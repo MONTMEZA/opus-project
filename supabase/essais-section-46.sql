@@ -625,6 +625,46 @@ rollback;
 
 -- --------------------------------------------------------------------------
 \echo ''
+\echo '=== 17 bis. TVA DECLAREE SUR L HONNEUR (2b-2) : pour le SIREN ACTIF de B, elle eteint conso_tva_intra ;'
+\echo '           pour un AUTRE SIREN, non ; et la phrase du motif dit la declaration, sans « certifi » ni « vérifi » ==='
+-- La jointure d'`emetteur_incomplet()` ne filtre pas la source : une
+-- déclaration (posée ici comme la fonction Edge la pose, sous la clé de
+-- service) vaut une reconnaissance par VIES — pour le SIREN ACTIF seulement.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur (pro_id, regime_tva) values (:B, 'reel');
+select bool_or(m like 'conso_tva_intra: %') as b_reel_sans_rien_attendu_t,
+       bool_or(m like 'conso_tva_intra: %vous n’en avez déclaré aucun sur l’honneur%'
+               and m like '%ou ne répond pas à trois contrôles en plus d’une heure%'
+               and m like '%vous pourrez le déclarer sur l’honneur%') as phrase_dit_la_declaration_attendu_t,
+       coalesce(bool_or(m ~* 'certifi|vérifi'), false) as ni_certifie_ni_verifie_attendu_f
+  from unnest(public.emetteur_incomplet(:B)) m;
+reset role;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000046011', 'FR14000046011', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+select coalesce(bool_or(m like 'conso_tva_intra: %'), false) as b_declare_pour_son_siren_attendu_f
+  from unnest(public.emetteur_incomplet(:B)) m;
+reset role;
+set local role service_role;
+delete from public.preuves_tva where pro_id = :B;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000046029', 'FRK1000046029', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+select bool_or(m like 'conso_tva_intra: %') as b_declare_pour_un_autre_siren_attendu_t
+  from unnest(public.emetteur_incomplet(:B)) m;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
 \echo '=== 18. Deux identites : la RETIREE avait un n° de TVA, l ACTIVE non -> conso_tva_intra present ==='
 -- La jointure lit l'identité active : une identité retirée ne prête pas son
 -- numéro à la suivante.

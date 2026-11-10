@@ -179,6 +179,22 @@
  * qui y ramène, la ligne qui garde sa hauteur dans tous les états, et
  * l'échec qui ne dit jamais « rien ne manque ».
  *
+ * « À QUEL TITRE ? », « LE CHANTIER » ET LA TVA DÉCLARÉE (lot 2b-2,
+ * 10/11/2026, cahier §5.5) — le bloc « À quel titre ? » de l'en-tête (la
+ * proposition, la question, la feuille et son ordre, « — enregistrement… »
+ * vu puis parti, une écriture qui ne revient pas, et sa HAUTEUR égale dans
+ * tous ses états, à 393 et 320) ; le point « Dites à quel titre… » de la
+ * liste et la partie « Votre entreprise » relue quand la réponse vue change ;
+ * la rangée et la carte « Le chantier » (la confirmation, la date, la
+ * hauteur égale, le plus long résumé compris, et la question TVA absente en
+ * franchise) ; le point d'une ligne à 10 % sur un chantier neuf et
+ * « Revoir « Le chantier » » ; la ligne « Pour le remettre » à 110 / 88
+ * points à 393 ; « Mon entreprise » → TVA (le bouton VIES qui ne bouge pas,
+ * la case décochée à chaque réponse, « déclaré » en vert, le retrait en deux
+ * appuis). Ni VoiceOver sur la case, ni le pouce sur la feuille, ni la règle
+ * P5 (il faudrait déplacer l'horloge) : l'iPhone et le banc de
+ * `verifier-tva`.
+ *
  * Pour la base de postes, pas davantage : ni le clavier sous les feuilles,
  * ni `hitSlop` (la croix d'une feuille mesure 18 × 20 ici, environ 38 × 40
  * au doigt), ni VoiceOver, ni Hermes. Deux `Modal` empilées ne laissent
@@ -457,6 +473,22 @@ page.on('console', (m) => { if (m.type() === 'error') erreursPage.push(`console 
 const attendre = (ms) => page.waitForTimeout(ms);
 const capture = async (nom) => { if (DOSSIER) await page.screenshot({ path: `${DOSSIER}/${nom}.png` }); };
 const texte = async () => net(await page.evaluate(() => document.body.innerText));
+/* Ce que la page MONTRE et ce qu'elle DIT, sans ce qui est gardé invisible :
+   une partie qui se relit, le gabarit de la ligne du haut, et depuis 2b-2 les
+   gabarits du bloc « À quel titre ? » et de la rangée « Le chantier » — qui
+   portent « — enregistrement… » et « — pas enregistré » — restent dans le
+   flux à opacité nulle et cachés à l'accessibilité (`aria-hidden`).
+   `innerText` les lit quand même : on les retire le temps de lire. Toute
+   mesure d'un ÉTAT (« enregistrement… » vu, ou parti) lit `texteLu`, jamais
+   `texte` : sinon le gabarit le lui montre toujours. */
+const texteLu = async () => net(await page.evaluate(() => {
+  const caches = [...document.querySelectorAll('[aria-hidden="true"]')];
+  const avant = caches.map((e) => e.style.display);
+  caches.forEach((e) => { e.style.display = 'none'; });
+  const t = document.body.innerText;
+  caches.forEach((e, i) => { e.style.display = avant[i]; });
+  return t;
+}));
 /* L'ANCRAGE DU DÉFILEMENT (relecture 5 de 2b-1, RELIRE4-D, 07/11/2026) :
    Chromium compense ce qui change hors de l'écran (`overflow-anchor`) — une
    ligne sortie de l'écran par le haut qui grandit ou rétrécit, et il corrige
@@ -1716,12 +1748,15 @@ await section('Les aides de droit de la carte « Conditions » : chacune lisible
       + 'à distance laisse au client 14 jours pour se rétracter, sauf exceptions (par exemple, le strict nécessaire d’un '
       + 'dépannage urgent qu’il vous a expressément demandé chez lui) : s’il se rétracte, vous lui rendez tout ce qu’il a '
       + 'versé, acompte ou arrhes (art. L. 221-18 et L. 221-24).' },
+    /* 2b-2 (annexe A.6) : « activité principale », et deux exceptions —
+       l'urgence, et le bâtiment neuf, à indiquer dans « Le chantier ». */
     { titre: 'Acompte', aide: 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, ou par '
-      + 'une entreprise de 5 salariés au plus pour des travaux hors de son métier : vous ne pouvez recevoir aucun paiement '
-      + 'avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. Seule exception : des travaux '
-      + 'd’entretien ou de réparation urgents qu’il vous a expressément demandés chez lui, et seulement pour les pièces et '
-      + 'travaux strictement nécessaires à l’urgence (Code de la consommation, art. L. 221-10 et L. 221-3). Opus ne sait '
-      + 'pas encore où ce devis sera signé : comptez ce délai.' },
+      + 'une entreprise de 5 salariés au plus pour des travaux hors de son activité principale : vous ne pouvez recevoir '
+      + 'aucun paiement avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. Exceptions : des '
+      + 'travaux d’entretien ou de réparation urgents qu’il vous a expressément demandés chez lui, et seulement pour les '
+      + 'pièces et travaux strictement nécessaires à l’urgence ; et la construction d’un bâtiment neuf ou la '
+      + 'transformation importante d’un bâtiment existant, à indiquer dans « Le chantier » (Code de la consommation, '
+      + 'art. L. 221-10, L. 221-2 et L. 221-3). Opus ne sait pas encore où ce devis sera signé : comptez ce délai.' },
     { titre: 'Validité de l’offre', aide: 'À compter de la date du devis, celle qui sera imprimée dessus : le jour où vous '
       + 'le remettrez au client, pas celui où vous l’avez commencé.' },
     { titre: 'Retenue de garantie', aide: 'Au plus 5 % des acomptes, rendue un an après la réception des travaux, sauf '
@@ -1945,7 +1980,7 @@ await section('Une écriture qui ne revient pas : « Non enregistrée — Réess
   await toucher(parLibelle('Prix unitaire HT'));
   await fermerCarte();
   ligneDe('Pose d’un meuble vasque').quantiteMilliemes = 2000;
-  verifier('« enregistrement… » se voit', !!(await jusqua(async () => (await texte()).includes('enregistrement…'), 3000)));
+  verifier('« enregistrement… » se voit', !!(await jusqua(async () => (await texteLu()).includes('enregistrement…'), 3000)));
   /* L'APPUI SUR LA BARRE DU BAS SE VOIT TOUT DE SUITE (relecture « écran »
      des étapes 4 à 7, B4) : la file écrit encore, donc la bande « Enregistrement
      avant de partir… » paraît au moment de l'appui — avant, l'écran restait
@@ -3130,6 +3165,18 @@ await section('Le régime de TVA : réel → franchise → réel, sans recharger
   verifier('…mais « Retirer la TVA » sur une ligne qui en porte un', (await page.getByText('Retirer la TVA', { exact: true }).count()) === 1);
   verifier('…et « Prix unitaire », sans « HT »', (await page.getByLabel('Prix unitaire', { exact: true }).count()) === 1);
   await fermerCarte();
+  /* « LE CHANTIER » EN FRANCHISE (2b-2, cahier §5.5) : la question TVA ne se
+     pose qu'au régime réel lu, ou quand elle a déjà « Oui » — « Rénovation »
+     n'y a pas répondu. La question des droits du client reste (Mme Martin n'a
+     encore aucune réponse « à quel titre »). */
+  await toucher(page.getByRole('button', { name: /^Le chantier : / }).first());
+  await jusqua(async () => (await texteLu()).includes('Deux questions indépendantes'), 4000);
+  const tChantier = await texteLu();
+  verifier('en franchise, la carte « Le chantier » ne pose pas la question TVA (« Pour la TVA » absent), seulement celle des droits du client',
+    tChantier.includes('Pour les droits de votre client') && !tChantier.includes('Pour la TVA'),
+    tChantier.slice(tChantier.indexOf('Deux questions'), tChantier.indexOf('Deux questions') + 300));
+  await toucher(parLibelle('Revenir au devis'));
+  await attendre(400);
   /* Le bouton du bandeau ouvre « Mon entreprise » sur la TVA ; au retour, le
      régime est RELU (`surEmetteur`). */
   await toucher(parLibelle('Ouvrir Mon entreprise, section TVA'));
@@ -3343,6 +3390,460 @@ await section('La fiche d’un client SANS devis : supprimer dit quand même la 
   await attendre(900);
 });
 
+/* (Les outils de la liste « Pour le remettre » — lot 2b-1 — vivent ICI,
+   avant les sections de 2b-2 qui s'en servent et qui jouent avant
+   « Supprimer ce brouillon » : une `const` lue avant sa déclaration lève,
+   même dans une fonction appelée plus tard.) */
+/* ======================================================================== */
+/*  « POUR LE REMETTRE » — CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b-1) */
+/* ======================================================================== */
+/* Le compte de l'entreprise de démonstration : celle-ci garde ses manques
+   (exigés par `verifier-emetteur`), comme chez le propriétaire, dont le n°
+   de TVA est refusé par VIES — la ligne « votre entreprise » reste allumée.
+   On le LIT sur l'écran (`n`), et l'on exige qu'il ne bouge pas d'un devis à
+   l'autre, ni après la fermeture de « Mon entreprise » sans écriture. */
+const TITRE_LISTE = 'Ce qu’il manque pour remettre ce devis';
+const RETOUR_LISTE_CARTE = 'Enregistrer cette ligne et revenir à ce qu’il manque pour remettre ce devis';
+const RETOUR_LISTE_CONDITIONS = 'Enregistrer les conditions et revenir à ce qu’il manque pour remettre ce devis';
+const lectures = () => page.evaluate(() => window.__opusListe.lectures);
+const ecouterLaListe = (oui) => page.evaluate((v) => { window.__opusListe.ecoute = v; window.__opusListe.casser = null; }, oui);
+/* La ligne du haut : la PREMIÈRE « Pour le remettre » de la page (la rangée
+   du bas porte la même étiquette, plus bas) — ou, en échec, le bouton
+   « Réessayer » qu'elle devient. */
+const ligneHaut = () => page.locator('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]').first();
+const libelleLigne = async () => net((await ligneHaut().getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '');
+/* Pendant une écriture ou une relecture, le compte se termine par « · mise
+   à jour… » : la phrase finit déjà par « … », et l'étiquette n'y ajoute
+   pas de point (`LigneRemise` : « Une phrase qui finit déjà par un point,
+   ou par « … », n'en reçoit pas un second »). */
+const COMPTE = /^Pour le remettre : ce devis — (aucun point|\d+ points?) · votre entreprise — (aucun point|\d+ points?)(?: · mise à jour… |\. )Ouvrir la liste$/;
+const nombre = (t) => (t === 'aucun point' ? 0 : Number((t || '').split(' ')[0]));
+const enCarte = async () => (await texte()).includes(TITRE_LISTE);
+/* Les cibles DE LA CARTE (elle est posée au-dessus de la saisie, qui reste
+   montée dessous) : 44 points au moins, et aucun bouton dans un bouton. */
+const ciblesDeLaListe = () => page.evaluate(() => {
+  let carte = document.querySelector('[aria-label="Revenir au devis"]');
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  if (!carte) return null;
+  return {
+    cibles: [...carte.querySelectorAll('[role="button"],button')].map((e) => {
+      const b = e.getBoundingClientRect();
+      return { l: (e.getAttribute('aria-label') || e.innerText || '').slice(0, 60), w: Math.round(b.width), h: Math.round(b.height) };
+    }).filter((c) => c.w > 0 && c.h > 0),
+    imbriques: carte.querySelectorAll('[role="button"] [role="button"], button button').length,
+  };
+});
+const jugerLaCarte = async (ou) => {
+  const c = await ciblesDeLaListe();
+  const petites = c ? c.cibles.filter((x) => x.w < TOUCHE - 0.5 || x.h < TOUCHE - 0.5) : [];
+  verifier(`${ou} : ${c ? c.cibles.length : 0} cible(s), toutes de ${TOUCHE} points au moins par leur BOÎTE, aucune dans une autre`,
+    !!c && c.cibles.length > 0 && petites.length === 0 && c.imbriques === 0,
+    c ? `${JSON.stringify(petites)} ; imbriquées : ${c.imbriques}` : 'la carte est introuvable');
+};
+const hauteursLigne = [];
+let pointsEntreprise = null;
+
+/* ======================================================================== */
+/*  « À QUEL TITRE ? » ET « LE CHANTIER » (lot 2b-2, cahier §5.5)          */
+/* ======================================================================== */
+/* Ce qu'elles mesurent, et pourquoi ici, AVANT « Supprimer ce brouillon » :
+   « Sol du séjour » y est encore (il porte la question TVA à « Oui ») et la
+   SCI des Verlusses n'a plus besoin d'être SANS devis (la section TEXTES1,
+   juste au-dessus, l'exige) — on lui en donne un, que « Supprimer ce
+   brouillon » efface ensuite avec « Sol du séjour ».
+     - le bloc « À quel titre ? » : la proposition, « Oui, à titre privé »
+       qui écrit, « — enregistrement… » vu pendant l'envoi puis parti, une
+       écriture qui ne revient pas (« — pas enregistré », jamais
+       « enregistrement… » resté), « Réessayer », la feuille et son ORDRE
+       (la rangée qui retire des mentions en dernier, avec « Dans le
+       doute… »), et la HAUTEUR DU BLOC égale dans tous ses états, à 393 et
+       à 320 ;
+     - la liste « Pour le remettre » : le point « Dites à quel titre… » et
+       son bouton, qui ferme la carte et ouvre la feuille ; le point qui
+       s'éteint ; la partie « Votre entreprise » RELUE quand la réponse vue
+       change (le compte de la ligne, et la phrase des mentions) ;
+     - « Le chantier » : la rangée (hauteur égale dans ses états, le plus
+       long résumé compris, à 393 et à 320), la carte, la confirmation (rien
+       d'écrit avant « Je confirme »), la date posée, « Non » d'un appui, la
+       question 1 qui se tait pour « pour son entreprise », et sur « Sol du
+       séjour » le point d'une ligne à 10 % et son second bouton
+       « Revoir « Le chantier » ».
+   Les textes attendus sont écrits EN TOUTES LETTRES (annexes A.1, A.3, A.4
+   du cahier) : une mesure qui les importerait du code ne vérifierait rien. */
+const PROPOSITION_TITRE = 'Au carnet : particulier. Commande-t-il à titre privé ?';
+const QUESTION_TITRE = 'À quel titre ce client commande-t-il ?';
+const POINT_POUR_QUI = 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis.';
+const BOUTON_POUR_QUI = 'Répondre : à quel titre ce client commande';
+const POINT_TAUX_NEUF = 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.';
+const MENTIONS_PRUDENCE = 'Opus ne sait pas encore pour qui le client commande : dans le doute, il compte ce qu’on doit à un particulier.';
+const MENTIONS_PRIVE = 'Ce client commande à titre privé : la loi demande de lui communiquer ces informations, et Opus les imprime sur le devis.';
+const AVIS_FICHE_PARTICULIER = 'Ce client commande pour son entreprise, mais votre carnet le range parmi les particuliers : passez sa fiche en « Entreprise » pour y écrire son SIRET.';
+const REPONSE_PRIVE = 'Commande : à titre privé';
+const REPONSE_PRO = 'Commande : pour son entreprise, dans son activité principale (ou plus de 5 salariés)';
+const REPONSE_ASSO = 'Commande : pour une association, une copropriété ou une société civile';
+const EN_ROUTE_TITRE = ' — enregistrement…';
+const EN_ECHEC_TITRE = ' — pas enregistré';
+const ORDRE_DE_LA_FEUILLE = [
+  'À titre privé, pour lui-même',
+  'Pour une association, une copropriété ou une société civile',
+  'Pour son entreprise de 5 salariés au plus, hors de son activité principale',
+  'Pour son entreprise, dans son activité principale, ou une entreprise de plus de 5 salariés',
+];
+const DANS_LE_DOUTE = 'Dans le doute, choisissez une autre réponse : c’est la plus sûre.';
+const INTRO_CHANTIER = 'Deux questions indépendantes : on peut répondre « Oui » à l’une et « Non » à l’autre.';
+const CONFIRMATION_CHANTIER = 'Bâtiment neuf ou transformation importante';
+const DATE_JJ_MM = '\\d{2}/\\d{2}/\\d{4}';
+
+/** La hauteur du bloc « À quel titre ? » (le parent de son sous-titre), ou
+ *  `null` quand il n'existe pas. */
+const hauteurDuBloc = () => page.evaluate(() => {
+  const h = [...document.querySelectorAll('body *')]
+    .find((e) => e.children.length === 0 && e.innerText === 'À quel titre ?' && !e.closest('[aria-hidden="true"]'));
+  return h ? Math.round(h.parentElement.getBoundingClientRect().height * 10) / 10 : null;
+});
+const rangeeChantier = () => page.getByRole('button', { name: /^Le chantier : / }).first();
+const hauteurDeLaRangee = async () => {
+  const b = await rangeeChantier().boundingBox().catch(() => null);
+  return b ? Math.round(b.height * 10) / 10 : null;
+};
+const libelleDeLaRangee = async () => net((await rangeeChantier().getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '');
+const feuilleOuverte = () => page.locator('[aria-modal="true"]').last();
+const rangeesDeLaFeuille = async () => (await feuilleOuverte().locator('[role="button"]').evaluateAll((es) => es
+  .map((e) => [e.getAttribute('aria-label') || '', e.getAttribute('aria-selected')]))).map(([l, s]) => [net(l), s]);
+/* Les rangées de la feuille, visées par un DÉBUT d'étiquette qui s'arrête
+   avant « 5 salariés » : l'étiquette y porte une espace insécable, qu'un
+   sélecteur CSS écrit avec une espace ordinaire ne trouverait pas. */
+const DEBUTS_DE_LA_FEUILLE = ['À titre privé', 'Pour une association', 'Pour son entreprise de 5', 'Pour son entreprise, dans son activité principale'];
+const rangeeDeLaFeuille = (i) => feuilleOuverte().locator(`[role="button"][aria-label^="${DEBUTS_DE_LA_FEUILLE[i]}"]`).first();
+/** Le compte de la ligne du haut, une fois qu'elle ne dit plus « mise à
+ *  jour… » : `{ devis, entreprise }` (des nombres), ou des `null`. */
+const compteDeLaLigne = async () => {
+  const ok = await jusqua(async () => { const l = await libelleLigne(); return COMPTE.test(l) && !/mise à jour…/.test(l); }, DELAI_ECRITURE + 4000);
+  const l = await libelleLigne();
+  const m = COMPTE.exec(l);
+  return ok && m ? { devis: nombre(m[1]), entreprise: nombre(m[2]), libelle: l } : { devis: null, entreprise: null, libelle: l };
+};
+const ecrituresDemo = () => page.evaluate(() => window.__opusEcritures);
+/* Ouvrir la liste par la ligne du haut. Juste après une écriture, la ligne
+   peut se redessiner entre le début et la fin de l'appui : on retouche UNE
+   fois, et une liste qui ne s'ouvre toujours pas fait échouer la section —
+   jamais une mesure faite sur l'écran d'en dessous. */
+const ouvrirLaListe = async () => {
+  for (let essai = 0; essai < 2 && !(await enCarte()); essai += 1) {
+    await toucher(ligneHaut());
+    await jusqua(enCarte, 3000);
+  }
+  if (!(await enCarte())) throw new Error('la liste « Pour le remettre » ne s’ouvre pas');
+  await jusqua(async () => !/Calcul en cours|mise à jour…/.test(await texteLu()), 4000);
+};
+const fermerLaListe = async () => {
+  await toucher(page.getByRole('button', { name: 'Revenir au devis', exact: true }).first());
+  await jusqua(async () => !(await enCarte()), 4000);
+};
+const reponseVue = async (attendue) => jusqua(async () => {
+  const t = await texteLu();
+  return t.includes(attendue) && !t.includes(`${attendue}${EN_ROUTE_TITRE}`) && !t.includes(`${attendue}${EN_ECHEC_TITRE}`);
+}, DELAI_ECRITURE + 4000);
+const choisirAuCarnet = async (nom, cherche) => {
+  await toucher(bouton('Choisir dans mon carnet'));
+  await parLibelle('Chercher dans mon carnet').waitFor({ timeout: 6000 });
+  await toucher(parLibelle('Chercher dans mon carnet'));
+  await taper(cherche);
+  await attendre(700);
+  await toucher(page.locator(`[aria-label^="Choisir ${nom}"]`).first());
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 0, 4000);
+  await attendre(600);
+};
+
+await section('« À quel titre ? » sur « Rénovation salle de bains », à 393 : la proposition, la liste, la feuille, la route coupée, et la hauteur du bloc (2b-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ecouterLaListe(true);
+  const c0 = await compteDeLaLigne();
+  exiger(c0.devis !== null && c0.devis >= 1, `la ligne « Pour le remettre » de « Rénovation » se lit (${c0.libelle})`);
+  const hs = [];
+  /* LA PROPOSITION : la fiche de Mme Martin est LUE « particulier ». */
+  const t0 = await texteLu();
+  hs.push(await hauteurDuBloc());
+  verifier(`la proposition : « ${PROPOSITION_TITRE} », « Autre réponse » à gauche, « Oui, à titre privé » à droite — et aucun « Répondre »`,
+    t0.includes(PROPOSITION_TITRE) && (await bouton('Autre réponse').count()) === 1
+    && (await bouton('Oui, à titre privé').count()) === 1 && (await bouton('Répondre').count()) === 0,
+    t0.slice(t0.indexOf('À quel titre ?'), t0.indexOf('À quel titre ?') + 160));
+  await jugerCibles('« À quel titre ? », la proposition', (c) => /^(Autre réponse|Oui, à titre privé)$/.test(c.libelle));
+  /* LA LISTE : le point « Dites à quel titre… », et son bouton qui FERME la
+     carte et ouvre la feuille. */
+  await ouvrirLaListe();
+  const tl0 = await texteLu();
+  verifier('la liste porte « Dites à quel titre ce client commande… » (règle d’Opus), et sous les mentions dues à un particulier, la phrase de prudence',
+    tl0.includes(POINT_POUR_QUI) && tl0.includes(MENTIONS_PRUDENCE), tl0.slice(0, 600));
+  await capture('2b2-liste-pour-qui');
+  await toucher(parLibelle(BOUTON_POUR_QUI));
+  const feuille = await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 1
+    && (await feuilleOuverte().innerText()).includes(QUESTION_TITRE), 4000);
+  verifier(`« ${BOUTON_POUR_QUI} » ferme la liste et ouvre la feuille « ${QUESTION_TITRE} »`, !!feuille && !(await enCarte()));
+  /* La croix : la DERNIÈRE « Fermer » de la feuille — la première est le
+     voile, posé dessous sur tout l'écran (`FeuilleBas`). */
+  await toucher(feuilleOuverte().locator('[aria-label="Fermer"]').last());
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 0, 4000);
+  /* « OUI, À TITRE PRIVÉ » ÉCRIT — la seule moitié qui écrit. L'écriture
+     est RALENTIE (2,5 s) : « — enregistrement… » doit se voir, puis partir. */
+  const e0 = await ecrituresDemo();
+  await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
+  await toucher(bouton('Oui, à titre privé'));
+  const enRoute = await jusqua(async () => (await texteLu()).includes(`${REPONSE_PRIVE}${EN_ROUTE_TITRE}`), 3000, 50);
+  hs.push(await hauteurDuBloc());
+  const lu = await reponseVue(REPONSE_PRIVE);
+  await page.evaluate(() => { window.__opusPauseEcritures = null; });
+  hs.push(await hauteurDuBloc());
+  verifier(`« Oui, à titre privé » écrit (${(await ecrituresDemo()) - e0} écriture) : « ${REPONSE_PRIVE}${EN_ROUTE_TITRE} » pendant l’envoi, puis « ${REPONSE_PRIVE} » et « Changer »`,
+    !!enRoute && !!lu && (await ecrituresDemo()) - e0 >= 1 && (await bouton('Changer').count()) === 1);
+  /* LE POINT S'ÉTEINT, et la phrase des mentions suit la réponse VUE. */
+  const c1 = await compteDeLaLigne();
+  verifier(`la ligne « Pour le remettre » : « ce devis » perd son point (${c0.devis} → ${c1.devis}), « votre entreprise » garde les siens (${c0.entreprise} → ${c1.entreprise})`,
+    c1.devis === c0.devis - 1 && c1.entreprise === c0.entreprise, `${c0.libelle} | ${c1.libelle}`);
+  await ouvrirLaListe();
+  const tl1 = await texteLu();
+  verifier('…et la liste ne dit plus « Dites à quel titre… » ; sous les mentions, « Ce client commande à titre privé… »',
+    !tl1.includes(POINT_POUR_QUI) && tl1.includes(MENTIONS_PRIVE) && !tl1.includes(MENTIONS_PRUDENCE), tl1.slice(0, 600));
+  await fermerLaListe();
+  /* LA FEUILLE : l'ordre protecteur, la réponse marquée, « Dans le doute… »
+     sous la dernière. */
+  await toucher(bouton('Changer'));
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 1, 4000);
+  await attendre(300);
+  const rangs = (await rangeesDeLaFeuille()).filter(([l]) => ORDRE_DE_LA_FEUILLE.some((o) => l.startsWith(o)));
+  const ordre = rangs.map(([l]) => ORDRE_DE_LA_FEUILLE.findIndex((o) => l.startsWith(o)));
+  const tf = net(await feuilleOuverte().innerText());
+  verifier(`la feuille : les quatre réponses dans l’ordre protecteur (${JSON.stringify(ordre)}), « À titre privé » choisie, « Dans le doute… » SOUS la dernière`,
+    JSON.stringify(ordre) === '[0,1,2,3]' && rangs[0][1] === 'true' && rangs.slice(1).every(([, s]) => s !== 'true')
+    && tf.indexOf(DANS_LE_DOUTE) > tf.indexOf(ORDRE_DE_LA_FEUILLE[3]) && tf.indexOf(ORDRE_DE_LA_FEUILLE[3]) > 0,
+    JSON.stringify(rangs));
+  await jugerCibles('la feuille « À quel titre ? »', (c) => ORDRE_DE_LA_FEUILLE.some((o) => net(c.libelle).startsWith(o)));
+  await capture('2b2-feuille-a-quel-titre');
+  /* LA ROUTE COUPÉE APRÈS UNE RÉPONSE (§3.8) : l'écriture ne revient pas.
+     « — enregistrement… » ne doit PAS rester : il est calculé, pas mémorisé. */
+  await page.evaluate(() => { window.__opusSuspendreEcritures = true; });
+  await toucher(rangeeDeLaFeuille(3));
+  const enRoute2 = await jusqua(async () => (await texteLu()).includes(`${REPONSE_PRO}${EN_ROUTE_TITRE}`), 3000, 50);
+  hs.push(await hauteurDuBloc());
+  const echec = await jusqua(async () => (await texteLu()).includes(`${REPONSE_PRO}${EN_ECHEC_TITRE}`), DELAI_ECRITURE + 6000);
+  hs.push(await hauteurDuBloc());
+  const tEchec = await texteLu();
+  verifier(`une écriture qui ne revient pas : « ${EN_ROUTE_TITRE.trim()} » pendant l’envoi, puis « ${REPONSE_PRO}${EN_ECHEC_TITRE} » — et plus aucun « enregistrement… » à l’écran`,
+    !!enRoute2 && !!echec && !tEchec.includes(EN_ROUTE_TITRE.trim()), tEchec.slice(tEchec.indexOf('À quel titre ?'), tEchec.indexOf('À quel titre ?') + 200));
+  await capture('2b2-a-quel-titre-pas-enregistre');
+  await page.evaluate(() => { window.__opusSuspendreEcritures = false; });
+  await toucher(page.getByRole('button', { name: 'Réessayer', exact: true }).first());
+  const repris = await reponseVue(REPONSE_PRO);
+  hs.push(await hauteurDuBloc());
+  verifier(`« Réessayer » : « ${REPONSE_PRO} », sans suffixe`, !!repris);
+  /* LA PARTIE « VOTRE ENTREPRISE » RELUE : pour une réponse
+     « professionnel », les mentions dues à un particulier ne sont plus
+     comptées (sauf l'adresse de l'établissement) — le compte de la ligne
+     change SANS qu'on rouvre « Mon entreprise ». */
+  const c2 = await compteDeLaLigne();
+  verifier(`la réponse vue a changé : la partie « votre entreprise » est RELUE (${c1.entreprise} → ${c2.entreprise} points), « ce devis » ne bouge pas (${c2.devis})`,
+    c2.entreprise !== null && c2.entreprise < c1.entreprise && c2.devis === c1.devis, `${c1.libelle} | ${c2.libelle}`);
+  await ouvrirLaListe();
+  const tl2 = await texteLu();
+  /* Les deux adresses de la démonstration sont complètes : pour une réponse
+     « professionnel », il ne reste aucune mention due à un particulier, et la
+     sous-partie (avec sa phrase) disparaît — la phrase de prudence aussi.
+     L'avis, jamais compté, dit que la fiche est rangée parmi les
+     particuliers. */
+  verifier('…la liste : plus de sous-partie « Mentions dues à un particulier » (les adresses de la démonstration sont complètes), ni sa phrase de prudence ; '
+    + 'l’avis « …votre carnet le range parmi les particuliers… » sous « À vérifier »',
+  !tl2.includes('Mentions dues à un particulier') && !tl2.includes(MENTIONS_PRUDENCE) && !tl2.includes(MENTIONS_PRIVE)
+    && tl2.includes(AVIS_FICHE_PARTICULIER) && tl2.indexOf(AVIS_FICHE_PARTICULIER) > tl2.indexOf('À vérifier'),
+  tl2.slice(Math.max(0, tl2.indexOf(TITRE_LISTE)), Math.max(0, tl2.indexOf(TITRE_LISTE)) + 1400));
+  await capture('2b2-liste-pour-son-entreprise');
+  await fermerLaListe();
+  /* « POUR SON ENTREPRISE » : la question 1 du chantier se tait. */
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  const tc = await texteLu();
+  verifier('« pour son entreprise » : la carte « Le chantier » ne pose plus que la question TVA (régime réel)',
+    !tc.includes('Pour les droits de votre client') && tc.includes('Pour la TVA'), tc.slice(tc.indexOf(INTRO_CHANTIER), tc.indexOf(INTRO_CHANTIER) + 300));
+  await toucher(parLibelle('Revenir au devis'));
+  await attendre(400);
+  /* RETOUR À « À TITRE PRIVÉ » : la partie entreprise revient. */
+  await toucher(bouton('Changer'));
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 1, 4000);
+  await toucher(rangeeDeLaFeuille(0));
+  await reponseVue(REPONSE_PRIVE);
+  hs.push(await hauteurDuBloc());
+  const c3 = await compteDeLaLigne();
+  verifier(`revenu à « à titre privé » : « votre entreprise » retrouve ses points (${c2.entreprise} → ${c3.entreprise})`, c3.entreprise === c1.entreprise, c3.libelle);
+  noter('393 : hauteur du bloc (proposition, en route, lu, en route, pas enregistré, repris, revenu)', JSON.stringify(hs));
+  verifier(`393 : la hauteur du bloc ne bouge pas, dans aucun de ses états (${JSON.stringify(hs)})`,
+    hs.length === 7 && hs.every((h) => h !== null && Math.abs(h - hs[0]) < 0.5));
+  await ecouterLaListe(false);
+  await capture('2b2-renovation-a-titre-prive');
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('« Le chantier » sur « Rénovation salle de bains », à 393 : la carte, la confirmation, la date, « Non » d’un appui, et la hauteur de la rangée (2b-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  const hr = [await hauteurDeLaRangee()];
+  const l0 = await libelleDeLaRangee();
+  exiger(/^Le chantier : Chantier ordinaire\. Ouvrir$/.test(l0), `la rangée de « Rénovation » dit « Chantier ordinaire » (${l0})`);
+  const rb = await rangeeChantier().boundingBox();
+  verifier(`la rangée « Le chantier » : une cible de 44 points au moins (${rb && Math.round(rb.width)} × ${rb && Math.round(rb.height)})`, !!rb && rb.height >= TOUCHE - 0.5);
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  const tc = await texteLu();
+  verifier('la carte pose les deux questions, et le dit : « Deux questions indépendantes… », « Pour les droits de votre client », « Pour la TVA », « Non (par défaut) »',
+    tc.includes(INTRO_CHANTIER) && tc.includes('Pour les droits de votre client') && tc.includes('Pour la TVA') && tc.includes('Non (par défaut)'));
+  await jugerCibles('la carte « Le chantier »', (c) => /^(Non|Oui : à confirmer|Non \(par défaut\)|Oui|Revenir au devis)$/.test(c.libelle));
+  await capture('2b2-carte-chantier');
+  /* « OUI » SE CONFIRME : rien n'est écrit avant « Je confirme ». */
+  const e0 = await ecrituresDemo();
+  await toucher(parLibelle('Oui : à confirmer'));
+  await jusqua(async () => (await bouton('Je confirme').count()) === 1, 4000);
+  await attendre(PAUSE_DEMO + 300);
+  const tf = await texteLu();
+  verifier(`« Oui » ouvre la confirmation « ${CONFIRMATION_CHANTIER} », « Garder « Non » » et « Je confirme » — et rien n’est écrit (${(await ecrituresDemo()) - e0})`,
+    tf.includes(CONFIRMATION_CHANTIER) && (await bouton('Garder « Non »').count()) === 1 && (await ecrituresDemo()) === e0);
+  await jugerCibles('la confirmation du bâtiment neuf', (c) => /^(Garder « Non »|Je confirme)$/.test(c.libelle));
+  await capture('2b2-confirmation-chantier');
+  await toucher(bouton('Je confirme'));
+  const conf = await jusqua(async () => new RegExp(`Oui — confirmé le ${DATE_JJ_MM}`).test(await texteLu()), DELAI_ECRITURE);
+  verifier('après « Je confirme » : « Oui — confirmé le JJ/MM/AAAA », la date posée par la base', !!conf);
+  await toucher(parLibelle('Revenir au devis'));
+  await attendre(500);
+  hr.push(await hauteurDeLaRangee());
+  const l1 = await libelleDeLaRangee();
+  verifier(`la rangée : « Bâtiment neuf ou transformation importante, confirmé le … » (${l1})`,
+    new RegExp(`^Le chantier : Bâtiment neuf ou transformation importante, confirmé le ${DATE_JJ_MM}\\. Ouvrir$`).test(l1));
+  /* « NON » D'UN APPUI, l'écriture ralentie : la rangée dit « en route »
+     sans changer de hauteur, puis « Chantier ordinaire » — la date part. */
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
+  await toucher(page.locator('[aria-label="Non"]').first());
+  await toucher(parLibelle('Revenir au devis'));
+  const enRoute = await jusqua(async () => / — enregistrement…\. Ouvrir$/.test(await libelleDeLaRangee()), 2000, 50);
+  hr.push(await hauteurDeLaRangee());
+  const fini = await jusqua(async () => /^Le chantier : Chantier ordinaire\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
+  await page.evaluate(() => { window.__opusPauseEcritures = null; });
+  hr.push(await hauteurDeLaRangee());
+  verifier('« Non » d’un appui, sans confirmation : « — enregistrement… » pendant l’envoi, puis « Chantier ordinaire » — la date est partie',
+    !!enRoute && !!fini);
+  noter('393 : hauteur de la rangée « Le chantier » (ordinaire, confirmé, en route, ordinaire)', JSON.stringify(hr));
+  verifier(`393 : la rangée « Le chantier » ne change pas de hauteur (${JSON.stringify(hr)})`,
+    hr.length === 4 && hr.every((h) => h !== null && Math.abs(h - hr[0]) < 0.5));
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('À 320 sur « Sol du séjour » : pas de bloc sans client, la proposition, la question, la feuille, et les hauteurs du bloc et de la rangée (2b-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Sol du séjour');
+  verifier('sans client, pas de bloc « À quel titre ? »', (await hauteurDuBloc()) === null);
+  const hr = [await hauteurDeLaRangee()];
+  const l0 = await libelleDeLaRangee();
+  exiger(/^Le chantier : Crée un bâtiment neuf : taux normal de TVA\. Ouvrir$/.test(l0), `« Sol du séjour » a répondu « Oui » à la question TVA (${l0})`);
+  const hb = [];
+  await choisirAuCarnet('Mme Martin', 'mart');
+  hb.push(await hauteurDuBloc());
+  verifier('Mme Martin choisie (fiche « particulier ») : la proposition', (await texteLu()).includes(PROPOSITION_TITRE));
+  await choisirAuCarnet('SCI des Verlusses', 'verl');
+  hb.push(await hauteurDuBloc());
+  verifier('la SCI des Verlusses (fiche « entreprise ») : la question et « Répondre », jamais la proposition ni « Oui, à titre privé »',
+    (await texteLu()).includes(QUESTION_TITRE) && (await bouton('Répondre').count()) === 1 && (await bouton('Oui, à titre privé').count()) === 0);
+  await toucher(bouton('Répondre'));
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 1, 4000);
+  await attendre(300);
+  const rangs = (await rangeesDeLaFeuille()).filter(([l]) => ORDRE_DE_LA_FEUILLE.some((o) => l.startsWith(o)));
+  verifier(`la rangée la plus HAUTE de la feuille ne retire rien (« ${(rangs[0] || [''])[0].slice(0, 40)} »), et aucune n’est choisie`,
+    rangs.length === 4 && rangs[0][0].startsWith(ORDRE_DE_LA_FEUILLE[0]) && rangs.every(([, s]) => s !== 'true'), JSON.stringify(rangs));
+  await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
+  await toucher(rangeeDeLaFeuille(1));
+  const enRoute = await jusqua(async () => (await texteLu()).includes(`${REPONSE_ASSO}${EN_ROUTE_TITRE}`), 3000, 50);
+  hb.push(await hauteurDuBloc());
+  await reponseVue(REPONSE_ASSO);
+  await page.evaluate(() => { window.__opusPauseEcritures = null; });
+  hb.push(await hauteurDuBloc());
+  verifier(`« ${ORDRE_DE_LA_FEUILLE[1]} » : « — enregistrement… » pendant l’envoi, puis « ${REPONSE_ASSO} »`, !!enRoute);
+  noter('320 : hauteur du bloc (proposition, question, en route, réponse)', JSON.stringify(hb));
+  verifier(`320 : la hauteur du bloc ne bouge pas (${JSON.stringify(hb)})`, hb.every((h) => h !== null && Math.abs(h - hb[0]) < 0.5));
+  /* LA RANGÉE À 320, son plus long résumé compris : les deux « Oui ». */
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  await toucher(parLibelle('Oui : à confirmer'));
+  await jusqua(async () => (await bouton('Je confirme').count()) === 1, 4000);
+  await toucher(bouton('Je confirme'));
+  await jusqua(async () => new RegExp(`Oui — confirmé le ${DATE_JJ_MM}`).test(await texteLu()), DELAI_ECRITURE);
+  await toucher(parLibelle('Revenir au devis'));
+  await attendre(500);
+  hr.push(await hauteurDeLaRangee());
+  const l1 = await libelleDeLaRangee();
+  verifier(`les deux « Oui » : « Bâtiment neuf, confirmé le … ; taux normal de TVA » (${l1})`,
+    new RegExp(`^Le chantier : Bâtiment neuf, confirmé le ${DATE_JJ_MM} ; taux normal de TVA\\. Ouvrir$`).test(l1));
+  await capture('2b2-sol-320');
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  await toucher(page.locator('[aria-label="Non"]').first());
+  await toucher(parLibelle('Revenir au devis'));
+  await jusqua(async () => /^Le chantier : Crée un bâtiment neuf : taux normal de TVA\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
+  hr.push(await hauteurDeLaRangee());
+  noter('320 : hauteur de la rangée « Le chantier » (TVA seule, les deux, TVA seule)', JSON.stringify(hr));
+  verifier(`320 : la rangée « Le chantier » ne change pas de hauteur, son plus long résumé compris (${JSON.stringify(hr)})`,
+    hr.length === 3 && hr.every((h) => h !== null && Math.abs(h - hr[0]) < 0.5));
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('« Sol du séjour », à 393 : le point d’une ligne à 10 % quand le chantier crée un bâtiment neuf, et « Revoir « Le chantier » » (2b-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Sol du séjour');
+  await ouvrirLaListe();
+  const tl = await texteLu();
+  const nb = tl.split(POINT_TAUX_NEUF).length - 1;
+  verifier(`${nb} point(s) « Mettez cette ligne au taux normal… », « Par prudence », chacun avec « Ouvrir cette ligne » et « Revoir « Le chantier » »`,
+    nb > 0 && tl.includes('Par prudence') && (await bouton('Revoir « Le chantier »').count()) > 0
+    && (await page.getByRole('button', { name: /^Ouvrir cette ligne/ }).count()) >= nb, tl.slice(0, 600));
+  await jugerLaCarte('la liste de « Sol du séjour »');
+  await capture('2b2-liste-taux-neuf');
+  await toucher(bouton('Revoir « Le chantier »'));
+  await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+  verifier('« Revoir « Le chantier » » ouvre la carte, « ‹ Liste » en tête, le « Oui » de la question TVA choisi',
+    (await texteLu()).includes('‹ Liste') && (await page.locator('[aria-label="Oui"][aria-selected="true"]').count()) === 1);
+  /* « CHANGEZ VOTRE RÉPONSE » : « Non » à la question TVA, puis « ‹ Liste » —
+     les points s'éteignent. */
+  await toucher(page.locator('[aria-label="Non"]').last());
+  await attendre(PAUSE_DEMO + 400);
+  await toucher(parLibelle('Revenir à la liste de ce qu’il manque'));
+  await jusqua(enCarte, 4000);
+  const eteint = await jusqua(async () => { const t = await texteLu(); return !t.includes(POINT_TAUX_NEUF) && !/Calcul en cours|mise à jour…/.test(t); }, DELAI_ECRITURE + 4000);
+  verifier('« Non » à la question TVA, puis « ‹ Liste » : la liste y ramène, et les points « …taux normal… » sont éteints', !!eteint);
+  await fermerLaListe();
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
 await section('« Supprimer ce brouillon », deux appuis', async () => {
   await allerAMesDevis();
   /* CE QUI RESTE (relecture « textes », TEXTES8) : « Rénovation salle de
@@ -3451,7 +3952,7 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
           d'avant »). Les phrases sont cherchées ici EN TOUTES LETTRES, jamais
           importées du code qu'on mesure. */
   const ecritures = () => page.evaluate(() => window.__opusEcritures);
-  const enAttente = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texte()), DELAI_ECRITURE + 3000);
+  const enAttente = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texteLu()), DELAI_ECRITURE + 3000);
   const nouveauPoste = async (libelle, designation, prix, { taux = true } = {}) => {
     await toucher(parLibelle(libelle));
     await taper(designation);
@@ -3638,7 +4139,7 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
   await ouvrirRangee('Gros œuvre');
   await viderEtTaper(parLibelle('Prix unitaire HT'), '1000');
   await fermerCarte();
-  const partie = await jusqua(async () => !/La réduction n’a pas pu être changée/.test(await texte()) && !/enregistrement…/.test(await texte()), 2 * DELAI_ECRITURE);
+  const partie = await jusqua(async () => !/La réduction n’a pas pu être changée/.test(await texte()) && !/enregistrement…/.test(await texteLu()), 2 * DELAI_ECRITURE);
   await attendre(PAUSE_DEMO + 800);
   const apres = await lireDevis();
   verifier(`la ligne baissée à 1 000,00 € : la réduction retirée repart TOUTE SEULE, la bande s’en va, et la base est d’accord avec l’écran `
@@ -3659,54 +4160,6 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
   verifier('tout est en base : le retour quitte la saisie sans garde', !(await dansLaSaisie()));
 });
 
-/* ======================================================================== */
-/*  « POUR LE REMETTRE » — CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b-1) */
-/* ======================================================================== */
-/* Le compte de l'entreprise de démonstration : celle-ci garde ses manques
-   (exigés par `verifier-emetteur`), comme chez le propriétaire, dont le n°
-   de TVA est refusé par VIES — la ligne « votre entreprise » reste allumée.
-   On le LIT sur l'écran (`n`), et l'on exige qu'il ne bouge pas d'un devis à
-   l'autre, ni après la fermeture de « Mon entreprise » sans écriture. */
-const TITRE_LISTE = 'Ce qu’il manque pour remettre ce devis';
-const RETOUR_LISTE_CARTE = 'Enregistrer cette ligne et revenir à ce qu’il manque pour remettre ce devis';
-const RETOUR_LISTE_CONDITIONS = 'Enregistrer les conditions et revenir à ce qu’il manque pour remettre ce devis';
-const lectures = () => page.evaluate(() => window.__opusListe.lectures);
-const ecouterLaListe = (oui) => page.evaluate((v) => { window.__opusListe.ecoute = v; window.__opusListe.casser = null; }, oui);
-/* La ligne du haut : la PREMIÈRE « Pour le remettre » de la page (la rangée
-   du bas porte la même étiquette, plus bas) — ou, en échec, le bouton
-   « Réessayer » qu'elle devient. */
-const ligneHaut = () => page.locator('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]').first();
-const libelleLigne = async () => net((await ligneHaut().getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '');
-/* Pendant une écriture ou une relecture, le compte se termine par « · mise
-   à jour… » : la phrase finit déjà par « … », et l'étiquette n'y ajoute
-   pas de point (`LigneRemise` : « Une phrase qui finit déjà par un point,
-   ou par « … », n'en reçoit pas un second »). */
-const COMPTE = /^Pour le remettre : ce devis — (aucun point|\d+ points?) · votre entreprise — (aucun point|\d+ points?)(?: · mise à jour… |\. )Ouvrir la liste$/;
-const nombre = (t) => (t === 'aucun point' ? 0 : Number((t || '').split(' ')[0]));
-const enCarte = async () => (await texte()).includes(TITRE_LISTE);
-/* Les cibles DE LA CARTE (elle est posée au-dessus de la saisie, qui reste
-   montée dessous) : 44 points au moins, et aucun bouton dans un bouton. */
-const ciblesDeLaListe = () => page.evaluate(() => {
-  let carte = document.querySelector('[aria-label="Revenir au devis"]');
-  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
-  if (!carte) return null;
-  return {
-    cibles: [...carte.querySelectorAll('[role="button"],button')].map((e) => {
-      const b = e.getBoundingClientRect();
-      return { l: (e.getAttribute('aria-label') || e.innerText || '').slice(0, 60), w: Math.round(b.width), h: Math.round(b.height) };
-    }).filter((c) => c.w > 0 && c.h > 0),
-    imbriques: carte.querySelectorAll('[role="button"] [role="button"], button button').length,
-  };
-});
-const jugerLaCarte = async (ou) => {
-  const c = await ciblesDeLaListe();
-  const petites = c ? c.cibles.filter((x) => x.w < TOUCHE - 0.5 || x.h < TOUCHE - 0.5) : [];
-  verifier(`${ou} : ${c ? c.cibles.length : 0} cible(s), toutes de ${TOUCHE} points au moins par leur BOÎTE, aucune dans une autre`,
-    !!c && c.cibles.length > 0 && petites.length === 0 && c.imbriques === 0,
-    c ? `${JSON.stringify(petites)} ; imbriquées : ${c.imbriques}` : 'la carte est introuvable');
-};
-const hauteursLigne = [];
-let pointsEntreprise = null;
 
 await section('« Pour le remettre » sur « Muret de clôture » : la ligne du haut, la carte, « Mon entreprise » qui relit (lot 2b-1)', async () => {
   await ecouterLaListe(true);
@@ -3770,12 +4223,22 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
   verifier('la carte : « Ce devis — aucun point », puis « Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui. »',
     t.includes('Ce devis — aucun point') && t.includes('Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.'));
   verifier('…et JUSTE SOUS elle, « Pas encore vérifié : … » (sans elle, « rien ne manque » mentirait)',
-    t.includes('Pas encore vérifié : pour qui le client commande, le moment de la signature, l’urgence, la garantie décennale, si le devis lui-même '
-      + 'est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et si les travaux concernent un immeuble neuf.')
+    t.includes('Pas encore vérifié : le moment de la signature, l’urgence, la garantie décennale, si le devis lui-même '
+      + 'est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et les conditions du taux réduit de TVA '
+      + '(l’ancienneté du logement, la certification du client).')
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
-  verifier(`…« Votre entreprise — ${pointsEntreprise} points », puis les mentions dues à un particulier, sous leur phrase de prudence`,
-    t.includes(`Votre entreprise — ${pointsEntreprise} point`) && t.includes('Mentions dues à un particulier')
-    && t.indexOf('Opus ne sait pas encore pour qui le client commande') > t.indexOf('Mentions dues à un particulier'));
+  /* 2b-2 (cahier §3.6, annexe A.3) : le Muret est commandé « à titre privé »
+     — la démonstration porte la réponse POUR Mme Martin, et la base l'a vue
+     dans la même photo que la liste : la phrase sous « Mentions dues à un
+     particulier » est celle de cette réponse, plus celle de la prudence.
+     Écrite en toutes lettres : une mesure qui lirait la constante du code
+     ne vérifierait rien (29/10). */
+  verifier(`…« Votre entreprise — ${pointsEntreprise} points », puis les mentions dues à un particulier, sous la phrase de la réponse que la `
+    + 'base a vue (« à titre privé »), et plus celle de la prudence',
+  t.includes(`Votre entreprise — ${pointsEntreprise} point`) && t.includes('Mentions dues à un particulier')
+    && t.indexOf('Ce client commande à titre privé : la loi demande de lui communiquer ces informations, et Opus les imprime sur le devis.')
+      > t.indexOf('Mentions dues à un particulier')
+    && !t.includes('Opus ne sait pas encore pour qui le client commande'));
   /* D-B (décision du 05/11) : le titre de la partie dit combien de ses
      points sont dus à un particulier, et l'accord suit le nombre (« 1 point,
      dont 1 dû », « 2 points, dont 1 dû », « 5 points, dont 3 dus »). Le
@@ -4110,18 +4573,9 @@ await section('Un brouillon NEUF dont la première ligne est incomplète : « 1 
 /* ======================================================================== */
 /*  RELECTURE 2 DE 2b-1 (06/11) — CE QUI NE DOIT PLUS BOUGER SOUS LE DOIGT   */
 /* ======================================================================== */
-/* Ce que la page MONTRE et ce qu'elle DIT, sans ce qui est gardé invisible :
-   une partie qui se relit, ou le gabarit de la ligne du haut, restent dans
-   le flux à opacité nulle et cachés à l'accessibilité (`aria-hidden`).
-   `innerText` les lit quand même : on les retire le temps de lire. */
-const texteLu = async () => net(await page.evaluate(() => {
-  const caches = [...document.querySelectorAll('[aria-hidden="true"]')];
-  const avant = caches.map((e) => e.style.display);
-  caches.forEach((e) => { e.style.display = 'none'; });
-  const t = document.body.innerText;
-  caches.forEach((e, i) => { e.style.display = avant[i]; });
-  return t;
-}));
+/* `texteLu` (ce que la page montre, sans ses gabarits invisibles) est défini
+   plus haut, à côté de `texte` : depuis 2b-2, des sections qui le précèdent
+   en ont besoin. */
 
 /* REL-1 : LA LIGNE DU HAUT NE SAUTE PLUS À LA PREMIÈRE LETTRE TAPÉE DANS
    L'EN-TÊTE quand une ligne du devis est incomplète (état « pas compté »,
@@ -4290,11 +4744,20 @@ await section('La carte : le premier bouton de « Votre entreprise » ne bouge p
     };
     requestAnimationFrame(pas);
   });
+  /* 2b-2 : le bloc « À quel titre ? » allonge l'en-tête — le champ du délai,
+     touché, fait défiler la page et la ligne du haut sort de l'écran (relevé :
+     y = −210 à 390×844). L'appui sur elle défile donc d'abord, ce qui ferme le
+     clavier : l'écriture part AVANT l'appui, et en démonstration elle finit
+     (300 ms) avant que la carte s'ouvre — la relecture n'était plus visible
+     DANS la carte. Ce n'est pas l'écran qui a changé de règle, c'est la
+     géométrie : on ralentit l'écriture le temps de la mesure, comme ailleurs. */
+  await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
   await toucher(ligneHaut());
   await page.getByText(TITRE_LISTE, { exact: true }).first().waitFor({ timeout: 5000 });
   await jusqua(async () => { const t = await texteLu(); return t.includes('Ce devis — aucun point') && !t.includes('Ce devis : la liste se met à jour.'); },
     DELAI_ECRITURE + 2000);
   await attendre(400);
+  await page.evaluate(() => { window.__opusPauseEcritures = null; });
   const vu = await page.evaluate(() => { window.__opusCarteRel3Fin = true; return window.__opusCarteRel3; });
   const ys = [...new Set(vu.map(([y]) => y).filter((y) => y !== null))];
   const pendant = vu.filter(([, relit]) => relit);
@@ -5756,8 +6219,8 @@ await section('De 320 à 440 points, tant que quelque chose n’est pas compté 
   verifier(`de 320 à 440 points, le texte lu ne sort jamais de sa ligne par le bas — pas même un refus de cinq phrases qu’aucun gabarit ne `
     + `prévoit, qui agrandit la place (à 393 : ${refusLong} points au lieu de ${reserve.haut[393]}) au lieu de déborder (${res.debords.length} débord(s))`,
   res.debords.length === 0 && refusLong > reserve.haut[393], res.debords.slice(0, 6).join(' | '));
-  verifier(`à 393 (l’iPhone 16 du propriétaire) : la ligne du haut réserve ≈ 110 points (${reserve.haut[393]}), celle du bas ${reserve.bas[393]}`,
-    Math.abs(reserve.haut[393] - 110) <= 2 && reserve.bas[393] > 0, `${reserve.haut[393]} / ${reserve.bas[393]}`);
+  verifier(`à 393 (l’iPhone 16 du propriétaire) : la ligne du haut réserve ≈ 110 points (${reserve.haut[393]}), celle du bas ≈ 88 (${reserve.bas[393]})`,
+    Math.abs(reserve.haut[393] - 110) <= 2 && Math.abs(reserve.bas[393] - 88) <= 2, `${reserve.haut[393]} / ${reserve.bas[393]}`);
   const fautesPolice = ['haut', 'bas'].flatMap((v) => {
     const p = res.polices[v];
     const max = Math.max(...Object.values(p.chiffres));
@@ -6099,7 +6562,7 @@ const refusPartielUneLigneDerriere = async (largeur) => {
   const OBJET = `Plafond ${largeur}`;
   await page.setViewportSize({ width: largeur, height: 852 });
   await attendre(400);
-  const sansEnvoi = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texte()), DELAI_ECRITURE + 3000);
+  const sansEnvoi = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texteLu()), DELAI_ECRITURE + 3000);
   const nouveauPoste = async (libelle, designation, prix) => {
     await toucher(parLibelle(libelle));
     await taper(designation);
@@ -6237,6 +6700,136 @@ await section('Un particulier n’a pas « Mes devis »', async () => {
     (await page.getByLabel('Mes devis : les brouillons de chiffrage', { exact: true }).count()) === 0
     && (await page.getByLabel('Mes clients', { exact: true }).count()) === 0);
   await capture('31-particulier');
+});
+
+/* « MON ENTREPRISE » → TVA : LE REFUS DE VIES, LA DÉCLARATION SUR L'HONNEUR,
+   LE RETRAIT (lot 2b-2, cahier §3.7 et §5.5). La fiche pro de démonstration
+   porte un numéro PUBLIÉ par l'annuaire : « Votre entreprise » n'y propose
+   rien à écrire. Le chemin qui montre la saisie : un particulier qui passe
+   pro avec l'entreprise d'essai SANS numéro publié (entrepreneur
+   individuel), puis un numéro que la démonstration de VIES refuse. D'où sa
+   place, la DERNIÈRE : elle part du compte particulier de la section
+   d'avant, et n'en laisse aucun autre derrière elle.
+   Ce qu'elle mesure : le bouton VIES qui NE BOUGE PAS quand la réponse
+   arrive, le bloc « Vous êtes sûr de ce numéro ? » SOUS lui, la case (44
+   points, décochée à chaque NOUVELLE réponse, et « Déclarer » qui dit ce qui
+   manque tant qu'elle ne l'est pas), « déclaré » en vert, la déclaration qui
+   reste quand VIES refuse de nouveau — et la case qui ne s'offre plus pour
+   un numéro déjà déclaré —, puis le retrait en deux appuis. La règle P5
+   (trois contrôles sans réponse en plus d'une heure) ne se mesure pas ici :
+   il faudrait déplacer l'horloge ; elle est tenue par le banc de
+   `verifier-tva`. */
+const NUMERO_REFUSE = 'FRAB000004242';
+const REFUS_VIES = 'VIES ne reconnaît pas ce numéro aujourd’hui.';
+const PLUS_BAS = 'si vous le déclarez sur l’honneur, plus bas.';
+const BLOC_DECLARATION = 'Vous êtes sûr de ce numéro ?';
+const DECLARER = 'Déclarer ce numéro sur l’honneur';
+const DECLARE_OK = 'Votre déclaration est enregistrée : ce numéro s’imprimera sur vos devis.';
+const RETIRE_OK = 'Votre déclaration est retirée : ce numéro ne s’imprimera plus sur vos devis.';
+await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration sur l’honneur, le retrait (2b-2)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(page.getByText('Se déconnecter', { exact: true }).first());
+  await page.getByText('JE SUIS UN PARTICULIER').first().waitFor({ timeout: 10000 });
+  await toucher(page.getByText('JE SUIS UN PARTICULIER').first());
+  await attendre(2500);
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(1200);
+  await toucher(page.getByText('Je suis artisan : passer en compte professionnel', { exact: true }).first());
+  await attendre(1200);
+  await toucher(parLibelle('Afficher les numéros d’essai'));
+  await attendre(400);
+  await toucher(parLibelle('Essayer Entreprise active (entrepreneur individuel, sans nom)'));
+  await attendre(1500);
+  await toucher(page.getByRole('button', { name: /^Oui, c/ }).first());
+  await attendre(800);
+  await toucher(page.getByPlaceholder('Le nom que vos clients connaissent').first());
+  await taper('Essai TVA');
+  await toucher(bouton('Ajouter un métier'));
+  await attendre(800);
+  await toucher(parLibelle('Rechercher un métier'));
+  await taper('maçon');
+  await attendre(700);
+  await toucher(page.getByRole('button', { name: /^Choisir le métier Maçon/ }).first());
+  await attendre(800);
+  if (await parLibelle('Fermer').count()) {
+    const f = parLibelle('Fermer');
+    if (await f.isVisible().catch(() => false)) { await toucher(f); await attendre(500); }
+  }
+  await toucher(page.getByLabel(/^Je déclare être le titulaire/).first());
+  await toucher(bouton('Passer en compte professionnel'));
+  await attendre(2500);
+  if (await bouton('Plus tard').count()) { await toucher(bouton('Plus tard')); await attendre(600); }
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(1200);
+  await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+  await attendre(1200);
+  exiger((await bouton('Écrire mon numéro de TVA').count()) === 1, 'l’entreprise d’essai n’a aucun numéro publié : « Écrire mon numéro de TVA » s’offre');
+  await toucher(bouton('Écrire mon numéro de TVA'));
+  await attendre(300);
+  await toucher(parLibelle('Numéro de TVA intracommunautaire'));
+  await taper(NUMERO_REFUSE);
+  const vies0 = await bouton('Faire contrôler par VIES').boundingBox();
+  await toucher(bouton('Faire contrôler par VIES'));
+  const refus = await jusqua(async () => (await texteLu()).includes(REFUS_VIES), 8000);
+  const vies1 = await bouton('Faire contrôler par VIES').boundingBox();
+  const t2 = await texteLu();
+  verifier(`le refus dit « …${PLUS_BAS} », et le bouton VIES ne bouge pas quand la réponse arrive (${vies0 && Math.round(vies0.y)} → ${vies1 && Math.round(vies1.y)})`,
+    !!refus && t2.includes(PLUS_BAS) && !!vies0 && !!vies1 && Math.abs(vies0.y - vies1.y) < 1);
+  verifier(`le bloc « ${BLOC_DECLARATION} » vient SOUS le bouton VIES`,
+    t2.indexOf(BLOC_DECLARATION) > t2.indexOf('Faire contrôler par VIES') && t2.indexOf('Faire contrôler par VIES') > 0);
+  await capture('2b2-tva-refus');
+  const laCase = () => page.getByRole('checkbox').first();
+  verifier('la case est décochée à l’arrivée de la réponse', (await laCase().getAttribute('aria-checked')) === 'false');
+  await toucher(bouton(DECLARER));
+  await attendre(400);
+  verifier('case décochée : « Déclarer » DIT ce qui manque (« Cochez la déclaration… »), rien ne part', (await texteLu()).includes('Cochez la déclaration'));
+  const caseBox = await laCase().boundingBox();
+  verifier(`la case est une rangée de 44 points au moins (${caseBox && Math.round(caseBox.height)})`, !!caseBox && caseBox.height >= TOUCHE - 0.5);
+  await toucher(laCase());
+  await attendre(300);
+  verifier('la case se coche', (await laCase().getAttribute('aria-checked')) === 'true');
+  /* UNE NOUVELLE RÉPONSE DÉCOCHE LA CASE (S27) : le même numéro recontrôlé
+     — le refus retenu revient — et la case cochée ne survit pas. */
+  await toucher(bouton('Faire contrôler par VIES'));
+  await jusqua(async () => (await texteLu()).includes(REFUS_VIES) && (await laCase().count()) === 1, 8000);
+  await attendre(400);
+  verifier('une nouvelle réponse de VIES : la case est DÉCOCHÉE de nouveau', (await laCase().getAttribute('aria-checked')) === 'false');
+  await toucher(laCase());
+  await attendre(300);
+  await toucher(bouton(DECLARER));
+  const decl = await jusqua(async () => (await texteLu()).includes(DECLARE_OK), 6000);
+  const t3 = await texteLu();
+  const couleur = await page.evaluate((debut) => {
+    const e = [...document.querySelectorAll('body *')].find((x) => x.children.length === 0 && (x.innerText || '').startsWith(debut));
+    let b = e;
+    while (b && getComputedStyle(b).borderLeftWidth === '0px') b = b.parentElement;
+    return b ? getComputedStyle(b).borderLeftColor : null;
+  }, 'Votre déclaration est enregistrée');
+  verifier(`« déclaré » se dit en vert (${couleur}), avec la note « Déclaré sur l’honneur par vous le … »`,
+    !!decl && new RegExp(`Déclaré sur l’honneur par vous le ${DATE_JJ_MM}`).test(t3) && couleur === 'rgb(31, 122, 77)', couleur);
+  await capture('2b2-tva-declaree');
+  /* RECONTRÔLER SANS RETAPER : le refus retenu revient, la déclaration
+     RESTE, et la case ne s'offre plus pour ce numéro déjà déclaré (S29). */
+  await toucher(bouton('Faire contrôler de nouveau par VIES'));
+  const reste = await jusqua(async () => new RegExp(`Votre déclaration sur l’honneur du ${DATE_JJ_MM} reste enregistrée : il continue de s’imprimer sur vos devis\\.`)
+    .test(await texteLu()), 8000);
+  verifier('recontrôlé : le refus garde la déclaration, et le dit — et la case ne s’offre pas pour un numéro déjà déclaré',
+    !!reste && new RegExp('Déclaré sur l’honneur par vous le').test(await texteLu()) && (await page.getByRole('checkbox').count()) === 0);
+  await capture('2b2-tva-recontrole');
+  await toucher(bouton('Retirer cette déclaration'));
+  await attendre(300);
+  verifier('le retrait demande un second appui', (await bouton('Confirmer : retirer la déclaration').count()) === 1);
+  await toucher(bouton('Confirmer : retirer la déclaration'));
+  const ret = await jusqua(async () => (await texteLu()).includes(RETIRE_OK), 6000);
+  verifier('la déclaration est retirée, et le dit', !!ret);
+  await capture('2b2-tva-retiree');
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
 });
 
 /* LA PROPRIÉTÉ DES RANGÉES, en un chiffre : combien de propositions ont été

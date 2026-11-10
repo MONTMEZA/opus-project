@@ -11,7 +11,22 @@
 --  DES CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité qui
 --  ne montre aucun refus n'éprouve rien. Chaque ordre qui doit échouer est
 --  le DERNIER de sa transaction. Et psql préfixe chaque ligne d'erreur par
---  le nom du fichier : un `grep '^ERROR'` ne les voit pas.
+--  le nom du fichier : un `grep '^ERROR'` ne les voit pas. Joué comme
+--  ci-dessus sur une base neuve, ce fichier écrit EXACTEMENT 22 lignes
+--  `psql:… ERROR` (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 22) : les quinze
+--  d'avant 2b-2 (cas 2, 3, 7 ×2, 8 ×8, 9 bis, 17, 18), puis les sept de la
+--  déclaration sur l'honneur (cas 21 b, 22 a à 22 e, 23). Un autre compte
+--  est un ÉCHEC. Ces sept-là sont, de plus, JUGÉS EN SQL (`:ERROR`,
+--  `LAST_ERROR_SQLSTATE`, `LAST_ERROR_MESSAGE`, cas 23 bis) : un refus qui ne
+--  vient plus laisse un `f`, pas seulement un compte différent. Leurs
+--  variables sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
+--  laisse un `f`, pas une erreur de syntaxe.
+--
+--  LA DÉCLARATION SUR L'HONNEUR (2b-2, cas 19 à 24) : ses écritures « de la
+--  fonction » sont faites sous `set local role service_role`, comme la
+--  fonction Edge les fait avec la clé de service ; celles « de l'éditeur
+--  SQL ou du connecteur », en superutilisateur. C'est `verifier-tva` (le
+--  banc) qui éprouve les actions `declarer` et `retirer` elles-mêmes.
 --
 --  AUCUN CAS DE RLS DANS UN BLOC `do $$ … $$` : à l'intérieur, les
 --  politiques ne sont PAS appliquées (constaté le 01/10/2026).
@@ -413,6 +428,292 @@ set local role authenticated;
 set local request.jwt.claim.sub = :A;
 select public.compter_essai_tva('tva-compte:e48', '2026-10-20 12:00+00', 100000, '2026-10-20 12:34+00', 100000);
 rollback;
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 19. LA DECLARATION SUR L HONNEUR (2b-2), posee par la FONCTION (service_role) : sa date et reconnu_le posees'
+\echo '        par la BASE (une date envoyee est ignoree), le texte garde, et le motif conso_tva_intra s eteint ==='
+-- --------------------------------------------------------------------------
+begin;
+delete from public.preuves_tva where pro_id = :A;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select string_agg(split_part(m, ':', 1), ',') as avant_attendu_conso_tva_intra
+  from unnest(public.emetteur_incomplet(:A)) m;
+reset role;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, vies_le, source, declaration_texte, declare_le, reconnu_le)
+values (:A, '000048009', 'FR91000048009', null, 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.', '2001-01-01', '2001-01-01');
+reset role;
+select count(*) as declaration_attendu_1,
+       bool_and(source = 'declaration') as source_declaration_attendu_t,
+       bool_and(declare_le > now() - interval '1 minute') as date_posee_par_la_base_attendu_t,
+       bool_and(reconnu_le = declare_le) as une_seule_date_attendu_t,
+       bool_and(declaration_texte = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.') as texte_garde_attendu_t,
+       bool_and(vies_le is null) as aucune_date_de_vies_attendu_t
+  from public.preuves_tva where pro_id = :A;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select coalesce(array_length(public.emetteur_incomplet(:A), 1), 0) as motifs_de_A_apres_declaration_attendu_0;
+select count(*) as A_lit_sa_declaration_attendu_1 from public.preuves_tva;
+set local request.jwt.claim.sub = :B;
+select count(*) as B_ne_lit_rien_attendu_0 from public.preuves_tva;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 20. CE QUE LA BASE FAIT D UNE DECLARATION (l en-tete de la section 48, mot pour mot) ==='
+\echo '    a. la MEME declaration renvoyee (upsert de la fonction) : rien ne rajeunit, ni la date, ni le texte'
+\echo '    b. VIES reconnait le MEME numero (upsert vies) : la ligne devient vies, la declaration RESTE JOINTE'
+\echo '    c. VIES le refuse de nouveau : la fonction la fait RENAITRE (update source = declaration) — meme date'
+\echo '    d. VIES reconnait un AUTRE numero : la declaration est REMPLACEE (effacee)'
+\echo '    e. une declaration d un AUTRE numero remplace une declaration : date NOUVELLE, plus recente'
+\echo '    f. le retrait (delete … source = declaration) : 0 ligne sur une preuve vies, 1 sur une declaration'
+-- --------------------------------------------------------------------------
+begin;
+delete from public.preuves_tva where pro_id = :A;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:A, '000048009', 'FR91000048009', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+reset role;
+select declare_le as date_declaration from public.preuves_tva where pro_id = :A \gset
+-- a.
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, vies_le, source, declaration_texte)
+values (:A, '000048009', 'FR91000048009', null, 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.')
+on conflict (pro_id) do update set siren = excluded.siren, numero = excluded.numero, vies_le = excluded.vies_le,
+                                   source = excluded.source, declaration_texte = excluded.declaration_texte;
+reset role;
+select bool_and(declare_le = :'date_declaration'::timestamptz and reconnu_le = :'date_declaration'::timestamptz
+                and declaration_texte = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.') as redeclarer_ne_rajeunit_rien_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- b.
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, vies_le, source)
+values (:A, '000048009', 'FR91000048009', now(), 'vies')
+on conflict (pro_id) do update set siren = excluded.siren, numero = excluded.numero, vies_le = excluded.vies_le,
+                                   source = excluded.source;
+reset role;
+select bool_and(source = 'vies') as devenue_vies_attendu_t,
+       bool_and(declare_le = :'date_declaration'::timestamptz and declaration_texte = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.') as declaration_reste_jointe_attendu_t,
+       bool_and(reconnu_le > declare_le and vies_le is not null) as controle_vies_date_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- l'export d'une preuve vies qui porte une ancienne declaration : ses deux dates ET la declaration
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select x ? 'reconnu_le' and x ? 'vies_le' and x ? 'declare_le' and x ? 'declaration_texte' as export_vies_complet_attendu_t
+  from (select public.mes_donnees() -> 'mon_numero_de_tva' as x) e;
+reset role;
+-- f (premier temps). le retrait ne touche PAS une preuve vies qui porte une declaration
+set local role service_role;
+delete from public.preuves_tva where pro_id = :A and source = 'declaration';
+reset role;
+select count(*) as retrait_epargne_la_preuve_vies_attendu_1 from public.preuves_tva where pro_id = :A;
+-- c.
+set local role service_role;
+update public.preuves_tva set source = 'declaration', vies_le = null
+ where pro_id = :A and numero = 'FR91000048009' and source = 'vies' and declare_le is not null;
+reset role;
+select bool_and(source = 'declaration' and declare_le = :'date_declaration'::timestamptz
+                and reconnu_le = :'date_declaration'::timestamptz and declaration_texte = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.'
+                and vies_le is null) as declaration_renait_meme_date_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- l'export d'une declaration : son texte et sa date, JAMAIS reconnu_le ni vies_le
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select x ->> 'source' = 'declaration' and x ? 'declare_le' and x ->> 'declaration_texte' = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.'
+         and not (x ? 'reconnu_le') and not (x ? 'vies_le') as export_declaration_sans_reconnu_attendu_t
+  from (select public.mes_donnees() -> 'mon_numero_de_tva' as x) e;
+reset role;
+-- e.
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, vies_le, source, declaration_texte)
+values (:A, '000048009', 'FRK1000048009', null, 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.')
+on conflict (pro_id) do update set siren = excluded.siren, numero = excluded.numero, vies_le = excluded.vies_le,
+                                   source = excluded.source, declaration_texte = excluded.declaration_texte;
+reset role;
+select bool_and(numero = 'FRK1000048009' and declare_le > :'date_declaration'::timestamptz
+                and reconnu_le = declare_le) as autre_numero_date_nouvelle_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- d.
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, vies_le, source)
+values (:A, '000048009', 'FR91000048009', now(), 'vies')
+on conflict (pro_id) do update set siren = excluded.siren, numero = excluded.numero, vies_le = excluded.vies_le,
+                                   source = excluded.source;
+reset role;
+select bool_and(source = 'vies' and declare_le is null and declaration_texte is null) as autre_numero_vies_remplace_attendu_t
+  from public.preuves_tva where pro_id = :A;
+-- f (second temps). sur une declaration, le retrait part
+set local role service_role;
+update public.preuves_tva set source = 'declaration', declaration_texte = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.' where pro_id = :A;
+delete from public.preuves_tva where pro_id = :A and source = 'declaration';
+reset role;
+select count(*) as retrait_d_une_declaration_attendu_0 from public.preuves_tva where pro_id = :A;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 21. LA GARDE I1 : une declaration NOUVELLE posee hors de la fonction (l editeur SQL, le connecteur) ==='
+\set e21b_err 'jamais relevé'
+\set e21b_code 'jamais relevé'
+\set e21b_msg 'jamais relevé'
+\set e22a_err 'jamais relevé'
+\set e22a_code 'jamais relevé'
+\set e22a_msg 'jamais relevé'
+\set e22b_err 'jamais relevé'
+\set e22b_code 'jamais relevé'
+\set e22b_msg 'jamais relevé'
+\set e22c_err 'jamais relevé'
+\set e22c_code 'jamais relevé'
+\set e22c_msg 'jamais relevé'
+\set e22d_err 'jamais relevé'
+\set e22d_code 'jamais relevé'
+\set e22d_msg 'jamais relevé'
+\set e22e_err 'jamais relevé'
+\set e22e_code 'jamais relevé'
+\set e22e_msg 'jamais relevé'
+\set e23_err 'jamais relevé'
+\set e23_code 'jamais relevé'
+\set e23_msg 'jamais relevé'
+\echo '    a. sur un compte d essai (A, @exemple-opus.test) : posee'
+\echo '    b. sur un VRAI compte : refus attendu (23514, « ne se pose que par l application… »)'
+-- --------------------------------------------------------------------------
+begin;
+delete from public.preuves_tva where pro_id = :A;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:A, '000048009', 'FR91000048009', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+select count(*) filter (where declare_le is not null) as essai_posee_par_l_editeur_attendu_1
+  from public.preuves_tva where pro_id = :A;
+-- une ecriture de MAINTENANCE sur cette declaration (meme numero) passe, et ne touche pas sa date
+select declare_le as date_editeur from public.preuves_tva where pro_id = :A \gset
+update public.preuves_tva set source = source where pro_id = :A;
+select bool_and(declare_le = :'date_editeur'::timestamptz) as maintenance_garde_la_date_attendu_t
+  from public.preuves_tva where pro_id = :A;
+rollback;
+begin;
+update auth.users set email = 'b4800@exemple.fr' where id = :B;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000048017', 'FR18000048017', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+\set e21b_err :ERROR
+\set e21b_code :LAST_ERROR_SQLSTATE
+\set e21b_msg :LAST_ERROR_MESSAGE
+rollback;
+\echo '    c. sur ce MEME vrai compte, par la fonction (service_role) : posee — la garde ne lit pas auth.users pour elle'
+begin;
+update auth.users set email = 'b4800@exemple.fr' where id = :B;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000048017', 'FR18000048017', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+reset role;
+select count(*) filter (where declare_le is not null) as vrai_compte_par_la_fonction_attendu_1
+  from public.preuves_tva where pro_id = :B;
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 22. LA CONTRAINTE preuve_tva_declaration_check : cinq refus attendus, chacun la nomme ==='
+\echo '    a. un texte HORS DE LA LISTE (apostrophes droites), par la fonction'
+\echo '    b. une declaration SANS texte, par la fonction (la date est posee, le texte manque)'
+\echo '    c. un texte SANS date (declencheur coupe, comme au cas 10)'
+\echo '    d. une ligne ESSAI qui porte une declaration (declencheur coupe)'
+\echo '    e. une ligne DECLARATION sans date ni texte (declencheur coupe)'
+-- --------------------------------------------------------------------------
+begin;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000048017', 'FR18000048017', 'declaration', 'Je certifie sur l''honneur que ce numéro est celui que l''administration fiscale a attribué à mon entreprise.');
+\set e22a_err :ERROR
+\set e22a_code :LAST_ERROR_SQLSTATE
+\set e22a_msg :LAST_ERROR_MESSAGE
+rollback;
+begin;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source)
+values (:B, '000048017', 'FR18000048017', 'declaration');
+\set e22b_err :ERROR
+\set e22b_code :LAST_ERROR_SQLSTATE
+\set e22b_msg :LAST_ERROR_MESSAGE
+rollback;
+begin;
+alter table public.preuves_tva disable trigger trg_tient_la_preuve_tva;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:B, '000048017', 'FR18000048017', 'vies', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+\set e22c_err :ERROR
+\set e22c_code :LAST_ERROR_SQLSTATE
+\set e22c_msg :LAST_ERROR_MESSAGE
+rollback;
+begin;
+alter table public.preuves_tva disable trigger trg_tient_la_preuve_tva;
+insert into public.preuves_tva (pro_id, siren, numero, source, declare_le, declaration_texte)
+values (:B, '000048017', 'FR18000048017', 'essai', now(), 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+\set e22d_err :ERROR
+\set e22d_code :LAST_ERROR_SQLSTATE
+\set e22d_msg :LAST_ERROR_MESSAGE
+rollback;
+begin;
+alter table public.preuves_tva disable trigger trg_tient_la_preuve_tva;
+insert into public.preuves_tva (pro_id, siren, numero, source)
+values (:B, '000048017', 'FR18000048017', 'declaration');
+\set e22e_err :ERROR
+\set e22e_code :LAST_ERROR_SQLSTATE
+\set e22e_msg :LAST_ERROR_MESSAGE
+rollback;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 23. A ne s ECRIT pas de declaration : refus attendu (permission denied) ==='
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:A, '000048009', 'FR91000048009', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+\set e23_err :ERROR
+\set e23_code :LAST_ERROR_SQLSTATE
+\set e23_msg :LAST_ERROR_MESSAGE
+rollback;
+\echo ''
+\echo '=== 23 bis. LES SEPT REFUS DE LA DECLARATION, JUGES EN SQL : chacun est venu, avec son code et son motif (attendu : t ×7) ==='
+select :'e21b_err' = 'true' and :'e21b_code' = '23514'
+         and strpos(:'e21b_msg', 'ne se pose que par l’application') > 0 as refus_21b_vrai_compte_attendu_t,
+       :'e22a_err' = 'true' and :'e22a_code' = '23514'
+         and strpos(:'e22a_msg', 'preuve_tva_declaration_check') > 0 as refus_22a_texte_hors_liste_attendu_t,
+       :'e22b_err' = 'true' and :'e22b_code' = '23514'
+         and strpos(:'e22b_msg', 'preuve_tva_declaration_check') > 0 as refus_22b_sans_texte_attendu_t,
+       :'e22c_err' = 'true' and :'e22c_code' = '23514'
+         and strpos(:'e22c_msg', 'preuve_tva_declaration_check') > 0 as refus_22c_texte_sans_date_attendu_t,
+       :'e22d_err' = 'true' and :'e22d_code' = '23514'
+         and strpos(:'e22d_msg', 'preuve_tva_declaration_check') > 0 as refus_22d_essai_declare_attendu_t,
+       :'e22e_err' = 'true' and :'e22e_code' = '23514'
+         and strpos(:'e22e_msg', 'preuve_tva_declaration_check') > 0 as refus_22e_sans_date_attendu_t,
+       :'e23_err' = 'true' and :'e23_code' = '42501' as refus_23_client_attendu_t;
+
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 24. LE CATALOGUE : trois sources, la contrainte et sa liste fermee, deux colonnes nullables sans defaut ;'
+\echo '        toujours UNE politique, en lecture ; le declencheur appelable par personne ==='
+-- --------------------------------------------------------------------------
+select pg_get_constraintdef(c.oid) = 'CHECK ((source = ANY (ARRAY[''vies''::text, ''essai''::text, ''declaration''::text])))'
+         as trois_sources_attendu_t
+  from pg_constraint c where c.conname = 'preuve_tva_source_check' and c.conrelid = 'public.preuves_tva'::regclass;
+select count(*) as contrainte_declaration_attendu_1,
+       bool_and(pg_get_constraintdef(c.oid) like '%' || 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.' || '%') as liste_fermee_attendu_t
+  from pg_constraint c where c.conname = 'preuve_tva_declaration_check' and c.conrelid = 'public.preuves_tva'::regclass;
+select string_agg(column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, '-'), ','
+                  order by column_name)
+         = 'declaration_texte:text:YES:-,declare_le:timestamp with time zone:YES:-' as deux_colonnes_attendu_t
+  from information_schema.columns
+ where table_schema = 'public' and table_name = 'preuves_tva' and column_name in ('declare_le', 'declaration_texte');
+select count(*) as politiques_toujours_attendu_1 from pg_policies where schemaname = 'public' and tablename = 'preuves_tva';
+select has_function_privilege('authenticated', 'public.tient_la_preuve_tva()', 'execute') as declencheur_connecte_attendu_f,
+       has_column_privilege('authenticated', 'public.preuves_tva', 'declare_le', 'update') as date_ecrite_par_un_client_attendu_f;
+
 
 -- Ménage de queue : rien ne reste de ce fichier.
 delete from auth.users where id::text like 'a4800000-%';

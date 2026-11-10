@@ -42,11 +42,52 @@
  *      une saturation ;
  *   8. si `reconnu`, la preuve, écrite AVANT de répondre ; si `refuse`, la
  *      preuve de CE numéro est retirée — un numéro que VIES ne reconnaît
- *      plus ne doit plus s'imprimer — et le refus est retenu ; tout ce qui
+ *      plus ne doit plus s'imprimer —, SAUF la déclaration sur l'honneur de
+ *      ce numéro, qui reste (2b-2), et le refus est retenu ; tout ce qui
  *      n'est ni l'un ni l'autre est écrit au JOURNAL, avec les codes de
- *      VIES (jamais un nom ni une adresse) ;
+ *      VIES (jamais un nom ni une adresse), et une absence de réponse est
+ *      retenue (P5) ;
  *   9. la purge des compteurs `tva-` de plus d'un jour, après un appel
  *      compté seulement.
+ *
+ * LA DÉCLARATION SUR L'HONNEUR — 2b-2, 09/11/2026 (PLAN-DEVIS 10.19)
+ * ------------------------------------------------------------------
+ * Quand VIES REFUSE le numéro, l'artisan peut le déclarer sur l'honneur ;
+ * et, décision P5 du propriétaire, aussi quand VIES n'a pas répondu à
+ * trois contrôles du même numéro, le premier et le dernier séparés d'au
+ * moins une heure, dans les dernières 24 heures. Deux ACTIONS, dans le
+ * corps de la demande :
+ *
+ *   { numero }                                      le contrôle, ci-dessus ;
+ *   { numero, action: 'declarer', engagement, texte }
+ *   { action: 'retirer' }
+ *
+ * Une `action` inconnue est une faute de déploiement, pas une issue : une
+ * PANNE (HTTP 500), avant tout travail.
+ *
+ * `declarer`, dans l'ordre : (1) la forme et la clé, puis la case cochée
+ * (`engagement === true`, sinon `sans_engagement`) et le texte montré à
+ * l'octet de la version en vigueur (`texte_perime` sinon) — sans base ni
+ * réseau ; (2) à (4) comme le contrôle ; (5) la preuve du compte : VIES
+ * reconnaît un AUTRE numéro de ce SIREN → `deja_reconnu` (pas de
+ * rétrogradation), ce MÊME numéro → `reconnu`, une déclaration de ce même
+ * numéro → `declare` sans rien écrire (redéclarer ne rajeunit pas) ;
+ * (6) un refus de VIES retenu pour ce compte et CE numéro, sous la même
+ * empreinte que le contrôle, ou les trois contrôles sans réponse — sinon
+ * `non_refuse`, sans VIES, sans compteur, sans écriture ; (7) la ligne de
+ * `ligneDeDeclarationTva`, avec le texte REÇU, et la date que la BASE pose ;
+ * (8) `declare`. Ni VIES, ni compteur : une déclaration ne coûte rien à
+ * VIES, et Opus seul l'écrit.
+ *
+ * `retirer` : l'appelant, puis sa ligne `declaration`, et elle seule — une
+ * preuve `vies` qui porte une ancienne déclaration n'est pas touchée →
+ * `retire`, ou `rien_a_retirer`.
+ *
+ * Et le CONTRÔLE change en deux points : un refus de VIES n'efface plus une
+ * déclaration de ce numéro — il la fait RENAÎTRE quand elle était jointe à
+ * une preuve `vies` —, et la réponse le dit (`declare_le`) ; une absence de
+ * réponse (saturation ou panne, jamais un blocage) se retient un jour
+ * (`tva-muet:`), et la réponse dit quand elle suffit (`declarable`).
  *
  * CE QU'ELLE NE FAIT JAMAIS
  * -------------------------
@@ -77,6 +118,10 @@ import {
   lireReponseVies,
   reponsePubliqueTva,
   ligneDePreuveTva,
+  ligneDeDeclarationTva,
+  declarableSansReponse,
+  DECLARATION_TVA,
+  SANS_REPONSE_TVA,
   LIMITES_TVA,
   REFUS_RETENU_MS,
   ESSAIS_VIES,
@@ -227,14 +272,48 @@ async function traiter(req: Request): Promise<Response> {
   };
 
   try {
-    let demande: { numero?: unknown } = {};
+    let demande: { numero?: unknown; action?: unknown; engagement?: unknown; texte?: unknown } = {};
     try { demande = await req.json(); } catch { demande = {}; }
+    const action = demande && typeof demande === 'object' ? demande.action : undefined;
+
+    /* UNE ACTION INCONNUE : une faute de déploiement (une application plus
+       récente que la fonction, ou l'inverse), pas une issue — une PANNE,
+       avant tout travail. Rien ne se devine. */
+    if (action !== undefined && action !== 'declarer' && action !== 'retirer') {
+      return panne('Action inconnue de la fonction tva.', JSON.stringify(action).slice(0, 40));
+    }
+
+    /* RETIRER SA DÉCLARATION : l'appelant, puis SA ligne `declaration`, et
+       elle seule. Une preuve `vies` qui porte une ancienne déclaration n'est
+       pas touchée : VIES reconnaît ce numéro, et c'est lui qui s'imprime.
+       Ni VIES, ni compteur, ni numéro à lire. */
+    if (action === 'retirer') {
+      const moi = await appelant(admin, req.headers.get('Authorization'));
+      if (!moi) return await repondre({ issue: 'sans_compte' });
+      const retiree = await admin.from('preuves_tva')
+        .delete()
+        .eq('pro_id', moi)
+        .eq('source', 'declaration')
+        .select('numero');
+      if (retiree.error) return panne('La déclaration n’a pas pu être retirée.', retiree.error);
+      const partie = ((retiree.data ?? []) as { numero: string }[])[0];
+      return await repondre(partie ? { issue: 'retire', numero: partie.numero } : { issue: 'rien_a_retirer' });
+    }
 
     /* (1) LA FORME ET LA CLÉ, sans base ni réseau. */
     const saisie = analyserNumeroTva(demande && demande.numero);
     if (saisie.etat === 'cle_fausse') return await repondre({ issue: 'cle_fausse' });
     if (saisie.etat !== 'pret') return await repondre({ issue: 'mal_forme' });
     const numero = saisie.numero;
+
+    /* (1 bis) LA DÉCLARATION : la case cochée, et le texte que l'écran a
+       montré, à l'octet de la version EN VIGUEUR. Une version d'Opus plus
+       ancienne montrerait un autre texte : on ne range pas un engagement
+       que l'artisan n'a pas lu. Toujours sans base ni réseau. */
+    if (action === 'declarer') {
+      if (demande.engagement !== true) return await repondre({ issue: 'sans_engagement' });
+      if (demande.texte !== DECLARATION_TVA) return await repondre({ issue: 'texte_perime' });
+    }
 
     /* (2) L'APPELANT. */
     const moi = await appelant(admin, req.headers.get('Authorization'));
@@ -256,6 +335,97 @@ async function traiter(req: Request): Promise<Response> {
       return await repondre({ issue: 'autre_siren' });
     }
 
+    /* Les clés des compteurs sont des EMPREINTES : une ligne de compteur ne
+       désigne personne. Le refus retenu et l'absence de réponse (P5) sont
+       ceux de CE compte et de CE numéro. */
+    const cleCompte = `tva-compte:${await empreinte(cleService, moi)}`;
+    const cleRefus = `tva-refus:${await empreinte(cleService, `${moi}:${numero}`)}`;
+    const cleMuet = `tva-muet:${await empreinte(cleService, `${moi}:${numero}`)}`;
+
+    /* Une déclaration de CE numéro qui reste enregistrée (seule, ou jointe à
+       une preuve `vies`) : un refus la DIT, sinon l'écran annoncerait « il
+       ne s'imprimera pas » d'un numéro qui s'imprime. */
+    const declarationDe = async () => {
+      const r = await admin.from('preuves_tva')
+        .select('declare_le')
+        .eq('pro_id', moi)
+        .eq('numero', numero)
+        .not('declare_le', 'is', null)
+        .limit(1);
+      if (r.error) return { panne: r.error };
+      const ligne = ((r.data ?? []) as { declare_le: string }[])[0];
+      return { declare_le: ligne ? ligne.declare_le : undefined };
+    };
+
+    /* Les contrôles restés sans réponse, pour ce compte et ce numéro, sur le
+       dernier jour : la règle de P5 est `declarableSansReponse`. */
+    const silences = async () => {
+      const r = await admin.from('siret_limites')
+        .select('fenetre')
+        .eq('cle', cleMuet)
+        .gt('fenetre', new Date(Date.now() - SANS_REPONSE_TVA.fenetre_ms).toISOString());
+      if (r.error) return { panne: r.error };
+      return { declarable: declarableSansReponse(((r.data ?? []) as { fenetre: string }[]).map((l) => l.fenetre), Date.now()) };
+    };
+
+    /* (3 à 8, déclaration) — voir l'en-tête. */
+    if (action === 'declarer') {
+      /* (5) LA PREUVE DU COMPTE : pas de rétrogradation, rien à refaire. */
+      const lueP = await admin.from('preuves_tva')
+        .select('numero, siren, source, reconnu_le, declare_le')
+        .eq('pro_id', moi)
+        .limit(1);
+      if (lueP.error) return panne('Lecture des preuves impossible.', lueP.error);
+      const actuelle = ((lueP.data ?? []) as {
+        numero: string; siren: string; source: string; reconnu_le: string | null; declare_le: string | null;
+      }[])[0];
+      if (actuelle && actuelle.siren === entreprise.siren) {
+        if (actuelle.source === 'vies' && actuelle.numero !== numero) {
+          return await repondre({ issue: 'deja_reconnu', numero: actuelle.numero, reconnu_le: actuelle.reconnu_le });
+        }
+        if (actuelle.source === 'vies') {
+          return await repondre({ issue: 'reconnu', numero, reconnu_le: actuelle.reconnu_le });
+        }
+        if (actuelle.source === 'declaration' && actuelle.numero === numero && actuelle.declare_le) {
+          return await repondre({ issue: 'declare', numero, declare_le: actuelle.declare_le });
+        }
+      }
+
+      /* (6) UNE RÉPONSE DE VIES A EU LIEU : un refus retenu pour CE numéro
+         (moins de trois heures, la même empreinte que le contrôle), ou trois
+         contrôles sans réponse (P5). Sinon, rien : ni VIES, ni compteur, ni
+         écriture. */
+      const refusRetenu = await admin.from('siret_limites')
+        .select('fenetre')
+        .eq('cle', cleRefus)
+        .gt('fenetre', new Date(Date.now() - REFUS_RETENU_MS).toISOString())
+        .limit(1);
+      if (refusRetenu.error) return panne('Lecture des refus retenus impossible.', refusRetenu.error);
+      let permise = ((refusRetenu.data ?? []) as { fenetre: string }[]).length > 0;
+      if (!permise) {
+        const s = await silences();
+        if (s.panne) return panne('Lecture des contrôles sans réponse impossible.', s.panne);
+        permise = s.declarable === true;
+      }
+      if (!permise) return await repondre({ issue: 'non_refuse' });
+
+      /* (7) LA DÉCLARATION — le texte REÇU (celui que l'écran a montré), et
+         la date que la BASE pose (`tient_la_preuve_tva`) : rien d'autre ne
+         part du téléphone. */
+      const ligne = ligneDeDeclarationTva({ pro_id: moi, siren: entreprise.siren, numero, texte: demande.texte });
+      if (!ligne) return panne('Déclaration impossible à composer.');
+      const ecrite = await admin.from('preuves_tva')
+        .upsert(ligne, { onConflict: 'pro_id' })
+        .select('numero, declare_le')
+        .single();
+      const posee = ecrite.data as { numero: string; declare_le: string | null } | null;
+      if (ecrite.error || !posee || !posee.declare_le) {
+        return panne('La déclaration n’a pas pu être enregistrée.', ecrite.error);
+      }
+      /* (8) */
+      return await repondre({ issue: 'declare', numero: posee.numero, declare_le: posee.declare_le });
+    }
+
     /* (5) UNE PREUVE FRAÎCHE POUR CE NUMÉRO : VIES n'est pas rappelé. */
     const recente = await admin.from('preuves_tva')
       .select('numero, reconnu_le')
@@ -270,10 +440,7 @@ async function traiter(req: Request): Promise<Response> {
     if (deja) return await repondre({ issue: 'reconnu', numero: deja.numero, reconnu_le: deja.reconnu_le });
 
     /* (5 bis) UN REFUS RETENU POUR CE COMPTE ET CE NUMÉRO : VIES n'est pas
-       rappelé. Les clés sont des EMPREINTES : une ligne de compteur ne
-       désigne personne. */
-    const cleCompte = `tva-compte:${await empreinte(cleService, moi)}`;
-    const cleRefus = `tva-refus:${await empreinte(cleService, `${moi}:${numero}`)}`;
+       rappelé. La réponse dit si une déclaration de ce numéro reste. */
     const refusRetenu = await admin.from('siret_limites')
       .select('fenetre')
       .eq('cle', cleRefus)
@@ -283,10 +450,13 @@ async function traiter(req: Request): Promise<Response> {
     if (refusRetenu.error) return panne('Lecture des refus retenus impossible.', refusRetenu.error);
     const refuse = ((refusRetenu.data ?? []) as { fenetre: string }[])[0];
     if (refuse) {
+      const reste = await declarationDe();
+      if (reste.panne) return panne('Lecture de la déclaration impossible.', reste.panne);
       return await repondre({
         issue: 'refuse',
         numero,
         reessayer_a: new Date(Date.parse(refuse.fenetre) + REFUS_RETENU_MS).toISOString(),
+        declare_le: reste.declare_le,
       });
     }
 
@@ -335,7 +505,9 @@ async function traiter(req: Request): Promise<Response> {
     if (lu.etat === 'reconnu') {
       /* La preuve, écrite AVANT de répondre : sans elle, l'écran dirait
          « reconnu » et le devis réclamerait encore le numéro. La date du
-         contrôle est celle que la BASE pose, et c'est elle qu'on renvoie. */
+         contrôle est celle que la BASE pose, et c'est elle qu'on renvoie.
+         Une déclaration de ce MÊME numéro reste jointe (le déclencheur la
+         garde) ; celle d'un autre numéro est remplacée. */
       const ligne = ligneDePreuveTva({ pro_id: moi, siren: entreprise.siren, numero, vies_le: lu.vies_le as string | null });
       if (!ligne) return panne('Preuve impossible à composer.');
       const ecrite = await admin.from('preuves_tva')
@@ -347,10 +519,25 @@ async function traiter(req: Request): Promise<Response> {
       return await repondre({ issue: 'reconnu', numero: preuve.numero, reconnu_le: preuve.reconnu_le });
     }
     if (lu.etat === 'refuse') {
-      /* Un numéro que VIES ne reconnaît plus cesse de s'imprimer. Seulement
-         CE numéro : un autre numéro refusé ne retire pas celui qui a été
-         reconnu. */
-      const retiree = await admin.from('preuves_tva').delete().eq('pro_id', moi).eq('numero', numero);
+      /* Un numéro que VIES ne reconnaît plus cesse de s'imprimer — SAUF
+         s'il est DÉCLARÉ sur l'honneur : la déclaration est faite pour ce
+         cas, et elle reste. D'abord, la preuve `vies` de CE numéro qui
+         porte une déclaration redevient une déclaration ; ensuite, ce qui
+         n'est pas une déclaration part. Dans cet ordre : sinon, la
+         déclaration jointe partirait avec sa preuve. Seulement CE numéro :
+         un autre numéro refusé ne retire pas celui qui a été reconnu. */
+      const renait = await admin.from('preuves_tva')
+        .update({ source: 'declaration', vies_le: null })
+        .eq('pro_id', moi)
+        .eq('numero', numero)
+        .eq('source', 'vies')
+        .not('declare_le', 'is', null);
+      if (renait.error) return panne('La déclaration n’a pas pu reprendre effet.', renait.error);
+      const retiree = await admin.from('preuves_tva')
+        .delete()
+        .eq('pro_id', moi)
+        .eq('numero', numero)
+        .neq('source', 'declaration');
       if (retiree.error) return panne('La preuve refusée n’a pas pu être retirée.', retiree.error);
       /* Le refus est RETENU : la même question ne repart pas à VIES avant
          trois heures. Un échec de cette écriture n'empêche pas de dire ce
@@ -359,11 +546,29 @@ async function traiter(req: Request): Promise<Response> {
         p_cle: cleRefus, p_fenetre: new Date(Date.now()).toISOString(), p_max: 1000,
       });
       if (retenu.error) console.error('Refus non retenu :', retenu.error.message);
-      return await repondre({ issue: 'refuse', numero });
+      const reste = await declarationDe();
+      if (reste.panne) return panne('Lecture de la déclaration impossible.', reste.panne);
+      return await repondre({ issue: 'refuse', numero, declare_le: reste.declare_le });
     }
     if (lu.etat === 'mal_forme') return await repondre({ issue: 'mal_forme' });
     if (lu.etat === 'bloque') return await repondre({ issue: 'bloque' });
-    return await repondre({ issue: 'indisponible', cause: lu.etat === 'sature' ? 'sature' : 'panne' });
+
+    /* VIES N'A PAS RÉPONDU (saturation ou panne — jamais un blocage, qui
+       est sorti juste au-dessus) : l'absence de réponse est RETENUE un jour,
+       et la réponse dit quand trois suffisent (P5). Un échec de ces deux
+       lectures et écritures n'empêche pas de dire que VIES n'a pas
+       répondu : la déclaration, alors, ne s'offre pas. */
+    const muet = await admin.rpc('compter_appel_siret', {
+      p_cle: cleMuet, p_fenetre: new Date(Date.now()).toISOString(), p_max: 1000,
+    });
+    if (muet.error) console.error('Absence de réponse non retenue :', muet.error.message);
+    const s = await silences();
+    if (s.panne) console.error('Contrôles sans réponse illisibles :', (s.panne as { message?: string }).message ?? s.panne);
+    return await repondre({
+      issue: 'indisponible',
+      cause: lu.etat === 'sature' ? 'sature' : 'panne',
+      declarable: s.declarable === true ? true : undefined,
+    });
   } catch (e) {
     return panne('Erreur inattendue dans la fonction tva.', e instanceof Error ? e.message : e);
   }

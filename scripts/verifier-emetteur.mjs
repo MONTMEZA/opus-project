@@ -356,6 +356,17 @@ if (E && M && D) {
         preuveTva: { ...preuveB, siren: '000048009', numero: 'FR91000048009' } }).join() === 'conso_tva_intra'
       && cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS,
         preuveTva: { ...preuveB, numero: 'FR91000048009' } }).join() === 'conso_tva_intra');
+    /* 2b-2 : une DÉCLARATION sur l'honneur éteint le motif comme la base
+       (sa jointure ne filtre pas la source) — pour le SIREN actif
+       seulement ; une source inconnue, non (S24). */
+    const declB = { ...preuveB, source: 'declaration', declare_le: '2026-11-09T10:00:00.000Z', declaration_texte: 'texte' };
+    verifier('une DÉCLARATION sur l’honneur pour le SIREN actif éteint `conso_tva_intra` ; pour un autre SIREN, ou une source inconnue, non',
+      cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS, preuveTva: declB }).length === 0
+      && cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS,
+        preuveTva: { ...declB, siren: '000048009', numero: 'FR91000048009' } }).join() === 'conso_tva_intra'
+      && cles({ entreprise: B, emetteur: sansTvaB, tarifs: FRAIS,
+        preuveTva: { ...declB, source: 'autre' } }).join() === 'conso_tva_intra'
+      && E.preuveTvaPour(B, declB) === declB);
     const age = (jours, source) => cles({ entreprise: { ...A, verifie_le: ilYA(jours), source },
       emetteur: COMPLETE, tarifs: FRAIS });
     verifier('fraîcheur : 400 jours → `entreprise_ancienne` ; 300 → rien ; 400 en `administration` → rien',
@@ -797,6 +808,29 @@ if (E && M && D) {
       E.numeroTvaImprime(A, preuve).origine === 'annuaire' && E.numeroTvaImprime(sansTva, preuve).origine === 'vies'
       && E.numeroTvaImprime(sansTva, essai).origine === 'essai'
       && E.numeroTvaImprime(sansTva, { ...preuve, source: 'autre' }) === null);
+    /* 2b-2 : LA DÉCLARATION SUR L'HONNEUR — une troisième source, comme la
+       base. Elle s'imprime (le numéro seul, sans provenance), elle ne se dit
+       jamais « reconnue », et une preuve VIES qui porte une ancienne
+       déclaration reste d'origine VIES. */
+    const declaree = { ...preuve, source: 'declaration', declare_le: '2026-11-09T10:00:00.123456+00:00',
+      declaration_texte: 'texte', reconnu_le: '2026-11-09T10:00:00.123456+00:00' };
+    const tvaDecl = E.numeroTvaImprime(sansTva, declaree);
+    verifier('une DÉCLARATION sur l’honneur s’imprime : origine « declaration », SA date, et aucune date de reconnaissance',
+      !!tvaDecl && tvaDecl.numero === A.tva && tvaDecl.origine === 'declaration'
+      && tvaDecl.declare_le === declaree.declare_le && !('reconnu_le' in tvaDecl), JSON.stringify(tvaDecl));
+    verifier('…une preuve VIES qui porte une ANCIENNE déclaration reste d’origine VIES',
+      E.numeroTvaImprime(sansTva, { ...declaree, source: 'vies' }).origine === 'vies');
+    verifier('…l’annuaire garde le dernier mot, et une déclaration faite pour un AUTRE SIREN ne s’imprime pas',
+      E.numeroTvaImprime(A, declaree).origine === 'annuaire'
+      && E.numeroTvaImprime(sansTva, { ...declaree, siren: '000048009', numero: 'FR91000048009' }) === null);
+    verifier('…et elle ne porte pas sa provenance sur le devis (Opus le dit à l’artisan seul) : la même ligne qu’un numéro VIES',
+      E.ligneSource(sansTva, declaree) === E.ligneSource(sansTva)
+      && E.ligneSource({ ...sansTva, source: 'administration' }, declaree) === null
+      && !/VIES|DGFiP|déclar|honneur/i.test(E.ligneSource(sansTva, declaree) || ''));
+    const enteteDecl = h({ entreprise: sansTva, emetteur: COMPLETE, tarifs: FRAIS, preuveTva: declaree });
+    verifier('…l’en-tête imprime le numéro déclaré, et ne le réclame plus',
+      enteteDecl.identite.includes(`N° de TVA intracommunautaire : ${A.tva}`)
+      && !lignes(enteteDecl).some((x) => /numéro de TVA intracommunautaire\]/.test(x)));
     verifier('…et une preuve faite pour un AUTRE SIREN ne s’imprime nulle part',
       E.ligneSource({ ...sansTva, source: 'administration' }, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) === null
       && !/VIES/.test(E.ligneSource(sansTva, { ...preuve, siren: '000048009', numero: 'FR91000048009' }) || ''));
@@ -1719,7 +1753,17 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
        pas encore : sur une base sans la section 48, il n'y a aucune preuve. */
     && /if \(v\.error && !tableAbsente\(v\.error\)\) throw v\.error;/.test(corps(api, 'async function monEmetteurSupabase('))
     && /erreur\.code === 'PGRST205' \|\| erreur\.code === '42P01'/.test(api)
-    && /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source'\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function monEmetteurSupabase(')));
+    /* 2b-2 (cahier §2.11, critique base M9) : la preuve se lit AVEC
+       `declare_le` — la date d'une déclaration sur l'honneur, que l'en-tête
+       imprime —, la ligne du compte seulement ; une base en retard d'une
+       migration (42703 sur CETTE colonne) est relue SANS elle, et seulement
+       elle. Les deux `select` sont écrits en toutes lettres (`verifier-lectures`
+       ne lit pas une liste rangée dans une variable), et ce sont les deux
+       seules lectures de la table dans `api.js`. */
+    && /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source, declare_le'\)\.eq\('pro_id', currentUserId\)\s*\.maybeSingle\(\),\s*\]\);/.test(corps(api, 'async function monEmetteurSupabase('))
+    && /function colonneAbsente\(erreur, colonne\) \{\s*return !!erreur && erreur\.code === '42703' && String\(erreur\.message \|\| ''\)\.includes\(colonne\);\s*\}/.test(api)
+    && /if \(v\.error && colonneAbsente\(v\.error, 'declare_le'\)\) \{\s*v = await supabase\.from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source'\)\.eq\('pro_id', currentUserId\)\s*\.maybeSingle\(\);\s*\}/.test(corps(api, 'async function monEmetteurSupabase('))
+    && (api.match(/from\('preuves_tva'\)/g) || []).length === 2);
   verifier('l’assurance et son retrait ne visent que la fiche du compte connecté',
     /\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function enregistrerAssuranceSupabase('))
     && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function retirerAssuranceSupabase(')));
@@ -1775,7 +1819,11 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   const bandeQuitter = (me.match(/\{quitter && \([\s\S]*?\n\s{8}\)\}/) || [''])[0];
   const corpsFermer = (me.match(/const fermer = \(\) => \{([\s\S]*?)\n {2}\};/) || ['', ''])[1];
   const formeDeFermer = corpsFermer.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/\s+/g, ' ').trim();
-  const FORME_DE_FERMER = "if (occupe || occupeAssurance) { afficher('' + ''); return; } if (occupeTva) { afficher('', ''); return; } "
+  /* 2b-2 : le message d'attente d'un envoi TVA nomme CE qui part (le
+     contrôle, la déclaration, le retrait — `messageDOccupationTva`,
+     declaration-tva.js, fait tourner par `verifier-tva`). */
+  const FORME_DE_FERMER = "if (occupe || occupeAssurance) { afficher('' + ''); return; } "
+    + "if (occupeTva) { afficher(messageDOccupationTva(occupeTva, { fermer: true }), ''); return; } "
     + "if (!quitter && aDesChangements()) { setQuitter(true); retour.avertissement(); retour.annoncer(''); return; } onFermer();";
   verifier('…« Quitter sans enregistrer » passe par `fermer`, comme la croix et le geste de retour d’Android : pendant un envoi, il '
     + 'attend et le dit ; `onFermer` n’est appelé que par `fermer` (relecture 5 de 2b-1, RELIRE4-A)',

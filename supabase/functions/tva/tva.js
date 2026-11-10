@@ -17,6 +17,17 @@
  * la DGFiP ne publie pas sont refusés par VIES. Calculer n'est pas
  * attribuer.
  *
+ * LA PORTE DE SORTIE — 2b-2, 09/11/2026 (PLAN-DEVIS 10.19)
+ * --------------------------------------------------------
+ * Quand VIES REFUSE le numéro — ou, décision P5 du propriétaire, ne répond
+ * pas à trois contrôles du même numéro en plus d'une heure —, l'artisan
+ * peut le DÉCLARER sur l'honneur, par une case à cocher dont le texte est
+ * `DECLARATION_TVA`. La fonction Edge garde la déclaration, son texte et sa
+ * date (posée par la base), et le numéro s'imprime sur ses devis. Elle
+ * seule peut l'écrire : elle seule sait qu'une réponse de VIES a eu lieu.
+ * Il peut la RETIRER à tout moment. La section 3 bis porte ce qui en
+ * décide.
+ *
  * CE FICHIER N'IMPORTE RIEN, ET C'EST UNE RÈGLE
  * ---------------------------------------------
  * Il est recopié OCTET POUR OCTET dans `supabase/functions/tva/tva.js` :
@@ -253,10 +264,20 @@ export function lireReponseVies(corps, numeroEnvoye) {
 /*  3. CE QUE LA FONCTION EDGE RENVOIE                                  */
 /* ================================================================== */
 
-/** Les issues que la fonction Edge peut rendre — toutes en HTTP 200. */
+/**
+ * Les issues que la fonction Edge peut rendre — toutes en HTTP 200.
+ *
+ * Les onze du contrôle, puis les sept de la déclaration sur l'honneur
+ * (2b-2) : `declare` (elle est enregistrée), `sans_engagement` (la case
+ * n'est pas cochée), `texte_perime` (le texte montré n'est plus celui en
+ * vigueur), `non_refuse` (aucun refus récent de VIES, ni trois contrôles
+ * sans réponse), `deja_reconnu` (VIES reconnaît déjà un AUTRE numéro de
+ * l'entreprise : pas de rétrogradation), `retire` et `rien_a_retirer`.
+ */
 export const ISSUES_TVA_SERVEUR = Object.freeze([
   'reconnu', 'refuse', 'indisponible', 'bloque', 'mal_forme', 'cle_fausse', 'autre_siren',
   'deja_publie', 'sans_entreprise', 'sans_compte', 'trop_d_essais',
+  'declare', 'sans_engagement', 'texte_perime', 'non_refuse', 'deja_reconnu', 'retire', 'rien_a_retirer',
 ]);
 
 /**
@@ -266,13 +287,24 @@ export const ISSUES_TVA_SERVEUR = Object.freeze([
  */
 export const ISSUES_TVA = Object.freeze([...ISSUES_TVA_SERVEUR, 'reseau', 'service_indisponible', 'lent']);
 
-/** Les détails qu'une issue a le DROIT d'emporter vers le téléphone. */
+/**
+ * Les détails qu'une issue a le DROIT d'emporter vers le téléphone.
+ *
+ * `refuse` porte `declare_le` quand une déclaration de CE numéro reste
+ * enregistrée (sinon l'écran dirait « il ne s'imprimera pas » d'un numéro
+ * qui s'imprime) ; `indisponible` porte `declarable` quand VIES n'a pas
+ * répondu à trois contrôles en plus d'une heure (P5). Les dates sont
+ * celles que la BASE a posées.
+ */
 const DETAILS_PUBLICS = {
   reconnu: ['numero', 'reconnu_le'],
-  refuse: ['numero', 'reessayer_a'],
-  indisponible: ['cause'],
+  refuse: ['numero', 'reessayer_a', 'declare_le'],
+  indisponible: ['cause', 'declarable'],
   deja_publie: ['numero'],
   trop_d_essais: ['reessayer_a', 'portee'],
+  declare: ['numero', 'declare_le'],
+  deja_reconnu: ['numero', 'reconnu_le'],
+  retire: ['numero'],
 };
 
 /**
@@ -302,6 +334,112 @@ export function ligneDePreuveTva({ pro_id, siren, numero, vies_le }) {
 }
 
 /* ================================================================== */
+/*  3 bis. LA DÉCLARATION SUR L'HONNEUR (2b-2, 09/11/2026)              */
+/* ================================================================== */
+
+/**
+ * LE TEXTE DE LA CASE — décidé par le propriétaire, mot pour mot
+ * (PLAN-DEVIS 10.19, où il est écrit avec des apostrophes droites ; ici,
+ * typographiques, comme tout le texte d'Opus — `verifier-tva` compare les
+ * deux après normalisation, jamais en « corrigeant » celle-ci).
+ *
+ * L'écran le MONTRE à côté de la case, et le téléphone le RENVOIE avec la
+ * déclaration : la fonction le compare à l'octet à la version en vigueur
+ * (`texte_perime` sinon), et c'est ce texte reçu qu'elle range — ce que
+ * l'artisan a lu, pas ce qu'Opus croit lui avoir montré.
+ *
+ * Il ne vit QUE dans cette constante : aucun message de `messageTva` ne le
+ * recopie, et aucun texte légal non plus (le mot qu'il emploie est refusé
+ * ailleurs, parce qu'il suggérerait une caution publique ; ici, c'est
+ * l'artisan qui s'engage).
+ */
+export const DECLARATION_TVA = 'Je certifie sur l’honneur que ce numéro est celui que l’administration '
+  + 'fiscale a attribué à mon entreprise.';
+
+/**
+ * TOUTES les versions du texte qui ont EXISTÉ — une liste fermée, recopiée
+ * de `preuve_tva_declaration_check` (section 48) : une déclaration déjà
+ * faite garde la sienne. Une version nouvelle s'AJOUTE (ici et dans la
+ * base, dans le même lot), jamais ne remplace ; `DECLARATION_TVA` est la
+ * dernière.
+ */
+export const DECLARATIONS_TVA_CONNUES = Object.freeze([DECLARATION_TVA]);
+
+/**
+ * La ligne d'une DÉCLARATION, et rien d'autre : la même forme que
+ * `ligneDePreuveTva`, la source `declaration`, `vies_le` vide (VIES n'a
+ * rien reconnu), et le texte que l'écran a montré — refusé s'il n'est dans
+ * aucune version connue. Ni `declare_le` ni `reconnu_le` : c'est la BASE
+ * qui les pose (`tient_la_preuve_tva`).
+ */
+export function ligneDeDeclarationTva({ pro_id, siren, numero, texte }) {
+  if (!DECLARATIONS_TVA_CONNUES.includes(texte)) return null;
+  const preuve = ligneDePreuveTva({ pro_id, siren, numero, vies_le: null });
+  if (!preuve) return null;
+  return { ...preuve, vies_le: null, source: 'declaration', declaration_texte: texte };
+}
+
+/**
+ * P5, DÉCISION DU PROPRIÉTAIRE (09/11/2026) — quand VIES ne répond pas.
+ * La déclaration est AUSSI proposée quand VIES n'a pas répondu à trois
+ * contrôles du même numéro, le premier et le dernier séparés d'au moins
+ * une heure, dans les dernières 24 heures. C'est la fonction Edge qui les
+ * compte, sur ses serveurs (le téléphone ne peut pas le prétendre) : une
+ * ligne `tva-muet:<empreinte du compte et du numéro>` par contrôle resté
+ * sans réponse (saturation ou panne de VIES). Un blocage d'Opus par VIES
+ * ne compte pas : il ne dit rien du numéro.
+ *
+ * Trois contrôles d'au plus quatre requêtes chacun tiennent sous la limite
+ * de 24 requêtes par heure et par compte (`LIMITES_TVA`).
+ */
+export const SANS_REPONSE_TVA = Object.freeze({
+  controles: 3,
+  ecart_ms: 60 * 60 * 1000,
+  fenetre_ms: 24 * 60 * 60 * 1000,
+});
+
+/**
+ * Un horodatage, réécrit dans LA forme que la spécification de JavaScript
+ * oblige tout moteur à lire (« AAAA-MM-JJTHH:MM:SS.sss±hh:mm ») — la MÊME
+ * règle que `isoLisible()` de `entreprise.js`, que ce fichier ne peut pas
+ * importer (`verifier-tva` compare les deux). PostgREST rend six décimales
+ * et « +00:00 » ; PostgreSQL en texte, un espace et « +00 ». Rend `null`
+ * pour ce qui n'est pas un horodatage.
+ */
+function isoTva(valeur) {
+  const s = String(valeur == null ? '' : valeur).trim();
+  const r = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/i);
+  if (!r) return null;
+  const [, jour, hm, sec = '00', frac = '', fuseau = ''] = r;
+  const millis = (frac + '000').slice(0, 3);
+  let tz = fuseau.toUpperCase();
+  if (/^[+-]\d{2}$/.test(tz)) tz += ':00';
+  else if (/^[+-]\d{4}$/.test(tz)) tz = `${tz.slice(0, 3)}:${tz.slice(3)}`;
+  return `${jour}T${hm}:${sec}.${millis}${tz}`;
+}
+
+/** L'instant d'un horodatage, en millisecondes, ou NaN. */
+function instantTva(valeur) {
+  const iso = isoTva(valeur);
+  return iso ? Date.parse(iso) : NaN;
+}
+
+/**
+ * La règle de P5, écrite UNE fois : les instants (`fenetre`) des contrôles
+ * restés sans réponse pour ce compte et ce numéro suffisent-ils ? Au moins
+ * `controles` dans les dernières `fenetre_ms` (strictement), et le premier
+ * et le dernier séparés d'au moins `ecart_ms`. Ce qui ne se lit pas ne
+ * compte pas.
+ */
+export function declarableSansReponse(fenetres, maintenantMs) {
+  if (!Array.isArray(fenetres) || !Number.isFinite(maintenantMs)) return false;
+  const debut = maintenantMs - SANS_REPONSE_TVA.fenetre_ms;
+  const instants = fenetres.map(instantTva).filter((x) => Number.isFinite(x) && x > debut);
+  if (instants.length < SANS_REPONSE_TVA.controles) return false;
+  return Math.max(...instants) - Math.min(...instants) >= SANS_REPONSE_TVA.ecart_ms;
+}
+
+/* ================================================================== */
 /*  4. CE QUE L'ÉCRAN DIT                                               */
 /* ================================================================== */
 
@@ -321,14 +459,59 @@ function sirenLisible(siren) {
 }
 
 /**
+ * « JJ/MM/AAAA » — la MÊME règle que `dateFrancaise()` de `entreprise.js`
+ * (que ce fichier ne peut pas importer ; `verifier-tva` compare les deux,
+ * dans plusieurs fuseaux) : un horodatage se lit à l'heure du TÉLÉPHONE
+ * (la date d'une déclaration posée à 0 h 30 à Paris n'est pas celle de la
+ * veille), une date seule ou une heure murale comme elles sont écrites.
+ */
+export function dateFrancaiseTva(valeur) {
+  const s = String(valeur == null ? '' : valeur);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const t = instantTva(s);
+  if (Number.isFinite(t)) {
+    const d = new Date(t);
+    const deux = (n) => String(n).padStart(2, '0');
+    return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()}`;
+  }
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/**
+ * P5 : ce que l'écran dit de la déclaration quand VIES n'a PAS répondu —
+ * seulement quand l'écran pourrait l'offrir (`peutDeclarer`, qu'il
+ * calcule : pas de preuve, une preuve d'essai, ou une déclaration d'un
+ * AUTRE numéro). Un blocage d'Opus par VIES ne compte pas parmi les
+ * contrôles sans réponse : il ne dit rien du numéro.
+ */
+function suiteSansReponse(issue, d) {
+  if (d.peutDeclarer !== true) return '';
+  if (issue === 'bloque') return ' La déclaration sur l’honneur n’est proposée qu’après une réponse de VIES.';
+  if (issue === 'indisponible' && d.declarable === true) {
+    return ' VIES n’a pas répondu à trois contrôles en plus d’une heure : si vous êtes sûr de ce '
+      + 'numéro, vous pouvez le déclarer sur l’honneur, plus bas.';
+  }
+  return ' Si VIES ne répond toujours pas à trois contrôles, en plus d’une heure, Opus vous '
+    + 'proposera de déclarer ce numéro sur l’honneur.';
+}
+
+/**
  * Le message d'un état de saisie ou d'une issue : { texte, action }.
  * `action` vaut 'corriger', 'reessayer' ou null — l'écran en tire son
  * bouton. `details` peut porter `siren`, `regime` (le régime de TVA
- * déclaré), `cause`, `reessayer_a`, `portee`.
+ * déclaré), `cause`, `reessayer_a`, `portee` ; et, pour la déclaration sur
+ * l'honneur (2b-2), `numero`, `reconnu_le` et `declare_le` (les dates de la
+ * BASE, telles que la fonction les renvoie), `declarable` (P5) et
+ * `peutDeclarer` — que l'ÉCRAN calcule : la déclaration ne s'offre jamais
+ * pour le numéro déjà déclaré, ni quand VIES en reconnaît un.
  *
  * TROIS FAMILLES, comme pour le SIRET, et elles ne se confondent pas :
  * la saisie (on aide à corriger) ; VIES n'a PAS contrôlé le numéro (on ne
  * l'accuse JAMAIS) ; VIES a répondu (on dit ce qu'il a dit).
+ *
+ * Et aucune phrase ne recopie `DECLARATION_TVA` : le texte de la case
+ * n'existe qu'à côté de la case.
  */
 export function messageTva(issue, details) {
   const d = details && typeof details === 'object' ? details : {};
@@ -372,12 +555,12 @@ export function messageTva(issue, details) {
     /* --- VIES N'A PAS CONTRÔLÉ LE NUMÉRO : on ne l'accuse jamais ---- */
     case 'indisponible':
       return {
-        texte: d.cause === 'sature'
+        texte: (d.cause === 'sature'
           ? 'VIES n’a pas pu répondre : ce service de la Commission européenne est saturé en ce '
             + 'moment. Votre numéro n’est pas en cause, et rien n’a changé dans Opus. Réessayez '
             + 'dans quelques minutes.'
           : 'VIES n’a pas pu contrôler votre numéro pour l’instant. Votre numéro n’est pas en '
-            + 'cause, et rien n’a changé dans Opus. Réessayez plus tard.',
+            + 'cause, et rien n’a changé dans Opus. Réessayez plus tard.') + suiteSansReponse(issue, d),
         action: 'reessayer',
       };
     case 'bloque':
@@ -385,13 +568,13 @@ export function messageTva(issue, details) {
       return {
         texte: 'VIES a refusé de traiter la demande d’Opus. Votre numéro n’est pas en cause, et '
           + 'rien n’a changé dans Opus : ce blocage se règle entre Opus et la Commission '
-          + 'européenne, et réessayer maintenant n’y changerait rien.',
+          + 'européenne, et réessayer maintenant n’y changerait rien.' + suiteSansReponse(issue, d),
         action: null,
       };
     case 'reseau':
       return {
         texte: 'Pas de connexion : la demande n’est pas partie. Votre numéro n’est pas en cause. '
-          + 'Retrouvez du réseau, puis réessayez.',
+          + 'Retrouvez du réseau, puis réessayez.' + suiteSansReponse(issue, d),
         action: 'reessayer',
       };
     case 'lent':
@@ -399,7 +582,7 @@ export function messageTva(issue, details) {
          ne dit donc PAS « rien n'a changé ». */
       return {
         texte: 'VIES met trop de temps à répondre. Rouvrez « Mon entreprise » dans un instant : si '
-          + 'votre numéro a été reconnu entre-temps, il y sera. Sinon, réessayez.',
+          + 'votre numéro a été reconnu entre-temps, il y sera. Sinon, réessayez.' + suiteSansReponse(issue, d),
         action: 'reessayer',
       };
     case 'service_indisponible':
@@ -430,17 +613,45 @@ export function messageTva(issue, details) {
       };
     case 'refuse': {
       const heure = heureFrancaise(d.reessayer_a);
+      const retenu = heure
+        ? 'VIES a refusé ce numéro il y a moins de trois heures : Opus ne le lui redemandera pas '
+          + `avant ${heure}. `
+        : '';
+      /* UNE DÉCLARATION DE CE NUMÉRO RESTE (la fonction le dit par
+         `declare_le`) : il CONTINUE de s'imprimer. Dire « il ne s'imprimera
+         pas » serait faux — c'était l'écran d'avant 2b-2. */
+      if (d.declare_le) {
+        const jour = dateFrancaiseTva(d.declare_le);
+        return {
+          texte: `${retenu || 'VIES ne reconnaît pas ce numéro. '}Votre déclaration sur l’honneur`
+            + `${jour ? ` du ${jour}` : ''} reste enregistrée : il continue de s’imprimer sur vos devis. `
+            + 'Si vous savez qu’il est faux, retirez votre déclaration.',
+          action: null,
+        };
+      }
       /* Le conseil de la franchise ne vaut que pour qui ne l'a pas déjà
          choisie : sinon il envoie dans une section où il n'y a rien à faire. */
-      const franchise = d.regime === 'franchise' ? ''
+      const franchiseChoisie = d.regime === 'franchise';
+      const pourquoi = 'Un numéro refusé peut n’être pas attribué, ou pas encore actif : ';
+      /* LA DÉCLARATION S'OFFRE PLUS BAS : on ne dit pas « il ne s'imprimera
+         pas » au-dessus d'une case qui promet le contraire. */
+      if (d.peutDeclarer === true) {
+        return {
+          texte: (retenu || 'VIES ne reconnaît pas ce numéro aujourd’hui. ')
+            + `${pourquoi}votre service des impôts des entreprises peut dire pourquoi, et l’activer.`
+            + (franchiseChoisie ? ' Tant que'
+              : ' Si vous êtes en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, tant que')
+            + ' VIES ne le reconnaît pas, Opus ne l’imprime sur vos devis que si vous le déclarez sur '
+            + 'l’honneur, plus bas.',
+          action: 'corriger',
+        };
+      }
+      const franchise = franchiseChoisie ? ''
         : ' Si vous êtes en franchise en base de TVA, choisissez-la dans « TVA ».';
       return {
-        texte: (heure
-          ? 'VIES a refusé ce numéro il y a moins de trois heures : Opus ne le lui redemandera pas '
-            + `avant ${heure}. `
-          : 'VIES ne reconnaît pas ce numéro aujourd’hui : il ne s’imprimera pas sur vos devis. ')
-          + 'Un numéro refusé n’est pas attribué, ou pas actif ; c’est votre service des impôts '
-          + `des entreprises qui peut dire pourquoi, et l’activer.${franchise}`,
+        texte: (retenu || 'VIES ne reconnaît pas ce numéro aujourd’hui : il ne s’imprimera pas sur vos devis. ')
+          + `${pourquoi}c’est votre service des impôts des entreprises qui peut dire pourquoi, et `
+          + `l’activer.${franchise}`,
         action: 'corriger',
       };
     }
@@ -459,6 +670,59 @@ export function messageTva(issue, details) {
     case 'sans_compte':
       return {
         texte: 'Votre session a expiré : reconnectez-vous, puis réessayez.',
+        action: null,
+      };
+
+    /* --- LA DÉCLARATION SUR L'HONNEUR (2b-2) ------------------------- */
+    case 'declare':
+      return {
+        texte: 'Votre déclaration est enregistrée : ce numéro s’imprimera sur vos devis. VIES ne le '
+          + 'reconnaît pas aujourd’hui ; si votre service des impôts le corrige ou l’active, '
+          + 'faites-le contrôler de nouveau.',
+        action: null,
+      };
+    case 'sans_engagement':
+      /* Pas « pour enregistrer » : le mot contient « registre », que les
+         contrôles de vocabulaire refusent dans ce fichier (VIES n'en est
+         pas un) — la phrase du cahier (A.5), dite autrement. */
+      return { texte: 'Cochez la déclaration pour que ce numéro soit enregistré.', action: null };
+    case 'texte_perime':
+      return {
+        texte: 'Le texte de la déclaration a changé depuis cette version d’Opus : mettez '
+          + 'l’application à jour, puis relisez-le avant de cocher. Rien n’a été enregistré.',
+        action: null,
+      };
+    case 'non_refuse':
+      /* Un refus retenu qui n'a pas pu s'écrire mène aussi ici : la phrase
+         dit de recontrôler, elle ne contredit pas l'écran qui a montré le
+         refus (cahier 2b-2, M7). */
+      return {
+        texte: 'Opus n’a pas de refus récent de VIES pour ce numéro : faites-le contrôler de nouveau. '
+          + 'S’il le refuse, la déclaration vous sera proposée.',
+        action: 'reessayer',
+      };
+    case 'deja_reconnu': {
+      /* Pas de rétrogradation : VIES reconnaît déjà un AUTRE numéro de
+         l'entreprise, et c'est lui qui s'imprime. On dit lequel, et quand
+         (cahier 2b-2, M4). */
+      const jour = dateFrancaiseTva(d.reconnu_le);
+      const numero = typeof d.numero === 'string' && FORME_TVA.test(d.numero) ? d.numero : null;
+      return {
+        texte: `VIES a reconnu ${numero ? `le numéro ${numero}` : 'un autre numéro'} de votre entreprise`
+          + `${jour ? ` le ${jour}` : ''} : c’est lui qui s’imprime sur vos devis. S’il n’est plus `
+          + 'valable, faites-le contrôler de nouveau.',
+        action: null,
+      };
+    }
+    case 'retire':
+      return {
+        texte: 'Votre déclaration est retirée : ce numéro ne s’imprimera plus sur vos devis.',
+        action: null,
+      };
+    case 'rien_a_retirer':
+      return {
+        texte: 'Il n’y a plus de déclaration à retirer : elle a déjà été retirée, ou VIES a reconnu '
+          + 'votre numéro entre-temps.',
         action: null,
       };
 

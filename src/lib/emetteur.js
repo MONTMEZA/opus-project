@@ -999,12 +999,14 @@ export const MOTIFS = Object.freeze([
     section: 'entreprise',
     phrase: 'Pour un devis à un particulier : vous avez déclaré le régime réel, mais Opus n’a aucun '
       + 'numéro de TVA intracommunautaire pour votre entreprise : l’annuaire des entreprises '
-      + '(liste de la DGFiP) ne lui en a transmis aucun, et VIES n’en a reconnu aucun. La loi '
-      + 'demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime '
-      + 'sur le devis. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « '
-      + 'TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler '
-      + 'par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service '
-      + 'des impôts des entreprises qui peut dire pourquoi, et l’activer.',
+      + '(liste de la DGFiP) ne lui en a transmis aucun, VIES n’en a reconnu aucun, et vous n’en '
+      + 'avez déclaré aucun sur l’honneur. La loi demande de le communiquer au client (code de la '
+      + 'consommation, R. 111-2) ; Opus l’imprime sur le devis. Si vous êtes en réalité en franchise '
+      + 'en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre '
+      + 'entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. '
+      + 'S’il le refuse, ou ne répond pas à trois contrôles en plus d’une heure, alors que vous êtes '
+      + 'sûr de ce numéro, vous pourrez le déclarer sur l’honneur ; votre service des impôts des '
+      + 'entreprises peut dire pourquoi VIES le refuse, et l’activer.',
   }),
   Object.freeze({
     cle: 'conso_mediateur',
@@ -1062,20 +1064,26 @@ export const MOTIFS = Object.freeze([
 ]);
 
 /**
- * LE N° DE TVA RECONNU PAR VIES (section 48) — la preuve, si elle vaut pour
- * CETTE entreprise, ou null.
+ * LE N° DE TVA RECONNU PAR VIES (section 48), OU DÉCLARÉ SUR L'HONNEUR
+ * (2b-2) — la preuve, si elle vaut pour CETTE entreprise, ou null.
  *
  * Elle ne vaut que pour le SIREN de l'identité ACTIVE, comme la jointure de
  * `emetteur_incomplet()` : une preuve faite pour une autre entreprise (le
  * compte en a changé) ne prête pas son numéro. Et elle doit avoir la forme
  * d'un numéro qui DÉSIGNE ce SIREN — la base l'exige déjà ; l'écran ne
  * l'imprime pas sans l'avoir relu.
+ *
+ * Trois sources, comme la base (`preuve_tva_source_check`) : `vies`,
+ * `essai`, et `declaration` — la déclaration sur l'honneur éteint
+ * `conso_tva_intra` EXACTEMENT comme la base (sa jointure ne filtre pas la
+ * source) ; sans elle, le miroir réclamerait un numéro que la base ne
+ * réclame plus.
  */
 export function preuveTvaPour(entreprise, preuveTva) {
   const r = entreprise || null;
   const p = preuveTva || null;
   if (!r || !p || !r.siren || p.siren !== r.siren) return null;
-  if (p.source != null && !['vies', 'essai'].includes(p.source)) return null;
+  if (p.source != null && !['vies', 'essai', 'declaration'].includes(p.source)) return null;
   const numero = String(p.numero || '');
   if (!FORME_TVA.test(numero) || numero.slice(4) !== r.siren) return null;
   return p;
@@ -1093,7 +1101,14 @@ export function numeroTvaImprime(entreprise, preuveTva) {
   if (!p) return null;
   /* Une preuve « essai » est posée par le connecteur, sans aucun appel à
      VIES : elle ne se dit jamais « reconnue par VIES ». */
-  return { numero: p.numero, origine: p.source === 'essai' ? 'essai' : 'vies', reconnu_le: p.reconnu_le || null };
+  if (p.source === 'essai') return { numero: p.numero, origine: 'essai', reconnu_le: p.reconnu_le || null };
+  /* UNE DÉCLARATION SUR L'HONNEUR (2b-2) ne se dit jamais « reconnue » non
+     plus : sa date est celle de la déclaration (`declare_le`), et
+     `reconnu_le`, qui la recopie en base, n'est pas une reconnaissance. Une
+     preuve `vies` qui porte une ANCIENNE déclaration (VIES a fini par
+     reconnaître le numéro) reste, elle, d'origine VIES. */
+  if (p.source === 'declaration') return { numero: p.numero, origine: 'declaration', declare_le: p.declare_le || null };
+  return { numero: p.numero, origine: 'vies', reconnu_le: p.reconnu_le || null };
 }
 
 /** Chaque clé de motif → l'ancre de l'écran qui permet de le compléter. */
@@ -1341,6 +1356,10 @@ export function adresseImprimee(entreprise, emetteur) {
  * aucune responsabilité » sur des données qui viennent des administrations
  * fiscales. La date du contrôle reste dans « Mon entreprise » et dans
  * l'export. Une preuve d'ESSAI, elle, se dit pour ce qu'elle est.
+ *
+ * Un numéro DÉCLARÉ sur l'honneur (2b-2) ne porte pas non plus sa
+ * provenance : rien sur le devis ne dit que VIES ne le reconnaît pas — Opus
+ * le dit à l'artisan SEUL, dans « Mon entreprise » (PLAN-DEVIS 10.19).
  *
  * Une identité ouverte par l'administration (`administration`) ne vient
  * pas du répertoire : seule la source du n° de TVA s'imprime, s'il y en a

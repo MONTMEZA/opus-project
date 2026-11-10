@@ -29,7 +29,45 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-02';
+export const VERSION = '2026-11-10';
+/* 10/11/2026 — À QUEL TITRE LE CLIENT COMMANDE, LE CHANTIER NEUF, ET LE N° DE
+   TVA DÉCLARÉ SUR L'HONNEUR (étape 2b-2 du module devis ; sections 46, 48
+   et 49 de `schema.sql`, fonction Edge `tva`). Ce qui a changé DE FOND :
+     - UNE DONNÉE NOUVELLE COLLECTÉE : la déclaration sur l'honneur du
+       numéro de TVA, son texte et sa date (posée par la base) ; et, pour les
+       devis, ce que le lot 2a rangeait déjà sans que le texte le dise — la
+       réduction, l'acompte et sa nature, la durée de validité — puis les
+       réponses de 2b-2 : à quel titre le client commande, si les travaux
+       portent sur un bâtiment neuf ou une transformation importante (et la
+       date du « Oui »), s'ils font partie d'un chantier qui crée un
+       bâtiment neuf, pour la TVA ;
+     - « SOURCES » disait « n'est gardé que si VIES le reconnaît » : FAUX
+       désormais — gardé aussi s'il est déclaré sur l'honneur, après un refus
+       de VIES ou trois contrôles sans réponse (décision P5 du 09/11) ;
+     - « POURQUOI » disait « un numéro qu'aucune administration ne
+       reconnaît » : récrit entier (critique « droit » B2), avec la base de
+       la déclaration, et celle du compte des contrôles restés sans réponse ;
+     - « UNE DÉCISION AUTOMATIQUE » : la règle d'Opus gagne une porte de
+       sortie et un retrait ; « Aucune vérification par un humain n'existe
+       encore » devient « personne chez Opus ne revoit les refus de VIES »,
+       avec ce qu'Opus contrôle et ne contrôle pas (M6), « quelques heures
+       après un refus » (M5), et les clients qu'Opus traite comme des
+       particuliers (I10) ;
+     - « COMBIEN DE TEMPS » : ce que la base fait de la déclaration —
+       gardée, effacée par son retrait, remplacée, jointe à une preuve de
+       VIES du même numéro — et le compte des silences de VIES, retenu un
+       jour sous une empreinte (critique « base » B1) ;
+     - « CE QUI EST INTERDIT » (CGU) : la fausse déclaration d'un numéro de
+       TVA, et ce qu'Opus peut en faire (décision P4 du 09/11) ;
+     - AUCUN TEXTE NE DIT « certifié » : c'est l'entreprise qui s'engage, et
+       la Licence Ouverte interdit de suggérer une caution ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions, et le préavis de quinze jours du règlement
+       2019/1150 (art. 3.2) s'appliquerait. Sans effet tant que STATUT vaut
+       'essai' ; à organiser avant l'ouverture au public (A-FAIRE).
+   Cette version prend la date du jour où ces textes ont été écrits ; si le
+   commit se fait un autre jour, `VERSION` prend la date de ce commit. */
+/* VERSION PRÉCÉDENTE : '2026-11-02'. */
 /* 02/11/2026 — CE QUE CHACUN LIT DES AUTRES, SECONDE ÉTAPE (lot S-d, étape
    M2 : les droits de colonne de `users` et des fiches pro). Ce qui a changé
    DE FOND :
@@ -961,14 +999,26 @@ export const MENTIONS = [
        n'en portent pas, ou portent celle de la CONSULTATION, et le
        répertoire ne publie pas toujours la sienne. La phrase dit donc OÙ
        elle accompagne la présentation — la carte de l'inscription et « Mon
-       entreprise » —, et que l'écran le dit quand elle manque. */
+       entreprise » —, et que l'écran le dit quand elle manque.
+
+       LE N° DE TVA DÉCLARÉ SUR L'HONNEUR (étape 2b-2 du devis, section 48 :
+       la source `declaration` de `preuves_tva`). « N'est gardé que si VIES
+       le reconnaît » devenait FAUX : après un refus de VIES — ou, décision
+       P5 du 09/11, après trois contrôles sans réponse, le premier et le
+       dernier séparés d'au moins une heure —, l'entreprise peut le déclarer
+       sur l'honneur, et la date de cette déclaration l'accompagne. La phrase
+       ne dit jamais « certifié » : la Licence Ouverte interdit de suggérer
+       une caution, et c'est l'entreprise qui s'engage, pas Opus. */
     titre: 'Sources',
     texte: 'Données d’entreprise : répertoire Sirene de l’INSEE (www.insee.fr), '
       + 'réutilisées sous Licence Ouverte 2.0 ; numéros de TVA : DGFiP ; via l’API '
       + 'Recherche d’entreprises. Un numéro de TVA que cette API ne publie pas, écrit par '
-      + 'l’entreprise elle-même, n’est gardé que si VIES, le service de la Commission '
+      + 'l’entreprise elle-même, est gardé si VIES, le service de la Commission '
       + 'européenne qui interroge l’administration fiscale de chaque pays, le reconnaît, '
-      + 'et la date de ce contrôle l’accompagne. La date de mise à jour du répertoire accompagne la '
+      + 'et la date de ce contrôle l’accompagne ; sinon, seulement si l’entreprise déclare '
+      + 'sur l’honneur, après un refus de VIES, ou après trois contrôles sans réponse, qu’il '
+      + 'est celui que l’administration fiscale lui a attribué, et la date de cette '
+      + 'déclaration l’accompagne. La date de mise à jour du répertoire accompagne la '
       + 'présentation de l’entreprise, à l’inscription et dans « Mon entreprise » — ou '
       + 'la mention qu’il n’en publie pas. Cette réutilisation ne vaut ni agrément ni '
       + 'caution de l’INSEE, de l’État ou de la Commission européenne.',
@@ -1212,7 +1262,14 @@ export const CGU = [
        compte déjà professionnel (la base réserve la demande aux
        particuliers, et l'application le dit dans « Mon entreprise ») :
        relecture adverse du 15/10. Le texte nomme les deux chemins qui
-       existent, et dit celui qui n'existe pas encore. */
+       existent, et dit celui qui n'existe pas encore.
+
+       LA FAUSSE DÉCLARATION D'UN N° DE TVA (étape 2b-2, décision P4 du
+       09/11, phrase choisie par le propriétaire) : sur le modèle de la
+       phrase du SIRET. Elle dit ce qu'Opus peut faire — fermer le compte —,
+       et rien de ce qu'un juge déciderait (la qualification pénale d'une
+       fausse déclaration à une plateforme privée est une question au
+       juriste, J2 : à savoir, pas à écrire). */
     texte: 'Se faire passer pour quelqu’un d’autre ou pour une entreprise qui '
       + "n'est pas la sienne. Proposer des travaux sans assurance ni facture. "
       + 'Insulter, menacer, harceler. Publier du contenu sexuel ou violent. '
@@ -1226,7 +1283,9 @@ export const CGU = [
       + 'rattachée à un compte qui n’est pas le vôtre, demandez une vérification à la '
       + 'main, depuis un compte particulier ou à l’inscription : chacun pourra être '
       + 'invité à justifier qu’il en est le titulaire. Un compte déjà professionnel ne '
-      + 'peut pas encore la demander depuis l’application.',
+      + 'peut pas encore la demander depuis l’application. Déclarer sur l’honneur un numéro '
+      + 'de TVA qui n’est pas celui que l’administration fiscale a attribué à son '
+      + 'entreprise : le compte peut être fermé.',
   },
   {
     titre: 'Modération',
@@ -1396,7 +1455,21 @@ export const CONFIDENTIALITE = [
        fourniture est-elle comprise, s'agit-il de main-d'œuvre) ; et le
        renvoi vers l'engagement des conditions disait « vos tarifs et vos
        prix » — les PHRASES de la base ne sont ni l'un ni l'autre, et c'est
-       pourtant l'engagement que la critique CD4 leur a donné. */
+       pourtant l'engagement que la critique CD4 leur a donné.
+
+       LES CONDITIONS ET LES RÉPONSES DU DEVIS, étape 2b-2 (10/11/2026) :
+       la phrase des devis n'avait jamais nommé ce que le lot 2a range (la
+       réduction, l'acompte et sa nature, la validité) ; elle nomme aussi les
+       réponses de 2b-2 — à quel titre le client commande, les deux
+       questions du « chantier » et la date du « Oui » que la BASE pose.
+       Insérées AVANT « leurs lignes » : `verifier-legal` découpe la phrase
+       à partir de « devis en préparation », et la base de postes reste
+       après. Et LA DÉCLARATION SUR L'HONNEUR du n° de TVA (section 48,
+       source `declaration`) : son texte et sa date, rangés à part de la
+       fiche comme le reste de l'identité. Le cahier écrivait « s'il le
+       refuse » seulement ; la décision P5 du 09/11 l'ouvre aussi après trois
+       contrôles sans réponse : le texte le dit, sinon il serait faux pour
+       ce cas-là. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -1426,7 +1499,9 @@ export const CONFIDENTIALITE = [
       + 'forme juridique, date de création, code d’activité, commune et adresse de '
       + 'l’établissement — ; et le numéro de TVA intracommunautaire que publie la DGFiP, '
       + 's’il en existe un — sinon, celui que vous écrivez vous-même, et la date à laquelle '
-      + 'VIES, le service de la Commission européenne, l’a reconnu. Ces informations sont rangées '
+      + 'VIES, le service de la Commission européenne, l’a reconnu — ou, s’il le refuse ou ne '
+      + 'répond pas à trois contrôles, votre déclaration sur l’honneur, son texte et sa date. '
+      + 'Ces informations sont rangées '
       + 'à part de votre fiche : '
       + 'seuls vous et l’administration d’Opus pouvez les lire. Un numéro saisi à la '
       + 'main dans l’ancien champ « SIRET » de la fiche, avant le 15/10/2026, n’est plus '
@@ -1443,7 +1518,11 @@ export const CONFIDENTIALITE = [
       + 'réclamation, et vos tarifs (frais de déplacement, taux horaire et son décompte, '
       + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
-      + 'garantie, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils '
+      + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel '
+      + 'titre le client commande, si les travaux portent sur un bâtiment neuf ou une '
+      + 'transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font '
+      + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, leurs lignes, leurs prix '
+      + 'et leurs totaux, le client de votre carnet auquel ils '
       + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '
       + 'base de postes : les phrases que vous y rangez, leur unité, si la fourniture est comprise '
       + 'et s’il s’agit de main-d’œuvre, le prix de référence que vous fixez et sa date, et le '
@@ -1600,7 +1679,14 @@ export const CONFIDENTIALITE = [
        l'écran fait aujourd'hui, et rien d'autre : proposer les phrases et
        les prix de référence pendant le chiffrage, et signaler un écart. Le
        jour où la base servira à autre chose, ce sera une finalité nouvelle,
-       annoncée avec SA case. */
+       annoncée avec SA case.
+
+       « UN NUMÉRO QU'AUCUNE ADMINISTRATION NE RECONNAÎT » DEVENAIT FAUX
+       (étape 2b-2, critique « droit » B2) : un numéro déclaré sur l'honneur
+       s'imprime alors que VIES ne le reconnaît pas. La phrase est récrite
+       ENTIÈRE, et la déclaration a sa propre base. Le compte des contrôles
+       restés sans réponse (décision P5 du 09/11) est un traitement nouveau,
+       que le cahier ne nommait pas ici : il a sa phrase, et sa base. */
     texte: 'Faire fonctionner le service et votre compte : exécution du '
       + 'contrat. Modérer les contenus et prévenir les fraudes : intérêt '
       + 'légitime, et obligation légale pour un service en ligne ouvert au '
@@ -1613,9 +1699,14 @@ export const CONFIDENTIALITE = [
       + 'intérêt légitime, protéger le service contre les abus. Faire contrôler par VIES '
       + 'le numéro de TVA que vous écrivez, et le garder : exécution du contrat — c’est ce '
       + 'qui permet de l’imprimer sur vos devis — et intérêt légitime à ce qu’un devis ne '
-      + 'porte pas un numéro qu’aucune administration ne reconnaît. Limiter le nombre de '
-      + 'ces contrôles par compte : intérêt légitime, protéger le service et VIES contre '
-      + 'les abus. Vous proposer, pendant que vous chiffrez, les phrases et les prix de '
+      + 'porte pas un numéro que ni l’administration ne reconnaît, ni l’entreprise n’a '
+      + 'déclaré sur l’honneur comme le sien. Garder votre déclaration sur l’honneur, son '
+      + 'texte et sa date : exécution du contrat — c’est ce qui permet d’imprimer ce numéro '
+      + 'sur vos devis — et intérêt légitime à garder la trace de votre engagement. Limiter '
+      + 'le nombre de ces contrôles par compte : intérêt légitime, protéger le service et '
+      + 'VIES contre les abus. Compter ceux auxquels VIES n’a pas répondu, pour vous proposer '
+      + 'la déclaration sur l’honneur après trois : exécution du contrat. Vous proposer, '
+      + 'pendant que vous chiffrez, les phrases et les prix de '
       + 'référence de votre base de postes, et vous signaler un écart avec ce prix : '
       + 'exécution du contrat. Remettre en avant vos publications et appliquer ses limites '
       + '— une fois tous les sept jours par publication, trois sur sept jours par '
@@ -1626,7 +1717,21 @@ export const CONFIDENTIALITE = [
        un compte professionnel est une décision automatisée qui peut
        affecter quelqu'un : il faut l'annoncer, et dire comment la faire
        revoir par un humain. Vrai dès ce lot, puisque la porte de secours
-       existe ; aucun délai n'est promis, parce qu'aucun n'est tenu. */
+       existe ; aucun délai n'est promis, parce qu'aucun n'est tenu.
+
+       LE N° DE TVA GAGNE UNE PORTE DE SORTIE (étape 2b-2, décisions du
+       09/11 et P5). « Aucune vérification par un humain n'existe encore »
+       était vrai et le reste — « personne chez Opus ne revoit les refus de
+       VIES » —, mais la règle n'est plus sans issue : l'artisan peut
+       déclarer le numéro sur l'honneur, et RETIRER cette déclaration. Le
+       texte dit honnêtement ce qu'Opus contrôle (la forme, et que le
+       numéro désigne bien son entreprise) et ce qu'il ne contrôle pas (que
+       le numéro lui a été attribué) — critique « droit » M6 ; « quelques
+       heures après un refus », parce qu'un refus est retenu trois heures
+       (M5) ; et les clients qu'Opus traite comme des particuliers (I10),
+       puisque le blocage de 2c vaudra pour eux aussi. Si la réponse est
+       « pour son entreprise, dans son activité principale », la mention
+       n'est plus comptée : le texte ne la promet donc que pour ceux-là. */
     titre: 'Une décision automatique, et comment la faire revoir',
     texte: 'Quand vous ouvrez un compte professionnel, le numéro SIRET est consulté '
       + 'automatiquement au répertoire Sirene de l’INSEE : s’il n’y est pas trouvé, si '
@@ -1637,15 +1742,23 @@ export const CONFIDENTIALITE = [
       + 'notifications et par la messagerie d’Opus. Vous pouvez y expliquer votre '
       + 'situation. Le numéro de TVA que vous écrivez suit une autre règle, et c’est une '
       + 'règle d’Opus : Opus le fait contrôler par VIES, le service de la Commission '
-      + 'européenne qui interroge l’administration fiscale française, et ne le garde que '
-      + 'si VIES le reconnaît. S’il ne le reconnaît pas, Opus ne l’imprime pas sur vos '
-      + 'devis ; au régime réel de TVA, « Mon entreprise » vous signale alors qu’il manque '
-      + 'une information pour vos devis à des particuliers, et, quand Opus permettra de '
-      + 'remettre des devis, il ne vous laissera pas en remettre un à un particulier tant '
-      + 'qu’elle manque. Aucune vérification par un humain n’existe encore pour cette '
-      + 'décision : seul votre service des impôts des entreprises peut activer ou corriger '
-      + 'votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler '
-      + 'de nouveau dès qu’il l’a fait. Si vous relevez en réalité de la franchise en base '
+      + 'européenne qui interroge l’administration fiscale française. S’il le reconnaît, '
+      + 'Opus l’imprime sur vos devis. S’il le refuse, ou s’il ne répond pas à trois '
+      + 'contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est '
+      + 'celui que l’administration fiscale a attribué à votre entreprise : Opus garde cette '
+      + 'déclaration, son texte et sa date, et imprime alors ce numéro sur vos devis. Cette '
+      + 'déclaration vous engage. Opus contrôle la forme du numéro et qu’il désigne bien '
+      + 'votre entreprise, mais pas qu’il vous a été attribué ; et personne chez Opus ne '
+      + 'revoit les refus de VIES. Vous pouvez retirer votre déclaration à tout moment. Tant '
+      + 'que vous n’avez ni numéro reconnu ni déclaration, au régime réel de TVA, « Mon '
+      + 'entreprise » vous signale qu’il manque une information pour vos devis à des '
+      + 'particuliers, et, quand Opus permettra de remettre des devis, il ne vous laissera '
+      + 'pas en remettre un à un particulier, ni à un client qu’Opus traite comme tel — une '
+      + 'association, une copropriété, une société civile, ou une entreprise de 5 salariés '
+      + 'au plus pour des travaux hors de son activité principale —, tant qu’elle manque. '
+      + 'Votre service des impôts des entreprises peut activer ou corriger votre numéro '
+      + 'auprès de l’administration fiscale, et vous pouvez le faire contrôler de nouveau, '
+      + 'quelques heures après un refus. Si vous relevez en réalité de la franchise en base '
       + 'de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé. '
       + 'Enfin, si vous remplacez ou retirez votre justificatif d’existence légale ou votre '
       + 'attestation d’assurance alors que votre badge est accordé, le badge est suspendu '
@@ -1877,9 +1990,14 @@ export const CONFIDENTIALITE = [
       + 'sont effacés une fois leur durée d’usage passée, lors d’une consultation '
       + 'suivante : ce ménage n’a lieu qu’à cette occasion, aucune durée maximale ne '
       + 'peut donc être promise. Le numéro de TVA que VIES a reconnu, et la date de ce '
-      + 'contrôle, restent attachés à votre compte et partent avec lui. Pour limiter les '
-      + 'contrôles auprès de VIES, Opus compte ceux de chaque compte, et retient quelques '
-      + 'heures qu’un numéro vient d’être refusé, sous une empreinte qui ne laisse lire ni '
+      + 'contrôle, restent attachés à votre compte et partent avec lui ; de même votre '
+      + 'déclaration sur l’honneur, son texte et sa date. Elle est effacée si vous la '
+      + 'retirez, ou remplacée si un autre numéro prend sa place — un numéro que vous '
+      + 'déclarez, ou que VIES reconnaît ; si VIES reconnaît ensuite ce même numéro, elle '
+      + 'reste jointe à sa preuve, et reprend effet s’il le refuse de nouveau. Pour limiter '
+      + 'les contrôles auprès de VIES, Opus compte ceux de chaque compte, et retient quelques '
+      + 'heures qu’un numéro vient d’être refusé, et un jour que VIES n’a pas répondu pour '
+      + 'lui, sous une empreinte qui ne laisse lire ni '
       + 'le compte ni le numéro ; ces compteurs sont effacés lors d’un contrôle suivant, '
       + 'plus d’un jour après, y compris si le compte a été supprimé entre-temps : comme '
       + 'pour la consultation du répertoire, aucune durée maximale ne peut donc être '

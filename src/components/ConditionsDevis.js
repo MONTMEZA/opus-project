@@ -65,7 +65,7 @@ import { CLAVIER } from '../lib/clavier';
 import * as retour from '../lib/retour';
 import {
   NATURES_ACOMPTE, VALIDITES_PROPOSEES, PHRASE_RETENUE,
-  AIDE_NATURE_ACOMPTE, ECHEANCE_ACOMPTE, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE, AIDE_RETENUE,
+  aidesDeLAcompte, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE, AIDE_RETENUE,
   centiemesEnSaisie, rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
   etatInitialConditions, lireConditions, texteEnregistreDans, phraseUniteEnAttente, libellesDesConditions,
   ligneDEtatDeLaCarte,
@@ -83,6 +83,11 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
   devis = {}, totaux = null, regime, nbOptions = 0, erreurs = {}, textes = null,
   etatEcriture = null, totauxIllisibles = false, onReessayer, onRelireTotaux,
   onEnregistrer, onFermer, champInitial = null, depuisLaListe = false,
+  /* 2b-2 : ce que l'ÉCRAN sait du client et du chantier — la réponse « à quel
+     titre » VALABLE, le « Oui » à la première question du chantier, et la
+     date que la BASE en a posée. Les aides de l'acompte les suivent
+     (`aidesDeLAcompte`) : ce sont des aides, pas des comptes. */
+  reponseATitre = null, chantierNeufConso = null, chantierNeufConsoLe = null,
 }, ref) {
   const refReduction = useRef(null);
   const refAcompte = useRef(null);
@@ -161,6 +166,7 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
   };
 
   const noms = libellesDesConditions(regime, c.nature);
+  const aides = aidesDeLAcompte({ reponse: reponseATitre, chantierNeufConso, chantierNeufConsoLe });
   const rangees = rangeesDesTotaux(totaux, regime, { nbOptions });
   const total = rangees.find((r) => r.cle === 'total');
   const reste = rangees.find((r) => r.cle === 'reste');
@@ -308,8 +314,12 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
           ))}
         </View>
         {sous('acompteNature')}
-        <Text style={s.aide}>{AIDE_NATURE_ACOMPTE}</Text>
-        <Text style={s.aide}>{ECHEANCE_ACOMPTE}</Text>
+        {/* LA NATURE ET LE 8e JOUR, selon le client et le chantier (2b-2) :
+            pour une entreprise dans son activité principale, ni le 8e jour ni
+            la rétractation ; pour un chantier neuf confirmé, le 8e jour ne
+            s'applique pas ; pour une association, par prudence. */}
+        <Text style={s.aide}>{aides.nature}</Text>
+        {!!aides.echeance && <Text style={s.aide}>{aides.echeance}</Text>}
 
         {/* LA VALIDITÉ — 15, 30, 60, 90 jours ou « Autre » ; RIEN de
             pré-choisi : la durée se confirme d'un appui (décision du 03/11). */}

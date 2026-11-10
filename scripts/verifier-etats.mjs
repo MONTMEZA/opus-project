@@ -553,8 +553,13 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
     /* Un texte HUMAIN a une espace ; `'registre'` seul est une valeur. */
     return chaines.filter((t) => /\s/.test(t.trim()));
   };
+  /* …et `declaration-tva.js` (2b-2) : les textes de la déclaration sur
+     l'honneur du n° de TVA, sortis de `SaisieTva.js` parce que « pendant
+     l'envoi : Enregistrement de votre déclaration… » contient les lettres
+     de « registre » — la règle crue de `SaisieTva.js` l'aurait accusé. Ici,
+     la règle du MOT ENTIER, et jamais « vérifié ». */
   const DEVIS = ['src/components/FicheEmetteur.js', 'src/components/PretAEmettre.js',
-    'src/components/ApercuEntete.js', 'src/lib/emetteur.js'];
+    'src/components/ApercuEntete.js', 'src/lib/emetteur.js', 'src/lib/declaration-tva.js'];
   const fautifsDevis = [];
   DEVIS.forEach((f) => {
     const c = sansCommentaires(lire(f));

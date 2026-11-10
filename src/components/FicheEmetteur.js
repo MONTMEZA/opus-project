@@ -58,6 +58,7 @@ import {
   parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
+import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
 import { MEDIATEURS_RELEVES_LE, ADRESSE_A_RECOPIER } from '../data/mediateurs';
 
 const L = LONGUEUR_MAX.emetteur;
@@ -807,6 +808,9 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
               ? `Numéro de TVA intracommunautaire ${tva.numero} : preuve d’essai posée par Opus, `
                 + 'non soumise à VIES.'
               : null}
+            {/* UN NUMÉRO DÉCLARÉ SUR L'HONNEUR (2b-2) : sans cette branche,
+                l'aide de la section restait VIDE (cahier §3.7). */}
+            {tva && tva.origine === 'declaration' ? aideDeLaSectionTvaDeclaree(tva.numero, tva.declare_le) : null}
             {!tva
               ? 'L’annuaire des entreprises (liste de la DGFiP) n’a transmis aucun numéro de TVA '
                 + 'intracommunautaire pour votre entreprise. Cela ne prouve rien sur votre régime : '

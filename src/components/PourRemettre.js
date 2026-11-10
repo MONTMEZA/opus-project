@@ -77,8 +77,8 @@ import {
 } from '../theme';
 import { ChevronRight } from './icons';
 import {
-  PAS_ENCORE_VERIFIE, RIEN_NE_MANQUE_POUR_CE_DEVIS, LISTE_NON_LUE, MENTIONS_PARTICULIER_PAR_PRUDENCE,
-  TITRE_POUR_REMETTRE, titresDesParties, premierePhrase, actionDuPoint,
+  PAS_ENCORE_VERIFIE, RIEN_NE_MANQUE_POUR_CE_DEVIS, LISTE_NON_LUE, phraseDesMentionsParticulier,
+  TITRE_POUR_REMETTRE, titresDesParties, premierePhrase, actionDuPoint, secondeActionDuPoint,
   texteDeLaLigneRemise, ceQueDitLaCarte,
 } from '../lib/devis';
 
@@ -209,7 +209,7 @@ export function LigneRemise({
 /* ========================================================================== */
 
 function Point({
-  point, action, designation = null, onAgir,
+  point, action, seconde = null, designation = null, onAgir, onAgirAussi = null,
 }) {
   const [ouvert, setOuvert] = useState(false);
   const { debut, suite } = premierePhrase(point.phrase);
@@ -237,6 +237,19 @@ function Point({
           style={({ pressed }) => [s.action, pressed && APPUI.plein]}
         >
           <Text style={s.actionTexte}>{action.libelle}</Text>
+        </Pressable>
+      )}
+      {/* LE SECOND BOUTON (2b-2) : une ligne à taux réduit sur un chantier
+          neuf se corrige sur la ligne OU dans « Le chantier », si la réponse
+          était fausse. Une sœur de la première action, jamais dedans. */}
+      {!!seconde && !!onAgirAussi && (
+        <Pressable
+          onPress={() => onAgirAussi(point, seconde)}
+          accessibilityRole="button"
+          accessibilityLabel={seconde.aDire || seconde.libelle}
+          style={({ pressed }) => [s.action, pressed && APPUI.plein]}
+        >
+          <Text style={s.actionTexte}>{seconde.libelle}</Text>
         </Pressable>
       )}
     </View>
@@ -308,7 +321,12 @@ function Partie({ partie, children }) {
  */
 export default function PourRemettre({
   etat, lue = null, erreurPhrase = null, erreurReessayable = true, enLecture = false, pasCompte = null, relecture = null,
-  avis = [], lignes = [], chiffrerPossible = false, onAgir, onReessayer, onFermer,
+  avis = [], lignes = [], chiffrerPossible = false, onAgir, onAgirAussi = null, onReessayer, onFermer,
+  /* La réponse « à quel titre » que la BASE a vue DANS LA MÊME PHOTO que
+     la liste (2b-2, cahier §3.6) : elle choisit la phrase des mentions dues
+     à un particulier. Jamais celle de l'écran, en avance d'un envoi. Pas
+     connue : la phrase de prudence. */
+  reponseVue = undefined,
 }) {
   const ligneExiste = (id) => !!id && lignes.some((l) => String(l.id) === String(id));
   const designationDe = (id) => {
@@ -322,8 +340,10 @@ export default function PourRemettre({
         key={`${p.cle || 'inconnu'}-${p.ligneId || ''}-${i}`}
         point={p}
         action={actionDuPoint(p, { chiffrerPossible, ligneExiste, designation })}
+        seconde={secondeActionDuPoint(p)}
         designation={designation}
         onAgir={onAgir}
+        onAgirAussi={onAgirAussi}
       />
     );
   };
@@ -415,12 +435,14 @@ export default function PourRemettre({
               <Text style={s.titre} accessibilityRole="header">{titres.entreprise}</Text>
               {parties.entreprise.map(rendrePoint)}
 
-              {/* 3. LES MENTIONS DUES À UN PARTICULIER — par prudence, tant
+              {/* 3. LES MENTIONS DUES À UN PARTICULIER — elle n'existe que si la
+                  liste LUE en porte ; sa phrase dit POURQUOI elles comptent,
+                  selon la réponse que la base a vue (2b-2) : par prudence tant
                   qu'Opus ne sait pas pour qui le client commande. */}
               {parties.particulier.length > 0 && (
                 <>
                   <Text style={s.sousTitre} accessibilityRole="header">Mentions dues à un particulier</Text>
-                  <Text style={s.aide}>{MENTIONS_PARTICULIER_PAR_PRUDENCE}</Text>
+                  <Text style={s.aide}>{phraseDesMentionsParticulier(reponseVue)}</Text>
                   {parties.particulier.map(rendrePoint)}
                 </>
               )}

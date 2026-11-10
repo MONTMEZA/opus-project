@@ -4394,7 +4394,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
           ? { createdAt: date, budget: demande.budget || null, texte: demande.titre || null } : null,
         urgence: demande.genre === 'sos'
           ? { createdAt: date, texte: texteUrgence || demande.titre || null } : null,
-        client: fiche ? { nom: fiche.nom, ville: fiche.ville || null } : null,
+        /* Le TYPE et le SIRET de la fiche voyagent avec (2b-2) : le bloc « À
+           quel titre ? » ne propose « à titre privé » que pour un type lu. */
+        client: fiche ? {
+          nom: fiche.nom, ville: fiche.ville || null, type: fiche.type ?? null, siret: fiche.siret ?? null,
+        } : null,
         demandeSource: complete,
       }, 'decouvrir');
 
@@ -4461,7 +4465,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      jamais deux fenêtres empilées. */
   const faireDevisDepuisFiche = (fiche) => {
     setFicheClient(null);
-    ouvrirDevis({ valeurs: devisDepuisClient(fiche), client: { nom: fiche.nom, ville: fiche.ville || null } }, screen);
+    ouvrirDevis({
+      valeurs: devisDepuisClient(fiche),
+      client: {
+        nom: fiche.nom, ville: fiche.ville || null, type: fiche.type ?? null, siret: fiche.siret ?? null,
+      },
+    }, screen);
   };
   const ouvrirDevisDepuisFiche = (d) => {
     setFicheClient(null);

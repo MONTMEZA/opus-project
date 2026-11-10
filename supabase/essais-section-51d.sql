@@ -508,6 +508,23 @@ select (select count(*) from jsonb_object_keys(e.j)) as nb_cles,
   from e;
 rollback;
 
+\echo '--- J1 quater. (2b-2) Un n° de TVA DÉCLARÉ SUR L HONNEUR s exporte sous la MÊME clé, avec son texte et sa date, mais SANS reconnu_le ni vies_le — l export ne dit jamais « reconnu » pour une déclaration ; et la liste fermée des clés ne bouge pas (attendu : t | 48)'
+begin;
+set local role service_role;
+insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
+values (:A, '000000240', 'FRK1000000240', 'declaration', 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.');
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+with e as (select public.mes_donnees() as j)
+select (e.j -> 'mon_numero_de_tva' ->> 'source') = 'declaration'
+         and e.j -> 'mon_numero_de_tva' ? 'declare_le' and e.j -> 'mon_numero_de_tva' ? 'declaration_texte'
+         and not (e.j -> 'mon_numero_de_tva' ? 'reconnu_le') and not (e.j -> 'mon_numero_de_tva' ? 'vies_le')
+         as declaration_exportee_sans_reconnu_attendu_t,
+       (select count(*) from jsonb_object_keys(e.j)) as nb_cles_attendu_48
+  from e;
+rollback;
+
 \echo '--- J1 bis. Les clés de la partie SANS MASQUAGE, en liste fermée — elle est appelable seule par `rpc/mes_donnees_sans_masquage` ; et chaque partie bornée dit son total, ses lignes rendues et celles écartées, rien d autre (attendu : 15 | t | t)'
 begin;
 set local role authenticated;

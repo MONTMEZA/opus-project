@@ -48,6 +48,8 @@ import ts from 'typescript';
 
 import * as T from '../src/lib/tva.js';
 import * as S from '../src/lib/siret.js';
+import { dateFrancaise } from '../src/lib/entreprise.js';
+import * as OCC from '../src/lib/declaration-tva.js';
 
 const ICI = fileURLToPath(import.meta.url);
 const RACINE = path.resolve(path.dirname(ICI), '..');
@@ -141,11 +143,11 @@ async function banc() {
     const ops = [];
     const q = {};
     for (const m of ['select', 'eq', 'is', 'limit', 'gt', 'lt', 'like', 'delete', 'upsert', 'update',
-      'insert', 'single', 'maybeSingle', 'order', 'in', 'neq', 'or']) {
+      'insert', 'single', 'maybeSingle', 'order', 'in', 'neq', 'or', 'not', 'gte', 'lte']) {
       q[m] = (...args) => { ops.push([m, ...args]); return q; };
     }
     q.then = (resolu, rejete) => {
-      E.ecritures.push({ table, ops, vies: E.vies.length, t });
+      E.ecritures.push({ table, ops, vies: E.vies.length, t, seq: E.seq++ });
       return Promise.resolve(E.base(table, ops)).then(resolu, rejete);
     };
     return q;
@@ -164,7 +166,7 @@ async function banc() {
         },
         from: (table) => nouvelleRequete(table),
         rpc: async (nom, args) => {
-          E.rpc.push({ nom, args, vies: E.vies.length, t });
+          E.rpc.push({ nom, args, vies: E.vies.length, t, seq: E.seq++ });
           return E.rpcRep(nom, args, E.rpc.filter((r) => r.nom === nom).length);
         },
       };
@@ -204,40 +206,206 @@ async function banc() {
   const SATURE = { actionSucceed: false, errorWrappers: [{ error: 'MS_MAX_CONCURRENT_REQ' }] };
   const BLOQUE = { actionSucceed: false, errorWrappers: [{ error: 'IP_BLOCKED' }] };
 
+  /* --- la base simulée, AVEC un état (2b-2) ---------------------------
+     `preuves_tva` et `siret_limites` sont de vraies listes de lignes : les
+     filtres de la fonction (eq, neq, is, not…is null, gt, lt, like) y sont
+     APPLIQUÉS, et l'écriture passe par une imitation du déclencheur
+     `tient_la_preuve_tva()` (pour la clé de service, la seule qui écrit) et
+     des contraintes de la section 48. Un filtre oublié ou retourné se voit
+     donc à ce qui RESTE dans la table, pas seulement au texte de la
+     requête. Le comportement réel de la base est prouvé ailleurs, sur un
+     vrai PostgreSQL (`essais-section-48.sql`). Une requête que le banc ne
+     sait pas simuler est une faute du BANC : elle est comptée, et le banc
+     échoue. */
+  const PHRASE_SQL = 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.';
+  const COLONNES_PREUVE = ['pro_id', 'siren', 'numero', 'reconnu_le', 'vies_le', 'source', 'declare_le', 'declaration_texte'];
+  const COLONNES_LIMITE = ['cle', 'fenetre', 'n'];
+  const fautesDuBanc = [];
+  const FILTRES = new Set(['eq', 'neq', 'is', 'not', 'gt', 'gte', 'lt', 'lte', 'like']);
+  const MODIFICATEURS = new Set(['select', 'limit', 'order', 'delete', 'upsert', 'update', 'insert', 'single', 'maybeSingle']);
+  const comparer = (a, b) => {
+    const ta = Date.parse(a);
+    const tb = Date.parse(b);
+    if (Number.isFinite(ta) && Number.isFinite(tb)) return ta - tb;
+    return String(a) < String(b) ? -1 : (String(a) > String(b) ? 1 : 0);
+  };
+  const faute = (message) => { fautesDuBanc.push(message); return { data: null, error: { message: `banc : ${message}` } }; };
+  const filtrer = (lignes, ops) => {
+    const inconnus = ops.filter(([m]) => !FILTRES.has(m) && !MODIFICATEURS.has(m)).map(([m]) => m);
+    if (inconnus.length) return { faute: `méthode non simulée : ${inconnus.join(', ')}` };
+    for (const [m, c, v, w] of ops) if (m === 'not' && (v !== 'is' || w !== null)) return { faute: `not(${c}, ${v}, ${w}) non simulé` };
+    return {
+      lignes: lignes.filter((l) => ops.every(([m, c, v]) => {
+        if (m === 'eq') return l[c] === v;
+        if (m === 'neq') return l[c] != null && l[c] !== v;
+        if (m === 'is') return v === null ? l[c] == null : l[c] === v;
+        if (m === 'not') return l[c] != null;
+        if (m === 'gt') return l[c] != null && comparer(l[c], v) > 0;
+        if (m === 'gte') return l[c] != null && comparer(l[c], v) >= 0;
+        if (m === 'lt') return l[c] != null && comparer(l[c], v) < 0;
+        if (m === 'lte') return l[c] != null && comparer(l[c], v) <= 0;
+        if (m === 'like') {
+          const motif = String(v);
+          return motif.endsWith('%') ? String(l[c]).startsWith(motif.slice(0, -1)) : l[c] === motif;
+        }
+        return true;
+      })),
+    };
+  };
+  /* Ce qu'une requête RELIT : les colonnes nommées (une colonne inconnue est
+     une erreur, comme 42703), triées, bornées ; `single()` exige une ligne. */
+  const relire = (lignes, ops, colonnes) => {
+    const sel = ops.find(([m]) => m === 'select');
+    if (!sel) return { data: null, error: null };
+    const noms = String(sel[1] == null ? '*' : sel[1]).split(',').map((c) => c.trim()).filter(Boolean);
+    const inconnues = noms.filter((c) => c !== '*' && !colonnes.includes(c));
+    if (inconnues.length) return { data: null, error: { code: '42703', message: `colonne inconnue : ${inconnues.join(', ')}` } };
+    let rangees = lignes.map((l) => ({ ...l }));
+    const ordre = ops.find(([m]) => m === 'order');
+    if (ordre) {
+      const sens = ordre[2] && ordre[2].ascending === false ? -1 : 1;
+      rangees.sort((x, y) => sens * comparer(x[ordre[1]], y[ordre[1]]));
+    }
+    const borne = ops.find(([m]) => m === 'limit');
+    if (borne) rangees = rangees.slice(0, borne[1]);
+    rangees = rangees.map((l) => (noms.includes('*') ? l : Object.fromEntries(noms.map((c) => [c, l[c] === undefined ? null : l[c]]))));
+    if (ops.some(([m]) => m === 'single')) {
+      return rangees.length === 1 ? { data: rangees[0], error: null }
+        : { data: null, error: { code: 'PGRST116', message: `${rangees.length} ligne(s) au lieu d’une` } };
+    }
+    return { data: rangees, error: null };
+  };
+
   const scenario = (o = {}) => {
     t = T0;
     minuteurs.length = 0;
     journal.length = 0;
+    const preuves = o.preuves || (o.preuveRecente ? [{ pro_id: MOI, siren: SIREN, numero: NUM, source: 'vies',
+      vies_le: null, declare_le: null, declaration_texte: null, ...o.preuveRecente }] : []);
+    const limites = o.limites || (o.refusRetenu ? [{ cle: cleRefus, n: 1, ...o.refusRetenu }] : []);
     E = {
-      ecritures: [], rpc: [], vies: [], getUser: [], clients: [],
+      ecritures: [], rpc: [], vies: [], getUser: [], clients: [], seq: 0,
       entreprise: o.entreprise === undefined ? { siren: SIREN, tva: null } : o.entreprise,
-      preuveRecente: o.preuveRecente || null,
-      refusRetenu: o.refusRetenu || null,
+      preuves: preuves.map((l) => ({ reconnu_le: null, vies_le: null, declare_le: null, declaration_texte: null, ...l })),
+      limites: limites.map((l) => ({ n: 1, ...l })),
+      horloge: 0,
       viesRep: o.viesRep || (() => VALIDE),
       duree: o.duree || ((n, rep) => (rep === SATURE || rep === BLOQUE ? 1500 : 10000)),
-      rpcRep: o.rpcRep || ((nom) => (nom === 'compter_essai_tva' ? { data: 'ok', error: null } : { data: true, error: null })),
+      rpcRep: o.rpcRep || ((nom, args) => {
+        if (nom === 'compter_essai_tva') return { data: 'ok', error: null };
+        if (nom === 'compter_appel_siret') return E.compterAppel(args);
+        return faute(`rpc non simulée : ${nom}`);
+      }),
       erreurs: o.erreurs || {},
+      /* `compter_appel_siret` (section 45.2) : une ligne par (clé, instant),
+         incrémentée si elle existe. */
+      compterAppel(args) {
+        const ligne = this.limites.find((l) => l.cle === args.p_cle && l.fenetre === args.p_fenetre);
+        if (ligne) ligne.n += 1; else this.limites.push({ cle: args.p_cle, fenetre: args.p_fenetre, n: 1 });
+        return { data: (ligne ? ligne.n : 1) <= args.p_max, error: null };
+      },
+      /* L'heure de la BASE (`clock_timestamp()`) : DATE_BASE, puis une
+         seconde de plus à chaque écriture. */
+      horlogeBase() {
+        const d = new Date(Date.parse(DATE_BASE) + 1000 * this.horloge).toISOString();
+        this.horloge += 1;
+        return d;
+      },
+      /* `tient_la_preuve_tva()` pour la clé de service, puis les contraintes
+         de la section 48 — la même règle, recopiée pour le banc. */
+      declencheur(avant, ligne) {
+        const nouvelle = ligne;
+        const maintenant = this.horlogeBase();
+        nouvelle.reconnu_le = maintenant;
+        const meme = !!avant && avant.declare_le != null && avant.numero === nouvelle.numero && avant.siren === nouvelle.siren;
+        if (nouvelle.source === 'declaration') {
+          if (meme) { nouvelle.declare_le = avant.declare_le; nouvelle.declaration_texte = avant.declaration_texte; }
+          else nouvelle.declare_le = maintenant;
+          nouvelle.reconnu_le = nouvelle.declare_le;
+        } else if (nouvelle.source === 'vies' && meme) {
+          nouvelle.declare_le = avant.declare_le;
+          nouvelle.declaration_texte = avant.declaration_texte;
+        } else {
+          nouvelle.declare_le = null;
+          nouvelle.declaration_texte = null;
+        }
+        const refus = (nom) => ({ code: '23514', message: `new row violates check constraint "${nom}"` });
+        if (!/^FR[0-9A-HJ-NP-Z]{2}[0-9]{9}$/.test(String(nouvelle.numero)) || String(nouvelle.numero).slice(4) !== nouvelle.siren) {
+          return refus('preuve_tva_numero_check');
+        }
+        if (!['vies', 'essai', 'declaration'].includes(nouvelle.source)) return refus('preuve_tva_source_check');
+        if ((nouvelle.declare_le == null) !== (nouvelle.declaration_texte == null)
+          || (nouvelle.source === 'declaration' && nouvelle.declare_le == null)
+          || (nouvelle.source === 'essai' && nouvelle.declare_le != null)
+          || (nouvelle.declaration_texte != null && nouvelle.declaration_texte !== PHRASE_SQL)) {
+          return refus('preuve_tva_declaration_check');
+        }
+        const inconnues = Object.keys(nouvelle).filter((c) => !COLONNES_PREUVE.includes(c));
+        if (inconnues.length) return { code: 'PGRST204', message: `colonne inconnue : ${inconnues.join(', ')}` };
+        return null;
+      },
       base(table, ops) {
         const a = (m) => ops.some(([x]) => x === m);
+        const op = (m) => ops.find(([x]) => x === m) || [];
+        const panneBase = { data: null, error: { message: 'panne' } };
         if (table === 'entreprise_registre') {
-          if (this.erreurs.entreprise) return { data: null, error: { message: 'panne' } };
+          if (this.erreurs.entreprise) return panneBase;
           return { data: this.entreprise ? [this.entreprise] : [], error: null };
         }
-        if (table === 'preuves_tva' && a('upsert')) {
-          if (this.erreurs.upsert) return { data: null, error: { message: 'panne' } };
-          const ligne = (ops.find(([m]) => m === 'upsert') || [])[1] || {};
-          return { data: { numero: ligne.numero, reconnu_le: DATE_BASE }, error: null };
+        if (table === 'preuves_tva') {
+          const vise = filtrer(this.preuves, ops);
+          if (vise.faute) return faute(vise.faute);
+          if (a('upsert')) {
+            if (this.erreurs.upsert) return panneBase;
+            const [, ligne, options] = op('upsert');
+            if (!ligne || !options || options.onConflict !== 'pro_id') return faute('upsert sans onConflict « pro_id »');
+            const avant = this.preuves.find((l) => l.pro_id === ligne.pro_id) || null;
+            const nouvelle = { reconnu_le: null, vies_le: null, declare_le: null, declaration_texte: null, ...(avant || {}), ...ligne };
+            const refus = this.declencheur(avant, nouvelle);
+            if (refus) return { data: null, error: refus };
+            this.preuves = this.preuves.filter((l) => l !== avant).concat([nouvelle]);
+            const relue = relire([nouvelle], ops, COLONNES_PREUVE);
+            if (this.erreurs.sansDate && relue.data) delete relue.data.declare_le;
+            return relue;
+          }
+          if (a('update')) {
+            if (this.erreurs.renaissance) return panneBase;
+            const [, valeurs] = op('update');
+            const apres = [];
+            for (const avant of vise.lignes) {
+              const nouvelle = { ...avant, ...valeurs };
+              const refus = this.declencheur(avant, nouvelle);
+              if (refus) return { data: null, error: refus };
+              apres.push([avant, nouvelle]);
+            }
+            for (const [avant, nouvelle] of apres) this.preuves = this.preuves.map((l) => (l === avant ? nouvelle : l));
+            return relire(apres.map(([, n]) => n), ops, COLONNES_PREUVE);
+          }
+          if (a('delete')) {
+            if (this.erreurs.retrait) return panneBase;
+            this.preuves = this.preuves.filter((l) => !vise.lignes.includes(l));
+            return relire(vise.lignes, ops, COLONNES_PREUVE);
+          }
+          if (a('select')) {
+            const enPanne = this.erreurs.preuves;
+            if (enPanne === true || (typeof enPanne === 'function' && enPanne(ops))) return panneBase;
+            return relire(vise.lignes, ops, COLONNES_PREUVE);
+          }
+          return faute('requête sur preuves_tva non simulée');
         }
-        if (table === 'preuves_tva' && a('delete')) {
-          return this.erreurs.retrait ? { data: null, error: { message: 'panne' } } : { data: null, error: null };
-        }
-        if (table === 'preuves_tva' && a('select')) {
-          if (this.erreurs.preuves) return { data: null, error: { message: 'panne' } };
-          return { data: this.preuveRecente ? [this.preuveRecente] : [], error: null };
-        }
-        if (table === 'siret_limites' && a('delete')) return { data: null, error: null };
-        if (table === 'siret_limites' && a('select')) {
-          return { data: this.refusRetenu ? [this.refusRetenu] : [], error: null };
+        if (table === 'siret_limites') {
+          const vise = filtrer(this.limites, ops);
+          if (vise.faute) return faute(vise.faute);
+          if (a('delete')) {
+            this.limites = this.limites.filter((l) => !vise.lignes.includes(l));
+            return { data: null, error: null };
+          }
+          if (a('select')) {
+            const enPanne = this.erreurs.limites;
+            if (enPanne === true || (typeof enPanne === 'function' && enPanne(ops))) return panneBase;
+            return relire(vise.lignes, ops, COLONNES_LIMITE);
+          }
+          return faute('requête sur siret_limites non simulée');
         }
         return { data: null, error: { message: `table inattendue : ${table}` } };
       },
@@ -256,7 +424,7 @@ async function banc() {
     const r = await traiter(new Request('https://banc.supabase.co/functions/v1/tva', {
       method: o.methode || 'POST',
       headers: enTetes,
-      body: (o.methode || 'POST') === 'POST' ? JSON.stringify({ numero }) : undefined,
+      body: (o.methode || 'POST') === 'POST' ? JSON.stringify(o.corps !== undefined ? o.corps : { numero }) : undefined,
     }));
     const texte = await r.text();
     let corps = null;
@@ -272,6 +440,27 @@ async function banc() {
   const rien = (r) => !JSON.stringify(r.corps).match(/FICTIVE|CLE-DE-SERVICE|a4800000|jeton/);
   const cleCompte = `tva-compte:${await T.empreinte(CLE_SERVICE, MOI)}`;
   const cleRefus = `tva-refus:${await T.empreinte(CLE_SERVICE, `${MOI}:${NUM}`)}`;
+  /* 2b-2 : un AUTRE numéro de la même entreprise (une clé en lettres, que
+     seul VIES peut juger), les clés des absences de réponse (P5), et la
+     forme d'une déclaration déjà faite. */
+  const NUM_K = 'FRK1000048009';
+  const cleRefusK = `tva-refus:${await T.empreinte(CLE_SERVICE, `${MOI}:${NUM_K}`)}`;
+  const cleMuet = `tva-muet:${await T.empreinte(CLE_SERVICE, `${MOI}:${NUM}`)}`;
+  const cleMuetK = `tva-muet:${await T.empreinte(CLE_SERVICE, `${MOI}:${NUM_K}`)}`;
+  const DECL_ANCIENNE = '2026-10-01T08:00:00.000Z';
+  const preuve = (o = {}) => ({ pro_id: MOI, siren: SIREN, numero: NUM, source: 'vies',
+    reconnu_le: '2026-10-05T09:00:00.000Z', vies_le: '2026-10-05T09:00:00.000Z', declare_le: null, declaration_texte: null, ...o });
+  const declaration = (numero = NUM, o = {}) => preuve({ numero, source: 'declaration', vies_le: null,
+    reconnu_le: DECL_ANCIENNE, declare_le: DECL_ANCIENNE, declaration_texte: PHRASE_SQL, ...o });
+  const refusIlYA = (ms, cle = cleRefus) => ({ cle, fenetre: new Date(T0 - ms).toISOString(), n: 1 });
+  const silenceIlYA = (ms, cle = cleMuet) => ({ cle, fenetre: new Date(T0 - ms).toISOString(), n: 1 });
+  const DECLARER = (o = {}) => ({ numero: NUM, action: 'declarer', engagement: true, texte: PHRASE_SQL, ...o });
+  const H = 3600000;
+  const opDe = (e, m) => (e && e.ops.find(([x]) => x === m)) || [];
+  const aEq = (e, c, v) => !!e && e.ops.some(([m, cc, vv]) => m === 'eq' && cc === c && vv === v);
+  const ecrituresPreuve = () => E.ecritures.filter((e) => e.table === 'preuves_tva'
+    && e.ops.some(([m]) => ['upsert', 'update', 'delete', 'insert'].includes(m)));
+  const rienDeFait = () => ecrituresPreuve().length === 0 && E.vies.length === 0 && E.rpc.length === 0 && purges().length === 0;
 
   /* ---------------------------------------------------------------- */
   ecrire('\nLe banc — avant VIES');
@@ -467,6 +656,344 @@ async function banc() {
   scenario(); r = await appeler(NUM, { methode: 'OPTIONS', origine: 'https://opus-project.com' });
   ok('OPTIONS → 200, sans travail', r.statut === 200 && E.getUser.length === 0 && E.ecritures.length === 0);
 
+  /* ================================================================ */
+  /*  2b-2 — LA DÉCLARATION SUR L'HONNEUR, ET P5                        */
+  /* ================================================================ */
+  ecrire('\nLe banc — 2b-2 : les actions');
+  for (const [nom, action] of [['« effacer »', 'effacer'], ['`null`', null], ['« Declarer » (la casse)', 'Declarer'], ['un nombre', 42]]) {
+    scenario({ limites: [refusIlYA(H)] });
+    r = await appeler(null, { corps: { numero: NUM, action, engagement: true, texte: PHRASE_SQL } });
+    ok(`une action inconnue, ${nom} → panne HTTP 500, AVANT tout travail (ni jeton, ni base, ni VIES)`,
+      r.statut === 500 && E.getUser.length === 0 && E.ecritures.length === 0 && E.vies.length === 0 && E.rpc.length === 0, r.texte);
+  }
+  scenario(); r = await appeler(null, { corps: { numero: NUM } });
+  ok('…une action ABSENTE est le contrôle d’aujourd’hui (une application ancienne marche toujours)',
+    r.corps && r.corps.issue === 'reconnu' && E.vies.length === 1, r.texte);
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : retirer sa déclaration');
+  scenario({ preuves: [declaration()] });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  const delR = ecritures('preuves_tva', 'delete');
+  ok('retirer : la déclaration part → retire, et son numéro', egal(r.corps, { issue: 'retire', numero: NUM }) && E.preuves.length === 0, r.texte);
+  ok('…UN retrait : la ligne `declaration` de l’APPELANT, et aucun autre filtre (pas de numéro à lire)',
+    delR.length === 1 && aEq(delR[0], 'pro_id', MOI) && aEq(delR[0], 'source', 'declaration')
+    && delR[0].ops.filter(([m]) => FILTRES.has(m)).length === 2, delR[0] && JSON.stringify(delR[0].ops));
+  ok('…ni VIES, ni compteur, ni purge, ni autre écriture', E.vies.length === 0 && E.rpc.length === 0 && purges().length === 0
+    && ecrituresPreuve().length === 1 && ecritAilleurs().length === 0);
+  scenario({ preuves: [declaration()] });
+  r = await appeler(null, { corps: { action: 'retirer', numero: NUM_K } });
+  ok('…le numéro du corps est ignoré : on retire SA déclaration, quelle qu’elle soit', egal(r.corps, { issue: 'retire', numero: NUM }), r.texte);
+  scenario({ preuves: [preuve({ declare_le: DECL_ANCIENNE, declaration_texte: PHRASE_SQL })] });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  ok('une preuve VIES qui porte une ancienne déclaration n’est PAS touchée → rien_a_retirer',
+    egal(r.corps, { issue: 'rien_a_retirer' }) && E.preuves.length === 1 && E.preuves[0].source === 'vies'
+    && E.preuves[0].declare_le === DECL_ANCIENNE, r.texte);
+  scenario({ preuves: [preuve({ source: 'essai', vies_le: null })] });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  ok('…une preuve d’essai non plus', egal(r.corps, { issue: 'rien_a_retirer' }) && E.preuves.length === 1 && E.preuves[0].source === 'essai');
+  scenario({ preuves: [declaration(NUM, { pro_id: 'b4800000-0000-4000-8000-00000000000b' })] });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  ok('…ni la déclaration d’un AUTRE compte', egal(r.corps, { issue: 'rien_a_retirer' }) && E.preuves.length === 1);
+  scenario(); r = await appeler(null, { corps: { action: 'retirer' } });
+  ok('…et rien à retirer → rien_a_retirer', egal(r.corps, { issue: 'rien_a_retirer' }));
+  scenario({ preuves: [declaration()] });
+  r = await appeler(null, { corps: { action: 'retirer' }, jeton: null });
+  ok('retirer sans jeton → sans_compte, et rien n’est retiré', egal(r.corps, { issue: 'sans_compte' }) && E.preuves.length === 1 && E.ecritures.length === 0);
+  scenario({ preuves: [declaration()], erreurs: { retrait: true } });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  ok('un retrait en échec → panne HTTP 500, JAMAIS « retire »', r.statut === 500 && !/"retire"/.test(r.texte));
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : déclarer, avant la base');
+  for (const [nom, corps, attendu] of [
+    ['un numéro incomplet', DECLARER({ numero: 'FR9100004800' }), 'mal_forme'],
+    ['une clé chiffrée fausse', DECLARER({ numero: 'FR00000048009' }), 'cle_fausse'],
+    ['la case pas cochée (`engagement` absent)', DECLARER({ engagement: undefined }), 'sans_engagement'],
+    ['`engagement: false`', DECLARER({ engagement: false }), 'sans_engagement'],
+    ['`engagement: "true"` (une chaîne)', DECLARER({ engagement: 'true' }), 'sans_engagement'],
+    ['`engagement: 1`', DECLARER({ engagement: 1 }), 'sans_engagement'],
+    ['un texte absent', DECLARER({ texte: undefined }), 'texte_perime'],
+    ['le texte d’une AUTRE version', DECLARER({ texte: 'Je déclare que ce numéro est celui de mon entreprise.' }), 'texte_perime'],
+    ['le texte en apostrophes droites', DECLARER({ texte: PHRASE_SQL.replace(/’/g, "'") }), 'texte_perime'],
+    ['le texte suivi d’une espace', DECLARER({ texte: `${PHRASE_SQL} ` }), 'texte_perime'],
+    ['la forme passe AVANT la case', DECLARER({ numero: 'FR9100004800', engagement: false, texte: 'x' }), 'mal_forme'],
+    ['la case passe AVANT le texte', DECLARER({ engagement: false, texte: 'x' }), 'sans_engagement'],
+  ]) {
+    scenario({ limites: [refusIlYA(H)] });
+    r = await appeler(null, { corps });
+    ok(`déclarer, ${nom} → ${attendu}, sans jeton ni base ni VIES`,
+      egal(r.corps, { issue: attendu }) && E.getUser.length === 0 && E.ecritures.length === 0 && E.vies.length === 0
+      && E.rpc.length === 0, r.texte);
+  }
+  scenario({ limites: [refusIlYA(H)] }); r = await appeler(null, { corps: DECLARER(), jeton: null });
+  ok('déclarer sans jeton → sans_compte, rien de lu ni d’écrit', egal(r.corps, { issue: 'sans_compte' }) && E.ecritures.length === 0);
+  scenario({ entreprise: null, limites: [refusIlYA(H)] }); r = await appeler(null, { corps: DECLARER() });
+  ok('…sans entreprise → sans_entreprise', egal(r.corps, { issue: 'sans_entreprise' }) && rienDeFait());
+  scenario({ entreprise: { siren: SIREN, tva: NUM_K }, limites: [refusIlYA(H)] }); r = await appeler(null, { corps: DECLARER() });
+  ok('…l’annuaire publie un numéro → deja_publie (l’annuaire garde le dernier mot), rien d’écrit',
+    egal(r.corps, { issue: 'deja_publie', numero: NUM_K }) && rienDeFait(), r.texte);
+  scenario({ limites: [refusIlYA(H)] }); r = await appeler(null, { corps: DECLARER({ numero: 'FR18000048017' }) });
+  ok('…le numéro d’une AUTRE entreprise → autre_siren, sans lire les preuves', egal(r.corps, { issue: 'autre_siren' })
+    && rienDeFait() && ecritures('preuves_tva', 'select').length === 0);
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : déclarer, la preuve du compte');
+  scenario({ preuves: [preuve({ numero: NUM_K })], limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('VIES reconnaît déjà un AUTRE numéro de l’entreprise → deja_reconnu, CE numéro et SA date, et RIEN n’est écrit',
+    egal(r.corps, { issue: 'deja_reconnu', numero: NUM_K, reconnu_le: '2026-10-05T09:00:00.000Z' }) && rienDeFait()
+    && E.preuves.length === 1 && E.preuves[0].numero === NUM_K && E.preuves[0].source === 'vies', r.texte);
+  const lueCompte = (ecritures('preuves_tva', 'select')[0] || { ops: [] });
+  ok('…la preuve lue est celle de l’APPELANT, toutes sources', aEq(lueCompte, 'pro_id', MOI)
+    && !lueCompte.ops.some(([m, c]) => m === 'eq' && c === 'source'), JSON.stringify(lueCompte.ops));
+  scenario({ preuves: [preuve()], limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('VIES reconnaît CE numéro → reconnu, sa date : rien à déclarer, rien d’écrit',
+    egal(r.corps, { issue: 'reconnu', numero: NUM, reconnu_le: '2026-10-05T09:00:00.000Z' }) && rienDeFait(), r.texte);
+  scenario({ preuves: [declaration()] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('CE numéro est déjà déclaré → declare, la date d’ORIGINE, rien d’écrit ni de relu dans les compteurs',
+    egal(r.corps, { issue: 'declare', numero: NUM, declare_le: DECL_ANCIENNE }) && rienDeFait()
+    && ecritures('siret_limites', 'select').length === 0 && E.preuves[0].declare_le === DECL_ANCIENNE, r.texte);
+  scenario({ preuves: [declaration(NUM_K)], limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('une déclaration d’un AUTRE numéro + un refus de CE numéro → elle est REMPLACÉE, datée de nouveau',
+    egal(r.corps, { issue: 'declare', numero: NUM, declare_le: DATE_BASE }) && E.preuves.length === 1
+    && E.preuves[0].numero === NUM && E.preuves[0].declare_le === DATE_BASE, r.texte);
+  scenario({ preuves: [preuve({ source: 'essai', vies_le: null })], limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('…une preuve d’essai de ce numéro aussi', r.corps && r.corps.issue === 'declare'
+    && E.preuves[0].source === 'declaration' && E.preuves[0].declare_le === DATE_BASE, r.texte);
+  scenario({ preuves: [preuve({ siren: '000048017', numero: 'FR18000048017' })], limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('…et la preuve VIES d’une AUTRE entreprise (le compte en a changé) aussi', r.corps && r.corps.issue === 'declare'
+    && E.preuves.length === 1 && E.preuves[0].numero === NUM, r.texte);
+  scenario({ limites: [refusIlYA(H)], erreurs: { preuves: true } });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('une lecture de la preuve en échec → panne HTTP 500, rien d’écrit', r.statut === 500 && ecrituresPreuve().length === 0);
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : déclarer, un refus de VIES ou trois silences');
+  scenario();
+  r = await appeler(null, { corps: DECLARER() });
+  const luesL = ecritures('siret_limites', 'select');
+  ok('ni refus retenu ni silences → non_refuse : ni VIES, ni compteur, ni écriture, ni purge',
+    egal(r.corps, { issue: 'non_refuse' }) && rienDeFait() && E.preuves.length === 0, r.texte);
+  ok('…le refus cherché sous la MÊME empreinte que le contrôle, sur trois heures ; puis les silences sous la leur, sur un jour',
+    luesL.length === 2 && aEq(luesL[0], 'cle', cleRefus)
+    && luesL[0].ops.some(([m, c, v]) => m === 'gt' && c === 'fenetre' && Date.parse(v) === T0 - T.REFUS_RETENU_MS)
+    && aEq(luesL[1], 'cle', cleMuet)
+    && luesL[1].ops.some(([m, c, v]) => m === 'gt' && c === 'fenetre' && Date.parse(v) === T0 - T.SANS_REPONSE_TVA.fenetre_ms)
+    && !JSON.stringify(luesL.map((e) => e.ops)).includes(MOI), JSON.stringify(luesL.map((e) => e.ops)));
+  scenario({ limites: [refusIlYA(T.REFUS_RETENU_MS + 1)] }); r = await appeler(null, { corps: DECLARER() });
+  ok('un refus de plus de trois heures → non_refuse', egal(r.corps, { issue: 'non_refuse' }) && rienDeFait());
+  scenario({ limites: [refusIlYA(H, cleRefusK)] }); r = await appeler(null, { corps: DECLARER() });
+  ok('un refus d’un AUTRE numéro → non_refuse', egal(r.corps, { issue: 'non_refuse' }) && rienDeFait());
+  scenario({ limites: [refusIlYA(H)] });
+  r = await appeler(null, { corps: DECLARER({ declare_le: '2001-01-01T00:00:00.000Z', reconnu_le: '2001-01-01T00:00:00.000Z',
+    source: 'vies', vies_le: '2001-01-01T00:00:00.000Z', pro_id: 'b4800000-0000-4000-8000-00000000000b', siren: '000048017' }) });
+  const upD = ecritures('preuves_tva', 'upsert');
+  const ligneD = opDe(upD[0], 'upsert')[1];
+  ok('un refus retenu → declare, le numéro, et la date que la BASE a posée (jamais celle du téléphone)',
+    egal(r.corps, { issue: 'declare', numero: NUM, declare_le: DATE_BASE }), r.texte);
+  ok('…UNE écriture : la ligne de déclaration de tva.js, le texte REÇU, rien de ce que le téléphone ajoute, en upsert sur le compte',
+    upD.length === 1 && egal(ligneD, { pro_id: MOI, siren: SIREN, numero: NUM, vies_le: null, source: 'declaration', declaration_texte: PHRASE_SQL })
+    && egal(opDe(upD[0], 'upsert')[2], { onConflict: 'pro_id' }) && ecrituresPreuve().length === 1, JSON.stringify(ligneD));
+  ok('…relue avec SA date de déclaration', /declare_le/.test(String(opDe(upD[0], 'select')[1])));
+  ok('…en base : une déclaration, `reconnu_le` = `declare_le`, toutes deux posées par la base',
+    E.preuves.length === 1 && E.preuves[0].source === 'declaration' && E.preuves[0].declare_le === DATE_BASE
+    && E.preuves[0].reconnu_le === DATE_BASE && E.preuves[0].pro_id === MOI, JSON.stringify(E.preuves));
+  ok('…ni VIES, ni compteur d’essais, ni refus retenu de plus, ni purge',
+    E.vies.length === 0 && E.rpc.length === 0 && purges().length === 0 && ecritAilleurs().length === 0);
+  scenario({ limites: [refusIlYA(H)], erreurs: { upsert: true } }); r = await appeler(null, { corps: DECLARER() });
+  ok('une déclaration qui ne s’écrit pas → panne HTTP 500, JAMAIS « declare »', r.statut === 500 && !/"declare"/.test(r.texte));
+  scenario({ limites: [refusIlYA(H)], erreurs: { sansDate: true } }); r = await appeler(null, { corps: DECLARER() });
+  ok('…une écriture qui ne rend pas sa date (une base pas migrée) → panne, jamais « declare » sans date', r.statut === 500);
+  scenario({ limites: [refusIlYA(H)], erreurs: { limites: true } }); r = await appeler(null, { corps: DECLARER() });
+  ok('une lecture du refus retenu en échec → panne, rien d’écrit', r.statut === 500 && ecrituresPreuve().length === 0);
+
+  /* P5 : trois contrôles sans réponse, le premier et le dernier séparés
+     d'au moins une heure, sur les dernières 24 heures. */
+  for (const [nom, lignes, attendu] of [
+    ['trois silences, le premier il y a deux heures', [silenceIlYA(2 * H), silenceIlYA(H), silenceIlYA(60000)], 'declare'],
+    ['trois silences séparés d’une heure EXACTEMENT', [silenceIlYA(H + 1000), silenceIlYA(H / 2), silenceIlYA(1000)], 'declare'],
+    ['trois silences en une heure moins une milliseconde', [silenceIlYA(H + 999), silenceIlYA(H / 2), silenceIlYA(1000)], 'non_refuse'],
+    ['deux silences seulement', [silenceIlYA(2 * H), silenceIlYA(60000)], 'non_refuse'],
+    ['trois silences dont un d’il y a 24 h pile', [silenceIlYA(24 * H), silenceIlYA(2 * H), silenceIlYA(1000)], 'non_refuse'],
+    ['trois silences dont un d’il y a 25 h', [silenceIlYA(25 * H), silenceIlYA(2 * H), silenceIlYA(1000)], 'non_refuse'],
+    ['trois silences d’un AUTRE numéro', [silenceIlYA(2 * H, cleMuetK), silenceIlYA(H, cleMuetK), silenceIlYA(1000, cleMuetK)], 'non_refuse'],
+  ]) {
+    scenario({ limites: lignes });
+    r = await appeler(null, { corps: DECLARER() });
+    ok(`P5, ${nom} → ${attendu}`, r.corps && r.corps.issue === attendu && E.vies.length === 0 && E.rpc.length === 0
+      && (attendu === 'declare' ? E.preuves.length === 1 : rienDeFait()), r.texte);
+  }
+  scenario({ limites: [silenceIlYA(2 * H), silenceIlYA(H), silenceIlYA(60000)],
+    erreurs: { limites: (ops) => ops.some(([m, c, v]) => m === 'eq' && c === 'cle' && String(v).startsWith('tva-muet:')) } });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('…une lecture des silences en échec → panne, rien d’écrit', r.statut === 500 && ecrituresPreuve().length === 0);
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : un refus de VIES n’efface plus une déclaration');
+  scenario({ viesRep: () => REFUS, preuves: [declaration()] });
+  r = await appeler(NUM);
+  const renaissance = ecritures('preuves_tva', 'update')[0];
+  const retrait = ecritures('preuves_tva', 'delete')[0];
+  ok('recontrôler un numéro DÉCLARÉ que VIES refuse : la déclaration RESTE, et la réponse le dit (sa date d’origine)',
+    egal(r.corps, { issue: 'refuse', numero: NUM, declare_le: DECL_ANCIENNE }) && E.preuves.length === 1
+    && E.preuves[0].source === 'declaration' && E.preuves[0].declare_le === DECL_ANCIENNE && E.preuves[0].declaration_texte === PHRASE_SQL, r.texte);
+  ok('…la renaissance d’ABORD (la preuve VIES de CE numéro, de CE compte, qui porte une déclaration), APRÈS VIES',
+    !!renaissance && renaissance.vies === 1 && egal(opDe(renaissance, 'update')[1], { source: 'declaration', vies_le: null })
+    && aEq(renaissance, 'pro_id', MOI) && aEq(renaissance, 'numero', NUM) && aEq(renaissance, 'source', 'vies')
+    && renaissance.ops.some(([m, c, v, w]) => m === 'not' && c === 'declare_le' && v === 'is' && w === null),
+    renaissance && JSON.stringify(renaissance.ops));
+  ok('…le retrait ENSUITE, de ce qui n’est PAS une déclaration, pour CE numéro et CE compte',
+    !!retrait && E.ecritures.indexOf(renaissance) < E.ecritures.indexOf(retrait)
+    && aEq(retrait, 'pro_id', MOI) && aEq(retrait, 'numero', NUM)
+    && retrait.ops.some(([m, c, v]) => m === 'neq' && c === 'source' && v === 'declaration'), retrait && JSON.stringify(retrait.ops));
+  ok('…et le refus est retenu quand même', rpcs('compter_appel_siret').some((x) => x.args.p_cle === cleRefus));
+  scenario({ viesRep: () => REFUS, preuves: [preuve({ declare_le: DECL_ANCIENNE, declaration_texte: PHRASE_SQL })] });
+  r = await appeler(NUM);
+  ok('une preuve VIES qui porte une déclaration, et que VIES refuse : elle REDEVIENT une déclaration (sans date VIES, la date d’origine gardée)',
+    egal(r.corps, { issue: 'refuse', numero: NUM, declare_le: DECL_ANCIENNE }) && E.preuves.length === 1
+    && E.preuves[0].source === 'declaration' && E.preuves[0].vies_le === null && E.preuves[0].declare_le === DECL_ANCIENNE, JSON.stringify(E.preuves));
+  scenario({ viesRep: () => REFUS, preuves: [preuve()] });
+  r = await appeler(NUM);
+  ok('une preuve VIES de ce numéro SANS déclaration : retirée, et la réponse ne parle d’aucune déclaration',
+    egal(r.corps, { issue: 'refuse', numero: NUM }) && E.preuves.length === 0, r.texte);
+  scenario({ viesRep: () => REFUS, preuves: [preuve({ source: 'essai', vies_le: null })] });
+  r = await appeler(NUM);
+  ok('…une preuve d’essai de ce numéro : retirée', egal(r.corps, { issue: 'refuse', numero: NUM }) && E.preuves.length === 0);
+  scenario({ viesRep: () => REFUS, preuves: [declaration(NUM_K)] });
+  r = await appeler(NUM);
+  ok('…la déclaration d’un AUTRE numéro : intacte, et la réponse ne s’en sert pas',
+    egal(r.corps, { issue: 'refuse', numero: NUM }) && E.preuves.length === 1 && E.preuves[0].numero === NUM_K
+    && E.preuves[0].declare_le === DECL_ANCIENNE, r.texte);
+  scenario({ viesRep: () => REFUS, preuves: [declaration(NUM, { pro_id: 'b4800000-0000-4000-8000-00000000000b' })] });
+  r = await appeler(NUM);
+  ok('…la déclaration du même numéro par un AUTRE compte : ni touchée, ni dite', egal(r.corps, { issue: 'refuse', numero: NUM })
+    && E.preuves.length === 1, r.texte);
+  scenario({ viesRep: () => REFUS, preuves: [declaration()], erreurs: { renaissance: true } });
+  r = await appeler(NUM);
+  ok('une renaissance en échec → panne HTTP 500, et rien n’est retiré', r.statut === 500 && E.preuves.length === 1
+    && ecritures('preuves_tva', 'delete').length === 0);
+  scenario({ viesRep: () => REFUS, preuves: [declaration()],
+    erreurs: { preuves: (ops) => ops.some(([m, c]) => m === 'not' && c === 'declare_le') && !ops.some(([m]) => m === 'update') } });
+  r = await appeler(NUM);
+  ok('une lecture de la déclaration restante en échec → panne (on ne dirait pas « il ne s’imprimera pas » à tort)', r.statut === 500);
+  scenario({ preuves: [declaration()], limites: [refusIlYA(H)] });
+  r = await appeler(NUM);
+  ok('un refus RETENU d’un numéro déclaré → refuse, l’heure, ET la déclaration qui reste ; ni VIES ni compteur',
+    egal(r.corps, { issue: 'refuse', numero: NUM, reessayer_a: new Date(T0 - H + T.REFUS_RETENU_MS).toISOString(), declare_le: DECL_ANCIENNE })
+    && E.vies.length === 0 && rpcs('compter_essai_tva').length === 0 && ecrituresPreuve().length === 0, r.texte);
+  scenario({ preuves: [declaration()] });
+  r = await appeler(NUM);
+  const upV = opDe(ecritures('preuves_tva', 'upsert')[0], 'upsert')[1] || {};
+  ok('VIES finit par reconnaître le numéro déclaré → reconnu ; la ligne écrite ne nomme pas la déclaration, que la base garde JOINTE',
+    r.corps && r.corps.issue === 'reconnu' && E.preuves.length === 1 && E.preuves[0].source === 'vies'
+    && E.preuves[0].declare_le === DECL_ANCIENNE && !('declare_le' in upV) && !('declaration_texte' in upV), JSON.stringify(E.preuves));
+  scenario({ preuves: [declaration(NUM_K)] });
+  r = await appeler(NUM);
+  ok('…VIES reconnaît un AUTRE numéro : la déclaration est remplacée', r.corps && r.corps.issue === 'reconnu'
+    && E.preuves[0].numero === NUM && E.preuves[0].source === 'vies' && E.preuves[0].declare_le === null, JSON.stringify(E.preuves));
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : P5, VIES ne répond pas');
+  scenario({ viesRep: () => SATURE, limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  const muets = rpcs('compter_appel_siret').filter((x) => x.args.p_cle === cleMuet);
+  const luMuet = ecritures('siret_limites', 'select').filter((e) => aEq(e, 'cle', cleMuet));
+  ok('VIES saturé pour la TROISIÈME fois en plus d’une heure → indisponible, et `declarable`',
+    egal(r.corps, { issue: 'indisponible', cause: 'sature', declarable: true }), r.texte);
+  ok('…l’absence de réponse retenue UNE fois par contrôle (pas par requête), sous l’empreinte du compte et du numéro, datée de maintenant, APRÈS VIES',
+    muets.length === 1 && rpcs('compter_appel_siret').length === 1 && muets[0].vies === E.vies.length && E.vies.length === T.ESSAIS_VIES.max
+    && Date.parse(muets[0].args.p_fenetre) === t && muets[0].args.p_max >= 1 && !JSON.stringify(muets[0].args).includes(MOI),
+    JSON.stringify(rpcs('compter_appel_siret').map((x) => x.args)));
+  ok('…les silences relus sous cette même clé, sur un jour, APRÈS l’avoir retenue',
+    luMuet.length === 1 && luMuet[0].ops.some(([m, c, v]) => m === 'gt' && c === 'fenetre' && Date.parse(v) === t - T.SANS_REPONSE_TVA.fenetre_ms)
+    && luMuet[0].seq > muets[0].seq, luMuet[0] && JSON.stringify(luMuet[0].ops));
+  ok('…et aucune preuve touchée', ecrituresPreuve().length === 0);
+  scenario({ viesRep: () => ({ __statut: 503 }), limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  ok('une PANNE de VIES compte aussi → indisponible, panne, declarable', egal(r.corps, { issue: 'indisponible', cause: 'panne', declarable: true }), r.texte);
+  for (const [nom, lignes] of [
+    ['un seul silence avant', [silenceIlYA(2 * H)]],
+    ['deux silences en moins d’une heure', [silenceIlYA(40 * 60000), silenceIlYA(20 * 60000)]],
+    ['deux silences de plus d’un jour', [silenceIlYA(26 * H), silenceIlYA(25 * H)]],
+    ['deux silences d’un AUTRE numéro', [silenceIlYA(2 * H, cleMuetK), silenceIlYA(70 * 60000, cleMuetK)]],
+  ]) {
+    scenario({ viesRep: () => SATURE, limites: lignes });
+    r = await appeler(NUM);
+    ok(`P5, ${nom} → indisponible, SANS declarable`, egal(r.corps, { issue: 'indisponible', cause: 'sature' }), r.texte);
+  }
+  scenario({ viesRep: () => BLOQUE, limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  ok('un BLOCAGE d’Opus par VIES ne compte pas : bloque, aucun silence retenu ni relu',
+    egal(r.corps, { issue: 'bloque' }) && rpcs('compter_appel_siret').length === 0
+    && ecritures('siret_limites', 'select').every((e) => !aEq(e, 'cle', cleMuet)), r.texte);
+  scenario({ viesRep: () => ({ actionSucceed: false, errorWrappers: [{ error: 'INVALID_INPUT' }] }), limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  ok('…ni un numéro que VIES ne comprend pas (mal_forme)', egal(r.corps, { issue: 'mal_forme' }) && rpcs('compter_appel_siret').length === 0);
+  scenario({ viesRep: () => REFUS, limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  ok('…ni un refus (c’est une réponse)', egal(r.corps, { issue: 'refuse', numero: NUM })
+    && !rpcs('compter_appel_siret').some((x) => x.args.p_cle === cleMuet));
+  scenario({ rpcRep: (nom) => ({ data: nom === 'compter_essai_tva' ? 'compte' : true, error: null }),
+    limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)] });
+  r = await appeler(NUM);
+  ok('…ni une limite qui mord AVANT VIES (VIES n’a rien vu)', r.corps && r.corps.issue === 'trop_d_essais'
+    && rpcs('compter_appel_siret').length === 0);
+  scenario({ viesRep: () => SATURE, limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)],
+    rpcRep: (nom) => (nom === 'compter_appel_siret' ? { data: null, error: { message: 'panne' } } : { data: 'ok', error: null }) });
+  r = await appeler(NUM);
+  ok('un silence qui ne se retient pas : indisponible quand même (sans le compter), et une trace au journal',
+    egal(r.corps, { issue: 'indisponible', cause: 'sature' }) && journal.some((l) => /Absence de réponse non retenue/.test(l)), r.texte);
+  scenario({ viesRep: () => SATURE, limites: [silenceIlYA(2 * H), silenceIlYA(70 * 60000)],
+    erreurs: { limites: (ops) => ops.some(([m, c, v]) => m === 'eq' && c === 'cle' && String(v).startsWith('tva-muet:')) } });
+  r = await appeler(NUM);
+  ok('des silences illisibles : indisponible quand même, SANS declarable, et une trace au journal',
+    egal(r.corps, { issue: 'indisponible', cause: 'sature' }) && journal.some((l) => /sans réponse illisibles/.test(l)), r.texte);
+
+  /* ---------------------------------------------------------------- */
+  ecrire('\nLe banc — 2b-2 : le parcours entier, dans la même base');
+  scenario({ viesRep: () => REFUS });
+  r = await appeler(NUM);
+  const etape1 = egal(r.corps, { issue: 'refuse', numero: NUM }) && E.preuves.length === 0;
+  r = await appeler(null, { corps: DECLARER() });
+  const dateDecl = r.corps && r.corps.declare_le;
+  const etape2 = r.corps && r.corps.issue === 'declare' && typeof dateDecl === 'string' && E.preuves[0].declare_le === dateDecl;
+  const viesAvant = E.vies.length;
+  r = await appeler(NUM);
+  const etape3 = egal(r.corps, { issue: 'refuse', numero: NUM, reessayer_a: r.corps && r.corps.reessayer_a, declare_le: dateDecl })
+    && !!r.corps.reessayer_a && E.vies.length === viesAvant;
+  r = await appeler(null, { corps: DECLARER() });
+  const etape4 = egal(r.corps, { issue: 'declare', numero: NUM, declare_le: dateDecl });
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  const etape5 = egal(r.corps, { issue: 'retire', numero: NUM }) && E.preuves.length === 0;
+  r = await appeler(NUM);
+  const etape6 = r.corps && r.corps.issue === 'refuse' && r.corps.declare_le === undefined && !!r.corps.reessayer_a;
+  r = await appeler(null, { corps: { action: 'retirer' } });
+  const etape7 = egal(r.corps, { issue: 'rien_a_retirer' });
+  ok('refusé → déclaré (date de la base) → recontrôlé (refus retenu, la déclaration reste) → redéclaré (même date) → retiré → recontrôlé (plus de déclaration) → rien à retirer',
+    etape1 && etape2 && etape3 && etape4 && etape5 && etape6 && etape7,
+    JSON.stringify({ etape1, etape2, etape3, etape4, etape5, etape6, etape7 }));
+  scenario({ viesRep: () => SATURE });
+  r = await appeler(NUM);
+  t += 30 * 60000; r = await appeler(NUM);
+  const deux = egal(r.corps, { issue: 'indisponible', cause: 'sature' });
+  r = await appeler(null, { corps: DECLARER() });
+  const pasEncore = egal(r.corps, { issue: 'non_refuse' });
+  t += 31 * 60000; r = await appeler(NUM);
+  const trois = egal(r.corps, { issue: 'indisponible', cause: 'sature', declarable: true });
+  r = await appeler(null, { corps: DECLARER() });
+  ok('trois contrôles saturés en plus d’une heure, dans la même base : non_refuse au deuxième, declarable au troisième, puis declare',
+    deux && pasEncore && trois && r.corps && r.corps.issue === 'declare' && E.preuves[0].source === 'declaration',
+    JSON.stringify({ deux, pasEncore, trois, fin: r.corps }));
+
+  ok('le banc a su simuler chaque requête de la fonction (aucune méthode, aucun filtre inconnu)', fautesDuBanc.length === 0,
+    fautesDuBanc.slice(0, 5).join(' ; '));
+
   ecrire(`BANC ${nb} ${echecs}`);
 }
 
@@ -657,11 +1184,30 @@ console.log('\nCe que la fonction renvoie, et ce que la base garde');
   verifier('autre_siren ne dit rien du SIREN ; sans_compte, sans_entreprise, bloque, mal_forme : rien',
     ['autre_siren', 'sans_compte', 'sans_entreprise', 'bloque', 'mal_forme', 'cle_fausse'].every(
       (i) => egal(R({ issue: i, siren: '000048009', numero: 'FR', codes: ['IP_BLOCKED'] }), { issue: i })));
-  verifier('les issues du serveur, les onze',
-    egal([...T.ISSUES_TVA_SERVEUR].sort(), ['autre_siren', 'bloque', 'cle_fausse', 'deja_publie', 'indisponible',
-      'mal_forme', 'reconnu', 'refuse', 'sans_compte', 'sans_entreprise', 'trop_d_essais'])
-    && T.ISSUES_TVA.length === 14
-    && ['reseau', 'lent', 'service_indisponible'].every((i) => T.ISSUES_TVA.includes(i) && !T.ISSUES_TVA_SERVEUR.includes(i)));
+  /* 2b-2 : onze issues du contrôle, et sept de la déclaration sur
+     l'honneur (cahier 2b-2, §2.10) — 18 côté serveur, 21 en tout. */
+  verifier('les issues du serveur : les onze du contrôle, et les sept de la déclaration (18)',
+    egal([...T.ISSUES_TVA_SERVEUR].sort(), ['autre_siren', 'bloque', 'cle_fausse', 'declare', 'deja_publie', 'deja_reconnu',
+      'indisponible', 'mal_forme', 'non_refuse', 'reconnu', 'refuse', 'retire', 'rien_a_retirer', 'sans_compte',
+      'sans_engagement', 'sans_entreprise', 'texte_perime', 'trop_d_essais'])
+    && T.ISSUES_TVA_SERVEUR.length === 18 && T.ISSUES_TVA.length === 21
+    && ['reseau', 'lent', 'service_indisponible'].every((i) => T.ISSUES_TVA.includes(i) && !T.ISSUES_TVA_SERVEUR.includes(i)),
+    [...T.ISSUES_TVA_SERVEUR].join(', '));
+  verifier('declare : le numéro et la date de la BASE ; deja_reconnu : le numéro reconnu et sa date ; retire : le numéro',
+    egal(R({ issue: 'declare', numero: 'N', declare_le: 'd', reconnu_le: 'x', declaration_texte: 'T', pro_id: 'z' }),
+      { issue: 'declare', numero: 'N', declare_le: 'd' })
+    && egal(R({ issue: 'deja_reconnu', numero: 'N', reconnu_le: 'r', declare_le: 'd', vies_le: 'v' }),
+      { issue: 'deja_reconnu', numero: 'N', reconnu_le: 'r' })
+    && egal(R({ issue: 'retire', numero: 'N', declare_le: 'd' }), { issue: 'retire', numero: 'N' }));
+  verifier('refuse emporte la date d’une déclaration qui RESTE ; indisponible, `declarable` (P5) — et rien d’autre',
+    egal(R({ issue: 'refuse', numero: 'N', reessayer_a: 'h', declare_le: 'd', declaration_texte: 'T' }),
+      { issue: 'refuse', numero: 'N', reessayer_a: 'h', declare_le: 'd' })
+    && egal(R({ issue: 'indisponible', cause: 'sature', declarable: true, silences: 3 }),
+      { issue: 'indisponible', cause: 'sature', declarable: true })
+    && egal(R({ issue: 'indisponible', cause: 'panne', declarable: undefined }), { issue: 'indisponible', cause: 'panne' }));
+  verifier('sans_engagement, texte_perime, non_refuse, rien_a_retirer : rien que l’issue',
+    ['sans_engagement', 'texte_perime', 'non_refuse', 'rien_a_retirer'].every(
+      (i) => egal(R({ issue: i, numero: 'N', declare_le: 'd', texte: 'T', reessayer_a: 'h' }), { issue: i })));
 
   const P = T.ligneDePreuveTva;
   const ligne = P({ pro_id: 'u', siren: '000048009', numero: 'FR91000048009', vies_le: '2026-10-20T13:51:00.982Z' });
@@ -672,6 +1218,89 @@ console.log('\nCe que la fonction renvoie, et ce que la base garde');
     && P({ pro_id: 'u', siren: '000048009', numero: 'FR9100004800' }) === null
     && P({ pro_id: 'u', siren: '000048009', numero: 'FRIO000048009' }) === null
     && P({ pro_id: null, siren: '000048009', numero: 'FR91000048009' }) === null);
+
+  /* 2b-2 : la ligne d'une DÉCLARATION — la même forme, la source
+     `declaration`, `vies_le` vide, le texte montré ; ni `declare_le` ni
+     `reconnu_le` (la base les pose). */
+  const D = T.ligneDeDeclarationTva;
+  const decl = D({ pro_id: 'u', siren: '000048009', numero: 'FR91000048009', texte: T.DECLARATION_TVA, declare_le: 'x', vies_le: 'y' });
+  verifier('la ligne de déclaration : six colonnes, source « declaration », vies_le vide, le texte — et PAS de date',
+    egal(decl, { pro_id: 'u', siren: '000048009', numero: 'FR91000048009', vies_le: null, source: 'declaration',
+      declaration_texte: T.DECLARATION_TVA }), JSON.stringify(decl));
+  verifier('…et aucune ligne pour un texte hors des versions connues, ou un numéro qui ne désigne pas ce SIREN',
+    D({ pro_id: 'u', siren: '000048009', numero: 'FR91000048009', texte: T.DECLARATION_TVA.replace(/’/g, "'") }) === null
+    && D({ pro_id: 'u', siren: '000048009', numero: 'FR91000048009', texte: `${T.DECLARATION_TVA} ` }) === null
+    && D({ pro_id: 'u', siren: '000048009', numero: 'FR91000048009' }) === null
+    && D({ pro_id: 'u', siren: '000048017', numero: 'FR91000048009', texte: T.DECLARATION_TVA }) === null
+    && D({ pro_id: null, siren: '000048009', numero: 'FR91000048009', texte: T.DECLARATION_TVA }) === null);
+}
+
+/* ================================================================== */
+console.log('\nLa déclaration sur l’honneur — le texte, ses versions, P5 (2b-2)');
+{
+  /* La phrase décidée par le propriétaire (PLAN-DEVIS 10.19) est écrite
+     avec des apostrophes DROITES ; le code, avec des typographiques. On
+     compare après normalisation — on ne « corrige » jamais la constante. */
+  const plan = lire('docs/PLAN-DEVIS.md');
+  const duPlan = (plan.match(/« (Je certifie sur l'honneur que ce numéro[^»]*?) »/) || [])[1] || '';
+  verifier('DECLARATION_TVA est la phrase décidée (PLAN-DEVIS 10.19), mot pour mot, apostrophes typographiques',
+    !!duPlan && T.DECLARATION_TVA.replace(/’/g, "'") === duPlan && !T.DECLARATION_TVA.includes("'")
+    && T.DECLARATION_TVA.includes('’'), `plan : ${duPlan}`);
+  const schema = sqlSansCommentaires(lire('supabase/schema.sql'));
+  const regle = (schema.match(/add constraint preuve_tva_declaration_check[\s\S]*?declaration_texte in \(([\s\S]*?)\)\)\);/) || [])[1] || '';
+  const duSql = [...regle.matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1].replace(/''/g, "'"));
+  verifier('DECLARATIONS_TVA_CONNUES = la liste fermée de la base, à l’octet ; DECLARATION_TVA en est la dernière',
+    duSql.length >= 1 && egal([...T.DECLARATIONS_TVA_CONNUES], duSql)
+    && T.DECLARATIONS_TVA_CONNUES[T.DECLARATIONS_TVA_CONNUES.length - 1] === T.DECLARATION_TVA
+    && Object.isFrozen(T.DECLARATIONS_TVA_CONNUES), `base : ${JSON.stringify(duSql)}`);
+
+  verifier('P5 : trois contrôles, le premier et le dernier séparés d’au moins une heure, sur un jour',
+    egal(JSON.parse(JSON.stringify(T.SANS_REPONSE_TVA)), { controles: 3, ecart_ms: 3600000, fenetre_ms: 86400000 })
+    && Object.isFrozen(T.SANS_REPONSE_TVA));
+  verifier('…et trois contrôles de quatre requêtes tiennent sous la limite du compte (24 par heure)',
+    T.SANS_REPONSE_TVA.controles * T.ESSAIS_VIES.max <= T.LIMITES_TVA.compte.max);
+  const M = Date.parse('2026-10-20T12:00:00.000Z');
+  const il = (ms) => new Date(M - ms).toISOString();
+  const H = 3600000;
+  const cas = [
+    ['trois, sur deux heures', [il(2 * H), il(H), il(0)], true],
+    ['trois, à une heure EXACTEMENT', [il(H), il(H / 2), il(0)], true],
+    ['trois, à une heure moins une milliseconde', [il(H - 1), il(H / 2), il(0)], false],
+    ['deux', [il(2 * H), il(0)], false],
+    ['quatre en dix minutes', [il(600000), il(400000), il(200000), il(0)], false],
+    ['trois dont un à 24 h PILE (exclu)', [il(24 * H), il(2 * H), il(0)], false],
+    ['trois dont un à 24 h moins 1 ms', [il(24 * H - 1), il(12 * H), il(0)], true],
+    ['trois dont un illisible', [il(2 * H), 'hier', il(0)], false],
+    ['les formes de PostgREST et de PostgreSQL', ['2026-10-20T10:00:00.123456+00:00', '2026-10-20 11:00:00+00', '2026-10-20T12:00:00Z'], true],
+    ['dans le désordre', [il(0), il(2 * H), il(H)], true],
+  ];
+  const faux = cas.filter(([, f, att]) => T.declarableSansReponse(f, M) !== att);
+  verifier(`declarableSansReponse : ${cas.length} cas, dont les deux bornes`, faux.length === 0,
+    faux.map(([n, f]) => `${n} → ${T.declarableSansReponse(f, M)}`).join(' ; '));
+  verifier('…et rien pour ce qui n’est pas une liste, ou sans horloge',
+    [null, undefined, 'abc', {}, 42].every((f) => T.declarableSansReponse(f, M) === false)
+    && T.declarableSansReponse([il(2 * H), il(H), il(0)], NaN) === false);
+
+  /* LES DATES, à l'heure du TÉLÉPHONE — la même règle que `dateFrancaise`
+     (entreprise.js), que tva.js ne peut pas importer : comparées dans
+     quatre fuseaux, sur les formes de PostgREST et de PostgreSQL. */
+  const FORMES = ['2026-10-19T23:18:21.716617+00:00', '2026-10-19 23:18:21+00', '2026-10-19T23:18:21.5+00:00',
+    '2026-10-19T23:18:21Z', '2026-10-19 23:18:21-05', '2026-10-19T23:18:21', '2026-10-19T23:18:21+0530',
+    '2026-10-19 23:18', '2026-09-02', '2026-03-29T00:30:00Z', '2026-10-25T00:30:00Z', null, 'demain', ''];
+  const avant = process.env.TZ;
+  const ecarts = [];
+  try {
+    for (const tz of ['Europe/Paris', 'America/Martinique', 'Pacific/Kiritimati', 'UTC']) {
+      process.env.TZ = tz;
+      for (const f of FORMES) if (T.dateFrancaiseTva(f) !== dateFrancaise(f)) ecarts.push(`${tz} ${f} : ${T.dateFrancaiseTva(f)} / ${dateFrancaise(f)}`);
+    }
+    process.env.TZ = 'Europe/Paris';
+    if (T.dateFrancaiseTva('2026-11-09T23:30:00.000000+00:00') !== '10/11/2026') ecarts.push('Paris, 0 h 30 : pas le jour du téléphone');
+  } finally {
+    if (avant === undefined) delete process.env.TZ; else process.env.TZ = avant;
+  }
+  verifier('dateFrancaiseTva = dateFrancaise, dans quatre fuseaux, sur quatorze formes (0 h 30 à Paris est le 10, pas le 9)',
+    ecarts.length === 0, ecarts.join(' ; '));
 }
 
 /* ================================================================== */
@@ -684,8 +1313,17 @@ console.log('\nLes mots — chaque message est FAIT TOURNER');
     { siren: '000048009', regime: 'reel', reessayer_a: '2026-10-20T15:00:00.000Z', portee: 'compte', cause: 'sature' },
     { siren: '000048009', regime: 'franchise', portee: 'service', cause: 'panne' },
   ];
+  /* 2b-2 : les branches de la déclaration passent les MÊMES règles de
+     vocabulaire — la case offerte, une déclaration qui reste, P5. */
+  const variantes2b2 = [
+    { siren: '000048009', regime: 'reel', peutDeclarer: true },
+    { siren: '000048009', regime: 'franchise', peutDeclarer: true, reessayer_a: '2026-10-20T15:00:00.000Z' },
+    { siren: '000048009', regime: 'reel', peutDeclarer: true, declarable: true, cause: 'sature' },
+    { siren: '000048009', declare_le: '2026-10-20T13:51:01.716617+00:00', numero: 'FRK1000048009', reconnu_le: '2026-10-19 08:00:00+00' },
+    { siren: '000048009', declare_le: '2026-10-20T13:51:01Z', reessayer_a: '2026-10-20T15:00:00.000Z', peutDeclarer: true },
+  ];
   const textes = [];
-  for (const d of variantes) for (const i of [...etats, ...issues]) textes.push([i, T.messageTva(i, d).texte]);
+  for (const d of [...variantes, ...variantes2b2]) for (const i of [...etats, ...issues]) textes.push([i, T.messageTva(i, d).texte]);
   const vides = textes.filter(([, t]) => !t || t.length < 30);
   verifier('chaque état et chaque issue a sa phrase (et « pret » n’en a pas)',
     vides.length === 0 && T.messageTva('pret').texte === null, [...new Set(vides.map(([i]) => i))].join(', '));
@@ -721,7 +1359,109 @@ console.log('\nLes mots — chaque message est FAIT TOURNER');
   verifier('trop_d_essais : la portée dit LAQUELLE des deux limites',
     T.messageTva('trop_d_essais', { portee: 'service' }).texte !== T.messageTva('trop_d_essais', { portee: 'compte' }).texte);
   verifier('les actions sont « corriger », « reessayer » ou rien',
-    [...etats, ...issues].every((i) => [null, 'corriger', 'reessayer'].includes(T.messageTva(i, {}).action)));
+    [...etats, ...issues].every((i) => [...variantes, ...variantes2b2].every(
+      (d) => [null, 'corriger', 'reessayer'].includes(T.messageTva(i, d).action))));
+
+  /* ---------------------------------------------------------------- */
+  /* 2b-2 — LES PHRASES DE LA DÉCLARATION, mot pour mot (cahier 2b-2,
+     annexe A.5). Un seul écart, et il est voulu : « pour enregistrer »
+     contient « registre », que les contrôles de vocabulaire refusent dans
+     tva.js — `sans_engagement` le dit autrement. */
+  const avantTz = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    const m = (i, d = {}) => T.messageTva(i, d).texte;
+    const EXACTES = [
+      ['declare', {}, 'Votre déclaration est enregistrée : ce numéro s’imprimera sur vos devis. VIES ne le reconnaît pas aujourd’hui ; '
+        + 'si votre service des impôts le corrige ou l’active, faites-le contrôler de nouveau.'],
+      ['sans_engagement', {}, 'Cochez la déclaration pour que ce numéro soit enregistré.'],
+      ['texte_perime', {}, 'Le texte de la déclaration a changé depuis cette version d’Opus : mettez l’application à jour, puis '
+        + 'relisez-le avant de cocher. Rien n’a été enregistré.'],
+      ['non_refuse', {}, 'Opus n’a pas de refus récent de VIES pour ce numéro : faites-le contrôler de nouveau. S’il le refuse, la '
+        + 'déclaration vous sera proposée.'],
+      ['deja_reconnu', { numero: 'FRK1000048009', reconnu_le: '2026-10-19T22:30:00.123456+00:00' },
+        'VIES a reconnu le numéro FRK1000048009 de votre entreprise le 20/10/2026 : c’est lui qui s’imprime sur vos devis. S’il '
+        + 'n’est plus valable, faites-le contrôler de nouveau.'],
+      ['deja_reconnu', {}, 'VIES a reconnu un autre numéro de votre entreprise : c’est lui qui s’imprime sur vos devis. S’il n’est '
+        + 'plus valable, faites-le contrôler de nouveau.'],
+      ['retire', {}, 'Votre déclaration est retirée : ce numéro ne s’imprimera plus sur vos devis.'],
+      ['rien_a_retirer', {}, 'Il n’y a plus de déclaration à retirer : elle a déjà été retirée, ou VIES a reconnu votre numéro '
+        + 'entre-temps.'],
+      ['refuse', { declare_le: '2026-10-19T22:30:00+00:00', peutDeclarer: true, regime: 'reel' },
+        'VIES ne reconnaît pas ce numéro. Votre déclaration sur l’honneur du 20/10/2026 reste enregistrée : il continue de '
+        + 's’imprimer sur vos devis. Si vous savez qu’il est faux, retirez votre déclaration.'],
+      ['refuse', { declare_le: '2026-10-20T08:00:00Z', reessayer_a: '2026-10-20T13:00:00.000Z' },
+        'VIES a refusé ce numéro il y a moins de trois heures : Opus ne le lui redemandera pas avant 15 h. Votre déclaration sur '
+        + 'l’honneur du 20/10/2026 reste enregistrée : il continue de s’imprimer sur vos devis. Si vous savez qu’il est faux, '
+        + 'retirez votre déclaration.'],
+      ['refuse', { peutDeclarer: true, regime: 'reel' },
+        'VIES ne reconnaît pas ce numéro aujourd’hui. Un numéro refusé peut n’être pas attribué, ou pas encore actif : votre '
+        + 'service des impôts des entreprises peut dire pourquoi, et l’activer. Si vous êtes en franchise en base de TVA, '
+        + 'choisissez-la dans « TVA ». Sinon, tant que VIES ne le reconnaît pas, Opus ne l’imprime sur vos devis que si vous le '
+        + 'déclarez sur l’honneur, plus bas.'],
+      ['refuse', { peutDeclarer: true, regime: 'reel', reessayer_a: '2026-10-20T13:05:00.000Z' },
+        'VIES a refusé ce numéro il y a moins de trois heures : Opus ne le lui redemandera pas avant 15 h 05. Un numéro refusé '
+        + 'peut n’être pas attribué, ou pas encore actif : votre service des impôts des entreprises peut dire pourquoi, et '
+        + 'l’activer. Si vous êtes en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, tant que VIES ne le reconnaît '
+        + 'pas, Opus ne l’imprime sur vos devis que si vous le déclarez sur l’honneur, plus bas.'],
+      ['refuse', { peutDeclarer: true, regime: 'franchise' },
+        'VIES ne reconnaît pas ce numéro aujourd’hui. Un numéro refusé peut n’être pas attribué, ou pas encore actif : votre '
+        + 'service des impôts des entreprises peut dire pourquoi, et l’activer. Tant que VIES ne le reconnaît pas, Opus ne '
+        + 'l’imprime sur vos devis que si vous le déclarez sur l’honneur, plus bas.'],
+      ['refuse', { regime: 'reel' },
+        'VIES ne reconnaît pas ce numéro aujourd’hui : il ne s’imprimera pas sur vos devis. Un numéro refusé peut n’être pas '
+        + 'attribué, ou pas encore actif : c’est votre service des impôts des entreprises qui peut dire pourquoi, et l’activer. '
+        + 'Si vous êtes en franchise en base de TVA, choisissez-la dans « TVA ».'],
+    ];
+    const ecartes = EXACTES.filter(([i, d, att]) => m(i, d) !== att);
+    verifier(`les phrases de la déclaration, mot pour mot (${EXACTES.length}, dont les quatre formes du refus)`,
+      ecartes.length === 0, ecartes.map(([i, d]) => `${i} ${JSON.stringify(d)} → « ${m(i, d)} »`).join(' ¶ '));
+
+    /* La case s'offre plus bas : on ne dit JAMAIS « il ne s'imprimera pas »
+       au-dessus d'elle (S26) — ni d'un numéro dont la déclaration reste. */
+    const refusOffert = [{ peutDeclarer: true }, { peutDeclarer: true, reessayer_a: '2026-10-20T13:00:00.000Z' },
+      { peutDeclarer: true, regime: 'franchise' }, { declare_le: '2026-10-20T08:00:00Z' },
+      { declare_le: '2026-10-20T08:00:00Z', peutDeclarer: true, reessayer_a: '2026-10-20T13:00:00.000Z' }];
+    verifier('« il ne s’imprimera pas » n’est jamais dit quand la case est offerte, ni d’un numéro qui reste déclaré',
+      refusOffert.every((d) => !/ne s’imprimera pas/.test(m('refuse', d))));
+    verifier('…« plus bas » n’annonce la case que là où l’écran peut l’offrir',
+      /plus bas/.test(m('refuse', { peutDeclarer: true })) && !/plus bas/.test(m('refuse', {}))
+      && !/plus bas/.test(m('refuse', { peutDeclarer: 'oui' })) && !/plus bas/.test(m('refuse', { declare_le: '2026-10-20T08:00:00Z', peutDeclarer: true }))
+      && /plus bas/.test(m('indisponible', { peutDeclarer: true, declarable: true }))
+      && !/plus bas/.test(m('indisponible', { declarable: true })) && !/plus bas/.test(m('indisponible', { peutDeclarer: true })));
+
+    /* P5 : ce que dit une absence de réponse, quand la case pourrait
+       s'offrir — et RIEN de plus quand elle ne le peut pas. */
+    const SILENCE = ' Si VIES ne répond toujours pas à trois contrôles, en plus d’une heure, Opus vous proposera de déclarer ce '
+      + 'numéro sur l’honneur.';
+    const DECLARABLE = ' VIES n’a pas répondu à trois contrôles en plus d’une heure : si vous êtes sûr de ce numéro, vous pouvez '
+      + 'le déclarer sur l’honneur, plus bas.';
+    const BLOQUE = ' La déclaration sur l’honneur n’est proposée qu’après une réponse de VIES.';
+    const suites = [
+      ['indisponible', { cause: 'sature' }, SILENCE], ['indisponible', { cause: 'panne' }, SILENCE],
+      ['indisponible', { cause: 'sature', declarable: true }, DECLARABLE], ['indisponible', { declarable: 'oui' }, SILENCE],
+      ['lent', {}, SILENCE], ['reseau', {}, SILENCE], ['bloque', {}, BLOQUE], ['bloque', { declarable: true }, BLOQUE],
+    ];
+    const malSuivies = suites.filter(([i, d, suite]) => m(i, { ...d, peutDeclarer: true }) !== m(i, d) + suite);
+    verifier('P5 : saturé, en panne, lent, sans réseau → « trois contrôles » ; declarable → la case, plus bas ; bloqué → « après une réponse »',
+      malSuivies.length === 0, malSuivies.map(([i, d]) => `${i} ${JSON.stringify(d)} → « ${m(i, { ...d, peutDeclarer: true })} »`).join(' ¶ '));
+    verifier('…rien de tout cela sans `peutDeclarer === true` (un « oui » n’est pas un vrai)',
+      ['indisponible', 'lent', 'reseau', 'bloque'].every((i) => m(i, { peutDeclarer: 'oui', declarable: true }) === m(i, {})
+        && m(i, { declarable: true }) === m(i, {}) && !/honneur/.test(m(i, {}))));
+    verifier('…ni après une limite d’Opus, ni une panne d’Opus : la case n’y a rien à faire',
+      ['trop_d_essais', 'service_indisponible'].every((i) => m(i, { peutDeclarer: true, declarable: true }) === m(i, {})));
+  } finally {
+    if (avantTz === undefined) delete process.env.TZ; else process.env.TZ = avantTz;
+  }
+
+  /* LA PHRASE DE LA CASE n'existe qu'à côté de la case : aucun message ne
+     la recopie, même en partie (S46). */
+  const tousLesTextes = [];
+  for (const d of [...variantes, ...variantes2b2]) for (const i of [...etats, ...issues]) tousLesTextes.push(T.messageTva(i, d).texte || '');
+  const debutCase = T.DECLARATION_TVA.slice(0, 30);
+  const finCase = T.DECLARATION_TVA.slice(-40);
+  verifier('aucun message ne recopie la phrase de la case (ni son début, ni sa fin)',
+    tousLesTextes.every((x) => !x.includes(debutCase) && !x.includes(finCase) && !/certifi/i.test(x)));
 }
 
 /* ================================================================== */
@@ -801,6 +1541,21 @@ const verifierEdge = () => {
   verifier('…et n’appelle que compter_essai_tva et compter_appel_siret',
     egal([...new Set([...code.matchAll(/\.rpc\('([a-z_]+)'/g)].map((m) => m[1]))].sort(),
       ['compter_appel_siret', 'compter_essai_tva']));
+  /* 2b-2 — ce que le banc ne peut pas distinguer : le texte RANGÉ est celui
+     que le téléphone a renvoyé (S20). Comme il doit être, à l'octet, la
+     version en vigueur, ranger la constante donnerait la même ligne ; mais
+     le jour où une version s'ajoute, seul le texte reçu dit ce que
+     l'artisan a lu. */
+  verifier('la déclaration range le texte REÇU (`texte: demande.texte`), passé par ligneDeDeclarationTva, jamais la constante',
+    /ligneDeDeclarationTva\(\{[^}]*\btexte:\s*demande\.texte\s*\}\)/.test(code)
+    && !/ligneDeDeclarationTva\(\{[^}]*\btexte:\s*DECLARATION_TVA/.test(code)
+    && (code.match(/declaration_texte/g) || []).length === 0);
+  verifier('…après avoir exigé la case (`engagement === true`) et le texte en vigueur, à l’octet',
+    /if \(demande\.engagement !== true\) return await repondre\(\{ issue: 'sans_engagement' \}\);/.test(code)
+    && /if \(demande\.texte !== DECLARATION_TVA\) return await repondre\(\{ issue: 'texte_perime' \}\);/.test(code));
+  verifier('…et la seule règle de P5 est celle de tva.js (`declarableSansReponse`), jamais un compte écrit à la main',
+    (code.match(/declarableSansReponse\(/g) || []).length === 1 && !/\.length\s*>=\s*3\b/.test(code)
+    && !/SANS_REPONSE_TVA\.(controles|ecart_ms)/.test(code));
 
   /* LE BANC — lancé dans un processus à part, et relu. Un banc qui PLANTE
      ne vérifie rien : il doit écrire sa dernière ligne, `BANC <n> <échecs>`. */
@@ -834,12 +1589,41 @@ const verifierBase = () => {
     /check \(case when siren ~ '\^\[0-9\]\{9\}\$' and substr\(numero, 3, 2\) ~ '\^\[0-9\]\{2\}\$'\s+then substr\(numero, 3, 2\)::int = \(12 \+ 3 \* \(siren::bigint % 97\)\) % 97\s+else true end\)/.test(schema));
   verifier('aucune contrainte morte sur le SIREN seul (la règle du numéro le dit déjà)',
     !/add constraint preuve_tva_siren_check/.test(schema));
-  verifier('la source : « vies » ou « essai », rien d’autre',
-    /add constraint preuve_tva_source_check\s*check \(source in \('vies', 'essai'\)\)/.test(schema));
+  /* 2b-2 : une troisième source, la déclaration sur l'honneur (cahier 2b-2,
+     §2.6) — et rien d'autre. */
+  verifier('la source : « vies », « essai » ou « declaration », rien d’autre',
+    /add constraint preuve_tva_source_check\s*check \(source in \('vies', 'essai', 'declaration'\)\)/.test(schema)
+    && (schema.match(/add constraint preuve_tva_source_check/g) || []).length === 1);
+  /* …ses deux colonnes, ajoutées à la table en place (le `create table` ne
+     les porte pas), et sa règle ENTIÈRE : la date et le texte ensemble ou
+     aucun, une déclaration a sa date, un essai n'en a jamais, et le texte
+     est l'une des versions qui ONT EXISTÉ (liste fermée, à l'octet). */
+  verifier('la déclaration : `declare_le timestamptz` et `declaration_texte text`, ajoutées une fois chacune',
+    (schema.match(/alter table public\.preuves_tva add column if not exists declare_le\s+timestamptz;/g) || []).length === 1
+    && (schema.match(/alter table public\.preuves_tva add column if not exists declaration_texte\s+text;/g) || []).length === 1
+    && (schema.match(/alter table public\.preuves_tva add column\b/g) || []).length === 2);
+  const regleDecl = (schema.match(/add constraint preuve_tva_declaration_check\s*(check[\s\S]*?\)\)\);)/) || [])[1] || '';
+  verifier('…et sa règle, ENTIÈRE : ensemble ou aucun, une déclaration datée, un essai jamais, le texte dans la liste fermée',
+    regleDecl.replace(/\s+/g, ' ') === "check ((declare_le is null) = (declaration_texte is null) and (source <> 'declaration' or "
+      + "declare_le is not null) and (source <> 'essai' or declare_le is null) and (declaration_texte is null or declaration_texte in "
+      + "( 'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.')));"
+    && (schema.match(/add constraint preuve_tva_declaration_check/g) || []).length === 1, regleDecl.slice(0, 300));
   const declencheur = (schema.match(/function public\.tient_la_preuve_tva\(\)[\s\S]*?\$\$;/) || [''])[0];
   verifier('la date du contrôle : posée à l’insertion et par la clé de SERVICE seulement, gardée sinon',
     /if tg_op = 'INSERT' or current_user = 'service_role' then\s+new\.reconnu_le := clock_timestamp\(\);\s+else\s+new\.reconnu_le := old\.reconnu_le;\s+end if;/.test(declencheur)
     && /before insert or update on public\.preuves_tva/.test(schema), declencheur.slice(0, 300));
+  /* 2b-2 : la date de la déclaration appartient à la BASE, redéclarer le
+     même numéro ne la rajeunit pas, VIES qui reconnaît ce même numéro la
+     garde jointe, un autre numéro ou un essai la vident ; et une
+     déclaration posée AILLEURS que par la fonction Edge (`service_role`) ne
+     l'est que sur un compte d'essai (garde I1) — imbriquée, pour que la clé
+     de service ne lise jamais `auth.users`. */
+  verifier('la déclaration : sa date posée par la base (une seule date, `reconnu_le` = `declare_le`), gardée si le même numéro est '
+    + 'redéclaré, jointe si VIES le reconnaît, vidée pour un autre numéro ou un essai',
+    /if new\.source = 'declaration' then\s+if tg_op = 'UPDATE' and old\.declare_le is not null\s+and old\.numero = new\.numero and old\.siren = new\.siren then\s+new\.declare_le := old\.declare_le;\s+new\.declaration_texte := old\.declaration_texte;\s+else\s+new\.declare_le := clock_timestamp\(\);/.test(declencheur)
+    && /new\.reconnu_le := new\.declare_le;\s+elsif new\.source = 'vies' and tg_op = 'UPDATE' and old\.declare_le is not null\s+and old\.numero = new\.numero and old\.siren = new\.siren then\s+new\.declare_le := old\.declare_le;\s+new\.declaration_texte := old\.declaration_texte;\s+else\s+new\.declare_le := null;\s+new\.declaration_texte := null;\s+end if;/.test(declencheur));
+  verifier('…et, posée ailleurs que par la clé de service, sur un compte d’essai SEULEMENT (23514) — la clé de service ne lit pas `auth.users`',
+    /if current_user <> 'service_role' then\s+if not exists \(select 1 from auth\.users u\s+where u\.id = new\.pro_id\s+and lower\(u\.email\) like '%@exemple-opus\.test'\) then\s+raise exception '[^']*' *\n?\s*using errcode = '23514';/.test(declencheur));
   verifier('une preuve « essai » ne se pose que sur un compte d’essai (@exemple-opus.test)',
     /if new\.source = 'essai' and not exists \(\s*select 1 from auth\.users u\s+where u\.id = new\.pro_id and lower\(u\.email\) like '%@exemple-opus\.test'\) then\s+raise exception/.test(declencheur));
   const politiques = [...schema.matchAll(/create policy "[^"]+" on public\.preuves_tva\s+for (\w+)/g)].map((m) => m[1]);
@@ -876,8 +1660,11 @@ const verifierBase = () => {
     /case when e\.regime_tva = 'reel' and r\.id is not null and r\.tva is null and v\.pro_id is null\s+then 'conso_tva_intra: /.test(incomplet));
   verifier('…une seule définition d’emetteur_incomplet dans tout le fichier',
     (schema.match(/create or replace function public\.emetteur_incomplet\(/g) || []).length === 1);
-  verifier('l’export RGPD la contient',
-    /'mon_numero_de_tva',\s*\(select to_jsonb\(x\) from public\.preuves_tva x where x\.pro_id = auth\.uid\(\)\)/.test(schema));
+  /* 2b-2 (cahier 2b-2, §2.9) : une DÉCLARATION s'exporte sans `reconnu_le`
+     ni `vies_le` — l'export ne dit jamais « reconnu » pour un numéro que
+     VIES n'a pas reconnu ; une preuve `vies` ou `essai`, entière. */
+  verifier('l’export RGPD la contient — une déclaration sans `reconnu_le` ni `vies_le`',
+    /'mon_numero_de_tva',\s*\(select case when x\.source = 'declaration'\s+then to_jsonb\(x\) - 'reconnu_le' - 'vies_le'\s+else to_jsonb\(x\) end\s+from public\.preuves_tva x where x\.pro_id = auth\.uid\(\)\)/.test(schema));
   const f = schema.match(/function public\.compter_appel_siret\(\s*([\s\S]*?)\)\s*returns\s+boolean/);
   verifier('compter_appel_siret(p_cle, p_fenetre, p_max) — les noms qu’appelle la fonction pour retenir un refus',
     !!f && egal(f[1].split(',').map((x) => x.trim().split(/\s+/)[0]), ['p_cle', 'p_fenetre', 'p_max']));
@@ -921,8 +1708,12 @@ const verifierApplication = () => {
   verifier('la démonstration suit l’ORDRE de la fonction Edge : forme, entreprise, publié, SIREN',
     ordre.every((x, k) => x > 0 && (k === 0 || x > ordre[k - 1])), ordre.join(','));
   const lecture = corps(api, 'async function monEmetteurSupabase(');
-  verifier('`monEmetteur` lit la preuve avec le reste de la fiche, sa source comprise',
-    /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source'\)/.test(lecture));
+  /* 2b-2 : avec la date d'une déclaration sur l'honneur (`declare_le`) ; et
+     une base en retard d'une migration est relue sans elle (critique base M9). */
+  verifier('`monEmetteur` lit la preuve avec le reste de la fiche, sa source et la date d’une déclaration comprises — et, sur une '
+    + 'base sans `declare_le` (42703), la relit sans elle',
+    /from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source, declare_le'\)/.test(lecture)
+    && /colonneAbsente\(v\.error, 'declare_le'\)\) \{\s*v = await supabase\.from\('preuves_tva'\)\.select\('siren, numero, reconnu_le, source'\)/.test(lecture));
   verifier('…et une erreur de lecture LÈVE — sauf la table absente, et elle seule',
     /if \(v\.error && !tableAbsente\(v\.error\)\) throw v\.error;/.test(lecture)
     && /function tableAbsente\(erreur\) \{\s*return !!erreur && \(erreur\.code === 'PGRST205' \|\| erreur\.code === '42P01'\);\s*\}/.test(api));
@@ -936,16 +1727,141 @@ const verifierApplication = () => {
   verifier('…un seul contrôle à la fois : le garde du vol, dans une référence, posé AVANT l’attente et levé dans `finally`',
     iGarde > 0 && iPose > iGarde && iAttente > iPose
     && /finally\s*\{\s*enVol\.current = false;/.test(ecran));
+  /* Un numéro pas prêt : le CONTRÔLE d'un numéro TAPÉ seulement — le
+     recontrôle d'une déclaration (2b-2) porte son numéro, il ne se tape pas. */
   verifier('…un numéro pas prêt DIT pourquoi, au lieu d’un bouton muet',
-    /if \(!pret\) \{[\s\S]{0,200}setMotif\(m\);/.test(ecran));
-  verifier('…le contrôle en vol se dit au-dessus (`onOccupe`), et « Mon entreprise » refuse de se fermer ou de passer en édition',
-    /if \(onOccupe\) onOccupe\(true\);/.test(ecran) && /if \(onOccupe\) onOccupe\(false\);/.test(ecran)
+    /if \(!deja && !pret\) \{[\s\S]{0,200}setMotif\(m\);/.test(ecran));
+  /* L'OCCUPATION SAIT CE QUI EST EN VOL (2b-2, cahier §3.7) : le contrôle,
+     la déclaration ou le retrait — chacun se dit au-dessus (`onOccupe`), et
+     « Mon entreprise » refuse de se fermer ou de passer en édition pendant
+     chacun. Chaque envoi lève l'occupation dans son `finally`. */
+  const occupations = ['controle', 'declaration', 'retrait'];
+  verifier('…l’envoi en vol se dit au-dessus (`onOccupe`, avec CE qui part : le contrôle, la déclaration, le retrait), et « Mon '
+    + 'entreprise » refuse de se fermer ou de passer en édition',
+    occupations.every((q) => (ecran.match(new RegExp(`if \\(onOccupe\\) onOccupe\\('${q}'\\);`, 'g')) || []).length === 1)
+    && (ecran.match(/finally\s*\{\s*enVol\.current = false;\s*if \(onOccupe\) onOccupe\(null\);/g) || []).length === 3
+    && !/onOccupe\((?:true|false)\)/.test(ecran)
     && (sansCommentaires(lire('src/components/MonEntreprise.js')).match(/if \(occupeTva\) \{/g) || []).length === 2);
   const meCode = sansCommentaires(lire('src/components/MonEntreprise.js'));
-  verifier('…et le message « attendez » part avec la fin du contrôle (il disait « en cours » sur un numéro reconnu)',
-    (meCode.match(/attendez sa réponse[^']*', 'attente'\);/g) || []).length === 2
-    && /const occuperTva = \(enCours\) => \{\s*setOccupeTva\(enCours\);\s*if \(!enCours\) setMessage\(\(m\) => \(m && m\.ton === 'attente' \? null : m\)\);\s*\};/.test(meCode)
-    && /onOccupeTva=\{occuperTva\}/.test(meCode));
+  /* …et le message d'attente NOMME ce qui part : `messageDOccupationTva`
+     (declaration-tva.js), fait tourner ici sur les trois occupations ; il
+     part avec la fin de l'envoi (il disait « en cours » sur un numéro
+     reconnu, 20/10). */
+  const occ = OCC;
+  verifier('…et le message « attendez » nomme ce qui part (le contrôle, la déclaration, le retrait) et part avec la fin de l’envoi (il '
+    + 'disait « en cours » sur un numéro reconnu)',
+    (meCode.match(/afficher\(messageDOccupationTva\(occupeTva(?:, \{ fermer: true \})?\), 'attente'\);/g) || []).length === 2
+    && /const occuperTva = \(quoi\) => \{\s*setOccupeTva\(quoi \|\| null\);\s*if \(!quoi\) setMessage\(\(m\) => \(m && m\.ton === 'attente' \? null : m\)\);\s*\};/.test(meCode)
+    && /onOccupeTva=\{occuperTva\}/.test(meCode)
+    && occ.messageDOccupationTva('controle') === 'Contrôle auprès de VIES en cours : attendez sa réponse.'
+    && occ.messageDOccupationTva('controle', { fermer: true }) === 'Contrôle auprès de VIES en cours : attendez sa réponse. Fermer ne l’annulerait pas.'
+    && occ.messageDOccupationTva('declaration') === 'Enregistrement de votre déclaration en cours : attendez la réponse.'
+    && occ.messageDOccupationTva('retrait') === 'Retrait de votre déclaration en cours : attendez la réponse.');
+  /* 2b-2 — LA DÉCLARATION SUR L'HONNEUR, À L'ÉCRAN (cahier §3.7, annexe
+     A.5). Ce que l'écran DÉCIDE vit dans `declaration-tva.js`, qui n'importe
+     que des calculs : fait tourner ici. */
+  const E_I3 = [
+    ['reconnu', 'reussite', 'reussite', 'ferme_vide'], ['declare', 'reussite', 'reussite', 'ferme_vide'],
+    ['retire', 'reussite', 'reussite', 'ferme_vide'],
+    ['deja_publie', 'note', null, 'ferme'], ['deja_reconnu', 'note', null, 'ferme'], ['rien_a_retirer', 'note', null, 'ferme'],
+    ['sans_engagement', 'erreur', null, 'ouvert'], ['non_refuse', 'erreur', null, 'ouvert'],
+    ['refuse', 'erreur', 'echec', 'ouvert'], ['texte_perime', 'erreur', 'echec', 'ouvert'],
+    ['sature', 'erreur', 'echec', 'ouvert'], ['une_issue_inconnue', 'erreur', 'echec', 'ouvert'],
+  ];
+  const tonsFaux = E_I3.filter(([i, ton, ret, champ]) => {
+    const p = OCC.presentationDeLIssueTva(i);
+    return p.ton !== ton || p.retour !== ret || p.champ !== champ;
+  }).map(([i]) => i);
+  verifier('2b-2 : le ton, la vibration et le champ de chaque issue (E-I3) : vert pour reconnu, déclaré, retiré ; neutre pour '
+    + 'publié, reconnu, rien à retirer ; rouge SANS vibrer pour ce qui manque (case, refus récent) ; rouge et vibrer pour le reste — '
+    + 'une issue inconnue n’est jamais « faite »', tonsFaux.length === 0, tonsFaux.join(', '));
+  const ent = { siren: '000004242', tva: null };
+  const pv = (preuve, numero) => OCC.peutDeclarerTva({ entreprise: ent, preuveTva: preuve, numero });
+  const preuveDe = (source, numero = 'FR00000004242') => ({ siren: '000004242', numero, source, reconnu_le: '2026-11-01T10:00:00Z' });
+  verifier('2b-2 : la déclaration ne s’offre que pour une preuve vide, une preuve d’essai, ou une déclaration d’un AUTRE numéro — '
+    + 'jamais pour le numéro déjà déclaré, jamais sur une preuve VIES, jamais quand l’annuaire publie un numéro (E-I4)',
+    pv(null, 'FRKX000004242') === true && pv(preuveDe('essai'), 'FRKX000004242') === true
+    && pv(preuveDe('declaration', 'FRKX000004242'), 'FRKY000004242') === true
+    && pv(preuveDe('declaration', 'FRKX000004242'), 'FRKX000004242') === false
+    && pv(preuveDe('vies'), 'FRKX000004242') === false
+    && OCC.peutDeclarerTva({ entreprise: { siren: '000004242', tva: 'FR00000004242' }, preuveTva: null, numero: 'FRKX000004242' }) === false
+    && OCC.peutDeclarerTva({ entreprise: null, preuveTva: null, numero: 'FRKX000004242' }) === false);
+  const off = (reponse, numero = 'FRKX000004242', peutDeclarer = true) => OCC.declarationOfferte({ peutDeclarer, reponse, numero });
+  verifier('2b-2 : la case ne s’affiche qu’après un REFUS (frais ou retenu) du numéro encore dans le champ, ou une absence de réponse '
+    + '`declarable` ; jamais après bloque, trop d’essais, réseau, lent, service indisponible, ni une absence sans `declarable`',
+    off({ issue: 'refuse', pour: 'FRKX000004242' }) === true
+    && off({ issue: 'refuse', pour: 'FRKX000004242', reessayer_a: '2026-11-10T13:00:00Z' }) === true
+    && off({ issue: 'refuse', pour: 'FRKX000004242', declare_le: '2026-11-01T10:00:00Z' }) === false
+    && off({ issue: 'refuse', pour: 'FRKY000004242' }) === false
+    && off({ issue: 'refuse', pour: 'FRKX000004242' }, 'FRKX000004242', false) === false
+    && off({ issue: 'indisponible', pour: 'FRKX000004242', declarable: true }) === true
+    && off({ issue: 'indisponible', pour: 'FRKX000004242' }) === false
+    && ['bloque', 'trop_d_essais', 'reseau', 'lent', 'service_indisponible', 'sature', 'reconnu']
+      .every((i) => off({ issue: i, pour: 'FRKX000004242', declarable: true }) === false));
+  verifier('2b-2 : les textes de l’écran de la déclaration, MOT POUR MOT (annexe A.5)',
+    OCC.DECLARATION_ECRAN.titre === 'Vous êtes sûr de ce numéro ?'
+    && OCC.DECLARATION_ECRAN.explication === 'Votre espace professionnel sur impots.gouv.fr le montre, ou un courrier de votre '
+      + 'service des impôts ? Vous pouvez alors le déclarer sur l’honneur : Opus l’imprimera sur vos devis. Cette déclaration vous '
+      + 'engage ; Opus la garde avec sa date, et vous pourrez la retirer.'
+    && OCC.DECLARATION_ECRAN.bouton === 'Déclarer ce numéro sur l’honneur'
+    && OCC.DECLARATION_ECRAN.boutonEnCours === 'Enregistrement de votre déclaration…'
+    && OCC.DECLARATION_ECRAN.accueilReel === 'S’il le refuse alors que vous êtes sûr de votre numéro, vous pourrez le déclarer sur '
+      + 'l’honneur.'
+    && OCC.DECLARATION_ECRAN.recontroler === 'Faire contrôler de nouveau par VIES'
+    && OCC.DECLARATION_ECRAN.autreNumero === 'Écrire un autre numéro'
+    && OCC.DECLARATION_ECRAN.retirer === 'Retirer cette déclaration'
+    && OCC.DECLARATION_ECRAN.confirmerRetrait === 'Confirmer : retirer la déclaration'
+    && OCC.DECLARATION_ECRAN.demo === 'Démonstration : une clé de deux chiffres juste est reconnue ; une clé en lettres qui commence '
+      + 'par Z trouve VIES saturé ; toute autre clé en lettres est refusée, et la déclaration sur l’honneur vous est alors proposée.'
+    && OCC.noteDUneDeclaration('2026-11-02T10:00:00Z') === 'Déclaré sur l’honneur par vous le 02/11/2026 : VIES ne l’avait pas '
+      + 'reconnu. Il s’imprime sur vos devis, sous votre responsabilité.'
+    && OCC.aideDeLaSectionTvaDeclaree('FRKX000004242', '2026-11-02T10:00:00Z') === 'Numéro de TVA intracommunautaire '
+      + 'FRKX000004242, déclaré sur l’honneur par vous le 02/11/2026 : VIES ne l’avait pas reconnu. Il s’imprimera sur vos devis, '
+      + 'quel que soit votre régime ; vous pouvez retirer votre déclaration dans « Votre entreprise ».'
+    && OCC.remplaceraLaDeclaration({ declare_le: '2026-11-02T10:00:00Z', numero: 'FRKX000004242' })
+      === 'Elle remplacera votre déclaration du 02/11/2026 pour le numéro FRKX000004242.'
+    /* …et jamais « vérifi… » ni « certifi… » dans ces textes de l'écran :
+       la phrase qui engage vit dans `DECLARATION_TVA`, seule. */
+    && !/v[ée]rifi|certifi/i.test(Object.values(OCC.DECLARATION_ECRAN).join(' ')),
+    JSON.stringify(OCC.DECLARATION_ECRAN).slice(0, 120));
+  verifier('2b-2 : l’écran décide par ces fonctions, et rien d’autre : le ton et le champ d’une réponse par '
+    + '`presentationDeLIssueTva`, la case par `peutDeclarerTva` puis `declarationOfferte`, la note d’une déclaration par '
+    + '`noteDUneDeclaration` (jamais « VIES l’a reconnu » d’un numéro déclaré)',
+    /const p = presentationDeLIssueTva\(r\.issue\);/.test(ecran)
+    && /const peutDeclarer = peutDeclarerTva\(\{ entreprise, preuveTva, numero: numeroRepondu \}\);/.test(ecran)
+    && /const offerte = !!onDeclarer && declarationOfferte\(\{ peutDeclarer, reponse, numero: numeroRepondu \}\);/.test(ecran)
+    && /\{declaree && noteDUneDeclaration\(preuve\.declare_le\)\}/.test(ecran)
+    && /\{preuve\.source === 'vies' && `Écrit par vous\. VIES l’a reconnu/.test(ecran)
+    && !/preuve\.source !== 'essai'/.test(ecran));
+  /* LA CASE : une vraie case pour VoiceOver, la rangée entière comme cible,
+     décochée à chaque réponse et à chaque changement du numéro ; inerte
+     pendant un envoi ; et SOUS le bouton VIES (E-I2) : rien de nouveau
+     n'apparaît au-dessus du bouton qu'on vient de toucher. */
+  const iBoutonVies = ecran.indexOf('label="Faire contrôler par VIES"');
+  const iReponse = ecran.lastIndexOf('{laReponse}');
+  const iCase = ecran.indexOf('accessibilityRole="checkbox"');
+  verifier('2b-2 : la case est une case (`accessibilityRole="checkbox"`, `aria-checked`), inerte pendant un envoi, décochée à chaque '
+    + 'réponse et à chaque frappe ; la réponse de VIES et la déclaration sont SOUS le bouton « Faire contrôler par VIES » (E-I2) ; '
+    + 'case décochée, « Déclarer » DIT ce qui manque (`sans_engagement`)',
+    iCase > 0 && /aria-checked=\{coche\}/.test(ecran) && /accessibilityLabel=\{DECLARATION_TVA\}/.test(ecran)
+    && /onPress=\{\(\) => \{ setCoche\(\(v\) => !v\); setMotifDeclaration\(null\); \}\}\s*disabled=\{!!enCours\}/.test(ecran)
+    && /const recevoir = \(r, pour\) => \{\s*const p = presentationDeLIssueTva\(r\.issue\);\s*setReponse\(\{ \.\.\.r, pour \}\);\s*setCoche\(false\);/.test(ecran)
+    && /setTexte\(t\); setMotif\(null\); setCoche\(false\);/.test(ecran)
+    && iBoutonVies > 0 && iReponse > iBoutonVies && iCase > iBoutonVies
+    && /if \(!coche\) \{\s*const m = messageTva\('sans_engagement'\)\.texte;\s*setMotifDeclaration\(m\);/.test(ecran)
+    && /r = await onDeclarer\(pour, \{ engagement: true \}\);/.test(ecran),
+    `bouton ${iBoutonVies}, réponse ${iReponse}, case ${iCase}`);
+  verifier('2b-2 : la fiche dit l’origine d’un numéro DÉCLARÉ (`aideDeLaSectionTvaDeclaree`) : sans cette branche, l’aide de la '
+    + 'section TVA restait vide',
+    /tva && tva\.origine === 'declaration' \? aideDeLaSectionTvaDeclaree\(tva\.numero, tva\.declare_le\) : null/
+      .test(sansCommentaires(lire('src/components/FicheEmetteur.js'))));
+  const appelsApi = sansCommentaires(lire('src/lib/api.js'));
+  verifier('2b-2 : l’application déclare et retire par la fonction `tva` (`declarer` avec l’engagement et le texte que l’écran a '
+    + 'montré, `retirer`), deux fonctions nommées, le choix à la fin (le piège Metro)',
+    /numero: analyserNumeroTva\(numero\)\.numero,\s*action: 'declarer',\s*engagement: engagement === true,\s*texte: DECLARATION_TVA,/.test(appelsApi)
+    && /action: 'retirer'/.test(appelsApi)
+    && /export const declarerTva = hasSupabase \? declarerTvaSupabase : declarerTvaDemo;/.test(appelsApi)
+    && /export const retirerDeclarationTva = hasSupabase \? retirerDeclarationTvaSupabase : retirerDeclarationTvaDemo;/.test(appelsApi));
   verifier('…et il dit ce qui part, avant le geste : « Seul ce numéro est envoyé à VIES »',
     /Seul ce numéro est envoyé à VIES/.test(ecran));
   verifier('…sans rien afficher quand l’annuaire publie déjà un numéro',
@@ -991,14 +1907,45 @@ const verifierTextesLegaux = () => {
   const decision = section('Une décision automatique, et comment la faire revoir');
   verifier('« Une décision automatique » dit que c’est une RÈGLE D’OPUS — jamais « pas une décision d’Opus »',
     /c’est une règle d’Opus/.test(decision) && !/pas une décision d’Opus/.test(legal.replace(/'\s*\+\s*'/g, '')));
-  verifier('…dit ce qu’elle empêche (les devis à un particulier), et qu’aucune révision humaine n’existe encore',
-    /devis à des particuliers/.test(decision) && /Aucune vérification par un humain n’existe encore pour cette décision/.test(decision));
+  /* LA PORTE DE SORTIE (2b-2) : « Aucune vérification par un humain
+     n'existe encore » est remplacée — c'était vrai, et ça le reste
+     (« personne chez Opus ne revoit les refus de VIES ») —, mais la règle
+     n'est plus sans issue. Le texte doit dire le recours (la déclaration
+     sur l'honneur), qu'il ENGAGE, qu'il se RETIRE, et ce qu'Opus ne
+     contrôle pas. Retirer la phrase sur l'humain sans dire le recours, ou
+     garder l'ancienne, rougit (sabotage S30). */
+  verifier('…dit ce qu’elle empêche (les devis à un particulier, et aux clients traités comme tels), et que personne chez Opus ne revoit les refus',
+    /devis à des particuliers/.test(decision) && /ni à un client qu’Opus traite comme tel/.test(decision)
+    && /personne chez Opus ne revoit les refus de VIES/.test(decision)
+    && !/Aucune vérification par un humain n’existe encore/.test(legal.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ')));
+  verifier('…et le recours : la déclaration sur l’honneur (après un refus ou trois contrôles sans réponse), qui engage, et qui se retire',
+    /S’il le refuse, ou s’il ne répond pas à trois contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à votre entreprise/.test(decision)
+    && /Cette déclaration vous engage\./.test(decision)
+    && /Vous pouvez retirer votre déclaration à tout moment\./.test(decision)
+    && /Opus contrôle la forme du numéro et qu’il désigne bien votre entreprise, mais pas qu’il vous a été attribué/.test(decision)
+    && !/S’il ne le reconnaît pas, Opus ne l’imprime pas/.test(decision));
+  verifier('« Sources » : gardé si VIES le reconnaît, sinon seulement sur la déclaration de l’entreprise — plus « n’est gardé que si VIES »',
+    /est gardé si VIES/.test(section('Sources'))
+    && /seulement si l’entreprise déclare sur l’honneur, après un refus de VIES, ou après trois contrôles sans réponse/.test(section('Sources'))
+    && !/n’est gardé que si VIES/.test(legal.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ')));
+  verifier('« Pourquoi » : plus « un numéro qu’aucune administration ne reconnaît », et la base de la déclaration',
+    /ni l’administration ne reconnaît, ni l’entreprise n’a déclaré sur l’honneur comme le sien/.test(section('Pourquoi, et sur quelle base'))
+    && /Garder votre déclaration sur l’honneur, son texte et sa date : exécution du contrat/.test(section('Pourquoi, et sur quelle base'))
+    && !/qu’aucune administration ne reconnaît/.test(legal.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ')));
+  verifier('« Ce que nous collectons » dit la déclaration, son texte et sa date',
+    /ou, s’il le refuse ou ne répond pas à trois contrôles, votre déclaration sur l’honneur, son texte et sa date/.test(section('Ce que nous collectons')));
   verifier('…et ce qu’on peut faire : le service des impôts des entreprises, ou la franchise',
     /service des impôts des entreprises/.test(decision) && /franchise en base de TVA/.test(decision));
   const temps = section('Combien de temps');
   verifier('« Combien de temps » annonce les compteurs et le refus retenu, sous une empreinte, sans durée promise',
     /Pour limiter les contrôles auprès de VIES/.test(temps) && /sous une empreinte qui ne laisse lire ni le compte ni le numéro/.test(temps)
     && /retient quelques heures/.test(temps) && /y compris si le compte a été supprimé/.test(temps));
+  verifier('…dont le compte des silences de VIES (P5), retenu un jour, et ce que la base fait de la déclaration',
+    /et un jour que VIES n’a pas répondu pour lui, sous une empreinte/.test(temps)
+    && /de même votre déclaration sur l’honneur, son texte et sa date\. Elle est effacée si vous la retirez, ou remplacée si un autre numéro prend sa place/.test(temps)
+    && /si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve, et reprend effet s’il le refuse de nouveau/.test(temps));
+  verifier('aucun texte légal ne dit « certifi… » (la case le dit, pas Opus)',
+    !/certifi/i.test(legal.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
 };
 
 const verifierPaquet = () => {

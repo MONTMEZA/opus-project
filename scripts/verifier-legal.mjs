@@ -2208,8 +2208,11 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
   const TEXTES = {
     'CONFIDENTIALITE:Ce que d’autres écrivent sur vous': [section(CONFIDENTIALITE, 'Ce que d’autres écrivent sur vous'),
       '0a656d58e78f9f2bc134e8de9d8b7c5935f8512100f62ca9a96f375d7d4d804d'],
+    /* Étape 2b-2 (10/11/2026) : la déclaration sur l'honneur — gardée,
+       effacée par son retrait, remplacée, jointe — et le compte des
+       silences de VIES, retenu un jour (annexe A.7, VERSION 2026-11-10). */
     'CONFIDENTIALITE:Combien de temps': [section(CONFIDENTIALITE, 'Combien de temps').split(CE_QUI_RESTE_EN_LIGNE).join('[CE_QUI_RESTE_EN_LIGNE]'),
-      '9032ad19d07c2c95026b2de18442ee3f336888349cbef0c7bd8d6b6c1aa7f645'],
+      '7120c2e712207fd476300a4d97ee6054017557ffc591149cd97514fe3f6b504b'],
     'CONFIDENTIALITE:Vos droits, et comment les exercer ICI': [section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').split('Opposition et limitation')[0],
       '5601e93511a41c2f30600cb8eedd899298e949fc8306d2796ecefef119413556'],
     'CONFIDENTIALITE:Cookies et traceurs': [section(CONFIDENTIALITE, 'Cookies et traceurs'),
@@ -2223,8 +2226,11 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     CE_QUI_EST_GARDE: [CE_QUI_EST_GARDE, '1df85a6fb5f6ab369a2201506a32d7e9cdc6ed63dd4a70e0506505ae059e42c8'],
     /* Et la copie d'inscription corrigée (seconde relecture du 31/10,
        R2T-11) : elle n'avait pas d'empreinte. */
+    /* Étape 2b-2 (10/11/2026) : la déclaration sur l'honneur du n° de TVA,
+       et ce que les devis portent depuis les lots 2a et 2b-2 (réduction,
+       acompte et sa nature, validité, à quel titre, le chantier). */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      '96e073c58ed174a63b27c383910902b352479bba7a5055c5ad886d8bc2d4bb08'],
+      'ed764b70034533eb57cf05c9912d3c34ecd0ccb0d8284c006e369dbfd950788a'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2545,6 +2551,180 @@ console.log('\n« Ce que les autres voient de vous » : chaque table, chaque rè
     /<Text style=\{s\.aide\}>\s*Votre profil ne la montre qu'aux professionnels connectés\. La\s+commune d'une demande que vous publiez est lue par tous les\s+professionnels\.\s*<\/Text>/.test(entre)
     && !/&&|\?\s*\(|\?\s*</.test(entre)
     && !/\bestPro\b/.test(ecranEdit.slice(ecranEdit.lastIndexOf(') : (', iNom), iNom)));
+}
+
+/* ==================================================================
+   ÉTAPE 2b-2 DU DEVIS (10/11/2026) — le n° de TVA déclaré sur
+   l'honneur, à quel titre le client commande, le chantier neuf
+   (cahier 2b-2, §4 et annexe A.7 ; sections 46, 48 et 49 de
+   `schema.sql`, fonction Edge `tva`).
+
+   Les passages réécrits sont gardés MOT POUR MOT : ils engagent, et une
+   tournure qui glisse (« n'est gardé que si VIES… », « qu'aucune
+   administration ne reconnaît », « Aucune vérification par un humain
+   n'existe encore ») redeviendrait fausse sans bruit. Et chaque promesse
+   est reliée à ce qui la tient :
+     - la collecte des devis nomme CHAQUE colonne de `devis`, LUE DANS LE
+       SCHÉMA (création et `alter table … add column`) : une colonne
+       ajoutée demain sans sa place dans le texte fait rougir ;
+     - les nombres que les textes disent (« trois contrôles », « en plus
+       d'une heure », « quelques heures », « un jour ») sont comparés aux
+       constantes de `tva.js` que la fonction Edge applique ;
+     - « effacée si vous la retirez » et « reprend effet s'il le refuse de
+       nouveau » sont comparés à ce que la fonction Edge écrit ;
+     - aucun texte ne dit « certifié », et la phrase de la case
+       (`DECLARATION_TVA`, qui dit « Je certifie… ») n'y est jamais
+       recopiée : c'est l'entreprise qui s'engage, et la Licence Ouverte
+       interdit de suggérer une caution.
+   ================================================================== */
+console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, le chantier : les textes et ce qui les tient');
+{
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const sources = bloc(MENTIONS, 'Sources');
+  const collecte = bloc(CONFIDENTIALITE, 'Ce que nous collectons');
+  const pourquoi = bloc(CONFIDENTIALITE, 'Pourquoi, et sur quelle base');
+  const decision = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+  const combien = bloc(CONFIDENTIALITE, 'Combien de temps');
+  const interdit = bloc(CGU, 'Ce qui est interdit');
+
+  verifier('VERSION est au moins celle de l’étape 2b-2 (10/11/2026) : une collecte et une décision automatique nouvelles',
+    VERSION >= '2026-11-10', `VERSION = ${VERSION}`);
+
+  /* LES PASSAGES DE L'ANNEXE A.7, mot pour mot (P5 = oui). */
+  const A7 = [
+    ['Sources', sources, 'Un numéro de TVA que cette API ne publie pas, écrit par l’entreprise elle-même, est gardé si VIES, le service de la Commission européenne qui interroge l’administration fiscale de chaque pays, le reconnaît, et la date de ce contrôle l’accompagne ; sinon, seulement si l’entreprise déclare sur l’honneur, après un refus de VIES, ou après trois contrôles sans réponse, qu’il est celui que l’administration fiscale lui a attribué, et la date de cette déclaration l’accompagne.'],
+    ['Ce que nous collectons (TVA)', collecte, 'et le numéro de TVA intracommunautaire que publie la DGFiP, s’il en existe un — sinon, celui que vous écrivez vous-même, et la date à laquelle VIES, le service de la Commission européenne, l’a reconnu — ou, s’il le refuse ou ne répond pas à trois contrôles, votre déclaration sur l’honneur, son texte et sa date.'],
+    ['Ce que nous collectons (devis)', collecte, 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.'],
+    ['Pourquoi', pourquoi, 'Faire contrôler par VIES le numéro de TVA que vous écrivez, et le garder : exécution du contrat — c’est ce qui permet de l’imprimer sur vos devis — et intérêt légitime à ce qu’un devis ne porte pas un numéro que ni l’administration ne reconnaît, ni l’entreprise n’a déclaré sur l’honneur comme le sien. Garder votre déclaration sur l’honneur, son texte et sa date : exécution du contrat — c’est ce qui permet d’imprimer ce numéro sur vos devis — et intérêt légitime à garder la trace de votre engagement. Limiter le nombre de ces contrôles par compte : intérêt légitime, protéger le service et VIES contre les abus. Compter ceux auxquels VIES n’a pas répondu, pour vous proposer la déclaration sur l’honneur après trois : exécution du contrat.'],
+    ['Combien de temps', combien, 'Le numéro de TVA que VIES a reconnu, et la date de ce contrôle, restent attachés à votre compte et partent avec lui ; de même votre déclaration sur l’honneur, son texte et sa date. Elle est effacée si vous la retirez, ou remplacée si un autre numéro prend sa place — un numéro que vous déclarez, ou que VIES reconnaît ; si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve, et reprend effet s’il le refuse de nouveau. Pour limiter les contrôles auprès de VIES, Opus compte ceux de chaque compte, et retient quelques heures qu’un numéro vient d’être refusé, et un jour que VIES n’a pas répondu pour lui, sous une empreinte qui ne laisse lire ni le compte ni le numéro ;'],
+    ['Ce qui est interdit (P4)', interdit, 'Déclarer sur l’honneur un numéro de TVA qui n’est pas celui que l’administration fiscale a attribué à son entreprise : le compte peut être fermé.'],
+  ];
+  for (const [nom, texte, phrase] of A7) {
+    verifier(`« ${nom} » porte, mot pour mot, le texte de l’annexe A.7`, texte.includes(phrase),
+      `attendu : « ${phrase.slice(0, 120)}… »`);
+  }
+
+  /* LA PARTIE TVA DE « UNE DÉCISION AUTOMATIQUE », ENTIÈRE : de « Le numéro
+     de TVA que vous écrivez » à « Enfin, » (la partie du badge). Une phrase
+     glissée au milieu — « un humain peut revoir… », un délai — se voit. */
+  const DECISION_TVA = 'Le numéro de TVA que vous écrivez suit une autre règle, et c’est une règle d’Opus : Opus le fait contrôler par VIES, le service de la Commission européenne qui interroge l’administration fiscale française. S’il le reconnaît, Opus l’imprime sur vos devis. S’il le refuse, ou s’il ne répond pas à trois contrôles en plus d’une heure, vous pouvez déclarer sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à votre entreprise : Opus garde cette déclaration, son texte et sa date, et imprime alors ce numéro sur vos devis. Cette déclaration vous engage. Opus contrôle la forme du numéro et qu’il désigne bien votre entreprise, mais pas qu’il vous a été attribué ; et personne chez Opus ne revoit les refus de VIES. Vous pouvez retirer votre déclaration à tout moment. Tant que vous n’avez ni numéro reconnu ni déclaration, au régime réel de TVA, « Mon entreprise » vous signale qu’il manque une information pour vos devis à des particuliers, et, quand Opus permettra de remettre des devis, il ne vous laissera pas en remettre un à un particulier, ni à un client qu’Opus traite comme tel — une association, une copropriété, une société civile, ou une entreprise de 5 salariés au plus pour des travaux hors de son activité principale —, tant qu’elle manque. Votre service des impôts des entreprises peut activer ou corriger votre numéro auprès de l’administration fiscale, et vous pouvez le faire contrôler de nouveau, quelques heures après un refus. Si vous relevez en réalité de la franchise en base de TVA, choisissez-la dans « Mon entreprise » : ce numéro n’est alors pas demandé.';
+  const iTva = decision.indexOf('Le numéro de TVA que vous écrivez');
+  const iBadge = decision.indexOf(' Enfin, ', iTva);
+  const partieTva = iTva >= 0 && iBadge > iTva ? decision.slice(iTva, iBadge) : '';
+  verifier('« Une décision automatique » : la partie TVA est EXACTEMENT celle de l’annexe A.7 (porte de sortie, retrait, ce qu’Opus contrôle et ne contrôle pas)',
+    partieTva === DECISION_TVA, partieTva || 'partie TVA introuvable (entre « Le numéro de TVA que vous écrivez » et « Enfin, »)');
+  verifier('…et le recours humain reste dit pour le SIRET, avec la suspension du badge qui suit',
+    /Cette décision peut toujours être revue par un humain/.test(decision) && decision.indexOf('Enfin, ') > iTva
+    && /Aucun délai d’examen n’est promis\.$/.test(decision));
+
+  /* LES PHRASES DEVENUES FAUSSES NE REVIENNENT PAS — partout. */
+  const tousTextes2b2 = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT])
+    .join(' ');
+  const FAUSSES = [
+    /n’est gardé que si VIES/,
+    /qu’aucune administration ne reconnaît/,
+    /Aucune vérification par un humain n’existe encore/,
+    /S’il ne le reconnaît pas, Opus ne l’imprime pas/,
+    /ne le garde que si VIES le reconnaît/,
+  ];
+  const revenues = FAUSSES.filter((m) => m.test(tousTextes2b2)).map(String);
+  verifier('aucune phrase devenue fausse avec la déclaration ne revient (« gardé que si VIES », « aucune administration », « Aucune vérification par un humain », « ne l’imprime pas »)',
+    revenues.length === 0, revenues.join(' · '));
+
+  /* « CERTIFIÉ » NULLE PART, et LA CASE JAMAIS RECOPIÉE. */
+  const { DECLARATION_TVA, SANS_REPONSE_TVA, REFUS_RETENU_MS } = await import('../src/lib/tva.js');
+  verifier('aucun texte légal ne dit « certifi… » (constantes servies aux écrans comprises)',
+    !/certifi/i.test(tousTextes2b2));
+  verifier('…et la phrase de la case (`DECLARATION_TVA`) n’y est jamais recopiée, ni sa fin',
+    typeof DECLARATION_TVA === 'string' && DECLARATION_TVA.length > 40
+    && !tousTextes2b2.includes(DECLARATION_TVA)
+    && !tousTextes2b2.includes(DECLARATION_TVA.replace(/^Je certifie sur l’honneur que /, '')));
+
+  /* LES NOMBRES DES TEXTES SONT CEUX QUE LA FONCTION EDGE APPLIQUE. */
+  const HEURE = 60 * 60 * 1000;
+  verifier('« trois contrôles … en plus d’une heure » et « un jour » : `SANS_REPONSE_TVA` vaut 3 contrôles, 1 heure, 24 heures',
+    SANS_REPONSE_TVA && SANS_REPONSE_TVA.controles === 3 && SANS_REPONSE_TVA.ecart_ms === HEURE
+    && SANS_REPONSE_TVA.fenetre_ms === 24 * HEURE,
+    JSON.stringify(SANS_REPONSE_TVA));
+  verifier('« quelques heures » après un refus : `REFUS_RETENU_MS` est de deux à douze heures',
+    typeof REFUS_RETENU_MS === 'number' && REFUS_RETENU_MS >= 2 * HEURE && REFUS_RETENU_MS <= 12 * HEURE,
+    String(REFUS_RETENU_MS));
+  verifier('…et les trois passages qui la disent parlent tous de « trois contrôles » (Sources, collecte, décision)',
+    [sources, collecte, decision].every((t) => /trois contrôles/.test(t)));
+
+  /* « EFFACÉE SI VOUS LA RETIREZ », « REPREND EFFET S'IL LE REFUSE DE
+     NOUVEAU » : ce que la fonction Edge écrit. Le retrait supprime SA
+     ligne `declaration` et elle seule ; un refus de VIES fait renaître la
+     déclaration jointe à une preuve VIES du même numéro, puis retire les
+     preuves qui ne sont pas des déclarations. */
+  const edgeTva = readFileSync('supabase/functions/tva/index.ts', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  verifier('« effacée si vous la retirez » : `retirer` supprime la ligne `declaration` du compte, et elle seule',
+    /\.from\('preuves_tva'\)\s*\.delete\(\)\s*\.eq\('pro_id', moi\)\s*\.eq\('source', 'declaration'\)/.test(edgeTva));
+  verifier('« reprend effet s’il le refuse de nouveau » : un refus fait renaître la déclaration (`source: \'declaration\'`), et le retrait du contrôle épargne les déclarations',
+    /\.update\(\{\s*source: 'declaration',\s*vies_le: null\s*\}\)/.test(edgeTva)
+    && /\.neq\('source', 'declaration'\)/.test(edgeTva));
+
+  /* LA COLLECTE DES DEVIS SUIT LE SCHÉMA : chaque colonne de `devis` —
+     création ET `alter table … add column` — est NOMMÉE dans la phrase
+     des devis, ou TECHNIQUE, avec sa raison. */
+  const schemaDevis = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const corpsDevis = (schemaDevis.match(/create table if not exists public\.devis\s*\(([\s\S]*?)\n\);/) || [])[1] || '';
+  const colonnesDevis = [...new Set([
+    ...corpsDevis.split('\n').map((l) => (l.match(/^\s+([a-z_][a-z0-9_]*)\s+/) || [])[1])
+      .filter((c) => c && !['constraint', 'references', 'primary', 'unique', 'check', 'foreign'].includes(c)),
+    ...[...schemaDevis.matchAll(/alter table (?:only )?public\.devis\b([^;]*);/g)]
+      .flatMap((m) => [...m[1].matchAll(/add column (?:if not exists )?([a-z_][a-z0-9_]*)/g)].map((x) => x[1])),
+  ])];
+  const NOMMEES_DEVIS = {
+    objet: 'leur objet',
+    lieu_adresse: 'le lieu',
+    lieu_code_postal: 'le lieu',
+    lieu_ville: 'le lieu',
+    delai_execution: 'délai des travaux',
+    retenue_garantie_centiemes: 'retenue de garantie',
+    remise_centiemes: 'leur réduction',
+    remise_centimes: 'leur réduction',
+    remise_ht_centimes: 'leur réduction',
+    acompte_centiemes: 'leur acompte',
+    acompte_centimes: 'leur acompte',
+    acompte_ttc_centimes: 'leur acompte',
+    acompte_nature: 'leur acompte et sa nature',
+    validite_jours: 'leur durée de validité',
+    pour_qui: 'à quel titre le client commande',
+    chantier_neuf_conso: 'si les travaux portent sur un bâtiment neuf ou une transformation importante',
+    chantier_neuf_conso_le: 'la date à laquelle vous l’avez confirmé',
+    chantier_neuf_tva: 's’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA',
+    total_ht_centimes: 'leurs totaux',
+    total_tva_centimes: 'leurs totaux',
+    total_ttc_centimes: 'leurs totaux',
+    total_ttc_options_centimes: 'leurs totaux',
+    client_id: 'le client de votre carnet auquel ils sont rattachés',
+    quote_request_id: 'la demande ou l’urgence d’où ils viennent',
+    sos_request_id: 'la demande ou l’urgence d’où ils viennent',
+    source: 'la demande ou l’urgence d’où ils viennent',
+  };
+  const TECHNIQUES_DEVIS = {
+    id: 'un identifiant, qui ne dit rien de personne',
+    pro_id: 'le compte lui-même, déjà nommé',
+    statut: 'un seul état, « brouillon », jusqu’au lot 2c',
+    generation: 'l’horloge qui garde les écritures tardives',
+    created_at: 'une date technique',
+    modifie_le: 'une date technique',
+    pour_qui_client: 'le client pour lequel la réponse a été donnée : la fiche du carnet, déjà nommée',
+  };
+  const iPhraseDevis = collecte.indexOf('devis en préparation');
+  const phraseDevis2b2 = iPhraseDevis < 0 ? '' : collecte.slice(iPhraseDevis, collecte.indexOf('. ', iPhraseDevis));
+  const sansPlaceDevis = colonnesDevis.filter((c) => !(c in NOMMEES_DEVIS) && !(c in TECHNIQUES_DEVIS));
+  const absentesDevis = Object.entries(NOMMEES_DEVIS).filter(([c, mot]) => colonnesDevis.includes(c) && !phraseDevis2b2.includes(mot));
+  verifier(`« Ce que nous collectons » nomme chaque colonne de \`devis\`, lue dans le schéma (${colonnesDevis.length} colonnes), dans la phrase des devis`,
+    colonnesDevis.length >= 33 && sansPlaceDevis.length === 0 && absentesDevis.length === 0,
+    colonnesDevis.length < 33
+      ? `${colonnesDevis.length} colonnes lues : la table \`devis\` a changé de forme, ou ce contrôle a perdu sa cible`
+      : [...sansPlaceDevis.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
+        ...absentesDevis.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · '));
 }
 
 console.log('');

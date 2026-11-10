@@ -135,6 +135,14 @@ export const LONGUEURS = Object.freeze({
 export const SOURCES = Object.freeze(['manuelle', 'demande', 'urgence']);
 /** Un seul statut au lot 1 (`devis_statut_check`). */
 export const STATUTS = Object.freeze(['brouillon']);
+/**
+ * « À QUEL TITRE CE CLIENT COMMANDE » (lot 2b-2, `devis_pour_qui_check`) —
+ * les quatre réponses, dans l'ORDRE PROTECTEUR de la feuille : celle qui
+ * RETIRE des mentions dues à un particulier vient en DERNIER (cahier 2b-2,
+ * annexe A.3 ; critique droit B3). La base garde la réponse BRUTE ; elle ne
+ * vaut que pour le client à qui elle a été donnée (`pourQuiValable`).
+ */
+export const POUR_QUI = Object.freeze(['consommateur', 'non_professionnel', 'professionnel_hors_activite', 'professionnel']);
 
 /**
  * Les dix contraintes de `devis_lignes`, TRIÉES PAR ORDRE ALPHABÉTIQUE.
@@ -159,10 +167,11 @@ export const CONTRAINTES_LIGNE = Object.freeze([
   'devis_ligne_unite_check',
 ]);
 
-/** Les dix-sept contraintes de `devis`, triées de même (dix au lot 1, sept
- *  au lot 2a). `validerDevis()` teste celles qui portent sur ce que
- *  l'artisan écrit ; `devis_plafond_check` est tenu par `totauxDevis()` ;
- *  `devis_totaux_check` et `devis_calculs_check` par la base seule. */
+/** Les dix-huit contraintes de `devis`, triées de même (dix au lot 1, sept
+ *  au lot 2a, une à 2b-2 : la réponse « à quel titre »). `validerDevis()`
+ *  teste celles qui portent sur ce que l'artisan écrit ; `devis_plafond_check`
+ *  est tenu par `totauxDevis()` ; `devis_totaux_check` et
+ *  `devis_calculs_check` par la base seule. */
 export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_acompte_check',
   'devis_acompte_nature_check',
@@ -174,6 +183,7 @@ export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_lieu_ville_check',
   'devis_objet_check',
   'devis_plafond_check',
+  'devis_pour_qui_check',
   'devis_remise_check',
   'devis_remise_une_forme_check',
   'devis_retenue_check',
@@ -291,6 +301,11 @@ export const CHAMPS_DEVIS = Object.freeze([
   'clientId', 'quoteRequestId', 'sosRequestId', 'source', 'objet', 'lieuAdresse', 'lieuCodePostal',
   'lieuVille', 'delaiExecution', 'retenueGarantieCentiemes',
   'remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
+  /* 2b-2 : à quel titre le client commande (la réponse, et le client à qui
+     elle a été donnée), et les deux questions du chantier. La date du « Oui »
+     au chantier neuf (`chantierNeufConsoLe`) n'y est PAS : la base seule la
+     pose (49.7 ne l'accorde à personne). */
+  'pourQui', 'pourQuiClient', 'chantierNeufConso', 'chantierNeufTva',
 ]);
 /** LES PAIRES qui s'écrivent ENSEMBLE, en une écriture (relecture BASE-2) :
  *  la réduction (pourcentage OU montant), l'acompte (pourcentage OU montant,
@@ -299,6 +314,12 @@ export const CHAMPS_DEVIS = Object.freeze([
 export const PAIRES_DEVIS = Object.freeze([
   Object.freeze(['remiseCentiemes', 'remiseCentimes']),
   Object.freeze(['acompteCentiemes', 'acompteCentimes', 'acompteNature']),
+  /* 2b-2 — EN FIN, jamais en tête : `PAIRES_DEVIS[0]` est lue comme la paire
+     de la RÉDUCTION (le plafond, ses renvois ; critique écran E-M7). La
+     réponse et le client pour lequel elle a été donnée partent ensemble :
+     écrites l'une sans l'autre, une réponse arrivée seule vaudrait pour le
+     client d'AVANT, ou pour personne. */
+  Object.freeze(['pourQui', 'pourQuiClient']),
 ]);
 export const CHAMPS_LIGNE = Object.freeze([
   'ordre', 'type', 'designation', 'quantiteMilliemes', 'unite', 'prixUnitaireCentimes', 'tauxTvaCentiemes',
@@ -917,6 +938,7 @@ const REGLES_DEVIS = {
   devis_lieu_ville_check: (d) => (!present(d.lieuVille) || longueur(d.lieuVille) <= LONGUEURS.lieuVille
     ? null : 'lieuVille'),
   devis_objet_check: (d) => (!present(d.objet) || longueur(d.objet) <= LONGUEURS.objet ? null : 'objet'),
+  devis_pour_qui_check: (d) => (!present(d.pourQui) || POUR_QUI.includes(d.pourQui) ? null : 'pourQui'),
   devis_retenue_check: (d) => (!present(d.retenueGarantieCentiemes)
     || (entier(d.retenueGarantieCentiemes) && d.retenueGarantieCentiemes >= 1 && d.retenueGarantieCentiemes <= RETENUE_MAX)
     ? null : 'retenueGarantieCentiemes'),
@@ -1678,7 +1700,11 @@ export function texteDUrgence({ libelle = null, details = null } = {}) {
    29/10/2026, sabotages F16 et F17). */
 export const LIENS_DU_DEVIS = '*, client:client_id(nom), demande:quote_request_id(created_at, budget), '
   + 'urgence:sos_request_id(created_at)';
-export const LIENS_DU_DEVIS_OUVERT = '*, client:client_id(nom), demande:quote_request_id(created_at, budget, description), '
+/* 2b-2 : le devis OUVERT lit aussi le TYPE et le SIRET de la fiche — le
+   type choisit la PHRASE de la proposition « à titre privé » (jamais la
+   réponse : rien n'est déduit de `clients.type`, décision du 09/11), le SIRET
+   nourrit un AVIS. La liste « Mes devis » n'en a pas besoin. */
+export const LIENS_DU_DEVIS_OUVERT = '*, client:client_id(nom, type, siret), demande:quote_request_id(created_at, budget, description), '
   + 'urgence:sos_request_id(created_at, probleme_label, details)';
 
 /** La demande et l'urgence jointes à un devis de la base, aux noms de
@@ -1766,10 +1792,23 @@ export function rowToDevis(d) {
     remiseHtCentimes: nombreOuNul(d.remise_ht_centimes),
     acompteTtcCentimes: nombreOuNul(d.acompte_ttc_centimes),
     totalTtcOptionsCentimes: nombreOuNul(d.total_ttc_options_centimes),
+    /* « À QUEL TITRE » ET « LE CHANTIER » (2b-2, 49.4 ter), relus tels que
+       la base les garde : la réponse BRUTE et le client pour lequel elle a
+       été donnée (elle ne vaut que pour lui : `pourQuiValable`), les deux
+       questions du chantier, et la date du « Oui », que la base seule pose. */
+    pourQui: d.pour_qui ?? null,
+    pourQuiClient: d.pour_qui_client ?? null,
+    chantierNeufConso: d.chantier_neuf_conso ?? null,
+    chantierNeufConsoLe: d.chantier_neuf_conso_le ?? null,
+    chantierNeufTva: d.chantier_neuf_tva ?? null,
     generation: nombreOuNul(d.generation),
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
-    client: d.client ? { nom: d.client.nom ?? null } : null,
+    /* Le TYPE et le SIRET de la fiche, SANS valeur par défaut : un type que
+       la requête n'a pas joint (« Mes devis ») reste `null` — inconnu —,
+       jamais « particulier » (le `|| 'particulier'` de `rowToClient` ferait
+       PROPOSER « à titre privé » à une entreprise ; piège B.6 du cahier). */
+    client: d.client ? { nom: d.client.nom ?? null, type: d.client.type ?? null, siret: d.client.siret ?? null } : null,
     /* Le TEXTE de la demande (sa description) et le problème de l'urgence
        n'arrivent qu'avec `unDevis` (`LIENS_DU_DEVIS_OUVERT`) : l'en-tête de la
        saisie les affiche, jamais recopiés dans le devis (29/10/2026). La
@@ -1813,6 +1852,18 @@ export function totauxDepuisBase(d) {
          gardé un acompte). La forme de `demandeDuDevis` (devis.js). */
       acompteNature: d.acompte_nature === 'acompte' || d.acompte_nature === 'arrhes' ? d.acompte_nature : null,
       retenueGarantieCentiemes: nombreOuNul(d.retenue_garantie_centiemes),
+      /* …et « À QUEL TITRE » ET « LE CHANTIER » TELS QUE LA BASE LES A VUS
+         (2b-2, cahier §3.3 et §3.6) : la sous-partie « Mentions dues à un
+         particulier » dit la phrase de la réponse que la base a COMPTÉE, dans
+         la même photo que la liste — jamais celle de l'écran, en avance d'un
+         envoi. Le client y est, pour juger la réponse valable. La forme de
+         `demandeDuDevis`. */
+      clientId: d.client_id ?? null,
+      pourQui: d.pour_qui ?? null,
+      pourQuiClient: d.pour_qui_client ?? null,
+      chantierNeufConso: d.chantier_neuf_conso ?? null,
+      chantierNeufConsoLe: d.chantier_neuf_conso_le ?? null,
+      chantierNeufTva: d.chantier_neuf_tva ?? null,
     },
     generation: nombreOuNul(d.generation),
     /* L'heure de la BASE, pour ranger la carte dans « Mes devis » : sans
@@ -2132,18 +2183,84 @@ export const AIDE_NATURE_ACOMPTE = 'Des arrhes : chacun peut renoncer — le cli
  *    tout court se lisait « nécessaires au chantier », c'est-à-dire tout le
  *    devis — exactement l'erreur que la phrase veut éviter.
  *
- *  « SEULE EXCEPTION » EST PLUS ÉTROIT QUE LA LOI, et c'est voulu : L. 221-10
- *  en compte trois autres (l'abonnement à un quotidien, les services à la
- *  personne d'un organisme agréé payés au fil d'un contrat continu, les
- *  ventes en réunion à domicile), qu'un devis de travaux ne rencontre pas.
- *  Les taire fait croire à l'artisan qu'il doit attendre là où il pourrait
- *  être payé : c'est le sens prudent, jamais celui qui l'expose. */
+ *  LES EXCEPTIONS (réécrite à 2b-2, critique droit B4 et B3). La phrase
+ *  disait « Seule exception : » le dépannage urgent, et « hors de son
+ *  métier ». Deux erreurs, dans le sens qui égare l'artisan :
+ *  - « seule » était FAUX depuis que « Le chantier » existe : la construction
+ *    d'un bâtiment neuf ou la transformation importante d'un bâtiment
+ *    existant sort du champ des contrats hors établissement (L. 221-2 12°),
+ *    donc de la règle du 8e jour ; la phrase le dit, et renvoie à la carte ;
+ *  - L. 221-3 parle de l'« activité principale » de la petite entreprise,
+ *    pas de son « métier » : une boulangerie qui fait refaire sa vitrine est
+ *    hors de son activité principale, et une entreprise peut avoir plusieurs
+ *    métiers.
+ *  Les trois autres exceptions de L. 221-10 (l'abonnement à un quotidien,
+ *  les services à la personne d'un organisme agréé payés au fil d'un contrat
+ *  continu, les ventes en réunion à domicile) restent tues : un devis de
+ *  travaux ne les rencontre pas, et les taire fait attendre là où l'artisan
+ *  pourrait être payé — le sens prudent. Cachée pour une réponse
+ *  « professionnel » (`aidesDeLAcompte`). */
 export const ECHEANCE_ACOMPTE = 'Devis signé hors de vos locaux (chez le client, sur le chantier) par un particulier, '
-  + 'ou par une entreprise de 5\u00a0salariés au plus pour des travaux hors de son métier : vous ne pouvez '
-  + 'recevoir aucun paiement avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. '
-  + 'Seule exception : des travaux d’entretien ou de réparation urgents qu’il vous a expressément demandés chez '
-  + 'lui, et seulement pour les pièces et travaux strictement nécessaires à l’urgence (Code de la consommation, '
-  + 'art. L.\u00a0221-10 et L.\u00a0221-3). Opus ne sait pas encore où ce devis sera signé : comptez ce délai.';
+  + 'ou par une entreprise de 5\u00a0salariés au plus pour des travaux hors de son activité principale : vous ne '
+  + 'pouvez recevoir aucun paiement avant le 8e jour après la signature — pas même un chèque à encaisser plus tard. '
+  + 'Exceptions : des travaux d’entretien ou de réparation urgents qu’il vous a expressément demandés chez lui, et '
+  + 'seulement pour les pièces et travaux strictement nécessaires à l’urgence ; et la construction d’un bâtiment neuf '
+  + 'ou la transformation importante d’un bâtiment existant, à indiquer dans « Le chantier » (Code de la '
+  + 'consommation, art. L.\u00a0221-10, L.\u00a0221-2 et L.\u00a0221-3). Opus ne sait pas encore où ce devis sera '
+  + 'signé : comptez ce délai.';
+
+/* La suite commune des deux formes de `echeanceAcompteChantierNeuf`. */
+const SUITE_CHANTIER_NEUF = 'ce devis porte sur la construction d’un bâtiment neuf ou la transformation importante d’un '
+  + 'bâtiment existant : la règle du 8e jour ne s’applique pas à ces chantiers. Si ce n’est pas vraiment le cas, '
+  + 'revenez à « Non » dans « Le chantier » : un paiement reçu trop tôt permettrait au client d’annuler le contrat.';
+
+/**
+ * L'aide du 8e jour quand l'artisan a répondu « Oui » à la première question
+ * du chantier (2b-2, annexe A.6 : `ECHEANCE_ACOMPTE_CHANTIER_NEUF`) — avec la
+ * date de la confirmation que la BASE a posée (`chantierNeufConsoLe`), ou,
+ * pas encore relue, « Vous venez d'indiquer ». Une FONCTION : la phrase porte
+ * une date. L. 221-2 12° (le champ), L. 221-10 (le 8e jour).
+ */
+export function echeanceAcompteChantierNeuf(confirmeLe = null) {
+  const date = confirmeLe ? dateFrancaise(confirmeLe) : null;
+  return date ? `Vous avez indiqué le ${date} que ${SUITE_CHANTIER_NEUF}` : `Vous venez d’indiquer que ${SUITE_CHANTIER_NEUF}`;
+}
+
+/** Pour une association, une copropriété, une société civile : la règle du
+ *  8e jour n'est peut-être pas due (L. 221-10 vise le consommateur), Opus la
+ *  compte par prudence (critique droit I5). */
+export const ECHEANCE_ACOMPTE_PRUDENCE = 'Pour une association, une copropriété ou une société civile sans activité '
+  + 'professionnelle, la loi ne pose peut-être pas cette règle ; Opus la compte, par prudence : ne recevez aucun '
+  + 'paiement avant le 8e jour après la signature.';
+
+/** L'aide de la nature pour un client qui commande pour son entreprise, dans
+ *  son activité principale : sans la partie « rétractation » ni la
+ *  présomption d'arrhes, qui ne valent que pour un consommateur (critique
+ *  droit M9). */
+export const AIDE_NATURE_ACOMPTE_PRO = 'Des arrhes : chacun peut renoncer — le client en les perdant, vous en lui '
+  + 'rendant le double. Un acompte engage les deux. Écrivez lequel des deux vous demandez.';
+
+/**
+ * LES AIDES DE L'ACOMPTE, selon la réponse « à quel titre » DE L'ÉCRAN et la
+ * première question du chantier (cahier 2b-2, §3.5) — ce sont des AIDES, pas
+ * des comptes : elles suivent ce que l'artisan voit, comme les autres aides de
+ * la carte. `{ nature, echeance }`, `echeance` à `null` quand elle n'a pas
+ * lieu d'être :
+ *   - `professionnel` : ni le 8e jour, ni la rétractation — `AIDE_NATURE_ACOMPTE_PRO` ;
+ *   - le chantier neuf (« Oui » à la question des droits du client) : le
+ *     8e jour ne s'applique pas — `echeanceAcompteChantierNeuf`, avec la date
+ *     de la base. Il l'emporte sur la prudence d'une association : ce qui
+ *     écarte la règle pour un consommateur l'écarte a fortiori ;
+ *   - `non_professionnel` : `ECHEANCE_ACOMPTE_PRUDENCE` ;
+ *   - sinon (une réponse privée, une petite entreprise hors de son activité,
+ *     ou pas de réponse) : `ECHEANCE_ACOMPTE`.
+ */
+export function aidesDeLAcompte({ reponse = null, chantierNeufConso = null, chantierNeufConsoLe = null } = {}) {
+  if (reponse === 'professionnel') return { nature: AIDE_NATURE_ACOMPTE_PRO, echeance: null };
+  if (chantierNeufConso === true) return { nature: AIDE_NATURE_ACOMPTE, echeance: echeanceAcompteChantierNeuf(chantierNeufConsoLe) };
+  if (reponse === 'non_professionnel') return { nature: AIDE_NATURE_ACOMPTE, echeance: ECHEANCE_ACOMPTE_PRUDENCE };
+  return { nature: AIDE_NATURE_ACOMPTE, echeance: ECHEANCE_ACOMPTE };
+}
 
 /** La réduction et l'acompte ne regardent jamais les OPTIONS (DROIT-6) :
  *  une option n'est pas commandée tant que le client ne l'a pas choisie. */
@@ -2210,6 +2327,7 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
      n'a été enregistré pour cette ligne » — à quelqu'un qui n'avait touché
      que la réduction. */
   devis_plafond_check: 'La réduction n’a pas pu être changée.',
+  devis_pour_qui_check: 'La réponse à « À quel titre ? » n’a pas pu être enregistrée.',
   devis_remise_check: 'La réduction n’a pas pu être enregistrée.',
   devis_remise_une_forme_check: 'La réduction n’a pas pu être enregistrée.',
   devis_retenue_check: 'La retenue de garantie n’a pas pu être enregistrée.',
@@ -2800,6 +2918,15 @@ export function demandeDuDevis(d) {
        encore. Une rangée dit ce que la base a, libellé ET montant. */
     acompteNature: NATURES_ACOMPTE.includes(x.acompteNature) ? x.acompteNature : null,
     retenueGarantieCentiemes: present(x.retenueGarantieCentiemes) ? Number(x.retenueGarantieCentiemes) : null,
+    /* 2b-2 : la réponse « à quel titre », son client, et le chantier — les
+       clés de `totauxDepuisBase`, valeurs telles quelles (la base n'en range
+       pas d'autres). */
+    clientId: x.clientId ?? null,
+    pourQui: x.pourQui ?? null,
+    pourQuiClient: x.pourQuiClient ?? null,
+    chantierNeufConso: x.chantierNeufConso ?? null,
+    chantierNeufConsoLe: x.chantierNeufConsoLe ?? null,
+    chantierNeufTva: x.chantierNeufTva ?? null,
   };
 }
 
@@ -3343,11 +3470,15 @@ export function avertissementDelai(texte) {
 export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus']);
 
 /**
- * LES DIX MOTIFS DU DEVIS, SUR NEUF RANGS (annexe B.2), recopiés OCTET POUR
- * OCTET de la fonction de la base : le rang (l'ordre de la liste), la
- * nature, la phrase. Le rang 3 porte DEUX clés (relecture de 2b-1, TXT-1) :
- * la loi ne dit pas la même chose d'une ligne taxée en franchise et d'une
- * ligne sans TVA au régime réel.
+ * LES DOUZE MOTIFS DU DEVIS, SUR NEUF RANGS (annexe B.2 du cahier 2b, et A.1
+ * du cahier 2b-2), recopiés OCTET POUR OCTET de la fonction de la base : le
+ * rang (l'ordre de la liste), la nature, la phrase. Le rang 1 porte DEUX clés,
+ * exclusives (2b-2) : sans client, `devis_client` ; avec un client mais sans
+ * réponse VALABLE à « À quel titre ? », `devis_pour_qui`. Le rang 3 en porte
+ * TROIS, une par ligne fautive (relecture de 2b-1, TXT-1, puis 2b-2) : la loi
+ * ne dit pas la même chose d'une ligne taxée en franchise, d'une ligne sans
+ * TVA au régime réel, et d'une ligne à taux réduit d'un chantier qui crée un
+ * bâtiment neuf.
  *
  * Trois règles de forme, et aucune n'est cosmétique :
  *   - AUCUN montant dans une phrase : la base ne met pas d'euros en forme,
@@ -3390,6 +3521,17 @@ export const MOTIFS_DEVIS = Object.freeze({
       + 'dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus '
       + 'le demande pour tous vos devis.',
   }),
+  /* 2b-2 : la 7e règle d'Opus (réponse P1 du 09/11 au soir, « Oui,
+     bloquer ») — EXCLUSIVE avec `devis_client` : on ne demande pas à quel
+     titre commande un client qui n'est pas choisi. Une phrase de 200
+     caractères au plus, la consigne d'abord (`premierePhrase` ne la coupe
+     pas). */
+  devis_pour_qui: Object.freeze({
+    rang: 1,
+    nature: 'regle_opus',
+    phrase: 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le '
+      + 'devis. Opus le demande pour tous vos devis.',
+  }),
   devis_lignes: Object.freeze({
     rang: 2,
     nature: 'regle_opus',
@@ -3406,6 +3548,18 @@ export const MOTIFS_DEVIS = Object.freeze({
     nature: 'prudence',
     phrase: 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en '
       + 'autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.',
+  }),
+  /* 2b-2 : une ligne à 10 % ou 5,5 % quand l'artisan a répondu « Oui » à la
+     question TVA du chantier (« Ces travaux font-ils partie d’un chantier qui
+     crée un bâtiment neuf ? ») — CGI 279-0 bis 2 et 278-0 bis A, recodifiés
+     au CIBS le 01/01/2027 (non lu). Une PRUDENCE jusqu'au lot 3 : d'autres
+     5,5 % (CGI 278-0 bis N et P, non lus) restent peut-être possibles sur un
+     bâtiment neuf. Aucun article cité, aucun pourcentage dans la phrase. */
+  devis_taux_reduit_neuf: Object.freeze({
+    rang: 3,
+    nature: 'prudence',
+    phrase: 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que '
+      + 'ces travaux font partie d’un chantier qui crée un bâtiment neuf.',
   }),
   devis_lieu: Object.freeze({
     rang: 4,
@@ -3482,9 +3636,65 @@ export const RANG_DE_L_ENTREPRISE = 100;
 
 const aLaCle = (o, cle) => cle != null && Object.prototype.hasOwnProperty.call(o, cle);
 
-/** La nature d'un motif de l'entreprise : l'exception écrite, ou `loi`. */
-export function natureDuMotifEntreprise(cle) {
+/**
+ * La nature d'un motif de l'entreprise : l'exception écrite, ou `loi` — et,
+ * depuis 2b-2, selon la réponse VALABLE à « À quel titre ? » (`valable`) :
+ * pour une association, une copropriété, une société civile
+ * (`non_professionnel`), ou une entreprise qui commande dans son activité
+ * principale (`professionnel`, pour les deux adresses gardées), une mention
+ * due à un particulier (`conso_`) n'est pas imposée par la loi — L. 111-1,
+ * R. 111-1 et R. 111-2 visent le consommateur, personne physique — : Opus la
+ * compte « Par prudence » (critique droit I4). Les règles d'Opus le restent
+ * partout, `conso_tva_intra` compris (décision du 05/11). Dans l'ordre du
+ * `case` de la base (49.9).
+ */
+export function natureDuMotifEntreprise(cle, valable = null) {
+  if (aLaCle(NATURE_DU_MOTIF_ENTREPRISE, cle) && NATURE_DU_MOTIF_ENTREPRISE[cle] === 'regle_opus') return 'regle_opus';
+  if ((valable === 'non_professionnel' || valable === 'professionnel') && estUneMentionConso(cle)) return 'prudence';
   return aLaCle(NATURE_DU_MOTIF_ENTREPRISE, cle) ? NATURE_DU_MOTIF_ENTREPRISE[cle] : 'loi';
+}
+
+/* Une mention due à un particulier : une clé qui commence EXACTEMENT par
+   `conso_` — `left(cle, 6) = 'conso_'` dans la base, jamais un `like`, dont
+   le `_` vaut n'importe quel caractère. Une clé absente n'en est pas une. */
+const estUneMentionConso = (cle) => typeof cle === 'string' && cle.startsWith('conso_');
+
+/** Les deux mentions `conso_` qu'un client « pour son entreprise » garde,
+ *  par prudence : l'adresse de l'établissement et celle du siège (R. 123-237
+ *  les demande peut-être sur tous les devis — question ouverte au juriste ;
+ *  critique droit I3). */
+export const MENTIONS_GARDEES_POUR_UN_PRO = Object.freeze(['conso_adresse_etablissement', 'conso_adresse_siege']);
+
+/**
+ * UNE MENTION DE L'ENTREPRISE COMPTE-T-ELLE pour ce devis ? Toujours, sauf
+ * une mention due à un particulier (hors les deux adresses) quand la réponse
+ * VALABLE est `professionnel` — le filtre de 49.9, appliqué APRÈS le calcul
+ * du rang : un motif filtré laisse un TROU, jamais une renumérotation. Une
+ * réponse vide, inconnue, ou donnée pour un autre client : tout compte (le
+ * cas protecteur ; en SQL, la condition vaut `null` et rien ne saute).
+ */
+export function mentionComptee(cle, valable) {
+  return !(valable === 'professionnel' && estUneMentionConso(cle) && !MENTIONS_GARDEES_POUR_UN_PRO.includes(cle));
+}
+
+/**
+ * LA RÉPONSE « À QUEL TITRE » VALABLE (2b-2, cahier §2.1 et §3.1) — la SEULE
+ * écriture de la règle côté téléphone, le miroir de `v_valable` (49.9) : la
+ * réponse ne vaut que si elle a été donnée POUR le client du devis
+ * (`pourQuiClient` = `clientId`, et un client choisi). Changer de client la
+ * rend sans effet, d'elle-même ; revenir au client d'avant la rend valable ;
+ * la fiche supprimée (le lien passe à vide) aussi la rend sans effet. La base
+ * ne modifie JAMAIS la réponse : elle ne la lit qu'à travers cette règle.
+ *
+ * Jamais `a === b` nu, qui rendrait vrai quand les deux MANQUENT (critique
+ * base M8) : un client est exigé. Et la comparaison ignore la casse, comme
+ * l'égalité de deux `uuid` en PostgreSQL. Marche aussi sur le bloc `demande`
+ * des totaux relus (`totauxDepuisBase`) : la réponse que la BASE a vue.
+ */
+export function pourQuiValable(devis) {
+  const d = devis || {};
+  if (!present(d.clientId) || !present(d.pourQuiClient)) return null;
+  return String(d.pourQuiClient).toLowerCase() === String(d.clientId).toLowerCase() ? (d.pourQui ?? null) : null;
 }
 
 /* « cle: phrase », la forme d'`emetteur_incomplet()`, coupée EXACTEMENT
@@ -3541,6 +3751,26 @@ export function ligneContreditLeRegime(l, regime) {
 }
 
 /**
+ * LA CLÉ DE RANG 3 D'UNE LIGNE — au plus UNE par ligne (la borne de 508
+ * motifs ne bouge pas), ou `null` : la règle du régime d'abord
+ * (`ligneContreditLeRegime`, une seule écriture), puis, au régime réel, une
+ * ligne à 10 % ou 5,5 % d'un chantier qui crée un bâtiment neuf, quand
+ * l'artisan a répondu « Oui » à la question TVA du chantier
+ * (`chantierNeufTva` VRAI : `null` et `false` disent « Non »). La question
+ * des droits du client (`chantierNeufConso`) n'y joue AUCUN rôle — ses
+ * « Oui » vont dans l'autre sens. En franchise, la ligne taxée porte la clé de
+ * la franchise, jamais celle du neuf. Le miroir des deux tableaux alignés de
+ * 49.9.
+ */
+export function cleDuTauxDeLaLigne(l, regime, chantierNeufTva = null) {
+  if (ligneContreditLeRegime(l, regime)) return regime === 'franchise' ? 'devis_taux_franchise' : 'devis_taux_sans_tva';
+  if (regime !== 'reel' || chantierNeufTva !== true) return null;
+  if (!l || !TYPES_CHIFFRES.includes(typeDe(l)) || !present(l.tauxTvaCentiemes)) return null;
+  const t = Number(l.tauxTvaCentiemes);
+  return t === 550 || t === 1000 ? 'devis_taux_reduit_neuf' : null;
+}
+
+/**
  * LE MIROIR DE `motifs_refus_remise()` — même entrée, même sortie.
  *
  * Entrée (annexe B.4) : le devis et ses lignes AUX NOMS DE L'APPLICATION
@@ -3577,13 +3807,20 @@ export function motifsDeRemise({ devis = null, lignes = [], regime = null, motif
   const ramene = (demande, effectif) => present(d[demande]) && present(d[effectif])
     && Number(d[effectif]) < Number(d[demande]);
 
+  /* LA RÉPONSE VALABLE, calculée UNE fois (2b-2) : le rang 1, le filtre et
+     les natures la lisent, comme `v_valable` dans la base. */
+  const valable = pourQuiValable(d);
   if (!present(d.clientId)) motif('devis_client');
+  else if (valable === null) motif('devis_pour_qui');
   if (!tri.some((l) => typeDe(l) === 'poste')) motif('devis_lignes');
-  /* Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
-     clé, dans l'ordre des lignes (`ordre`, puis `id`) — UNE boucle, comme la
-     base. `ligneContreditLeRegime` ne rend vrai qu'en franchise ou au réel. */
-  const cleDuTaux = regime === 'franchise' ? 'devis_taux_franchise' : 'devis_taux_sans_tva';
-  tri.forEach((l) => { if (ligneContreditLeRegime(l, regime)) motif(cleDuTaux, l.id ?? null); });
+  /* UNE clé par ligne fautive, dans l'ordre des lignes (`ordre`, puis `id`)
+     — UNE boucle, comme la base. Depuis 2b-2, deux clés de rang 3 peuvent
+     ALTERNER dans un même devis au réel (une ligne sans TVA, une ligne à
+     taux réduit d'un chantier qui crée un bâtiment neuf). */
+  tri.forEach((l) => {
+    const cle = cleDuTauxDeLaLigne(l, regime, d.chantierNeufTva);
+    if (cle) motif(cle, l.id ?? null);
+  });
   if (!present(d.lieuAdresse) && !present(d.lieuCodePostal) && !present(d.lieuVille)) motif('devis_lieu');
   if (!present(d.delaiExecution)) motif('devis_delai');
   if (!present(d.validiteJours)) motif('devis_validite');
@@ -3591,9 +3828,14 @@ export function motifsDeRemise({ devis = null, lignes = [], regime = null, motif
   if (ramene('acompteCentimes', 'acompteTtcCentimes')) motif('devis_acompte_ramene');
   if (ramene('remiseCentimes', 'remiseHtCentimes')) motif('devis_reduction_ramenee');
 
+  /* Les motifs de l'entreprise : le rang garde sa position d'ORIGINE
+     (`100 + position`), PUIS le filtre de la réponse valable — un trou,
+     jamais une renumérotation —, PUIS la nature selon la même réponse. */
   (Array.isArray(motifsEmetteur) ? motifsEmetteur : []).forEach((brut, i) => {
     const { cle, phrase } = couperMotifEntreprise(brut);
-    sortie.push({ rang: RANG_DE_L_ENTREPRISE + i + 1, cle, phrase, nature: natureDuMotifEntreprise(cle), ligneId: null });
+    const rang = RANG_DE_L_ENTREPRISE + i + 1;
+    if (!mentionComptee(cle, valable)) return;
+    sortie.push({ rang, cle, phrase, nature: natureDuMotifEntreprise(cle, valable), ligneId: null });
   });
 
   /* Le rang d'abord, puis l'ordre d'arrivée — celui des lignes rangées pour
@@ -3644,9 +3886,16 @@ export const ETIQUETTE_DE_NATURE = Object.freeze({
  */
 export const ENDROIT_DU_MOTIF = Object.freeze({
   devis_client: Object.freeze({ endroit: 'client' }),
+  /* 2b-2 : la feuille « À quel titre ? », la même que « Répondre » sous le
+     choix du client. */
+  devis_pour_qui: Object.freeze({ endroit: 'pour_qui' }),
   devis_lignes: Object.freeze({ endroit: 'lignes' }),
   devis_taux_franchise: Object.freeze({ endroit: 'ligne' }),
   devis_taux_sans_tva: Object.freeze({ endroit: 'ligne' }),
+  /* 2b-2 : LA ligne fautive, ET la carte « Le chantier » (un second bouton,
+     « Revoir « Le chantier » ») — la phrase dit qu'on peut corriger l'un ou
+     l'autre. */
+  devis_taux_reduit_neuf: Object.freeze({ endroit: 'ligne', aussi: 'chantier' }),
   devis_lieu: Object.freeze({ endroit: 'lieu' }),
   devis_delai: Object.freeze({ endroit: 'delai' }),
   devis_validite: Object.freeze({ endroit: 'conditions', champ: 'validite' }),
@@ -3670,7 +3919,8 @@ export function endroitDuMotif(motif, { sections = null } = {}) {
     const e = ENDROIT_DU_MOTIF[cle];
     if (e.endroit === 'ligne') {
       const id = motif.ligneId ?? null;
-      return id ? { endroit: 'ligne', ligneId: id } : { endroit: 'lignes' };
+      const aussi = e.aussi ? { aussi: e.aussi } : {};
+      return id ? { endroit: 'ligne', ligneId: id, ...aussi } : { endroit: 'lignes', ...aussi };
     }
     return { ...e };
   }
@@ -3761,10 +4011,16 @@ export function lireMotifsDeRemise(liste, { sections = null } = {}) {
 /*  LES AVIS — jamais bloquants (annexe B.7)                            */
 /* ------------------------------------------------------------------ */
 
-/** Les avis de l'étape 2b-1 : ils s'affichent SOUS la liste, à part. */
+/** Les avis : ils s'affichent SOUS la liste, à part. Deux depuis 2b-1, deux
+ *  de plus à 2b-2 (annexe A.3) — quand le client commande pour son
+ *  entreprise, ce qu'il manque à SA fiche pour la facture. */
 export const AVIS_DU_DEVIS = Object.freeze({
   avis_objet: 'Ce devis n’a pas de titre : le document dira seulement « Devis ».',
   avis_gratuit: 'Ce devis ne coûte rien au client : vérifiez que c’est voulu.',
+  avis_siret_client: 'Ce client commande pour son entreprise : ajoutez son SIRET à sa fiche, il vous servira pour la '
+    + 'facture.',
+  avis_fiche_particulier: 'Ce client commande pour son entreprise, mais votre carnet le range parmi les particuliers : '
+    + 'passez sa fiche en « Entreprise » pour y écrire son SIRET.',
 });
 
 /**
@@ -3788,9 +4044,19 @@ export const AVIS_DU_DEVIS = Object.freeze({
  * au client : vérifiez que c’est voulu. ». C'est la règle des motifs : on ne
  * juge que la dernière liste sûre. Sans `etat`, on se tait aussi : un appel
  * qui l'oublie ne doit pas ramener le défaut.
+ *
+ * LES DEUX AVIS DE LA FICHE (2b-2) ne parlent que quand la BASE a vu le client
+ * commander pour son entreprise (`reponseVue` : `professionnel` ou
+ * `professionnel_hors_activite` — la réponse VALABLE du bloc `demande` des
+ * totaux relus, jamais celle de l'écran, en avance d'un envoi). `client` :
+ * la fiche lue avec le devis (`devis.client` : `{ nom, type, siret }`) ;
+ * un type INCONNU (`null`, une liste qui ne le joint pas) ne dit rien — on
+ * n'avertit pas sur une fiche qu'on n'a pas lue.
+ *   - `avis_siret_client` : une fiche « entreprise » sans SIRET ;
+ *   - `avis_fiche_particulier` : une fiche « particulier ».
  */
 export function avisDuDevis({
-  devis = null, lignes = [], totaux = null, etat = null, pasCompte = null,
+  devis = null, lignes = [], totaux = null, etat = null, pasCompte = null, client = undefined, reponseVue = null,
 } = {}) {
   if (!devis) return [];
   const avis = [];
@@ -3801,6 +4067,14 @@ export function avisDuDevis({
   if (totaux && present(totaux.ttc)) ttc = Number(totaux.ttc);
   else if (present(devis.totalTtcCentimes)) ttc = Number(devis.totalTtcCentimes);
   if (sure && aUnPoste && ttc === 0) avis.push({ cle: 'avis_gratuit', phrase: AVIS_DU_DEVIS.avis_gratuit });
+  const fiche = client !== undefined ? client : (devis.client || null);
+  if ((reponseVue === 'professionnel' || reponseVue === 'professionnel_hors_activite') && fiche && typeof fiche === 'object') {
+    if (fiche.type === 'entreprise' && texteNet(fiche.siret) === null) {
+      avis.push({ cle: 'avis_siret_client', phrase: AVIS_DU_DEVIS.avis_siret_client });
+    } else if (fiche.type === 'particulier') {
+      avis.push({ cle: 'avis_fiche_particulier', phrase: AVIS_DU_DEVIS.avis_fiche_particulier });
+    }
+  }
   return avis;
 }
 
@@ -3808,10 +4082,39 @@ export function avisDuDevis({
 /*  LES PHRASES DE L'ÉCRAN (annexe B.8) — une seule écriture de chacune */
 /* ------------------------------------------------------------------ */
 
-/** En tête des « Mentions dues à un particulier » — elle disparaît à
- *  l'étape 2b-2, quand le devis saura pour qui le client commande. */
+/** En tête des « Mentions dues à un particulier » quand on ne sait pas à
+ *  quel titre le client commande — pas de réponse VALABLE vue par la base, ou
+ *  une réponse qu'Opus ne connaît pas. Depuis 2b-2, c'est la phrase de
+ *  repli de `phraseDesMentionsParticulier`. */
 export const MENTIONS_PARTICULIER_PAR_PRUDENCE = 'Opus ne sait pas encore pour qui le client commande : dans le '
   + 'doute, il compte ce qu’on doit à un particulier.';
+
+/** La phrase de la sous-partie, réponse par réponse (cahier 2b-2, annexe
+ *  A.3). « 5 salariés » porte une espace insécable. */
+export const MENTIONS_PARTICULIER_SELON_LA_REPONSE = Object.freeze({
+  consommateur: 'Ce client commande à titre privé : la loi demande de lui communiquer ces informations, et Opus les '
+    + 'imprime sur le devis.',
+  non_professionnel: 'Une association, une copropriété ou une société civile sans activité professionnelle : la loi ne '
+    + 'demande peut-être pas ces mentions pour elle ; Opus les compte, par prudence.',
+  professionnel_hors_activite: 'Ce client commande pour son entreprise de 5\u00a0salariés au plus, hors de son activité '
+    + 'principale : quand le devis est signé hors de vos locaux, la loi lui doit ces mentions comme à un particulier '
+    + '(sauf pour un bâtiment neuf ou une transformation importante). Opus les compte toutes, par prudence.',
+  professionnel: 'Ce client commande pour son entreprise : Opus ne garde que l’adresse de votre établissement ou de '
+    + 'votre siège, par prudence — la loi la demande peut-être sur tous vos devis.',
+});
+
+/**
+ * LA PHRASE SOUS « MENTIONS DUES À UN PARTICULIER » (2b-2, cahier §3.6) —
+ * choisie par la réponse que la BASE a vue DANS LA MÊME PHOTO que la liste
+ * (`reponseVue`, la réponse valable du bloc `demande` relu avec elle),
+ * JAMAIS par celle de l'écran : la liste dit ce que la base a compté, et la
+ * phrase qui l'explique doit parler du même devis. Inconnue : la phrase de
+ * prudence.
+ */
+export function phraseDesMentionsParticulier(reponseVue) {
+  return aLaCle(MENTIONS_PARTICULIER_SELON_LA_REPONSE, reponseVue)
+    ? MENTIONS_PARTICULIER_SELON_LA_REPONSE[reponseVue] : MENTIONS_PARTICULIER_PAR_PRUDENCE;
+}
 
 /**
  * CE QU'OPUS NE VÉRIFIE PAS ENCORE — dit sous « rien ne manque » (critique
@@ -3824,10 +4127,17 @@ export const MENTIONS_PARTICULIER_PAR_PRUDENCE = 'Opus ne sait pas encore pour q
  * sur un immeuble neuf affichait « rien ne manque ». Et « le prix du devis »
  * se lisait comme le TOTAL : la loi parle du caractère payant ou gratuit du
  * devis LUI-MÊME (arrêté du 24/01/2017, art. 4-I).
+ *
+ * SEPT FAITS depuis 2b-2 (annexe A.6) : « pour qui le client commande » est
+ * vérifié (le motif `devis_pour_qui`), et le chantier neuf aussi, par la
+ * réponse de l'artisan (`devis_taux_reduit_neuf`) ; restent, pour le taux
+ * réduit, ses AUTRES conditions — l'ancienneté du logement et la
+ * certification du client (critique droit I6). Le moment de la signature
+ * reste : aucune question ne le pose (décision du 09/11).
  */
-export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : pour qui le client commande, le moment de la signature, '
-  + 'l’urgence, la garantie décennale, si le devis lui-même est payant, les déchets de chantier, le label RGE '
-  + 'pour des travaux d’énergie, et si les travaux concernent un immeuble neuf.';
+export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : le moment de la signature, l’urgence, la garantie décennale, '
+  + 'si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et les '
+  + 'conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client).';
 
 /** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
 export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
@@ -4485,6 +4795,7 @@ export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = (
   const seul = (libelle) => ({ libelle, aDire: libelle });
   switch (e.endroit) {
     case 'client': return seul('Choisir le client');
+    case 'pour_qui': return { libelle: 'Répondre', aDire: 'Répondre : à quel titre ce client commande' };
     case 'lignes': return chiffrerPossible ? seul('Ajouter un poste') : null;
     case 'ligne':
       if (!ligneExiste(e.ligneId)) return null;
@@ -4507,6 +4818,23 @@ export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = (
     }
     default: return null;
   }
+}
+
+/** Le libellé du second bouton d'un point `aussi: 'chantier'` (2b-2). */
+export const REVOIR_LE_CHANTIER = 'Revoir « Le chantier »';
+
+/**
+ * LE SECOND BOUTON D'UN POINT (2b-2, cahier §3.1 et §3.6) — `{ libelle, aDire,
+ * endroit }`, ou `null`. Aujourd'hui, un seul motif en porte : la ligne à
+ * taux réduit d'un chantier qui crée un bâtiment neuf, qu'on corrige sur la
+ * ligne (« Ouvrir cette ligne ») OU dans la carte « Le chantier », si la
+ * réponse était fausse. Il existe même quand la ligne n'est pas à l'écran :
+ * la carte, elle, est toujours là.
+ */
+export function secondeActionDuPoint(point) {
+  const e = point && point.endroit;
+  if (!e || e.aussi !== 'chantier') return null;
+  return { libelle: REVOIR_LE_CHANTIER, aDire: REVOIR_LE_CHANTIER, endroit: 'chantier' };
 }
 
 /**
@@ -4532,3 +4860,312 @@ export const AIDE_TAUX_REDUIT = 'À 10\u00a0% ou 5,5\u00a0%, le client devra cer
   + 'taux réduit sont remplies : un logement achevé depuis plus de deux ans, des travaux qui ne créent pas un immeuble '
   + 'neuf et n’agrandissent pas la surface de plus de 10\u00a0% ; à 5,5\u00a0%, des travaux de rénovation énergétique. '
   + 'Opus imprimera la certification prévue par la loi, avec la place de signer.';
+
+/* ================================================================== */
+/*  « À QUEL TITRE ? » ET « LE CHANTIER » (lot 2b-2, cahier §3.4-§3.5)  */
+/* ================================================================== */
+/*
+ * Ce que l'écran DIT de la réponse « à quel titre » et du chantier, et ce
+ * qu'il décide — des fonctions PURES, ici et pas dans `EnteteDevis.js` ni dans
+ * la carte : `node` les fait tourner (`verifier-devis`, `mesure-devis`), la
+ * leçon de `cloudinary-adresses.js`. Les textes sont ceux des annexes A.3 et
+ * A.4 du cahier 2b-2, mot pour mot ; « 5 salariés », « 14 jours »,
+ * « 150 000 € » et « 10 % » portent des espaces insécables.
+ *
+ * DEUX RÈGLES, et aucune n'est cosmétique :
+ *   - RIEN N'EST JAMAIS ÉCRIT SANS APPUI. Une fiche « particulier » PROPOSE
+ *     « à titre privé » ; la réponse ne part que sur « Oui, à titre privé »
+ *     (décision du 09/11 : Opus propose, l'artisan confirme). Le type de la
+ *     fiche ne choisit que la PHRASE de la proposition ;
+ *   - UN BOUTON QUI ÉCRIT N'APPARAÎT JAMAIS LÀ OÙ ÉTAIT UN BOUTON QUI N'ÉCRIT
+ *     PAS : la moitié gauche n'écrit jamais (« Répondre », « Autre réponse »,
+ *     « Changer » ouvrent la même feuille) ; seule la moitié droite écrit, et
+ *     seulement dans la proposition. Un appui visé sur « Répondre » au moment
+ *     où le type de la fiche arrive tombe sur « Autre réponse », qui ouvre la
+ *     même feuille (critique écran E-I1).
+ */
+
+/** Les textes du bloc « À quel titre ? » (annexe A.3). */
+export const A_QUEL_TITRE = Object.freeze({
+  sousTitre: 'À quel titre ?',
+  question: 'À quel titre ce client commande-t-il ?',
+  proposition: 'Au carnet : particulier. Commande-t-il à titre privé ?',
+  prefixeReponse: 'Commande : ',
+  repondre: 'Répondre',
+  autreReponse: 'Autre réponse',
+  ouiATitrePrive: 'Oui, à titre privé',
+  changer: 'Changer',
+  titreFeuille: 'À quel titre ce client commande-t-il ?',
+});
+
+/** Ce qui suit un résumé dont l'écriture est en route, ou a échoué (§3.8). */
+export const SUFFIXE_EN_ROUTE = ' — enregistrement…';
+export const SUFFIXE_EN_ECHEC = ' — pas enregistré';
+
+/**
+ * LES QUATRE RANGÉES DE LA FEUILLE, dans l'ORDRE PROTECTEUR (annexe A.3 ;
+ * critique droit B3, écran E-I9) : celle qui RETIRE des mentions dues à un
+ * particulier vient en DERNIER, avec « Dans le doute, choisissez une autre
+ * réponse : c’est la plus sûre. ». `resume` suit « Commande : ».
+ */
+export const REPONSES_A_QUEL_TITRE = Object.freeze([
+  Object.freeze({
+    valeur: 'consommateur',
+    rangee: 'À titre privé, pour lui-même',
+    aide: null,
+    resume: 'à titre privé',
+  }),
+  Object.freeze({
+    valeur: 'non_professionnel',
+    rangee: 'Pour une association, une copropriété ou une société civile',
+    aide: 'Sans activité professionnelle : une SCI familiale, un syndicat de copropriétaires (même représenté par un '
+      + 'syndic professionnel), une association. Opus leur compte, par prudence, les mentions dues à un particulier.',
+    resume: 'pour une association, une copropriété ou une société civile',
+  }),
+  Object.freeze({
+    valeur: 'professionnel_hors_activite',
+    rangee: 'Pour son entreprise de 5\u00a0salariés au plus, hors de son activité principale',
+    aide: 'Par exemple, une boulangerie qui fait refaire sa vitrine. Quand le devis est signé hors de vos locaux, la loi '
+      + 'la protège comme un particulier (sauf pour un bâtiment neuf ou une transformation importante) ; Opus lui '
+      + 'compte, par prudence, toutes les mentions dues à un particulier.',
+    resume: 'pour son entreprise (5\u00a0salariés au plus), hors de son activité principale',
+  }),
+  Object.freeze({
+    valeur: 'professionnel',
+    rangee: 'Pour son entreprise, dans son activité principale, ou une entreprise de plus de 5\u00a0salariés',
+    aide: 'Par exemple, un autre artisan qui vous sous-traite une partie de son chantier, ou un commerce de plus de '
+      + '5\u00a0salariés. La plupart des mentions dues à un particulier ne sont alors plus comptées. Dans le doute, '
+      + 'choisissez une autre réponse : c’est la plus sûre.',
+    resume: 'pour son entreprise, dans son activité principale (ou plus de 5\u00a0salariés)',
+  }),
+]);
+
+/** Le résumé d'une réponse (« à titre privé »…), ou `null` pour une réponse
+ *  vide ou inconnue. */
+export function resumeDeLaReponse(valeur) {
+  const r = REPONSES_A_QUEL_TITRE.find((x) => x.valeur === valeur);
+  return r ? r.resume : null;
+}
+
+/** Le suffixe d'un résumé selon l'état de son écriture : en route d'abord
+ *  (elle part maintenant), puis en échec. */
+export function suffixeDEtat({ enRoute = false, enEchec = false } = {}) {
+  if (enRoute) return SUFFIXE_EN_ROUTE;
+  if (enEchec) return SUFFIXE_EN_ECHEC;
+  return '';
+}
+
+/** Les champs de l'en-tête qui font « à quel titre », et ceux du chantier :
+ *  ce que `etatDesChampsDuDevis` regarde. */
+export const CHAMPS_A_QUEL_TITRE = Object.freeze(['clientId', 'pourQui', 'pourQuiClient']);
+export const CHAMPS_DU_CHANTIER = Object.freeze(['chantierNeufConso', 'chantierNeufTva']);
+
+/**
+ * EN ROUTE, EN ÉCHEC — CALCULÉS À CHAQUE RENDU, JAMAIS MÉMORISÉS (cahier
+ * §3.8, critique écran E-B2 : un état « en cours » gardé en mémoire survivait
+ * à un échec). Depuis `file.entreesVoulues()`, l'entrée du devis, pour une
+ * liste de champs :
+ *   - en route ⇔ l'entrée part (`en_cours`) ET, pour un de ces champs, ce
+ *     qui est voulu diffère de ce que la base a confirmé (ou la base n'a pas
+ *     répondu : le champ est dans `inconnues`) ;
+ *   - en échec ⇔ l'entrée est `echec` ET la même différence ;
+ *   - `local` ⇔ le brouillon n'est pas encore en base (`locale`) ET la même
+ *     différence : rien n'est parti, rien n'a échoué — l'écran le dit à sa
+ *     façon (`ENTETE_PAS_ENCORE_ENREGISTRE`).
+ * Une valeur `undefined` ne dit rien ; `null` et une valeur absente de la
+ * base se valent.
+ */
+export function etatDesChampsDuDevis(entrees, champs) {
+  const e = (Array.isArray(entrees) ? entrees : []).find((x) => x && x.cle === 'devis');
+  const rien = { enRoute: false, enEchec: false, local: false };
+  if (!e || !e.voulu || !Array.isArray(champs)) return rien;
+  const inconnues = Array.isArray(e.inconnues) ? e.inconnues : [];
+  const differe = champs.some((c) => {
+    if (inconnues.includes(c)) return true;
+    const v = e.voulu[c];
+    if (v === undefined) return false;
+    const conf = e.confirme && e.confirme[c] !== undefined ? e.confirme[c] : null;
+    return !Object.is(v ?? null, conf ?? null);
+  });
+  if (!differe) return rien;
+  return { enRoute: e.etat === 'en_cours', enEchec: e.etat === 'echec', local: e.etat === 'locale' };
+}
+
+/**
+ * LE BLOC « À QUEL TITRE ? » — `{ etat, reponse, texte, gauche, droite }`, ou
+ * `null` quand aucun client n'est choisi (le bloc n'existe pas). `devis` :
+ * celui de l'ÉCRAN (ce qui est voulu, la file fusionnée) ; `client` : la fiche
+ * jointe au devis (`{ nom, ville, type, siret }`), `devis.client` par défaut.
+ *   - une réponse VALABLE : « Commande : » + son résumé (+ le suffixe
+ *     d'état), « Changer » à gauche, rien à droite ;
+ *   - pas de réponse, fiche LUE « particulier » : la proposition, « Autre
+ *     réponse » à gauche, « Oui, à titre privé » à droite — le SEUL bouton
+ *     qui écrit (`droite.pourQui`), et l'écran lit le client À L'INSTANT de
+ *     l'appui, jamais celui de l'affichage (critique écran E-M8) ;
+ *   - sinon (type pas lu, « entreprise », inconnu) : la question,
+ *     « Répondre » à gauche, la moitié droite vide — sa place reste.
+ * Les trois boutons de gauche ouvrent LA MÊME feuille.
+ */
+export function resumeAQuelTitre({ devis = null, client = undefined, enRoute = false, enEchec = false } = {}) {
+  if (!devis || !present(devis.clientId)) return null;
+  const valable = pourQuiValable(devis);
+  const r = REPONSES_A_QUEL_TITRE.find((x) => x.valeur === valable) || null;
+  if (r) {
+    return {
+      etat: 'reponse',
+      reponse: r.valeur,
+      texte: `${A_QUEL_TITRE.prefixeReponse}${r.resume}${suffixeDEtat({ enRoute, enEchec })}`,
+      gauche: Object.freeze({ libelle: A_QUEL_TITRE.changer, ecrit: false }),
+      droite: null,
+    };
+  }
+  const fiche = client !== undefined ? client : (devis.client || null);
+  const type = fiche && typeof fiche === 'object' ? fiche.type : null;
+  if (type === 'particulier') {
+    return {
+      etat: 'proposition',
+      reponse: null,
+      texte: A_QUEL_TITRE.proposition,
+      gauche: Object.freeze({ libelle: A_QUEL_TITRE.autreReponse, ecrit: false }),
+      droite: Object.freeze({ libelle: A_QUEL_TITRE.ouiATitrePrive, ecrit: true, pourQui: 'consommateur' }),
+    };
+  }
+  return {
+    etat: 'question',
+    reponse: null,
+    texte: A_QUEL_TITRE.question,
+    gauche: Object.freeze({ libelle: A_QUEL_TITRE.repondre, ecrit: false }),
+    droite: null,
+  };
+}
+
+/** TOUS les textes que le bloc peut afficher, suffixes compris : les
+ *  GABARITS invisibles qui fixent sa hauteur (règle « garder la grande
+ *  place », comme la ligne « Pour le remettre »). */
+export const GABARITS_A_QUEL_TITRE = Object.freeze([
+  A_QUEL_TITRE.question,
+  A_QUEL_TITRE.proposition,
+  ...REPONSES_A_QUEL_TITRE.flatMap((r) => [SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC, '']
+    .map((suffixe) => `${A_QUEL_TITRE.prefixeReponse}${r.resume}${suffixe}`)),
+]);
+
+/** Les textes de la rangée et de la carte « Le chantier » (annexe A.4). */
+export const LE_CHANTIER = Object.freeze({
+  titre: 'Le chantier',
+  introduction: 'Deux questions indépendantes : on peut répondre « Oui » à l’une et « Non » à l’autre.',
+  ordinaire: 'Chantier ordinaire',
+  q1: Object.freeze({
+    sousTitre: 'Pour les droits de votre client',
+    question: 'Ce devis porte-t-il sur la construction d’un bâtiment neuf, ou sur la transformation importante d’un '
+      + 'bâtiment existant ?',
+    non: 'Non',
+    oui: 'Oui',
+    aide: 'Ces chantiers échappent aux règles du devis signé hors de vos locaux : 14\u00a0jours pour se rétracter, '
+      + 'formulaire de rétractation, aucun paiement avant le 8e jour. Une réparation, un entretien ou une rénovation '
+      + 'ordinaire n’en font pas partie. Si vous ne faites qu’une partie des travaux d’un bâtiment neuf (l’électricité, '
+      + 'la plomberie…), la loi ne dit pas clairement que votre devis en fait partie. Dans le doute, gardez « Non » : '
+      + 'c’est le cas le plus sûr.',
+  }),
+  /* La feuille de confirmation du « Oui » à la première question (J7) :
+     rien n'est écrit avant « Je confirme ». Sources : L. 221-2 12°,
+     L. 221-10, L. 221-20, L. 242-1, L. 242-5, L. 242-7. */
+  confirmation: Object.freeze({
+    titre: 'Bâtiment neuf ou transformation importante',
+    paragraphes: Object.freeze([
+      'Dans ce cas, le devis n’aura pas de formulaire de rétractation, ne laissera pas 14\u00a0jours au client pour '
+        + 'changer d’avis, et la règle du 8e jour ne s’appliquera pas.',
+      'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client garde le droit de se rétracter '
+        + 'pendant douze mois de plus ; un paiement reçu avant le 8e jour permet d’annuler le contrat ; et la loi punit '
+        + 'ces manquements jusqu’à deux ans d’emprisonnement et 150\u00a0000\u00a0€ d’amende.',
+      'La loi ne définit pas la « transformation importante », et ne dit pas clairement qu’un devis pour une partie '
+        + 'seulement des travaux d’un bâtiment neuf en fait partie. Dans le doute, gardez « Non ».',
+    ]),
+    garder: 'Garder « Non »',
+    confirmer: 'Je confirme',
+  }),
+  q2: Object.freeze({
+    sousTitre: 'Pour la TVA',
+    question: 'Ces travaux font-ils partie d’un chantier qui crée un bâtiment neuf ?',
+    nonParDefaut: 'Non (par défaut)',
+    non: 'Non',
+    oui: 'Oui',
+    aide: 'C’est le cas si vos travaux font partie, même pour un seul corps d’état, d’un chantier qui construit un '
+      + 'bâtiment ou le surélève, qui refait la majorité de ses fondations, de sa structure ou de ses façades (hors '
+      + 'ravalement), ou la plus grande partie de chacun des éléments de son second œuvre, ou qui augmente sa surface '
+      + 'de plancher de plus de 10\u00a0% — en comptant tous les travaux faits sur deux ans, par vous ou par d’autres. '
+      + 'La TVA est alors au taux normal. Ce sont les travaux qui comptent, pas l’âge du bâtiment — mais le taux réduit '
+      + 'demande, en plus, un logement achevé depuis plus de deux ans.',
+  }),
+});
+
+/**
+ * QUELLES QUESTIONS DU CHANTIER SONT MONTRÉES (cahier §3.5 ; critique écran
+ * E-M2) — `{ q1, q2, rangee }` :
+ *   - la première, sauf quand la réponse « à quel titre » DE L'ÉCRAN est
+ *     `professionnel` : elle est alors sans objet (sa valeur gardée n'a aucun
+ *     effet sur la liste) ;
+ *   - la seconde, quand le régime de TVA LU est le réel, OU quand sa valeur
+ *     est vraie — on ne renvoie jamais vers une question invisible (le motif
+ *     `devis_taux_reduit_neuf` dit « Le chantier »). Un régime pas lu
+ *     (`null`) n'est jamais « non déclaré » : la question est cachée, sauf
+ *     valeur vraie ;
+ *   - la rangée n'existe que si une question au moins est montrée.
+ */
+export function questionsDuChantier({ devis = null, regime = null } = {}) {
+  const d = devis || {};
+  const q1 = pourQuiValable(d) !== 'professionnel';
+  const q2 = regime === 'reel' || d.chantierNeufTva === true;
+  return { q1, q2, rangee: q1 || q2 };
+}
+
+/**
+ * LE RÉSUMÉ DE LA RANGÉE « LE CHANTIER » (annexe A.4), ou `null` quand la
+ * rangée n'existe pas. La date du « Oui » est celle que la BASE a posée
+ * (`chantierNeufConsoLe`) ; pas encore relue, la rangée se tait sur la date.
+ * Une question cachée ne compte pas : sa valeur gardée n'a aucun effet.
+ */
+export function resumeDuChantier({ devis = null, regime = null, enRoute = false, enEchec = false } = {}) {
+  const d = devis || {};
+  const { q1, q2, rangee } = questionsDuChantier({ devis: d, regime });
+  if (!rangee) return null;
+  const oui1 = q1 && d.chantierNeufConso === true;
+  const oui2 = q2 && d.chantierNeufTva === true;
+  const date = oui1 && d.chantierNeufConsoLe ? dateFrancaise(d.chantierNeufConsoLe) : null;
+  const confirme = date ? `, confirmé le ${date}` : '';
+  let texte = LE_CHANTIER.ordinaire;
+  if (oui1 && oui2) texte = `Bâtiment neuf${confirme} ; taux normal de TVA`;
+  else if (oui1) texte = `Bâtiment neuf ou transformation importante${confirme}`;
+  else if (oui2) texte = 'Crée un bâtiment neuf : taux normal de TVA';
+  return `${texte}${suffixeDEtat({ enRoute, enEchec })}`;
+}
+
+/** Le libellé du « Oui » de la première question, dans la carte :
+ *  « Oui — confirmé le JJ/MM/AAAA » (la date de la base), « Oui —
+ *  enregistrement… », « Oui — pas enregistré », ou « Oui » tant que la date
+ *  n'est pas relue. */
+export function libelleOuiDuChantier({ confirmeLe = null, enRoute = false, enEchec = false } = {}) {
+  const suffixe = suffixeDEtat({ enRoute, enEchec });
+  if (suffixe) return `${LE_CHANTIER.q1.oui}${suffixe}`;
+  const date = confirmeLe ? dateFrancaise(confirmeLe) : null;
+  return date ? `${LE_CHANTIER.q1.oui} — confirmé le ${date}` : LE_CHANTIER.q1.oui;
+}
+
+/** Les deux pastilles de la seconde question : « Non (par défaut) » tant que
+ *  la valeur est vide, puis « Non » (critique écran E-M10). */
+export function pastillesDeLaQuestionTva(valeur) {
+  return [valeur === null || valeur === undefined ? LE_CHANTIER.q2.nonParDefaut : LE_CHANTIER.q2.non, LE_CHANTIER.q2.oui];
+}
+
+/* La date la plus LARGE qu'un résumé peut porter, pour les gabarits. */
+const DATE_LA_PLUS_LARGE = `${CHIFFRE_LE_PLUS_LARGE.repeat(2)}/${CHIFFRE_LE_PLUS_LARGE.repeat(2)}/${CHIFFRE_LE_PLUS_LARGE.repeat(4)}`;
+
+/** TOUS les résumés de la rangée, suffixes compris, avec la date la plus
+ *  large : les GABARITS qui fixent sa hauteur. */
+export const GABARITS_DU_CHANTIER = Object.freeze([
+  LE_CHANTIER.ordinaire,
+  `Bâtiment neuf ou transformation importante, confirmé le ${DATE_LA_PLUS_LARGE}`,
+  'Bâtiment neuf ou transformation importante',
+  'Crée un bâtiment neuf : taux normal de TVA',
+  `Bâtiment neuf, confirmé le ${DATE_LA_PLUS_LARGE} ; taux normal de TVA`,
+  'Bâtiment neuf ; taux normal de TVA',
+].flatMap((t) => ['', SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC].map((suffixe) => `${t}${suffixe}`)));

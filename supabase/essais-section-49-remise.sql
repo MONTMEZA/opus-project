@@ -1,6 +1,8 @@
 -- ==========================================================================
 --  ESSAIS DE LA SECTION 49.9 — « Ce qu'il manque pour remettre ce devis »
---  (lot 2b, étape 2b-1, 05/11/2026) : `motifs_refus_remise(p_devis)`
+--  (lot 2b, étape 2b-1, 05/11/2026) : `motifs_refus_remise(p_devis)` — et
+--  ce que l'étape 2b-2 (09/11/2026) y a ajouté : « à quel titre », le
+--  chantier neuf et sa date (49.4 ter)
 --
 --  À lancer sur un PostgreSQL ordinaire, après `local-prelude.sql` puis
 --  `schema.sql` rejoué DEUX fois :
@@ -14,11 +16,12 @@
 --  tête : les trois fichiers 49 peuvent se jouer l'un après l'autre sur la
 --  même base. A est une SARL en siège (5499), SANS n° de TVA connu.
 --
---  ONZE CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité qui
---  ne montre aucun refus n'éprouve rien. Joué comme ci-dessus sur une base
---  neuve, ce fichier écrit EXACTEMENT 11 lignes `psql:… ERROR`
---  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 11). Un autre compte est un ÉCHEC,
---  même quand toutes les colonnes valent `t`. Les onze, tous au cas 12 :
+--  TREIZE CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité
+--  qui ne montre aucun refus n'éprouve rien. Joué comme ci-dessus sur une
+--  base neuve, ce fichier écrit EXACTEMENT 13 lignes `psql:… ERROR`
+--  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 13). Un autre compte est un ÉCHEC,
+--  même quand toutes les colonnes valent `t`. Les onze de 2b-1, tous au cas
+--  12, puis les deux de 2b-2 (cas 15 g et 18 b) :
 --
 --     1  12 a   A demande la liste du devis de B             → OP027
 --     2  12 b   A, un identifiant inventé                     → OP027
@@ -31,24 +34,39 @@
 --     9  12 g   …et un identifiant inventé                    → OP027
 --    10  12 g   par la clé de service SANS jeton : le devis de A → OP027
 --    11  12 h   un visiteur (anon)  → « permission denied for function motifs_refus_remise »
+--    12  15 g   une réponse « à quel titre » inconnue        → devis_pour_qui_check (23514)
+--    13  18 b   le téléphone écrit la date du « Oui »         → « permission denied for table devis »
 --
 --  ET CHACUN EST JUGÉ EN SQL, pas à l'œil (la leçon de RBM-1, lot 2a) :
 --  `:ERROR`, `LAST_ERROR_SQLSTATE` et `LAST_ERROR_MESSAGE` sont relevés
 --  juste après l'ordre, puis comparés, la transaction annulée, au code et au
 --  message attendus — le MÊME message pour les dix OP027. Un refus qui
---  manque laisse un `f`, pas seulement une ligne de moins. Les trente-trois
---  variables sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
+--  manque laisse un `f`, pas seulement une ligne de moins. Les trente-neuf
+--  variables (trente-trois de 2b-1, six de 2b-2) sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
 --  entier laisse un `f` à sa place, au lieu d'une erreur de syntaxe qui
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 130 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 131e qui les compte (cas 15) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 187 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 188e qui les compte (cas 19) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
 --  transaction déjà annulée, un cas retiré) manque au compte, et le cas 15
---  vaut `f`. Joué comme ci-dessus, le juge relit 131 colonnes `…_attendu_`
+--  vaut `f`. Joué comme ci-dessus, le juge relit 188 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
+--
+--  CE QUE 2b-2 A AJOUTÉ (09/11/2026) : `devis_complet` donne sa réponse « à
+--  quel titre » POUR SON CLIENT (sinon `devis_pour_qui` sortirait partout) ;
+--  le contrat du cas 10 passe à DOUZE clés sur neuf rangs ; le cas 13 (D4-c)
+--  part sans réponse et la donne à l'état 2 ; le cas 14 c interdit aussi
+--  `clients` et `chantier_neuf_conso` dans le corps ; et quatre cas
+--  nouveaux — 15 : `devis_pour_qui`, la réponse liée à SON client, la base
+--  qui ne mute rien, l'exclusion avec `devis_client` ; 16 : le filtre et les
+--  natures de l'entreprise selon la réponse valable, les rangs À TROUS ;
+--  17 : `devis_taux_reduit_neuf`, une clé par ligne, les deux clés du réel
+--  qui ALTERNENT ; 18 : la date du « Oui » au chantier neuf. Cinquante-sept
+--  valeurs de plus (130 → 187), deux refus de plus (11 → 13). Le compte,
+--  toujours en dernier, est devenu le cas 19.
 --
 --  CE QUE LA RELECTURE DE 2b-1 A CHANGÉ (05/11/2026, au soir) : le motif de
 --  rang 3 est coupé en DEUX clés (TXT-1) — `devis_taux_franchise` (la loi)
@@ -88,6 +106,7 @@
 \set P '''a4900000-0000-4000-8000-00000000000e'''
 \set C1 '''c4900000-0000-4000-8000-0000000000c1'''
 \set CB '''c4900000-0000-4000-8000-0000000000cb'''
+\set C2 '''c4900000-0000-4000-8000-0000000000c2'''
 \set QA '''e4900000-0000-4000-8000-00000000a0a1'''
 \set QB '''e4900000-0000-4000-8000-00000000a0b1'''
 \set SA '''e4900000-0000-4000-8000-00000000b0a1'''
@@ -109,13 +128,13 @@
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 130. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 187. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
--- pas. Le jugement final (cas 15) compare le compte à l'annonce.
-\set VALEURS_ANNONCEES 130
+-- pas. Le jugement final (cas 19) compare le compte à l’annonce.
+\set VALEURS_ANNONCEES 187
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -133,7 +152,7 @@ language sql volatile as $c$
   select case when is_called then last_value else 0 end from pg_temp.essai_valeurs;
 $c$;
 
--- LES ONZE REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
+-- LES TREIZE REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
 -- jugement illisible (une variable indéfinie ferait échouer l'ordre — une
 -- AUTRE erreur à la place de la sienne, et six valeurs de moins), il laisse
 -- un `f` à sa place.
@@ -170,6 +189,12 @@ $c$;
 \set e12h_err 'jamais relevé'
 \set e12h_code 'jamais relevé'
 \set e12h_msg 'jamais relevé'
+\set e15g_err 'jamais relevé'
+\set e15g_code 'jamais relevé'
+\set e15g_msg 'jamais relevé'
+\set e18b_err 'jamais relevé'
+\set e18b_code 'jamais relevé'
+\set e18b_msg 'jamais relevé'
 
 -- --------------------------------------------------------------------------
 --  LE MÉNAGE DE TÊTE — le fichier se rejoue (en local seulement).
@@ -224,12 +249,20 @@ prepare fiche_a(text) as
 prepare frais_a as
   insert into public.tarifs_pro (pro_id, frais_deplacement_centimes) values (:A, 3500);
 
--- UN DEVIS DE A OÙ RIEN NE MANQUE (horloge 1) : client, lieu, délai, validité.
+-- UN DEVIS DE A OÙ RIEN NE MANQUE (horloge 1) : client, lieu, délai, validité
+-- — et, depuis 2b-2, la réponse « à quel titre » (à titre privé), DONNÉE
+-- POUR SON CLIENT (`pour_qui_client = client_id`) : sans elle, le motif
+-- `devis_pour_qui` sortirait, et le cas 0 tomberait.
 prepare devis_complet(uuid) as
   insert into public.devis (id, pro_id, client_id, objet, lieu_adresse, lieu_code_postal, lieu_ville,
-                            delai_execution, validite_jours, generation)
+                            delai_execution, validite_jours, pour_qui, pour_qui_client, generation)
   values ($1, :A, :C1, 'Salle de bain', '4 rue de l''Essai', '13410', 'Lambesc',
-          'Dans les 30 jours suivant la signature', 30, 1);
+          'Dans les 30 jours suivant la signature', 30, 'consommateur', :C1, 1);
+-- UNE SECONDE FICHE DU CARNET DE A (une entreprise), posée DANS les cas 2b-2
+-- qui en ont besoin, en superutilisateur, et annulée avec eux.
+prepare client_c2 as
+  insert into public.clients (id, pro_id, type, nom, ville)
+  values (:C2, :A, 'entreprise', 'Entreprise essai A', 'Lambesc');
 -- Une ligne CHIFFRÉE : (id, devis, ordre, type, prix en centimes, taux, offert, numéro d'écriture).
 prepare chiffree(uuid, uuid, integer, text, bigint, integer, boolean, bigint) as
   insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
@@ -245,6 +278,13 @@ prepare titre(uuid, uuid, integer, text, bigint) as
 prepare motifs(uuid, text) as
   select coalesce(string_agg(m.cle, ',' order by m.o), '—') as cles,
          pg_temp.v(coalesce(string_agg(m.cle, ',' order by m.o), '—') = $2) as motifs_attendu_t
+    from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
+-- LA LISTE ENTIÈRE, « rang:clé=nature » dans l'ordre de sortie (2b-2, cas 16) :
+-- le rang, la clé ET la nature, ensemble — un trou dans les rangs se lit.
+prepare liste(uuid, text) as
+  select coalesce(string_agg(m.rang || ':' || m.cle || '=' || m.nature, ',' order by m.o), '—') as lue,
+         pg_temp.v(coalesce(string_agg(m.rang || ':' || m.cle || '=' || m.nature, ',' order by m.o), '—') = $2)
+           as liste_attendu_t
     from public.motifs_refus_remise($1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
 -- Les lignes désignées par les motifs de LIGNE (le rang 3 : ses deux clés,
 -- `devis_taux_franchise` et `devis_taux_sans_tva`), dans l'ordre de sortie.
@@ -604,7 +644,7 @@ rollback;
 \echo '    une OPTION à 20 % (fautive en franchise, et pas un poste) ; un acompte de 50,00 € sans nature'
 \echo '    (ramené : le TTC vaut 0) ; une réduction de 1,00 € (ramenée : le brut vaut 0)'
 \echo '    attendu : rangs 1,2,3,4,5,6,7,8,9 (le rang 3 sous sa clé de franchise) ; chaque phrase = celle du contrat'
-\echo '              (annexe B.2 du cahier 2b, revue le 05/11 au soir : DIX clés sur neuf rangs) ;'
+\echo '              (annexe B.2 du cahier 2b, revue le 05/11 au soir, plus les deux clés de 2b-2 : DOUZE clés sur neuf rangs) ;'
 \echo '              ligne_id posée sur le seul motif 3 ; aucune phrase ne porte de chiffre, d’euro,'
 \echo '              d’apostrophe droite, d’espace insécable ni de barre oblique inverse'
 -- ==========================================================================
@@ -620,9 +660,11 @@ execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,d
 with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)),
      contrat(rang, cle, nature, phrase) as (values
   (1, 'devis_client',            'regle_opus', 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'),
+  (1, 'devis_pour_qui',          'regle_opus', 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'),
   (2, 'devis_lignes',            'regle_opus', 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'),
   (3, 'devis_taux_franchise',    'loi',        'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'),
   (3, 'devis_taux_sans_tva',     'prudence',   'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'),
+  (3, 'devis_taux_reduit_neuf',  'prudence',   'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'),
   (4, 'devis_lieu',              'prudence',   'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
   (5, 'devis_delai',             'regle_opus', 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'),
   (6, 'devis_validite',          'prudence',   'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
@@ -721,7 +763,7 @@ rollback;
 -- ==========================================================================
 
 \echo ''
-\echo '--- 12 a. A demande la liste du devis de B → OP027 (refus 1/11)'
+\echo '--- 12 a. A demande la liste du devis de B → OP027 (refus 1/13)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :B;
@@ -735,7 +777,7 @@ select * from public.motifs_refus_remise(:DB);
 \set e12a_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 b. A, un identifiant inventé → OP027 (refus 2/11)'
+\echo '--- 12 b. A, un identifiant inventé → OP027 (refus 2/13)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -745,7 +787,7 @@ select * from public.motifs_refus_remise(:DI);
 \set e12b_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 c. A, un identifiant vide → OP027 (refus 3/11)'
+\echo '--- 12 c. A, un identifiant vide → OP027 (refus 3/13)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -755,7 +797,7 @@ select * from public.motifs_refus_remise(null);
 \set e12c_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/11)'
+\echo '--- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/13)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -768,7 +810,7 @@ select * from public.motifs_refus_remise(:D1);
 \set e12d_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 e. P, un identifiant inventé → OP027 (refus 5/11)'
+\echo '--- 12 e. P, un identifiant inventé → OP027 (refus 5/13)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :P;
@@ -781,7 +823,7 @@ rollback;
 \echo '--- 12 f. DEPUIS UNE FONCTION security definer — comme la remise de 2c l’appellera. L’enveloppe est'
 \echo '          créée ET retirée dans la même transaction (le rollback la retire : sinon l’essai 49, cas 27b,'
 \echo '          compterait une definer de plus). Le devis de A passe (attendu t), puis, derrière deux'
-\echo '          savepoints : le devis de B → OP027 (refus 6/11), un identifiant inventé → OP027 (refus 7/11)'
+\echo '          savepoints : le devis de B → OP027 (refus 6/13), un identifiant inventé → OP027 (refus 7/13)'
 begin;
 create function public.essai_remise_enveloppe(p uuid)
 returns table (cle text)
@@ -815,8 +857,8 @@ rollback;
 select pg_temp.v(count(*)) as enveloppe_retiree_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
 
 \echo '--- 12 g. PAR LA CLÉ DE SERVICE (bypassrls) — jeton de A : son devis passe (attendu t), le devis de B → OP027'
-\echo '          (refus 8/11), un identifiant inventé → OP027 (refus 9/11) ; SANS jeton, le devis de A lui-même'
-\echo '          → OP027 (refus 10/11) : la clé de service n’est l’entreprise de personne'
+\echo '          (refus 8/13), un identifiant inventé → OP027 (refus 9/13) ; SANS jeton, le devis de A lui-même'
+\echo '          → OP027 (refus 10/13) : la clé de service n’est l’entreprise de personne'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :B;
@@ -850,7 +892,7 @@ select * from public.motifs_refus_remise(:D1);
 \set e12g3_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/11)'
+\echo '--- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/13)'
 begin;
 set local role anon;
 select * from public.motifs_refus_remise(:DI);
@@ -879,10 +921,10 @@ select pg_temp.v(:'e12f1_err' = 'true' and :'e12f1_code' = 'OP027' and :'e12f1_m
 \echo ''
 \echo '=== 13. D4-c — AUCUN MOTIF NE DÉPEND DE L’ORIGINE : trois devis identiques sauf leurs liens et la façon dont'
 \echo '        ils ont été ouverts (manuelle ; demande + urgence ; urgence seule) rendent la MÊME liste ==='
-\echo '    état 1 : une ligne fautive (option à 20 % en franchise), délai et validité vides, acompte de 30 % sans'
-\echo '             nature ; puis P bloque A, toujours dans l’état 1 — la liste ne le voit pas (c’est la REMISE'
-\echo '             de 2c qui refusera) ; état 2 : tout corrigé. attendu : non vide, non vide, vide, et X = Y = Z'
-\echo '             à chaque fois (t ×3)'
+\echo '    état 1 : pas de réponse « à quel titre » (2b-2), une ligne fautive (option à 20 % en franchise), délai et'
+\echo '             validité vides, acompte de 30 % sans nature ; puis P bloque A, toujours dans l’état 1 — la liste ne'
+\echo '             le voit pas (c’est la REMISE de 2c qui refusera) ; état 2 : tout corrigé, la réponse donnée.'
+\echo '             attendu : non vide, non vide, vide, et X = Y = Z à chaque fois (t ×3)'
 -- ==========================================================================
 begin;
 execute fiche_a('franchise');
@@ -904,14 +946,15 @@ execute chiffree('f4930000-0000-4000-8000-0000000000b2', :DY, 2000, 'option', 10
 execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste',  100000, 0,    false, 2);
 execute chiffree('f4930000-0000-4000-8000-0000000000c2', :DZ, 2000, 'option', 10000,  2000, false, 3);
 \echo '-- état 1 (attendu : cles_attendu_t t, x_y_z_identiques_attendu_t t)'
-execute trois_listes(:DX, :DY, :DZ, 'devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
+execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
 \echo '-- état 1, après que P a bloqué A (attendu : t, t — la liste ne voit pas le blocage)'
 set local request.jwt.claim.sub = :P;
 insert into public.blocages (bloqueur_id, bloque_id) values (:P, :A);
 set local request.jwt.claim.sub = :A;
-execute trois_listes(:DX, :DY, :DZ, 'devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
+execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature');
 \echo '-- état 2, tout corrigé sur les trois devis (attendu : cles « — », t, t)'
-update public.devis set delai_execution = 'Deux semaines', validite_jours = 30, acompte_nature = 'arrhes', generation = 4
+update public.devis set delai_execution = 'Deux semaines', validite_jours = 30, acompte_nature = 'arrhes',
+                        pour_qui = 'consommateur', pour_qui_client = :C1, generation = 4
  where id in (:DX, :DY, :DZ);
 update public.devis_lignes set taux_tva_centiemes = 0, generation = 5 where type = 'option' and devis_id in (:DX, :DY, :DZ);
 execute trois_listes(:DX, :DY, :DZ, '—');
@@ -947,7 +990,9 @@ select pg_temp.v(p.proacl::text !~ '(^\{|,)=X') as pas_public_attendu_t,
 
 \echo '--- 14 c. LE CORPS, commentaires et chaînes retirés : il ne nomme QUE devis, devis_lignes et emetteur (plus'
 \echo '          est_mon_entreprise et emetteur_incomplet), et AUCUN des mots de l’origine ni des lectures entières'
-\echo '          (D4-c, critique B5) — attendu : la liste exacte, puis 0 | 0 | 0 | t'
+\echo '          (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de rien) ni'
+\echo '          `chantier_neuf_conso` (le motif du taux réduit ne lit que la question TVA) — attendu : la liste exacte,'
+\echo '          puis 0 | 0 | 0 | t'
 with corps as (
   select regexp_replace(
            regexp_replace(
@@ -963,7 +1008,7 @@ select pg_temp.v((select string_agg(distinct x[1], ',' order by x[1])
           from regexp_matches(src, 'public\s*\.\s*([a-z_][a-z0-9_]*)', 'g') as x)
          = 'devis,devis_lignes,emetteur,emetteur_incomplet,est_mon_entreprise') as nomme_exactement_attendu_t,
        pg_temp.v((select count(*) from regexp_matches(src,
-          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre)\M',
+          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients|chantier_neuf_conso)\M',
           'gi'))) as mots_interdits_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi'))) as lectures_entieres_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi'))) as mots_d_origine_attendu_0,
@@ -990,9 +1035,285 @@ select pg_temp.v(count(*) filter (where has_function_privilege('anon', p.oid, 'e
 
 -- ==========================================================================
 \echo ''
-\echo '=== 15. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et 130) ==='
+\echo '=== 15. « À QUEL TITRE ? » (2b-2) — devis_pour_qui : rang 1, une RÈGLE D’OPUS, EXCLUSIF de devis_client ; la'
+\echo '        réponse ne vaut que pour SON client, et la base ne MUTE rien (49.4 ter) ==='
+\echo '    a. la réponse retirée → devis_pour_qui (rang 1, regle_opus, la phrase du contrat, aucune ligne) ; remise → « — »'
+\echo '    b. la réponse donnée pour un AUTRE client (le témoin vaut C2, le client C1) → devis_pour_qui'
+\echo '    c. le client passe à C2, la réponse reste pour C1 → devis_pour_qui, et la réponse est INTACTE ; retour à C1 → « — »'
+\echo '    d. client vide : témoin vide → devis_client SEUL ; témoin C1 → devis_client SEUL (jamais les deux)'
+\echo '    e. les quatre réponses, chacune donnée pour C1 → « — » ×4 (l’entreprise de A est complète)'
+\echo '    f. la fiche C1 SUPPRIMÉE par A : client_id passe à vide (set null), la réponse et son témoin RESTENT tels quels,'
+\echo '       et la liste dit devis_client'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+execute client_c2;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+execute motifs(:D1, '—');
+update public.devis set pour_qui = null, generation = 3 where id = :D1;
+execute motifs(:D1, 'devis_pour_qui');
+select pg_temp.v(count(*) = 1 and bool_and(rang = 1 and nature = 'regle_opus' and ligne_id is null
+         and phrase = 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.')) as pour_qui_rang_nature_phrase_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_pour_qui';
+update public.devis set pour_qui = 'consommateur', generation = 4 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui_client = :C2, generation = 5 where id = :D1;
+execute motifs(:D1, 'devis_pour_qui');
+update public.devis set pour_qui_client = :C1, client_id = :C2, generation = 6 where id = :D1;
+execute motifs(:D1, 'devis_pour_qui');
+select pg_temp.v(pour_qui = 'consommateur' and pour_qui_client = :C1 and client_id = :C2) as reponse_intacte_attendu_t
+  from public.devis where id = :D1;
+update public.devis set client_id = :C1, generation = 7 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set client_id = null, pour_qui_client = null, generation = 8 where id = :D1;
+execute motifs(:D1, 'devis_client');
+update public.devis set pour_qui_client = :C1, generation = 9 where id = :D1;
+execute motifs(:D1, 'devis_client');
+update public.devis set client_id = :C1, pour_qui = 'non_professionnel', generation = 10 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'professionnel_hors_activite', generation = 11 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'professionnel', generation = 12 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'consommateur', generation = 13 where id = :D1;
+execute motifs(:D1, '—');
+delete from public.clients where id = :C1;
+select pg_temp.v(client_id is null and pour_qui = 'consommateur' and pour_qui_client = :C1) as fiche_partie_reponse_restee_attendu_t
+  from public.devis where id = :D1;
+execute motifs(:D1, 'devis_client');
+rollback;
+
+\echo '--- 15 g. une réponse INCONNUE → devis_pour_qui_check (refus 12/13), jugé en SQL juste après'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+update public.devis set pour_qui = 'autre', generation = 2 where id = :D1;
+\set e15g_err :ERROR
+\set e15g_code :LAST_ERROR_SQLSTATE
+\set e15g_msg :LAST_ERROR_MESSAGE
+rollback;
+select pg_temp.v(:'e15g_err' = 'true' and :'e15g_code' = '23514'
+         and :'e15g_msg' = 'new row for relation "devis" violates check constraint "devis_pour_qui_check"')
+         as reponse_inconnue_refusee_attendu_t;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 16. LE FILTRE ET LES NATURES DE L’ENTREPRISE SELON LA RÉPONSE VALABLE (2b-2) ==='
+\echo '    A devient (en superutilisateur) un entrepreneur individuel architecte, établissement qui n’est pas le siège,'
+\echo '    adresse non transmise, au RNE, au régime réel : ses DOUZE… treize motifs sont relus d’abord (la donnée existe).'
+\echo '    attendu, rang:clé=nature dans l’ordre de sortie :'
+\echo '      consommateur, hors de son activité : les treize, les conso_ en loi (conso_tva_intra regle_opus) ;'
+\echo '      non_professionnel : les treize, les conso_ en PRUDENCE (conso_tva_intra toujours regle_opus) ;'
+\echo '      professionnel : 101, 102, 103 et 112 SEULEMENT — les deux adresses gardées en prudence, des TROUS dans les rangs ;'
+\echo '      professionnel donné pour un AUTRE client, ou client vidé (témoin C1), ou fiche supprimée : rien n’est filtré'
+-- ==========================================================================
+begin;
+update public.entreprise_registre set forme_juridique = '1000', est_ei = true, est_siege = false, adresse = null
+ where pro_id = :A and retiree_le is null;
+update public.professional_profiles set metiers = array['architecte'] where id = :A;
+insert into public.emetteur (pro_id, registre, regime_tva) values (:A, 'rne', 'reel');
+execute client_c2;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+select pg_temp.v(string_agg(split_part(m, ': ', 1), ',' order by o)
+         = 'conso_adresse_etablissement,nom_ei,conso_adresse_siege,conso_telephone,conso_email,conso_tva_intra,'
+           'conso_mediateur,conso_garantie_legale,conso_modalites_paiement,conso_modalites_execution,'
+           'conso_reclamations,frais_deplacement,conso_profession_reglementee') as treize_motifs_existent_attendu_t
+  from unnest(public.emetteur_incomplet(:A)) with ordinality as u(m, o);
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 2);
+execute liste(:D1, '101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=l'
+         || 'oi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_leg'
+         || 'ale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=lo'
+         || 'i,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence');
+update public.devis set pour_qui = 'professionnel_hors_activite', generation = 3 where id = :D1;
+execute liste(:D1, '101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=l'
+         || 'oi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_leg'
+         || 'ale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=lo'
+         || 'i,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence');
+update public.devis set pour_qui = 'non_professionnel', generation = 4 where id = :D1;
+execute liste(:D1, '101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,104:conso_t'
+         || 'elephone=prudence,105:conso_email=prudence,106:conso_tva_intra=regle_opus,107:conso_mediateur=pruden'
+         || 'ce,108:conso_garantie_legale=prudence,109:conso_modalites_paiement=prudence,110:conso_modalites_exec'
+         || 'ution=prudence,111:conso_reclamations=prudence,112:frais_deplacement=regle_opus,113:conso_profession'
+         || '_reglementee=prudence');
+update public.devis set pour_qui = 'professionnel', generation = 5 where id = :D1;
+execute liste(:D1, '101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,112:frais_d'
+         || 'eplacement=regle_opus');
+-- les rangs gardés sont 100 + LEUR position dans emetteur_incomplet : un trou, jamais une renumérotation
+with m as (select * from public.motifs_refus_remise(:D1) where rang > 100),
+     e as (select * from unnest(public.emetteur_incomplet(:A)) with ordinality as y(motif, pos))
+select pg_temp.v((select count(*) from m join e on e.pos = m.rang - 100 where m.cle || ': ' || m.phrase = e.motif)
+         = (select count(*) from m) and (select count(*) from m) = 4) as rangs_d_origine_attendu_t;
+update public.devis set pour_qui_client = :C2, generation = 6 where id = :D1;
+execute liste(:D1, '1:devis_pour_qui=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_sie'
+         || 'ge=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateu'
+         || 'r=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=l'
+         || 'oi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prud'
+         || 'ence');
+update public.devis set pour_qui_client = :C1, client_id = null, generation = 7 where id = :D1;
+execute liste(:D1, '1:devis_client=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege'
+         || '=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur='
+         || 'loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi'
+         || ',111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=pruden'
+         || 'ce');
+update public.devis set client_id = :C1, generation = 8 where id = :D1;
+execute liste(:D1, '101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,112:frais_d'
+         || 'eplacement=regle_opus');
+update public.devis set pour_qui = null, generation = 9 where id = :D1;
+execute liste(:D1, '1:devis_pour_qui=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_sie'
+         || 'ge=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateu'
+         || 'r=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=l'
+         || 'oi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prud'
+         || 'ence');
+update public.devis set pour_qui = 'professionnel', generation = 10 where id = :D1;
+delete from public.clients where id = :C1;
+execute liste(:D1, '1:devis_client=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege'
+         || '=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur='
+         || 'loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi'
+         || ',111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=pruden'
+         || 'ce');
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 17. devis_taux_reduit_neuf (2b-2) — au RÉEL, une ligne à 10 % ou 5,5 % quand l’artisan a répondu « Oui » à la'
+\echo '        question TVA de « Le chantier » : UNE clé par ligne, et les deux clés du réel ALTERNENT dans l’ordre'
+\echo '    lignes : zone L7 (sans taux) ; L1 poste 20 % (juste) ; L2 poste 10 % ordre 2000 ; L5 poste 0 % ordre 2500 ;'
+\echo '             L6 poste 5,5 % ordre 3000 ; L3 OPTION 5,5 % ordre 4000 ; L4 poste OFFERT 10 % ordre 5000'
+\echo '    attendu : question vide, « Non », ou seule la question des DROITS à « Oui » → devis_taux_sans_tva sur L5 seulement ;'
+\echo '              « Oui » → L2 neuf, L5 sans TVA, L6 neuf, L3 neuf, L4 neuf (alignés), nature prudence, la phrase du contrat ;'
+\echo '              en franchise → cinq devis_taux_franchise, aucun neuf ; régime vide → aucun motif de ligne ;'
+\echo '              au réel, tout passé à 20 % → il ne reste que conso_tva_intra'
+-- ==========================================================================
+begin;
+execute fiche_a('reel');
+execute frais_a;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute titre(:L7, :D1, 500, 'zone', 2);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 2000, false, 3);
+execute chiffree(:L2, :D1, 2000, 'poste', 10000, 1000, false, 4);
+execute chiffree(:L5, :D1, 2500, 'poste', 10000, 0, false, 5);
+execute chiffree(:L6, :D1, 3000, 'poste', 10000, 550, false, 6);
+execute chiffree(:L3, :D1, 4000, 'option', 10000, 550, false, 7);
+execute chiffree(:L4, :D1, 5000, 'poste', 4500, 1000, true, 8);
+execute motifs(:D1, 'devis_taux_sans_tva,conso_tva_intra');
+execute fautives(:D1, :L5::text);
+update public.devis set chantier_neuf_tva = false, generation = 9 where id = :D1;
+execute motifs(:D1, 'devis_taux_sans_tva,conso_tva_intra');
+update public.devis set chantier_neuf_tva = null, chantier_neuf_conso = true, generation = 10 where id = :D1;
+execute motifs(:D1, 'devis_taux_sans_tva,conso_tva_intra');
+update public.devis set chantier_neuf_tva = true, chantier_neuf_conso = null, generation = 11 where id = :D1;
+execute motifs(:D1, 'devis_taux_reduit_neuf,devis_taux_sans_tva,devis_taux_reduit_neuf,devis_taux_reduit_neuf,devis_taux_reduit_neuf,conso_tva_intra');
+execute fautives(:D1, concat_ws(',', :L2::text, :L5::text, :L6::text, :L3::text, :L4::text));
+select pg_temp.v(string_agg(ligne_id::text || '=' || cle, ',' order by o)
+         = concat_ws(',', :L2::text || '=devis_taux_reduit_neuf', :L5::text || '=devis_taux_sans_tva',
+                     :L6::text || '=devis_taux_reduit_neuf', :L3::text || '=devis_taux_reduit_neuf',
+                     :L4::text || '=devis_taux_reduit_neuf')) as cles_alignees_sur_les_lignes_attendu_t
+  from public.motifs_refus_remise(:D1) with ordinality as m(rang, cle, phrase, nature, ligne_id, o) where rang = 3;
+select pg_temp.v(count(*) = 4 and bool_and(nature = 'prudence' and phrase = 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.')) as reduit_neuf_prudence_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_taux_reduit_neuf';
+reset role;
+update public.emetteur set regime_tva = 'franchise' where pro_id = :A;
+set local role authenticated;
+execute motifs(:D1, 'devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise');
+execute fautives(:D1, concat_ws(',', :L1::text, :L2::text, :L6::text, :L3::text, :L4::text));
+reset role;
+update public.emetteur set regime_tva = null where pro_id = :A;
+set local role authenticated;
+select pg_temp.v(count(*) filter (where rang = 3)) as regime_vide_aucune_ligne_attendu_0,
+       pg_temp.v(count(*) filter (where cle = 'regime_tva')) as regime_tva_attendu_1
+  from public.motifs_refus_remise(:D1);
+reset role;
+update public.emetteur set regime_tva = 'reel' where pro_id = :A;
+set local role authenticated;
+update public.devis_lignes set taux_tva_centiemes = 2000, generation = 12 where id = :L2;
+update public.devis_lignes set taux_tva_centiemes = 2000, generation = 13 where id = :L5;
+update public.devis_lignes set taux_tva_centiemes = 2000, generation = 14 where id = :L6;
+update public.devis_lignes set taux_tva_centiemes = 2000, generation = 15 where id = :L3;
+update public.devis_lignes set taux_tva_centiemes = 2000, generation = 16 where id = :L4;
+execute motifs(:D1, 'conso_tva_intra');
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 18. LA DATE DU « OUI » AU CHANTIER NEUF (2b-2, tient_le_devis, point 1 bis) — posée par la BASE quand la réponse'
+\echo '        DEVIENT vraie, gardée ensuite, effacée quand elle cesse de l’être ; une date envoyée est ignorée ==='
+\echo '    attendu : vide à la naissance ; posée au « Oui » ; GARDÉE par une autre écriture, par le recalcul d’une ligne,'
+\echo '              par un « Oui » renvoyé, par une date de 2001 écrite en superutilisateur, par la cascade d’une fiche'
+\echo '              supprimée ; effacée par « Non » et par vide ; un nouveau « Oui » en pose une PLUS RÉCENTE ; à'
+\echo '              l’insertion en superutilisateur, une date envoyée est remplacée (Oui) ou vidée (sinon)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+select pg_temp.v(chantier_neuf_conso_le is null) as vide_a_la_naissance_attendu_t from public.devis where id = :D1;
+update public.devis set chantier_neuf_conso = true, generation = 2 where id = :D1;
+select chantier_neuf_conso_le as date_oui from public.devis where id = :D1 \gset
+select pg_temp.v(chantier_neuf_conso_le is not null and chantier_neuf_conso_le >= now()
+         and chantier_neuf_conso_le <= clock_timestamp()) as posee_par_la_base_attendu_t
+  from public.devis where id = :D1;
+update public.devis set objet = 'Extension', generation = 3 where id = :D1;
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 4);
+update public.devis set chantier_neuf_conso = true, generation = 5 where id = :D1;
+select pg_temp.v(chantier_neuf_conso_le = :'date_oui'::timestamptz) as gardee_par_trois_ecritures_attendu_t
+  from public.devis where id = :D1;
+reset role;
+update public.devis set chantier_neuf_conso_le = '2001-01-01', generation = 6 where id = :D1;
+set local role authenticated;
+select pg_temp.v(chantier_neuf_conso_le = :'date_oui'::timestamptz) as date_de_2001_ignoree_attendu_t
+  from public.devis where id = :D1;
+update public.devis set chantier_neuf_conso = false, generation = 7 where id = :D1;
+select pg_temp.v(chantier_neuf_conso_le is null) as effacee_par_non_attendu_t from public.devis where id = :D1;
+update public.devis set chantier_neuf_conso = true, generation = 8 where id = :D1;
+select chantier_neuf_conso_le as date_oui2 from public.devis where id = :D1 \gset
+select pg_temp.v(chantier_neuf_conso_le > :'date_oui'::timestamptz) as nouvelle_date_plus_recente_attendu_t
+  from public.devis where id = :D1;
+delete from public.clients where id = :C1;
+select pg_temp.v(client_id is null and chantier_neuf_conso is true
+         and chantier_neuf_conso_le = :'date_oui2'::timestamptz) as gardee_par_la_cascade_attendu_t
+  from public.devis where id = :D1;
+update public.devis set chantier_neuf_conso = null, generation = 9 where id = :D1;
+select pg_temp.v(chantier_neuf_conso_le is null) as effacee_par_vide_attendu_t from public.devis where id = :D1;
+reset role;
+insert into public.devis (id, pro_id, chantier_neuf_conso, chantier_neuf_conso_le, generation)
+values (:DX, :A, true, '2001-01-01', 1), (:DY, :A, false, '2001-01-01', 1), (:DZ, :A, null, '2001-01-01', 1);
+select pg_temp.v(count(*) filter (where id = :DX and chantier_neuf_conso_le >= now())
+         + count(*) filter (where id in (:DY, :DZ) and chantier_neuf_conso_le is null) = 3) as insertion_date_envoyee_attendu_t
+  from public.devis where id in (:DX, :DY, :DZ);
+rollback;
+
+\echo '--- 18 b. le TÉLÉPHONE écrit la date → « permission denied for table devis » (refus 13/13), jugé en SQL juste après'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+update public.devis set chantier_neuf_conso = true, chantier_neuf_conso_le = '2001-01-01', generation = 2 where id = :D1;
+\set e18b_err :ERROR
+\set e18b_code :LAST_ERROR_SQLSTATE
+\set e18b_msg :LAST_ERROR_MESSAGE
+rollback;
+select pg_temp.v(:'e18b_err' = 'true' and :'e18b_code' = '42501'
+         and :'e18b_msg' = 'permission denied for table devis') as date_ecrite_par_le_telephone_refusee_attendu_t;
+
+-- ==========================================================================
+\echo ''
+\echo '=== 19. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 131e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 188e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

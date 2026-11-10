@@ -1254,8 +1254,13 @@ const EMPREINTES = {
   mes_donnees_sans_masquage: '9abe58152e3be5434658dd234be73c4aceda91acfd2d3bb10b29945d1476268c',
   tient_le_signalement: '9dbf97e75796c7b1989ca56ea4bc9e66ca71c15efdf7248309d8c1913b1f5d00',
   /* Et l'export lui-même (seconde relecture du 31/10, R2T-13) : y remettre
-     ses propres messages derrière le masquage passait les contrôles. */
-  mes_donnees: '5aecd0ec28af992cf8b80397ea8ec23961e7749c421659862b9e31051c9bfb68',
+     ses propres messages derrière le masquage passait les contrôles.
+     2b-2 (cahier 2b-2, §2.9) : `mon_numero_de_tva` d'une DÉCLARATION sur
+     l'honneur s'exporte sans `reconnu_le` ni `vies_le` — l'export ne dit
+     jamais « reconnu » pour un numéro que VIES n'a pas reconnu ; une preuve
+     `vies` s'exporte entière. Rien d'autre n'a changé ; essais 51d (J1
+     quater) et 48 (cas 20) rejoués. */
+  mes_donnees: 'af5ae6259c085cd2ae5a673a9d61f10b8eca397740d2aa0c9da138282b958d27',
 };
 for (const [nom, attendue] of Object.entries(EMPREINTES)) {
   const f = fonctionSql(nom);

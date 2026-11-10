@@ -11649,7 +11649,7 @@ begin
            case when e.regime_tva is null
                 then 'regime_tva: Déclarez votre régime de TVA. En franchise, vos devis porteront « TVA non applicable, article 293 B du CGI » ; au régime réel, la TVA de chaque ligne. Opus ne peut pas le deviner : votre chiffre d’affaires n’est pas dans Opus.' end,
            case when e.regime_tva = 'reel' and r.id is not null and r.tva is null and v.pro_id is null
-                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais Opus n’a aucun numéro de TVA intracommunautaire pour votre entreprise : l’annuaire des entreprises (liste de la DGFiP) ne lui en a transmis aucun, et VIES n’en a reconnu aucun. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime sur le devis. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. S’il y est refusé, c’est votre service des impôts des entreprises qui peut dire pourquoi, et l’activer.' end,
+                then 'conso_tva_intra: Pour un devis à un particulier : vous avez déclaré le régime réel, mais Opus n’a aucun numéro de TVA intracommunautaire pour votre entreprise : l’annuaire des entreprises (liste de la DGFiP) ne lui en a transmis aucun, VIES n’en a reconnu aucun, et vous n’en avez déclaré aucun sur l’honneur. La loi demande de le communiquer au client (code de la consommation, R. 111-2) ; Opus l’imprime sur le devis. Si vous êtes en réalité en franchise en base de TVA, choisissez-la dans « TVA ». Sinon, écrivez votre numéro dans « Votre entreprise » : Opus le fait contrôler par VIES, le service de la Commission européenne. S’il le refuse, ou ne répond pas à trois contrôles en plus d’une heure, alors que vous êtes sûr de ce numéro, vous pourrez le déclarer sur l’honneur ; votre service des impôts des entreprises peut dire pourquoi VIES le refuse, et l’activer.' end,
            case when e.mediateur_nom is null
                 then 'conso_mediateur: Pour un devis à un particulier : indiquez le médiateur de la consommation auquel vous adhérez, avec son nom, son adresse et son site (code de la consommation, L. 111-1 et R. 111-1). Ce n’est pas une information à trouver : il faut adhérer à un médiateur référencé. Un devis à un professionnel n’en a généralement pas besoin, sauf pour un petit professionnel démarché hors de son activité principale.' end,
            case when e.garantie_legale_texte is null
@@ -11671,7 +11671,8 @@ begin
     left join public.entreprise_registre r on r.pro_id = moi.id and r.retiree_le is null
     left join public.emetteur e on e.pro_id = moi.id
     left join public.tarifs_pro t on t.pro_id = moi.id
-    /* Le n° de TVA reconnu par VIES (section 48), pour le SIREN ACTIF
+    /* Le n° de TVA reconnu par VIES, OU DÉCLARÉ SUR L'HONNEUR (section 48,
+       2b-2 : la jointure ne filtre pas la source), pour le SIREN ACTIF
        seulement : une preuve faite pour une autre entreprise ne vaut rien
        ici. La table naît plus bas ; un corps plpgsql ne se résout qu'à
        l'exécution, et cette fonction n'est jamais exécutée pendant que le
@@ -12369,7 +12370,40 @@ revoke truncate on public.sos_availability from authenticated;
 --  Et aucune date d'expiration : le propriétaire a décidé le 18/10 qu'Opus
 --  n'aurait qu'UNE règle plus stricte que la loi, relire le SIRET chaque
 --  année. Le devis imprime la date du contrôle : son âge se lit. Un numéro
---  soumis de nouveau et refusé par VIES, lui, est retiré par la fonction.
+--  soumis de nouveau et refusé par VIES, lui, est retiré par la fonction —
+--  sauf une DÉCLARATION SUR L'HONNEUR (ci-dessous), qui n'est pas une
+--  reconnaissance et qu'un refus de VIES ne retire pas.
+--
+--  LA DÉCLARATION SUR L'HONNEUR (lot 2b, étape 2b-2, décision du
+--  propriétaire du 09/11/2026, `docs/PLAN-DEVIS.md` 10.19)
+--  --------------------------------------------------------
+--  Quand VIES REFUSE le numéro (ou, réponse P5, ne répond pas à trois
+--  contrôles en plus d'une heure), l'artisan peut cocher : « Je certifie sur
+--  l'honneur que ce numéro est celui que l'administration fiscale a attribué
+--  à mon entreprise. » La preuve prend alors la source `declaration`, avec
+--  le TEXTE coché (celui que l'écran a montré, dans une LISTE FERMÉE de
+--  toutes les versions qui ont existé) et sa DATE, posée par la base
+--  (`declare_le`). Le numéro s'imprime sur ses devis ; `emetteur_incomplet()`
+--  n'a rien à changer (sa jointure ne filtre pas la source). Seule la
+--  fonction Edge `tva` la pose (actions `declarer` et `retirer`) : elle seule
+--  sait qu'une réponse de VIES a eu lieu — le refus retenu est rangé sous
+--  une empreinte HMAC de la clé de service, que PostgreSQL ne sait pas
+--  recalculer. Posée par l'éditeur SQL ou le connecteur sur un VRAI compte,
+--  elle est REFUSÉE (23514) : un compte d'essai seulement.
+--  CE QUE LA BASE EN FAIT, exactement — et les textes légaux le disent :
+--    - redéclarer le MÊME numéro ne rajeunit ni la date ni le texte ;
+--    - VIES reconnaît ensuite le MÊME numéro : la preuve redevient `vies`,
+--      et la déclaration (date et texte) RESTE JOINTE — l'engagement pris ce
+--      jour-là ne s'efface pas parce que VIES a fini par répondre ; si VIES
+--      le refuse de nouveau, la fonction la fait RENAÎTRE en déclaration ;
+--    - un AUTRE numéro prend la place (déclaré, ou reconnu par VIES), ou une
+--      preuve d'essai : la déclaration est REMPLACÉE (effacée) ;
+--    - l'artisan la RETIRE : la ligne `declaration` part (une preuve `vies`
+--      qui porte une ancienne déclaration n'est pas touchée) ;
+--    - elle part avec le compte (la clé étrangère est en cascade).
+--  `reconnu_le` reste `not null` : pour une déclaration, elle vaut
+--  `declare_le` et ne s'affiche ni ne s'exporte — ce n'est PAS une
+--  reconnaissance (`mes_donnees()` la retire de l'export).
 -- ==========================================================================
 
 create table if not exists public.preuves_tva (
@@ -12412,21 +12446,55 @@ alter table public.preuves_tva add constraint preuve_tva_cle_check
               then substr(numero, 3, 2)::int = (12 + 3 * (siren::bigint % 97)) % 97
               else true end);
 
-/* `essai` : une ligne posée par le connecteur pour un compte jetable, le
-   temps d'un essai sur la vraie base. Elle part avec le compte (la clé
-   étrangère est en cascade). La fonction Edge n'écrit que `vies`. */
+/* LA DÉCLARATION SUR L'HONNEUR (2b-2) : sa date, posée par la base
+   (`tient_la_preuve_tva()`), et le texte que l'artisan a coché. Ajoutées
+   à une table déjà en place : le `create table` ne les porte pas. */
+alter table public.preuves_tva add column if not exists declare_le        timestamptz;
+alter table public.preuves_tva add column if not exists declaration_texte text;
+
+/* LES TROIS SOURCES. `vies` : VIES a reconnu le numéro (la fonction Edge).
+   `declaration` (2b-2) : l'artisan l'a déclaré sur l'honneur après un refus
+   de VIES (la fonction Edge aussi). `essai` : une ligne posée par le
+   connecteur pour un compte jetable, le temps d'un essai sur la vraie base.
+   Toutes partent avec le compte (la clé étrangère est en cascade). */
 alter table public.preuves_tva drop constraint if exists preuve_tva_source_check;
 alter table public.preuves_tva add constraint preuve_tva_source_check
-  check (source in ('vies', 'essai'));
+  check (source in ('vies', 'essai', 'declaration'));
+
+/* LA DÉCLARATION, SA DATE ET SON TEXTE (2b-2) :
+     - la date et le texte vont ENSEMBLE, ou aucun : une déclaration peut
+       rester JOINTE à une preuve `vies` du même numéro (VIES a fini par le
+       reconnaître) — d'où « les deux ensemble », et non l'équivalence avec
+       la source ;
+     - une ligne `declaration` a sa date ; une ligne `essai` n'en a jamais ;
+     - le texte est l'une des versions qui ONT EXISTÉ, à l'octet (apostrophes
+       typographiques) — une LISTE FERMÉE, que `DECLARATIONS_TVA_CONNUES`
+       (`src/lib/tva.js`) recopie. Une version nouvelle s'AJOUTE ici, jamais
+       ne remplace : les déclarations déjà faites gardent la leur. */
+alter table public.preuves_tva drop constraint if exists preuve_tva_declaration_check;
+alter table public.preuves_tva add constraint preuve_tva_declaration_check
+  check ((declare_le is null) = (declaration_texte is null)
+     and (source <> 'declaration' or declare_le is not null)
+     and (source <> 'essai' or declare_le is null)
+     and (declaration_texte is null or declaration_texte in (
+           'Je certifie sur l’honneur que ce numéro est celui que l’administration fiscale a attribué à mon entreprise.')));
 
 comment on table public.preuves_tva is
   'Le n° de TVA intracommunautaire écrit par l''artisan quand l''annuaire n''en publie '
-  'aucun, et la date à laquelle VIES (Commission européenne) l''a reconnu. Écrite par '
-  'la fonction Edge tva seulement ; lue par le titulaire. Section 48.';
+  'aucun, et la date à laquelle VIES (Commission européenne) l''a reconnu, ou la déclaration '
+  'sur l''honneur de l''entreprise, son texte et sa date (2b-2). Écrite par la fonction Edge tva '
+  'seulement ; lue par le titulaire. Section 48.';
 comment on column public.preuves_tva.reconnu_le is
-  'Posée par la base (tient_la_preuve_tva) à chaque CONTRÔLE : l''insertion, ou une '
-  'écriture de la fonction Edge ; aucune autre écriture ne la déplace. Affichée dans '
-  '« Mon entreprise » ; elle ne s''imprime pas sur le devis.';
+  'source vies : la date du dernier contrôle par VIES, posée par la base (tient_la_preuve_tva) à '
+  'chaque CONTRÔLE — l''insertion, ou une écriture de la fonction Edge ; aucune autre écriture ne la '
+  'déplace. essai : la date de pose. declaration : égale à declare_le, ni affichée ni exportée — ce '
+  'n''est pas une reconnaissance.';
+comment on column public.preuves_tva.declare_le is
+  'La date de la déclaration sur l''honneur, posée par la base ; gardée si VIES reconnaît ensuite le '
+  'même numéro. Section 48 (2b-2).';
+comment on column public.preuves_tva.declaration_texte is
+  'Le texte que l''artisan a coché, tel que l''écran le lui a montré : une des versions de la liste '
+  'fermée (preuve_tva_declaration_check). Gardé avec sa date. Section 48 (2b-2).';
 comment on column public.preuves_tva.vies_le is
   'La date de la réponse, telle que VIES l''a écrite (requestDate). Gardée comme trace.';
 
@@ -12447,7 +12515,25 @@ comment on column public.preuves_tva.vies_le is
    `preuve_essai_check` (section 45.1). Posée par erreur sur un vrai compte,
    elle éteindrait le motif d'un numéro que VIES n'a jamais vu. Seuls le
    connecteur et l'éditeur SQL écrivent une preuve d'essai ; ils lisent
-   `auth.users`. */
+   `auth.users`.
+
+   LA DÉCLARATION SUR L'HONNEUR (2b-2) — le point 2, qui dit EXACTEMENT ce
+   que l'en-tête de la section promet :
+     - sa date (`declare_le`) est posée par la base, une date envoyée est
+       ignorée ; redéclarer le MÊME numéro (même SIREN) garde la date ET le
+       texte d'origine ;
+     - pour une déclaration, `reconnu_le` vaut `declare_le` : une seule date,
+       qui ne bouge pas — même quand la fonction réécrit la ligne ;
+     - VIES reconnaît le MÊME numéro (la ligne passe à `vies`) : la
+       déclaration reste jointe ; un AUTRE numéro, ou une preuve d'essai :
+       elle est vidée ;
+     - LA GARDE I1 : une déclaration NOUVELLE posée ailleurs que par la
+       fonction Edge (`service_role`) — l'éditeur SQL, le connecteur — n'est
+       acceptée que sur un compte d'essai. Sur un vrai compte, ce serait une
+       déclaration que l'artisan n'a pas faite. La lecture d'`auth.users` est
+       IMBRIQUÉE sous `current_user <> 'service_role'` : la clé de service
+       n'a jamais à la lire. Un client, lui, n'écrit rien dans cette table
+       (droits de table). */
 create or replace function public.tient_la_preuve_tva()
 returns trigger
 language plpgsql
@@ -12455,11 +12541,43 @@ security invoker
 set search_path = public
 as $$
 begin
+  -- 1. La date du contrôle (inchangé).
   if tg_op = 'INSERT' or current_user = 'service_role' then
     new.reconnu_le := clock_timestamp();
   else
     new.reconnu_le := old.reconnu_le;
   end if;
+
+  -- 2. La déclaration sur l'honneur (2b-2).
+  if new.source = 'declaration' then
+    if tg_op = 'UPDATE' and old.declare_le is not null
+       and old.numero = new.numero and old.siren = new.siren then
+      new.declare_le := old.declare_le;               -- redéclarer ne rajeunit pas
+      new.declaration_texte := old.declaration_texte; -- ce qu'il a coché ce jour-là
+    else
+      new.declare_le := clock_timestamp();
+      -- Posée ailleurs que par la fonction Edge : un compte d'essai seulement.
+      -- Imbriqué exprès : `service_role` n'a jamais à lire auth.users.
+      if current_user <> 'service_role' then
+        if not exists (select 1 from auth.users u
+                        where u.id = new.pro_id
+                          and lower(u.email) like '%@exemple-opus.test') then
+          raise exception 'Une déclaration sur l’honneur du numéro de TVA ne se pose que par l’application (la fonction tva), ou sur un compte d’essai (adresse en @exemple-opus.test).'
+            using errcode = '23514';
+        end if;
+      end if;
+    end if;
+    new.reconnu_le := new.declare_le;                 -- une seule date, qui ne bouge pas
+  elsif new.source = 'vies' and tg_op = 'UPDATE' and old.declare_le is not null
+        and old.numero = new.numero and old.siren = new.siren then
+    new.declare_le := old.declare_le;                 -- VIES reconnaît le numéro déclaré :
+    new.declaration_texte := old.declaration_texte;   --   l'engagement reste joint
+  else
+    new.declare_le := null;                           -- un autre numéro, ou un essai :
+    new.declaration_texte := null;                    --   plus de déclaration
+  end if;
+
+  -- 3. Une preuve « essai » : un compte d'essai seulement (inchangé).
   if new.source = 'essai' and not exists (
        select 1 from auth.users u
         where u.id = new.pro_id and lower(u.email) like '%@exemple-opus.test') then
@@ -12986,8 +13104,93 @@ comment on column public.devis_tva.remise_centimes is
   'ce taux (base_centimes) est NETTE de cette part. 49.4 bis.';
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — trente et une ici, toutes en `_check`, et une
---       trente-deuxième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
+--  49.4 ter À QUEL TITRE LE CLIENT COMMANDE, ET LE CHANTIER (lot 2b, étape
+--           2b-2, 09/11/2026)
+--
+--  Ajoutées ICI, dans la section du devis, pour la même raison que 49.4
+--  bis : les droits d'écriture vivent en 49.7, et `verifier-devis` lit les
+--  colonnes de la section 49. Toutes NULLABLES, SANS DÉFAUT : un fait de 2b
+--  naît vide, et « vide » veut dire « l'artisan n'a pas encore répondu ».
+--  Pour les deux booléens, `null` et `false` disent « Non » : la base les
+--  lit par `is true`, jamais par `not x` (une condition qui vaut `null` ne
+--  doit jamais lever une protection par accident).
+--
+--  « À QUEL TITRE ? » — décision du propriétaire du 09/11 : Opus PROPOSE,
+--  l'artisan CONFIRME. Rien n'est déduit de `clients.type`, qui ne choisit
+--  que la phrase de la proposition (à l'écran). Quatre réponses, dans
+--  l'ORDRE PROTECTEUR de l'écran (celle qui retire des mentions en
+--  dernier) : `consommateur` (à titre privé), `non_professionnel` (une
+--  association, une copropriété, une société civile sans activité
+--  professionnelle — comptée, par prudence, comme un particulier),
+--  `professionnel_hors_activite` (une entreprise de 5 salariés au plus,
+--  hors de son activité principale — protégée comme un particulier hors
+--  établissement, C. conso. L. 221-3), `professionnel`.
+--
+--  LA RÉPONSE EST LIÉE AU CLIENT À QUI ELLE A ÉTÉ DONNÉE (`pour_qui_client`).
+--  Elle ne VAUT que si `client_id` n'est pas vide et `pour_qui_client =
+--  client_id` : changer de client la rend sans effet d'elle-même, revenir au
+--  client d'avant la rend valable, et la base ne MODIFIE JAMAIS ce que le
+--  téléphone a envoyé — aucune course avec la fusion des écritures de la
+--  file, et un renvoi tardif de la réponse après un changement de client
+--  porte l'ANCIEN client, donc ne vaut rien. Une remise à vide par
+--  `tient_le_devis()` a été écartée : dans un `before update`, « renvoyé
+--  égal » et « pas envoyé » ne se distinguent pas. `pour_qui_client` n'a
+--  PAS de clé étrangère : c'est un TÉMOIN, pas un lien. La fiche d'un autre
+--  artisan ne peut jamais valoir `client_id` (OP013) ; après la suppression
+--  de la fiche, `client_id` passe à vide (`set null`) et la réponse est sans
+--  effet — rien à effacer. Et AUCUNE CONTRAINTE NE NOMME `client_id` (D4).
+--  LA RÈGLE « VALABLE » EST ÉCRITE UNE FOIS DE CHAQUE CÔTÉ :
+--  `motifs_refus_remise()` (49.9, `v_valable`) et `pourQuiValable()`
+--  (`src/lib/devis.js`). 2c figera une COPIE calculée à la remise, jamais
+--  redérivée de `client_id`, qu'une cascade peut vider.
+--
+--  « LE CHANTIER » — DEUX questions, et elles ne dépendent pas l'une de
+--  l'autre (leurs « Oui » vont en sens inverse) :
+--    `chantier_neuf_conso` (POUR LES DROITS DU CLIENT) : le devis porte sur
+--      la construction d'un bâtiment neuf ou la transformation importante
+--      d'un bâtiment existant (C. conso. L. 221-2 12°) — un « Oui » RETIRE
+--      au client ses 14 jours de rétractation hors établissement ; l'écran
+--      le fait CONFIRMER, et la base garde la date de cette confirmation
+--      (`chantier_neuf_conso_le`, posée par `tient_le_devis()`, jamais
+--      écrite par le téléphone : absente des droits de 49.7) ;
+--    `chantier_neuf_tva` (POUR LA TVA) : les travaux font partie d'un
+--      chantier qui CRÉE un bâtiment neuf (CGI, art. 257 I 2 2°) — un « Oui »
+--      interdit le taux réduit : une ligne à 10 % ou 5,5 % devient un motif
+--      de la liste (`devis_taux_reduit_neuf`, 49.9). Pas de date : aucun
+--      lecteur ne s'en servirait (le « bouton §18 »).
+--  Pas de date non plus pour « à quel titre » : 2c fige ce qu'il faut.
+--
+--  NOMS ÉVITÉS : ni `nature`, ni `regime_tva`, ni `taux_justification` — ils
+--  désignent déjà autre chose dans le projet.
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists pour_qui               text;
+alter table public.devis add column if not exists pour_qui_client        uuid;
+alter table public.devis add column if not exists chantier_neuf_conso    boolean;
+alter table public.devis add column if not exists chantier_neuf_conso_le timestamptz;
+alter table public.devis add column if not exists chantier_neuf_tva      boolean;
+
+comment on column public.devis.pour_qui is
+  'La réponse BRUTE à « À quel titre ? » : consommateur | non_professionnel | professionnel_hors_activite '
+  '| professionnel ; vide = pas encore répondu. Elle ne vaut que si pour_qui_client = client_id (et '
+  'client_id non vide) : toute lecture passe par cette règle. 49.4 ter.';
+comment on column public.devis.pour_qui_client is
+  'Le client pour lequel la réponse pour_qui a été donnée. Un TÉMOIN, sans clé étrangère : une valeur '
+  'qui ne vaut pas client_id rend la réponse sans effet. 49.4 ter.';
+comment on column public.devis.chantier_neuf_conso is
+  'Pour les droits du client : le devis porte sur la construction d''un bâtiment neuf ou la '
+  'transformation importante d''un bâtiment existant (C. conso. L. 221-2 12°). Vide ou false = Non. '
+  'Lu par is true. 49.4 ter.';
+comment on column public.devis.chantier_neuf_conso_le is
+  'Posée par la base quand la réponse DEVIENT vraie ; jamais écrite par le téléphone. Effacée quand '
+  'la réponse cesse de l''être. 49.4 ter.';
+comment on column public.devis.chantier_neuf_tva is
+  'Pour la TVA : les travaux font partie d''un chantier qui crée un bâtiment neuf (CGI, art. 257 I 2 2°). '
+  'Vrai : une ligne à 10 % ou 5,5 % est un motif de refus de la remise (devis_taux_reduit_neuf). Vide '
+  'ou false = Non. Lu par is true. 49.4 ter.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — trente-deux ici, toutes en `_check`, et une
+--       trente-troisième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
 --       rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
@@ -13110,6 +13313,15 @@ alter table public.devis add constraint devis_remise_une_forme_check
 alter table public.devis drop constraint if exists devis_validite_check;
 alter table public.devis add constraint devis_validite_check
   check (validite_jours is null or validite_jours between 1 and 365);
+/* « À quel titre ? » (lot 2b, étape 2b-2, 49.4 ter) : une des quatre
+   réponses, ou vide. La SEULE contrainte de l'étape — et elle ne nomme ni
+   `pour_qui_client` ni `client_id` : AUCUNE contrainte ne nomme `client_id`
+   (D4) ; une réponse donnée pour un autre client est sans effet, elle n'est
+   pas refusée. */
+alter table public.devis drop constraint if exists devis_pour_qui_check;
+alter table public.devis add constraint devis_pour_qui_check
+  check (pour_qui is null or pour_qui in
+         ('consommateur', 'professionnel', 'professionnel_hors_activite', 'non_professionnel'));
 
 alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
 alter table public.devis_lignes add constraint devis_ligne_designation_check
@@ -13475,6 +13687,22 @@ begin
   -- `ESPACES_CODE_POSTAL` (src/lib/devis.js).
   new.lieu_code_postal := nullif(regexp_replace(coalesce(new.lieu_code_postal, ''),
                                                 E'[ \\t\\n\\v\\f\\r\\u00a0\\u202f]', '', 'g'), '');
+
+  -- 1 bis. La date de la confirmation du chantier neuf (L. 221-2 12°, lot
+  --   2b-2, 49.4 ter), posée par la base : à l'instant où la réponse DEVIENT
+  --   vraie ; effacée quand elle cesse de l'être ; gardée sinon — le
+  --   recalcul et une cascade réécrivent le devis sans la changer. Une date
+  --   envoyée est ignorée (et le téléphone n'a pas le droit de l'écrire,
+  --   49.7). `is true` / `is not true` : une réponse vide dit « Non ».
+  if new.chantier_neuf_conso is true then
+    if tg_op = 'INSERT' or old.chantier_neuf_conso is not true then
+      new.chantier_neuf_conso_le := clock_timestamp();
+    else
+      new.chantier_neuf_conso_le := old.chantier_neuf_conso_le;
+    end if;
+  else
+    new.chantier_neuf_conso_le := null;
+  end if;
 
   -- 2. Le NUMÉRO d'écriture (49.5 bis, point 7) : présent, et dans ses
   --    bornes, d'où qu'on écrive. Une cascade ou le recalcul le gardent ou
@@ -13919,7 +14147,8 @@ create or replace trigger trg_recalcule_apres_reduction
   execute function public.recalcule_apres_reduction();
 
 comment on function public.tient_le_devis() is
-  'Nettoie un devis (blancs, code postal), pose ses dates, fige sa source, refuse un numéro '
+  'Nettoie un devis (blancs, code postal), pose ses dates (dont celle de la confirmation du chantier '
+  'neuf, 2b-2), fige sa source, refuse un numéro '
   'd''écriture absent ou hors bornes (OP016), une écriture plus ancienne que son horloge (OP015), '
   'un lien vers la fiche ou la demande d''un autre (OP013), un 21e devis pour une même demande ou '
   'urgence (OP017), et RELIT ses totaux dans devis_tva. Section 49.6.';
@@ -14302,7 +14531,12 @@ create policy "ventilation de mes devis" on public.devis_tva
        devis : une ligne ne change pas de devis par l'application (relecture
        BASE-9 ; 49.5 bis, point 6) ;
      - JAMAIS : `statut`, les totaux, la réduction et l'acompte effectifs, le
-       total toutes options comprises, le total d'une ligne, les dates.
+       total toutes options comprises, le total d'une ligne, les dates — dont
+       celle de la confirmation du chantier neuf (`chantier_neuf_conso_le`,
+       lot 2b-2) : la réponse, l'artisan l'écrit ; sa date, la base la pose.
+     Depuis 2b-2 (49.4 ter), un devis naît et se modifie AUSSI sur « à quel
+     titre » (`pour_qui`, et le client pour lequel la réponse est donnée,
+     `pour_qui_client`) et sur les deux réponses du chantier.
    Une colonne que l'application enverrait sans que la liste la rende ferait
    refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
    compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
@@ -14312,12 +14546,14 @@ grant select, delete on public.devis, public.devis_lignes to authenticated;
 grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
-              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours, generation)
+              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
+              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva, generation)
   on public.devis to authenticated;
 grant update (client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
-              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours, generation)
+              acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
+              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva, generation)
   on public.devis to authenticated;
 grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
@@ -14404,10 +14640,24 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                art. 7 4°), la description des travaux et leur prix pour
 --                un particulier (code de la consommation, L. 111-1 1° et
 --                2°) ; chaque phrase dit ce cas, puis « Opus le demande pour
---                tous vos devis ». SIX RÈGLES D'OPUS en tout. Et la TVA à
---                10 % ou 5,5 % : « tout permettre » — AUCUN motif de taux
---                réduit ; c'est 2c qui imprimera la certification que le
---                client signe.
+--                tous vos devis ». LE 09/11, UNE SEPTIÈME (2b-2, réponse P1
+--                du propriétaire) : dire à quel titre le client commande
+--                (`devis_pour_qui`) — sans réponse, Opus compte tout ce
+--                qu'on doit à un particulier, et 2c imprimerait le
+--                formulaire de rétractation même pour un autre artisan qui
+--                sous-traite. SEPT RÈGLES D'OPUS en tout. Et la TVA à 10 %
+--                ou 5,5 % : « tout permettre » ; c'est 2c qui imprimera la
+--                certification que le client signe. UNE SEULE EXCEPTION
+--                (2b-2) : l'artisan dit lui-même, dans « Le chantier », que
+--                ses travaux font partie d'un chantier qui CRÉE un bâtiment
+--                neuf (`chantier_neuf_tva`) — une ligne à 10 % ou 5,5 % est
+--                alors un motif (`devis_taux_reduit_neuf`), en PRUDENCE
+--                jusqu'au lot 3 : d'autres taux à 5,5 % restent peut-être
+--                possibles sur un bâtiment neuf (CGI 278-0 bis N et P, non
+--                lus), et ces articles passent au CIBS le 01/01/2027 (non
+--                lu, à relire avant). Les références vivent ICI, jamais
+--                dans la phrase (CGI, art. 257 I 2 2°, 278-0 bis A et
+--                279-0 bis).
 --  Tout le reste est un AVIS, qui ne bloque rien.
 --
 --  LES AVIS NE SONT PAS ICI, et c'est voulu (critique B6) : la remise de 2c
@@ -14500,11 +14750,30 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --      acquitte la TVA (CGI, art. 283 2 nonies, l'autoliquidation) —, mais
 --      Opus ne sait pas encore imprimer un tel devis : il bloque, et il le
 --      dit comme une prudence, jamais comme la loi.
---  Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
---  clé, dans l'ordre `ordre, id`, en UNE boucle. Elle se lit dans les
---  LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
+--    `devis_taux_reduit_neuf` (prudence, 2b-2) : au régime réel, une
+--      ligne à 10 % ou 5,5 % quand l'artisan a répondu « Oui » à la
+--      question TVA de « Le chantier » (`chantier_neuf_tva is true`) — la
+--      TVA est alors au taux normal (CGI, art. 257 I 2 2°). La question des
+--      DROITS du client (`chantier_neuf_conso`) n'y est pour rien.
+--  UNE LIGNE PORTE AU PLUS UNE CLÉ : en franchise, la première ; au réel,
+--  une ligne à 0 porte la deuxième, une ligne à 10 % ou 5,5 % la troisième
+--  — au réel, les deux dernières peuvent ALTERNER dans un même devis. D'où
+--  DEUX tableaux, les lignes et leurs clés, aux clauses IDENTIQUES (même
+--  `filter`, même `order by l.ordre, l.id`, unique) : ils s'alignent indice
+--  par indice, et la boucle les parcourt ensemble, dans l'ordre `ordre,
+--  id`. La borne de la liste (508 motifs) ne bouge pas. Elle se lit dans
+--  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
 --  l'entreprise, `regime_tva`, le dit déjà.
+--
+--  « À QUEL TITRE ? » (2b-2, 49.4 ter) : la réponse VALABLE (`v_valable`)
+--  est celle donnée pour le client du devis (`pour_qui_client = client_id`,
+--  client non vide), sinon vide — la règle est écrite UNE fois ici, et le
+--  rang 1, le filtre et les natures la lisent. Au rang 1, `devis_client`
+--  (pas de client) et `devis_pour_qui` (un client, pas de réponse valable)
+--  s'EXCLUENT. La fonction ne lit JAMAIS `clients` : le type de la fiche
+--  ne décide de rien (décision du 09/11), il ne choisit que la phrase de la
+--  proposition, à l'écran.
 --
 --  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
 --  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
@@ -14523,13 +14792,27 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --      franchise — relecture de 2b-1, TXT-7) ;
 --    `loi` pour les autres, `registre` compris (la loi demande la mention
 --      quand l'entreprise est immatriculée, et la phrase le dit).
---  Les onze motifs `conso_` restent TOUS en 2b-1. Neuf sont en `loi` : la
---  loi les demande pour un devis à un particulier, et chaque phrase commence
---  par « Pour un devis à un particulier ». Comme Opus ne sait pas encore
---  pour qui le client commande (2b-2), c'est l'ÉCRAN qui les range, par
---  prudence, sous « Mentions dues à un particulier » ; leur nature reste la
---  loi (relecture de 2b-1, BASE-2). `conso_tva_intra` reste une règle
---  d'Opus (réponse du 05/11) et `conso_profession_reglementee` une prudence.
+--  LES ONZE MOTIFS `conso_` SELON LA RÉPONSE VALABLE (2b-2) :
+--    vide (ou donnée pour un autre client), `consommateur`,
+--      `professionnel_hors_activite` : tous comptent, comme en 2b-1. Neuf
+--      sont en `loi` : la loi les demande pour un devis à un particulier, et
+--      chaque phrase commence par « Pour un devis à un particulier » ;
+--      l'ÉCRAN les range sous « Mentions dues à un particulier » ;
+--    `non_professionnel` (une association, une copropriété, une société
+--      civile sans activité professionnelle) : tous comptent, en
+--      `prudence` — L. 111-1, R. 111-1 et R. 111-2 visent le consommateur,
+--      personne physique ; Opus les compte par prudence (question au
+--      juriste) ;
+--    `professionnel` (pour son entreprise, dans son activité principale) :
+--      aucun ne compte, SAUF `conso_adresse_etablissement` et
+--      `conso_adresse_siege`, gardés en `prudence` — R. 123-237 demande
+--      peut-être l'adresse du siège sur tous les devis (question ouverte).
+--      Le filtre tourne APRÈS le calcul du rang : un motif retiré laisse un
+--      TROU dans les rangs, jamais une renumérotation ; et il s'écrit
+--      `left(cle, 6) = 'conso_'`, jamais par `like`. Une condition qui vaut
+--      `null` ne saute RIEN : le cas protecteur tient.
+--  `conso_tva_intra` reste une RÈGLE D'OPUS partout (réponse du 05/11) et
+--  `conso_profession_reglementee` une prudence.
 --
 --  LES PHRASES sont écrites en CARACTÈRES — l'apostrophe typographique ’,
 --  les espaces ordinaires avant « : », comme celles d'`emetteur_incomplet()`
@@ -14567,9 +14850,15 @@ declare
   v_acompte_eff  bigint;
   v_remise_eur   bigint;
   v_remise_eff   bigint;
+  v_pour_qui     text;
+  v_pour_qui_cl  uuid;
+  v_neuf_tva     boolean;
+  v_valable      text;
   v_regime       text;
   v_un_poste     boolean;
   v_fautives     uuid[];
+  v_cles_lignes  text[];
+  v_i            integer;
   v_ligne        uuid;
   v_motif        text;
   v_position     bigint;
@@ -14578,10 +14867,12 @@ begin
   --    lecture : elle tient d'où qu'on appelle.
   select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville,
          d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
-         d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes
+         d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes,
+         d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
-         v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff
+         v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
+         v_pour_qui, v_pour_qui_cl, v_neuf_tva
     from public.devis d
    where d.id = p_devis
      and public.est_mon_entreprise(d.pro_id);
@@ -14590,20 +14881,39 @@ begin
       using errcode = 'OP027';
   end if;
 
+  -- 1 bis. La réponse « à quel titre » VALABLE (49.4 ter) : celle donnée
+  --    pour le client du devis, sinon vide. La règle est écrite ICI, une
+  --    fois ; le rang 1, le filtre et les natures la lisent.
+  v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end;
+
   -- 2. Le régime de TVA déclaré (vide s'il ne l'est pas).
   select e.regime_tva into v_regime
     from public.emetteur e
    where e.pro_id = v_pro;
 
   -- 3. Les lignes, lues UNE fois : y a-t-il un poste, et quelles lignes
-  --    chiffrées contredisent le régime, dans l'ordre du devis.
+  --    chiffrées sont fautives, avec la clé de chacune, dans l'ordre du
+  --    devis. Les deux tableaux ont la MÊME condition et le MÊME ordre
+  --    (unique : `ordre, id`) : ils s'alignent, indice par indice.
   select coalesce(bool_or(l.type = 'poste'), false),
          coalesce(array_agg(l.id order by l.ordre, l.id)
                     filter (where l.type in ('poste', 'option')
                               and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0)
-                                   or (v_regime = 'reel' and l.taux_tva_centiemes = 0))),
+                                   or (v_regime = 'reel' and l.taux_tva_centiemes = 0)
+                                   or (v_regime = 'reel' and v_neuf_tva is true
+                                       and l.taux_tva_centiemes in (550, 1000)))),
+                  '{}'),
+         coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise'
+                                 when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva'
+                                 else 'devis_taux_reduit_neuf' end
+                            order by l.ordre, l.id)
+                    filter (where l.type in ('poste', 'option')
+                              and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0)
+                                   or (v_regime = 'reel' and l.taux_tva_centiemes = 0)
+                                   or (v_regime = 'reel' and v_neuf_tva is true
+                                       and l.taux_tva_centiemes in (550, 1000)))),
                   '{}')
-    into v_un_poste, v_fautives
+    into v_un_poste, v_fautives, v_cles_lignes
     from public.devis_lignes l
    where l.devis_id = p_devis;
 
@@ -14613,21 +14923,31 @@ begin
     rang := 1; cle := 'devis_client'; nature := 'regle_opus';
     phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.';
     return next;
+  elsif v_valable is null then
+    rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus';
+    phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.';
+    return next;
   end if;
   if not v_un_poste then
     rang := 2; cle := 'devis_lignes'; nature := 'regle_opus';
     phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.';
     return next;
   end if;
-  -- Un devis n'a qu'un régime : toutes ses lignes fautives portent la même
-  -- clé (la franchise, ou le réel), dans l'ordre `ordre, id`.
-  foreach v_ligne in array v_fautives loop
-    if v_regime = 'franchise' then
+  -- UNE clé par ligne fautive, dans l'ordre `ordre, id` : la franchise
+  -- (toutes les lignes d'un devis en franchise portent la même), et, au
+  -- réel, une ligne sans TVA ou une ligne à taux réduit sur un chantier qui
+  -- crée un bâtiment neuf — les deux peuvent alterner dans un même devis.
+  for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop
+    v_ligne := v_fautives[v_i];
+    if v_cles_lignes[v_i] = 'devis_taux_franchise' then
       rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne;
       phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.';
-    else
+    elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then
       rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne;
       phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.';
+    else
+      rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne;
+      phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.';
     end if;
     return next;
   end loop;
@@ -14664,6 +14984,8 @@ begin
   end if;
 
   -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
+  --    Le rang garde sa position d'origine (100 + position) : un motif
+  --    filtré laisse un TROU, jamais une renumérotation.
   for v_motif, v_position in
     select u.m, u.o
       from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o)
@@ -14672,8 +14994,16 @@ begin
     rang := 100 + v_position;
     cle := split_part(v_motif, ': ', 1);
     phrase := substr(v_motif, char_length(cle) + 3);
+    -- Un client qui commande pour son entreprise, dans son activité
+    -- principale : les mentions dues à un particulier ne comptent plus, SAUF
+    -- les deux adresses (R. 123-237, question ouverte). Une réponse vide, ou
+    -- donnée pour un autre client, rend la condition nulle : rien ne saute.
+    continue when v_valable = 'professionnel'
+              and left(cle, 6) = 'conso_'
+              and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege');
     nature := case
       when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus'
+      when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence'
       when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence'
       else 'loi'
     end;
@@ -14695,7 +15025,8 @@ grant execute on function public.motifs_refus_remise(uuid) to authenticated;
 comment on function public.motifs_refus_remise(uuid) is
   'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
   'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
-  'à 9) puis ceux de l''entreprise (100 + position dans emetteur_incomplet). Aucune ligne = rien '
+  'à 9) puis ceux de l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
+  'réponse valable à « À quel titre ? », 2b-2). Aucune ligne = rien '
   'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '
   'refus pour un devis d''un autre et pour un devis qui n''existe pas). Ne lit jamais l''origine '
   'du devis (D4-c). Phrases identiques à MOTIFS_DEVIS (src/lib/devis.js). Section 49.9.';
@@ -17170,10 +17501,18 @@ as $$
                              from public.emetteur_assurances x where x.pro_id = auth.uid()), '[]'::jsonb),
     'mes_tarifs',
                  (select to_jsonb(x) from public.tarifs_pro x where x.pro_id = auth.uid()),
-    /* MON N° DE TVA reconnu par VIES (section 48) : pour un entrepreneur
-       individuel, c'est une donnée personnelle — il désigne une personne. */
+    /* MON N° DE TVA reconnu par VIES, ou DÉCLARÉ SUR L'HONNEUR (section 48,
+       2b-2) : pour un entrepreneur individuel, c'est une donnée personnelle
+       — il désigne une personne. Une déclaration s'exporte avec son texte et
+       sa date, mais SANS `reconnu_le` ni `vies_le` : l'export ne dit jamais
+       « reconnu » pour un numéro que VIES n'a pas reconnu. Une preuve `vies`
+       qui porte une ancienne déclaration garde les deux dates, et la
+       déclaration jointe. */
     'mon_numero_de_tva',
-                 (select to_jsonb(x) from public.preuves_tva x where x.pro_id = auth.uid()),
+                 (select case when x.source = 'declaration'
+                              then to_jsonb(x) - 'reconnu_le' - 'vies_le'
+                              else to_jsonb(x) end
+                    from public.preuves_tva x where x.pro_id = auth.uid()),
     /* MA DISPONIBILITÉ AUX URGENCES (section 10) — l'article 15 : mon métier
        d'urgence, mon rayon, mon délai, et trois colonnes mortes, toujours à 0.
        Mes TARIFS sont dans `mes_tarifs`, colonnes de la section 47 comprises. */

@@ -193,6 +193,10 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       lieuVille: null,
       delaiExecution: null,
       retenueGarantieCentiemes: null,
+      /* 2b-2 : « Oui » à la question TVA du chantier — ses lignes à 10 %
+         portent `devis_taux_reduit_neuf` : le seul endroit où ce motif se
+         voit sans `.env` (cahier §3.9). */
+      chantierNeufTva: true,
       generation: num(2 * HEURE),
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
@@ -226,6 +230,11 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       validiteJours: 30,
       acompteCentiemes: 3000,
       acompteNature: 'acompte',
+      /* 2b-2 : Mme Martin commande à titre privé — la réponse est donnée
+         POUR elle (`pourQuiClient`) : sans elle, « Ce devis » ne serait plus
+         complet (`devis_pour_qui`). */
+      pourQui: 'consommateur',
+      pourQuiClient: martin.id,
       generation: num(8 * JOUR),
       createdAt: il(9 * JOUR),
       modifieLe: il(8 * JOUR),
@@ -243,6 +252,8 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       validiteJours: null,
       acompteCentiemes: 3000,
       acompteNature: null,
+      pourQui: 'consommateur',
+      pourQuiClient: martin.id,
       generation: num(6 * JOUR),
       createdAt: il(7 * JOUR),
       modifieLe: il(6 * JOUR),
@@ -668,6 +679,9 @@ export function creerBaseDevisDemo({
     const n = horodatage();
     devis.set(op.id, {
       ...choisirChamps(x, CHAMPS_DEVIS),
+      /* La date du « Oui » au chantier neuf : posée par la base, à l'instant
+         où la réponse DEVIENT vraie (`tient_le_devis()`, point 1 bis). */
+      chantierNeufConsoLe: x.chantierNeufConso === true ? n : null,
       id: op.id,
       proId,
       statut: 'brouillon',
@@ -708,7 +722,16 @@ export function creerBaseDevisDemo({
        toujours », ce qui est faux. */
     const t = totauxDevis(lignesDe(d.id), conditionsDe(x));
     if (!t.ok) throw refusCheck(t.contrainte === 'devis_plafond_check' ? 'devis' : 'devis_lignes', t.contrainte);
-    Object.assign(d, choisirChamps(x, CHAMPS_DEVIS), { source: d.source, generation: op.generation, modifieLe: horodatage() });
+    /* La date du « Oui » au chantier neuf, comme `tient_le_devis()` : posée
+       quand la réponse DEVIENT vraie, GARDÉE tant qu'elle le reste (renvoyer
+       « Oui » ne la rajeunit pas), effacée quand elle cesse de l'être. Une
+       date envoyée n'existe pas : elle n'est pas dans `CHAMPS_DEVIS`. */
+    const confirmeLe = x.chantierNeufConso === true
+      ? (d.chantierNeufConso === true && d.chantierNeufConsoLe ? d.chantierNeufConsoLe : horodatage())
+      : null;
+    Object.assign(d, choisirChamps(x, CHAMPS_DEVIS), {
+      source: d.source, generation: op.generation, modifieLe: horodatage(), chantierNeufConsoLe: confirmeLe,
+    });
     poserTotaux(d, t);
   }
 
@@ -973,7 +996,10 @@ export function creerBaseDevisDemo({
     const date = (x) => x.createdAt || dateDeDemandeDemo(x.id, maintenant());
     return {
       ...d,
-      client: client ? { nom: client.nom } : null,
+      /* Le type et le SIRET de la fiche (2b-2), comme `LIENS_DU_DEVIS_OUVERT` :
+         le type choisit la phrase de la proposition, le SIRET nourrit un avis.
+         Sans valeur par défaut. */
+      client: client ? { nom: client.nom, type: client.type ?? null, siret: client.siret ?? null } : null,
       demande: dem ? { createdAt: date(dem), budget: dem.budget ?? null, texte: dem.titre ?? null } : null,
       urgence: urg ? { createdAt: date(urg), texte: urg.titre ?? null } : null,
     };

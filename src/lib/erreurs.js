@@ -177,7 +177,7 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   client_ville_check: TEXTE_TROP_LONG,
 
   /* --- Le chiffrage d'un devis : section 49 (lot 1 du module devis) ---
-     LES TRENTE (vingt-trois au lot 1, sept au lot 2a), et pas seulement celles qu'on tape. L'écran refuse
+     LES TRENTE ET UNE (vingt-trois au lot 1, sept au lot 2a, une à 2b-2), et pas seulement celles qu'on tape. L'écran refuse
      AVANT d'envoyer (`validerLigne`, `validerDevis`, dans `devis.js`, avec
      les mêmes noms) : ces phrases sortent donc d'une version en retard,
      d'un client modifié — ou de la base qui voit ce que l'écran ne voit
@@ -209,6 +209,11 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
   devis_lieu_ville_check: TEXTE_TROP_LONG,
   devis_objet_check: TEXTE_TROP_LONG,
+  /* 2b-2 : la réponse à « À quel titre ? » — l'application n'envoie que les
+     quatre valeurs que la base connaît ; une autre vient d'une version en
+     retard (ou en avance) de l'application. */
+  devis_pour_qui_check: 'cette réponse à « À quel titre ? » n’est pas connue d’Opus : rien n’a été enregistré. '
+    + 'Mettez l’application à jour, puis réessayez.',
   /* LE PLAFOND — LA PHRASE DE REPLI, vraie quel que soit le chemin. Trois
      écritures y mènent, et chacune a SA phrase (`PHRASES_DU_PLAFOND`, plus
      bas, que l'écran demande par `messageDEcritureDuDevis`) : une LIGNE, une

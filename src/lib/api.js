@@ -33,7 +33,9 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 /* Le SIRET (section 45). `siret.js` n'importe rien, `erreurs.js` non plus,
    et `siret-demo.js` pas davantage : aucun cycle possible avec ce fichier. */
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
-import { analyserNumeroTva, ESSAIS_VIES } from './tva';
+import {
+  analyserNumeroTva, ESSAIS_VIES, REFUS_RETENU_MS, DECLARATION_TVA, declarableSansReponse,
+} from './tva';
 import { NOM_ENTREPRISE_MAX } from './entreprise';
 import {
   issueDeVerification, avecDelai, REFUS_DEVIS, SUPPRESSION_DEPASSEE, ErreurPoste, REFUS_DEMANDES, ErreurDeLaBase, REPONSE_FERMEE,
@@ -2164,20 +2166,38 @@ const copieEmetteur = (f) => ({
    échec de lecture ferait croire que rien n'est enregistré — et un
    « Enregistrer » touché là effacerait ce qui l'était (cahier 9.1-29).
    -------------------------------------------------------------------------- */
+/* Ce que « Mon entreprise » lit de la preuve du n° de TVA : la date de la
+   déclaration sur l'honneur depuis 2b-2 (`declare_le`), à côté de celle du
+   contrôle par VIES. */
+/** « Cette colonne n'existe pas » (42703), quand c'est CELLE-LÀ : une base qui
+ *  n'a pas encore reçu la migration qui la pose. */
+function colonneAbsente(erreur, colonne) {
+  return !!erreur && erreur.code === '42703' && String(erreur.message || '').includes(colonne);
+}
+
 async function monEmetteurSupabase() {
   /* La quatrième : le n° de TVA reconnu par VIES (section 48). Elle se lit
      avec les trois autres, parce que l'en-tête et ce qui manque en
      dépendent ; et elle échoue avec elles — un numéro qu'on n'a pas pu
      lire ne doit pas ressembler à un numéro absent. */
-  const [e, a, t, v] = await Promise.all([
+  const [e, a, t, v0] = await Promise.all([
     supabase.from('emetteur').select('*').eq('pro_id', currentUserId).maybeSingle(),
     supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }),
     supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
-    supabase.from('preuves_tva').select('siren, numero, reconnu_le, source').eq('pro_id', currentUserId)
+    supabase.from('preuves_tva').select('siren, numero, reconnu_le, source, declare_le').eq('pro_id', currentUserId)
       .maybeSingle(),
   ]);
   for (const r of [e, a, t]) if (r.error) throw r.error;
+  /* UNE BASE EN RETARD D'UNE MIGRATION (2b-2, critique base M9) : sans la
+     colonne `declare_le` (42703), on relit SANS elle — « Mon entreprise » ne
+     tombe pas entière pour une colonne de plus. Aucune déclaration ne peut
+     alors exister : la contrainte de la source ne la connaît pas. */
+  let v = v0;
+  if (v.error && colonneAbsente(v.error, 'declare_le')) {
+    v = await supabase.from('preuves_tva').select('siren, numero, reconnu_le, source').eq('pro_id', currentUserId)
+      .maybeSingle();
+  }
   /* UNE SEULE ERREUR N'EN EST PAS UNE : la table qui n'existe pas encore.
      Sur une base où la section 48 n'est pas posée, il n'y a AUCUN numéro
      reconnu — c'est vrai, et la fiche doit se lire quand même. Le
@@ -2965,6 +2985,14 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
   poser('acompte_centimes', 'acompteCentimes');
   poser('acompte_nature', 'acompteNature');
   poser('validite_jours', 'validiteJours');
+  /* 2b-2 : à quel titre le client commande — la réponse ET le client pour
+     lequel elle a été donnée, en une écriture (PAIRES_DEVIS) —, et les deux
+     questions du chantier. JAMAIS la date du « Oui » (`chantier_neuf_conso_le`) :
+     la base seule la pose, et 49.7 ne l'accorde à personne. */
+  poser('pour_qui', 'pourQui');
+  poser('pour_qui_client', 'pourQuiClient');
+  poser('chantier_neuf_conso', 'chantierNeufConso');
+  poser('chantier_neuf_tva', 'chantierNeufTva');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3165,6 +3193,9 @@ async function relireTotauxDevisSupabase(devisId) {
     .select('total_ht_centimes, total_tva_centimes, total_ttc_centimes, remise_ht_centimes, acompte_ttc_centimes, '
       + 'total_ttc_options_centimes, remise_centimes, remise_centiemes, acompte_centimes, acompte_centiemes, '
       + 'acompte_nature, retenue_garantie_centiemes, generation, modifie_le, '
+      /* 2b-2 : la réponse « à quel titre » et le chantier que la BASE a vus,
+         dans la même photo que les totaux (`totauxDepuisBase`, bloc `demande`). */
+      + 'client_id, pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_conso_le, chantier_neuf_tva, '
       + 'devis_tva(taux_tva_centiemes, base_centimes, remise_centimes, tva_centimes, nb_lignes)')
     .eq('id', devisId)
     .maybeSingle();
@@ -5567,7 +5598,29 @@ async function controlerTvaSupabase(numero) {
    une clé de deux CHIFFRES juste est reconnue ; une clé en lettres
    commençant par « Z » trouve VIES saturé ; toute autre clé en lettres est
    refusée. Le reste — la forme, la clé, le SIREN, le numéro déjà publié —
-   suit les mêmes règles que la fonction Edge, dans le même ordre. */
+   suit les mêmes règles que la fonction Edge, dans le même ordre.
+
+   2b-2 : ELLE SE SOUVIENT, COMME LA FONCTION (cahier §3.3). Un refus est
+   RETENU trois heures pour ce compte et ce numéro (`refusTvaDemo`) — c'est
+   lui qui permet ensuite de DÉCLARER le numéro sur l'honneur —, et un
+   contrôle resté sans réponse est compté (`silencesTvaDemo`, la règle P5).
+   Un refus n'efface jamais une DÉCLARATION de ce numéro : une preuve VIES
+   qui en portait une redevient une déclaration, et la réponse le dit
+   (`declare_le`). Le tout vit le temps de la session. */
+const refusTvaDemo = {};
+const silencesTvaDemo = {};
+const cleTvaDemo = (moi, numero) => `${moi}:${numero}`;
+/** La date de la déclaration de CE numéro qui reste, ou `undefined`. */
+function declarationTvaDemo(moi, numero) {
+  const p = preuvesTvaDemo[moi];
+  return p && p.numero === numero && p.declare_le ? p.declare_le : undefined;
+}
+/** L'instant du refus retenu (moins de trois heures) de ce numéro, ou `null`. */
+function refusRetenuTvaDemo(moi, numero) {
+  const t = refusTvaDemo[cleTvaDemo(moi, numero)];
+  return Number.isFinite(t) && Date.now() - t < REFUS_RETENU_MS ? t : null;
+}
+
 async function controlerTvaDemo(numero) {
   const saisie = analyserNumeroTva(numero);
   if (saisie.etat === 'cle_fausse') return { issue: 'cle_fausse' };
@@ -5577,20 +5630,144 @@ async function controlerTvaDemo(numero) {
   if (!r || r.retiree_le) return { issue: 'sans_entreprise' };
   if (r.tva) return { issue: 'deja_publie', numero: r.tva };
   if (analyserNumeroTva(saisie.numero, r.siren).etat !== 'pret') return { issue: 'autre_siren' };
-  await patienter(1500);
-  const cle = saisie.numero.slice(2, 4);
-  if (/^\d{2}$/.test(cle)) {
-    preuvesTvaDemo[moi] = {
-      siren: r.siren, numero: saisie.numero, reconnu_le: new Date().toISOString(), source: 'vies',
+  const n = saisie.numero;
+  /* (5 bis) Un refus retenu : VIES n'est pas rappelé, et la réponse dit si
+     une déclaration de ce numéro reste. */
+  const retenu = refusRetenuTvaDemo(moi, n);
+  if (retenu !== null) {
+    await patienter(300);
+    return {
+      issue: 'refuse', numero: n, reessayer_a: new Date(retenu + REFUS_RETENU_MS).toISOString(),
+      declare_le: declarationTvaDemo(moi, n),
     };
-    return { issue: 'reconnu', numero: saisie.numero, reconnu_le: preuvesTvaDemo[moi].reconnu_le };
   }
-  if (cle.startsWith('Z')) return { issue: 'indisponible', cause: 'sature' };
-  if (preuvesTvaDemo[moi] && preuvesTvaDemo[moi].numero === saisie.numero) delete preuvesTvaDemo[moi];
-  return { issue: 'refuse', numero: saisie.numero };
+  await patienter(1500);
+  const cle = n.slice(2, 4);
+  if (/^\d{2}$/.test(cle)) {
+    /* La déclaration de CE numéro reste JOINTE à la preuve VIES (le
+       déclencheur la garde) ; celle d'un autre numéro est remplacée. */
+    const avant = preuvesTvaDemo[moi];
+    const jointe = avant && avant.numero === n && avant.declare_le
+      ? { declare_le: avant.declare_le, declaration_texte: avant.declaration_texte || null } : {};
+    preuvesTvaDemo[moi] = {
+      siren: r.siren, numero: n, reconnu_le: new Date().toISOString(), source: 'vies', ...jointe,
+    };
+    return { issue: 'reconnu', numero: n, reconnu_le: preuvesTvaDemo[moi].reconnu_le };
+  }
+  if (cle.startsWith('Z')) {
+    const k = cleTvaDemo(moi, n);
+    silencesTvaDemo[k] = [...(silencesTvaDemo[k] || []), new Date().toISOString()];
+    return {
+      issue: 'indisponible', cause: 'sature',
+      declarable: declarableSansReponse(silencesTvaDemo[k], Date.now()) ? true : undefined,
+    };
+  }
+  /* LE REFUS : la preuve VIES de ce numéro qui portait une déclaration
+     redevient une déclaration ; ce qui n'en est pas une part. */
+  const p = preuvesTvaDemo[moi];
+  if (p && p.numero === n && p.source === 'vies' && p.declare_le) {
+    preuvesTvaDemo[moi] = { ...p, source: 'declaration', reconnu_le: p.declare_le };
+  } else if (p && p.numero === n && p.source !== 'declaration') {
+    delete preuvesTvaDemo[moi];
+  }
+  refusTvaDemo[cleTvaDemo(moi, n)] = Date.now();
+  return { issue: 'refuse', numero: n, declare_le: declarationTvaDemo(moi, n) };
 }
 
 export const controlerTva = hasSupabase ? controlerTvaSupabase : controlerTvaDemo;
+
+/* --------------------------------------------------------------------------
+   DÉCLARER SON N° DE TVA SUR L'HONNEUR, ET RETIRER SA DÉCLARATION — 2b-2.
+
+   Deux ACTIONS de la fonction Edge `tva` (cahier §2.10) : c'est elle seule
+   qui écrit `preuves_tva`, et elle seule sait qu'une réponse de VIES a eu
+   lieu (un refus retenu, ou trois contrôles sans réponse). Le même contrat
+   que le contrôle : TOUJOURS `{ issue, … }`, jamais une exception.
+
+   LE TEXTE QUI PART EST CELUI QUE L'ÉCRAN A MONTRÉ (`DECLARATION_TVA`,
+   critique base I3) : la fonction le compare à la version en vigueur, et
+   range celui qu'elle a reçu. `engagement` : la case est cochée — l'écran
+   ne l'envoie qu'à `true`, et la fonction refuse tout le reste
+   (`sans_engagement`). Ni VIES ni compteur : quinze secondes suffisent.
+   -------------------------------------------------------------------------- */
+export const DELAI_DECLARATION_TVA_MS = 15000;
+
+async function appelTvaSupabase(corps) {
+  const debut = Date.now();
+  let reponse;
+  try {
+    reponse = await supabase.functions.invoke('tva', { body: corps, timeout: DELAI_DECLARATION_TVA_MS });
+  } catch (e) {
+    return issueDeVerification(e, Date.now() - debut, DELAI_DECLARATION_TVA_MS);
+  }
+  const { data, error } = reponse || {};
+  if (error) return issueDeVerification(error, Date.now() - debut, DELAI_DECLARATION_TVA_MS);
+  if (!data || typeof data !== 'object' || typeof data.issue !== 'string') {
+    return { issue: 'service_indisponible' };
+  }
+  return data;
+}
+
+async function declarerTvaSupabase(numero, { engagement = false } = {}) {
+  return appelTvaSupabase({
+    numero: analyserNumeroTva(numero).numero,
+    action: 'declarer',
+    engagement: engagement === true,
+    texte: DECLARATION_TVA,
+  });
+}
+
+/* La démonstration suit l'ORDRE de la fonction : forme, engagement et
+   texte, entreprise, publié, SIREN, la preuve du compte, une réponse de
+   VIES (un refus retenu, ou trois contrôles sans réponse), puis la
+   déclaration, datée « par la base » — ici, au moment de l'écrire. */
+async function declarerTvaDemo(numero, { engagement = false } = {}) {
+  const saisie = analyserNumeroTva(numero);
+  if (saisie.etat === 'cle_fausse') return { issue: 'cle_fausse' };
+  if (saisie.etat !== 'pret') return { issue: 'mal_forme' };
+  if (engagement !== true) return { issue: 'sans_engagement' };
+  const moi = String(moiEnDemo());
+  const r = entreprisesDemo[moi];
+  if (!r || r.retiree_le) return { issue: 'sans_entreprise' };
+  if (r.tva) return { issue: 'deja_publie', numero: r.tva };
+  if (analyserNumeroTva(saisie.numero, r.siren).etat !== 'pret') return { issue: 'autre_siren' };
+  const n = saisie.numero;
+  await patienter(500);
+  const p = preuvesTvaDemo[moi];
+  if (p && p.siren === r.siren) {
+    if (p.source === 'vies' && p.numero !== n) return { issue: 'deja_reconnu', numero: p.numero, reconnu_le: p.reconnu_le };
+    if (p.source === 'vies') return { issue: 'reconnu', numero: n, reconnu_le: p.reconnu_le };
+    if (p.source === 'declaration' && p.numero === n && p.declare_le) return { issue: 'declare', numero: n, declare_le: p.declare_le };
+  }
+  const permise = refusRetenuTvaDemo(moi, n) !== null
+    || declarableSansReponse(silencesTvaDemo[cleTvaDemo(moi, n)] || [], Date.now());
+  if (!permise) return { issue: 'non_refuse' };
+  const le = new Date().toISOString();
+  preuvesTvaDemo[moi] = {
+    siren: r.siren, numero: n, source: 'declaration', reconnu_le: le, declare_le: le, declaration_texte: DECLARATION_TVA,
+  };
+  return { issue: 'declare', numero: n, declare_le: le };
+}
+
+export const declarerTva = hasSupabase ? declarerTvaSupabase : declarerTvaDemo;
+
+async function retirerDeclarationTvaSupabase() {
+  return appelTvaSupabase({ action: 'retirer' });
+}
+
+/* Seule une ligne `declaration` part : une preuve VIES qui porte une
+   ancienne déclaration n'est pas touchée — c'est le numéro reconnu qui
+   s'imprime. */
+async function retirerDeclarationTvaDemo() {
+  const moi = String(moiEnDemo());
+  await patienter(400);
+  const p = preuvesTvaDemo[moi];
+  if (!p || p.source !== 'declaration') return { issue: 'rien_a_retirer' };
+  delete preuvesTvaDemo[moi];
+  return { issue: 'retire', numero: p.numero };
+}
+
+export const retirerDeclarationTva = hasSupabase ? retirerDeclarationTvaSupabase : retirerDeclarationTvaDemo;
 
 /* --------------------------------------------------------------------------
    MON ENTREPRISE — l'identité rattachée à MA fiche, et elle seule.

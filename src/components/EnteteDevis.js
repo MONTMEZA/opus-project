@@ -28,6 +28,19 @@
  * `focusChamp('delai' | 'lieu')` donne le focus au champ — sur l'iPhone, le
  * contenu remonte alors jusqu'au curseur (`CLAVIER`). Ça ne se vérifie qu'au
  * doigt (cahier §3.9).
+ *
+ * LOT 2b-2 — « À QUEL TITRE ? » : sous le choix du client, un bloc à HAUTEUR
+ * FIXE (la règle « garder la grande place », comme la ligne « Pour le
+ * remettre ») — ses textes possibles sont posés en GABARITS invisibles
+ * (`GABARITS_A_QUEL_TITRE`, devis.js), le texte lu par-dessus ; puis UNE
+ * rangée de deux moitiés, chacune à la place de son plus long libellé. La
+ * moitié GAUCHE n'écrit jamais (« Répondre », « Autre réponse », « Changer »
+ * ouvrent la même feuille) ; la DROITE n'écrit que dans la proposition
+ * (« Oui, à titre privé ») et garde sa place vide sinon : un bouton qui écrit
+ * n'apparaît jamais là où était un bouton qui n'écrit pas. Ce que le bloc dit
+ * vient de `resumeAQuelTitre` (devis.js), que la saisie calcule : l'en-tête
+ * ne décide rien, ne contient aucune `FeuilleBas`, et ne reçoit que deux
+ * rappels.
  */
 import React, {
   forwardRef, useImperativeHandle, useRef, useState,
@@ -42,7 +55,35 @@ import ChampVille from './ChampVille';
 import { libelleBudget } from '../data/annonces';
 import {
   DELAI_PAR_DEFAUT, LONGUEURS, avertissementDelai, origineLisible, texteDeLaDemande,
+  A_QUEL_TITRE, GABARITS_A_QUEL_TITRE,
 } from '../lib/devis';
+
+/* Les libellés que chaque moitié peut porter : la moitié prend la place du
+   PLUS LONG, quel que soit l'état (règle « garder la grande place »). */
+const LIBELLES_GAUCHE = Object.freeze([A_QUEL_TITRE.repondre, A_QUEL_TITRE.autreReponse, A_QUEL_TITRE.changer]);
+const LIBELLES_DROITE = Object.freeze([A_QUEL_TITRE.ouiATitrePrive]);
+
+/* Des GABARITS invisibles qui donnent la hauteur — ni touchés, ni lus par
+   VoiceOver —, et ce qui se lit vraiment posé PAR-DESSUS : la technique de
+   `LigneRemise` (`PourRemettre.js`). */
+function Superpose({ gabarits, children }) {
+  return (
+    <View style={s.superpose}>
+      {gabarits.map((g, i) => (
+        <View
+          key={`gabarit-${i}`}
+          style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]}
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          {g}
+        </View>
+      ))}
+      <View style={[s.couche, gabarits.length > 0 && s.coucheSuivante]}>{children}</View>
+    </View>
+  );
+}
 
 /** Le texte du bandeau, une fois : `verifier-devis` le cherche ici. */
 export const BANDEAU_CHIFFRAGE = 'Chiffrage — ce brouillon ne part pas encore.';
@@ -51,6 +92,7 @@ const texte = (v) => (v == null ? '' : String(v));
 
 const EnteteDevis = forwardRef(function EnteteDevis({
   devis, client = null, avisRegime = null, erreurs = {}, phraseLieu = null, ligneRemise = null,
+  aQuelTitre = null, onRepondreAQuelTitre = null, onOuiATitrePrive = null,
   onEnregistrer, onFrappe = null, onChoisirClient, onNouveauClient, onMonEntreprise, onRelireRegime,
 }, ref) {
   /* Le lieu, tenu ICI : `ChampVille` remonte chaque lettre, et l'écran n'a
@@ -200,6 +242,36 @@ const EnteteDevis = forwardRef(function EnteteDevis({
         </View>
       </View>
       {sous('clientId')}
+
+      {/* « À QUEL TITRE ? » (2b-2) — seulement quand un client est choisi :
+          le bloc apparaît quand la feuille du carnet se ferme, jamais sous
+          le doigt. Sa hauteur ne dépend pas de ce qu'il dit. */}
+      {!!aQuelTitre && (
+        <View style={s.aQuelTitre}>
+          <Text style={s.titre} accessibilityRole="header">{A_QUEL_TITRE.sousTitre}</Text>
+          <Superpose gabarits={GABARITS_A_QUEL_TITRE.map((g) => <Text key={g} style={s.aQuelTitreTexte}>{g}</Text>)}>
+            <Text style={s.aQuelTitreTexte}>{aQuelTitre.texte}</Text>
+          </Superpose>
+          <View style={s.deux}>
+            <View style={s.moitie}>
+              <Superpose gabarits={LIBELLES_GAUCHE.map((l) => <BtnOutline key={l} label={l} />)}>
+                {/* LA MOITIÉ GAUCHE N'ÉCRIT JAMAIS : elle ouvre la feuille. */}
+                <BtnOutline label={aQuelTitre.gauche.libelle} onPress={onRepondreAQuelTitre} />
+              </Superpose>
+            </View>
+            <View style={s.moitie}>
+              <Superpose gabarits={LIBELLES_DROITE.map((l) => <BtnOutline key={l} label={l} />)}>
+                {/* LA DROITE N'ÉCRIT QUE DANS LA PROPOSITION ; sinon, sa place
+                    reste vide. */}
+                {aQuelTitre.droite && aQuelTitre.droite.ecrit ? (
+                  <BtnOutline label={aQuelTitre.droite.libelle} onPress={onOuiATitrePrive} />
+                ) : <View />}
+              </Superpose>
+            </View>
+          </View>
+          {sous('pourQui')}
+        </View>
+      )}
 
       <Text style={s.titre}>Objet</Text>
       <ChampLocal
@@ -353,6 +425,16 @@ const s = StyleSheet.create({
   titre: { fontFamily: F.oswald6, fontSize: T.corps, color: C.ink, marginTop: S.md },
   client: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, marginBottom: S.xs },
   deux: { flexDirection: 'row', gap: S.sm },
+  aQuelTitre: { gap: S.xs },
+  aQuelTitreTexte: { fontFamily: F.inter, fontSize: T.corps, color: C.ink, lineHeight: interligne(T.corps) },
+  /* LA SUPERPOSITION (la technique de `LigneRemise`) : une RANGÉE prend la
+     hauteur de son élément le plus haut ; chaque couche fait toute la
+     largeur, les suivantes reviennent sous la première par une marge de
+     −100 %. */
+  superpose: { flexDirection: 'row', alignItems: 'flex-start' },
+  couche: { width: '100%' },
+  coucheSuivante: { marginLeft: '-100%' },
+  gabarit: { opacity: 0, pointerEvents: 'none' },
   moitie: { flex: 1, minWidth: 0 },
   cp: { width: 112 },
   ville: { flex: 1, minWidth: 0 },

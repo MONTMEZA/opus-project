@@ -64,6 +64,23 @@
  * « Conditions » ouverte SUR son champ (et « ‹ » y ramène à la liste), ou
  * « Mon entreprise » sur sa section.
  *
+ * LOT 2b-2 (cahier §3.4-§3.8) — « À QUEL TITRE ? » ET « LE CHANTIER » :
+ *   - sous le choix du client, le bloc « À quel titre ? » (dans l'en-tête,
+ *     à hauteur fixe) ; sa feuille des quatre réponses s'ouvre par l'état
+ *     UNIQUE `feuille` (`{ type: 'pour_qui' }`), jamais par l'en-tête ;
+ *   - avant « Conditions », la rangée « Le chantier », qui ouvre une carte
+ *     plein écran (`CARTE_CHANTIER`, une valeur de plus de l'état `carte`) ;
+ *     le « Oui » à la première question se confirme dans une feuille
+ *     (`{ type: 'chantier_neuf' }`) posée par-dessus ;
+ *   - « en route » et « pas enregistré » se CALCULENT à chaque événement de
+ *     la file (`etatDesChampsDuDevis`), jamais mémorisés : un état « en
+ *     cours » gardé en mémoire survivait à un échec (critique écran E-B2) ;
+ *   - la partie « Votre entreprise » de la liste DÉPEND DU DEVIS : la
+ *     réponse « à quel titre » retire des mentions. Quand la réponse que la
+ *     BASE a vue change, les DEUX parties se relisent ; et la phrase des
+ *     mentions dues à un particulier suit la réponse rangée AVEC la liste
+ *     (`liste.reponseVue`), jamais celle de l'écran.
+ *
  * EN DÉMONSTRATION, tout cela VIT : la base en mémoire de
  * `src/data/devis-demo.js` refuse avec les mots de la vraie base, une
  * écriture y prend un tiers de seconde, et les états « enregistrement… » ou
@@ -108,9 +125,14 @@ import {
   cheminDeLEcriture, refusDeLaLigne, renvoyerLaLigne, creerRenvoisAutomatiques, phraseDuRejeu, echecsDeLaFile,
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
   lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
+  pourQuiValable, resumeAQuelTitre, resumeDuChantier, etatDesChampsDuDevis,
+  CHAMPS_A_QUEL_TITRE, CHAMPS_DU_CHANTIER, GABARITS_DU_CHANTIER, LE_CHANTIER,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
+import ChantierDevis from '../components/ChantierDevis';
+import FeuilleAQuelTitre from '../components/FeuilleAQuelTitre';
+import FeuilleChantierNeuf from '../components/FeuilleChantierNeuf';
 import PourRemettre, { LigneRemise } from '../components/PourRemettre';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
@@ -131,6 +153,13 @@ const NOMS_ENTETE = Object.freeze({
      qu'elle n'est pas choisie, jamais « Acompte » seul. */
   acompteNature: 'Acompte ou arrhes',
   validiteJours: 'Validité de l’offre',
+  /* 2b-2 : la réponse et le client pour lequel elle est donnée sont UNE
+     écriture (la paire) — un seul nom ; les deux questions du chantier
+     aussi (critique écran E-M3). */
+  pourQui: 'À quel titre',
+  pourQuiClient: 'À quel titre',
+  chantierNeufConso: 'Le chantier',
+  chantierNeufTva: 'Le chantier',
 });
 
 /* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
@@ -147,6 +176,12 @@ const CHAMPS_CONDITIONS = Object.freeze([
    retour, la garde et VoiceOver les traitent pareil. Un identifiant de ligne
    est un UUID : il ne vaut jamais « conditions » ni « pour_remettre ». */
 const CARTE_CONDITIONS = 'conditions';
+/* …et `CARTE_CHANTIER` (lot 2b-2) : la carte des deux questions sur le neuf. */
+const CARTE_CHANTIER = 'chantier';
+
+/* « Rien en route, rien en échec » : l'état de départ d'un ensemble de
+   champs, avant le premier événement de la file. */
+const AUCUN_ETAT = Object.freeze({ enRoute: false, enEchec: false, local: false });
 
 /* Ce qu'une lecture de la liste « Pour le remettre » relit parce que cela
    vient de changer : rien (lot 2b-1, relecture ECR-1). */
@@ -324,7 +359,7 @@ function BasDuDevis({
   options, franchise, reel, regime, propositions, regimeEnEchec, totaux, totauxIllisibles, devis, erreurs,
   etatDeLOption, onReessayer,
   onOuvrir, onAjouter, onRelireTotaux, onOuvrirConditions, onSupprimer, confirmeSuppression, phraseSuppression,
-  rangeeRemise = null,
+  rangeeRemise = null, resumeChantier = null, onOuvrirChantier = null,
 }) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
@@ -443,6 +478,42 @@ function BasDuDevis({
         )}
       </View>
 
+      {/* « LE CHANTIER » (lot 2b-2) — juste AVANT « Conditions », jamais
+          au-dessus des lignes. Elle n'existe que si une question au moins est
+          montrée (`resumeDuChantier` rend alors son résumé). SA HAUTEUR NE
+          DÉPEND PAS DE CE QU'ELLE DIT : tous ses résumés possibles sont posés
+          en gabarits invisibles (`GABARITS_DU_CHANTIER`), le résumé lu
+          par-dessus — la règle « garder la grande place ». */}
+      {!!resumeChantier && (
+        <Pressable
+          onPress={onOuvrirChantier}
+          accessibilityRole="button"
+          accessibilityLabel={`${LE_CHANTIER.titre} : ${resumeChantier}. Ouvrir`}
+          style={({ pressed }) => [s.resume, pressed && APPUI.discret]}
+        >
+          <View style={s.resumeTexte}>
+            <Text style={s.replieTexte}>{LE_CHANTIER.titre}</Text>
+            <View style={s.superpose}>
+              {GABARITS_DU_CHANTIER.map((g, i) => (
+                <View
+                  key={`gabarit-${i}`}
+                  style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]}
+                  aria-hidden
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={s.aide}>{g}</Text>
+                </View>
+              ))}
+              <View style={[s.couche, s.coucheSuivante]}>
+                <Text style={s.aide}>{resumeChantier}</Text>
+              </View>
+            </View>
+          </View>
+          <ChevronRight size={16} color={C.accent2} />
+        </Pressable>
+      )}
+
       {/* LES CONDITIONS — une rangée qui les RÉSUME et ouvre leur carte
           (lot 2a). Ce qui manque passe d'abord ; un champ refusé se dit. */}
       <Pressable
@@ -550,16 +621,29 @@ export default function SaisieDevisScreen({
        du lot 2a — la carte ne juge « ramenée » que contre elle). */
     demande: demandeDuDevis({}),
   }));
+  /* LES DERNIERS TOTAUX REÇUS, aussi dans une référence (2b-2) : la liste
+     « Pour le remettre », à son retour, range avec elle la réponse « à quel
+     titre » que la base a vue DANS LA MÊME PHOTO — le bloc `demande` de ces
+     totaux, relus sous la même génération de la file. */
+  const totauxRef = useRef(totaux);
+  const poserTotaux = (t) => {
+    totauxRef.current = t;
+    setTotaux(t);
+  };
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
   const [attente, setAttente] = useState({
     nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
+    etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT,
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
   const [memoire, setMemoire] = useState(null);
   /* L'UNIQUE ÉTAT DE FEUILLE : `null`, `{ type: 'client' }`,
-     `{ type: 'ajout', valeurs, devisOrigineId }` ou
-     `{ type: 'poste', poste, prixPropose }`. Jamais deux booléens. */
+     `{ type: 'ajout', valeurs, devisOrigineId }`,
+     `{ type: 'poste', poste, prixPropose }`, et depuis 2b-2
+     `{ type: 'pour_qui' }` (« À quel titre ? ») et
+     `{ type: 'chantier_neuf' }` (la confirmation du chantier neuf). Jamais
+     deux booléens. */
   const [feuille, setFeuille] = useState(null);
   const [phraseLieu, setPhraseLieu] = useState(null);
   const [garde, setGarde] = useState(null);
@@ -607,9 +691,21 @@ export default function SaisieDevisScreen({
      `lectureListe` numérote les lectures : seule la DERNIÈRE partie
      s'affiche. `monte` : une réponse qui arrive après le démontage ne
      touche à rien. */
+  /* `reponseVue` (2b-2, cahier §3.6) : la réponse « à quel titre » VALABLE
+     que la base avait quand elle a calculé CETTE liste — le bloc `demande`
+     des totaux relus sous la même génération de la file, rangé avec elle au
+     retour. `undefined` : aucune liste lue, ou une photo dont la génération
+     n'est pas celle de la liste (la phrase de prudence se dit alors). Jamais
+     la réponse de l'écran, en avance d'un envoi. Une référence aussi : la
+     règle de relecture des événements `totaux` la compare. */
   const [liste, setListe] = useState({
-    motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
+    motifs: null, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, reponseVue: undefined,
   });
+  const reponseVueRef = useRef(undefined);
+  /* La GÉNÉRATION de la file à laquelle les derniers totaux ont été relus :
+     la réponse qu'ils portent n'est celle de la liste que si la liste est
+     lue sous la même. */
+  const totauxGenRef = useRef(null);
   const lectureListe = useRef(0);
   const monte = useRef(true);
   useEffect(() => () => { monte.current = false; }, []);
@@ -687,6 +783,7 @@ export default function SaisieDevisScreen({
     const f = fileRef.current;
     if (!f) return;
     const e = f.etats();
+    const entrees = f.entreesVoulues();
     const retraits = Object.keys(e).filter((id) => f.retiree(id) && e[id] === 'echec').length;
     setAttente({
       nb: f.enAttente(),
@@ -707,8 +804,17 @@ export default function SaisieDevisScreen({
       renvoisEnRoute: f.renvoisEnRoute().length,
       /* Ceux que « Réessayer » de leur bande peut renvoyer : jamais un refus
          définitif (TC-1). */
-      retraitsRenvoyables: retraitsARenvoyer(f.entreesVoulues().map((x) => ({ ...x, erreur: f.erreurDe(x.cle) })),
+      retraitsRenvoyables: retraitsARenvoyer(entrees.map((x) => ({ ...x, erreur: f.erreurDe(x.cle) })),
         { estDefinitif: estUnRefusDefinitif }).length,
+      /* « À QUEL TITRE » ET « LE CHANTIER » (2b-2, cahier §3.8) : en route,
+         en échec — calculés ICI, depuis ce que la file veut et ce que la base
+         a confirmé, à CHAQUE événement de la file (`etatDesChampsDuDevis`),
+         jamais mémorisés d'un geste à l'autre : un « enregistrement… »
+         gardé en mémoire survivait à un échec (critique écran E-B2). */
+      etatAQuelTitre: etatDesChampsDuDevis(entrees, CHAMPS_A_QUEL_TITRE),
+      etatChantier: etatDesChampsDuDevis(entrees, CHAMPS_DU_CHANTIER),
+      etatQ1: etatDesChampsDuDevis(entrees, ['chantierNeufConso']),
+      etatQ2: etatDesChampsDuDevis(entrees, ['chantierNeufTva']),
     });
   };
 
@@ -766,6 +872,11 @@ export default function SaisieDevisScreen({
     lectureListe.current += 1;
     const n = lectureListe.current;
     const g = f.generation();
+    /* LA RÉPONSE QUE LA BASE A VUE DANS CETTE PHOTO (2b-2) : celle des
+       derniers totaux relus, s'ils l'ont été sous CETTE génération — sinon
+       elle n'est pas connue (`undefined`), et la phrase de prudence se dit. */
+    const t = totauxRef.current;
+    const vue = t && t.demande && totauxGenRef.current === g ? pourQuiValable(t.demande) : undefined;
     const causes = Array.isArray(cause) ? cause : [cause];
     setListe((l) => ({
       ...l,
@@ -792,13 +903,16 @@ export default function SaisieDevisScreen({
            ligne, elle, ne dépend d'aucune liste (`GABARITS_DE_LA_LIGNE`,
            devis.js) : rien n'est à garder pour elle. */
         const lues = !r.erreur && Array.isArray(r.motifs) ? r.motifs : null;
-        setListe(r.erreur
+        /* Un échec garde la dernière réponse vue : elle ne sert qu'à
+           comparer, et aucune liste ne s'affiche. */
+        if (!r.erreur) reponseVueRef.current = vue;
+        setListe((l) => (r.erreur
           ? {
-            motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE,
+            motifs: null, erreur: r.erreur, enLecture: false, relecture: AUCUNE_RELECTURE, reponseVue: l.reponseVue,
           }
           : {
-            motifs: lues, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE,
-          });
+            motifs: lues, erreur: null, enLecture: false, relecture: AUCUNE_RELECTURE, reponseVue: vue,
+          }));
       });
   };
 
@@ -843,7 +957,10 @@ export default function SaisieDevisScreen({
         }
         if (ev.cle === 'devis' && ev.etat === 'enregistree') rangerRef.current();
       } else if (ev.type === 'totaux') {
-        if (ev.totaux) setTotaux(ev.totaux);
+        if (ev.totaux) {
+          poserTotaux(ev.totaux);
+          totauxGenRef.current = fileRef.current ? fileRef.current.generation() : null;
+        }
         setTotauxIllisibles(false);
         rangerRef.current(ev.totaux);
         /* LA FILE EST AU REPOS, une écriture vient d'être confirmée (point 2) :
@@ -853,8 +970,14 @@ export default function SaisieDevisScreen({
         Promise.resolve().then(() => { if (vivant) rejouerLePlafond(); });
         /* …ET LA LISTE « POUR LE REMETTRE » SE RELIT (lot 2b-1), sous la
            même génération que ces totaux — la partie « Ce devis » se relit
-           (ECR-1) : jusqu'au retour, la carte ne la montre pas. */
-        lireLaListe('devis');
+           (ECR-1) : jusqu'au retour, la carte ne la montre pas. ET LA PARTIE
+           « VOTRE ENTREPRISE » AUSSI quand la réponse « à quel titre » que la
+           base a vue n'est plus celle de la dernière liste (2b-2, cahier
+           §3.6) : les mentions dues à un particulier en dépendent. Avant la
+           première liste, rien à comparer. */
+        const vueNouvelle = ev.totaux ? pourQuiValable(ev.totaux.demande) : reponseVueRef.current;
+        const changee = reponseVueRef.current !== undefined && vueNouvelle !== reponseVueRef.current;
+        lireLaListe(changee ? ['devis', 'entreprise'] : 'devis');
       } else if (ev.type === 'totaux_illisibles') {
         setTotauxIllisibles(true);
       } else if (ev.type === 'renomme' && ev.quoi === 'ligne') {
@@ -916,11 +1039,15 @@ export default function SaisieDevisScreen({
            laissée — et sa rangée le DIT (son état vient de la file). */
         const vue = fusionnerAvecLaFile({ devis: r.devis, lignes: r.lignes }, f.entreesVoulues());
         changerDevis(vue.devis);
-        if (r.devis.client) setClientAffiche({ nom: r.devis.client.nom });
+        /* Le TYPE et le SIRET de la fiche viennent avec (2b-2) : le bloc « À
+           quel titre ? » ne PROPOSE « à titre privé » que pour un type LU. */
+        if (r.devis.client) {
+          setClientAffiche({ nom: r.devis.client.nom, type: r.devis.client.type ?? null, siret: r.devis.client.siret ?? null });
+        }
         lignesRef.current = vue.lignes;
         setLignes(vue.lignes);
         r.lignes.forEach((l) => { derniereEnvoyee.current[l.id] = l; });
-        setTotaux({
+        poserTotaux({
           ht: r.devis.totalHtCentimes, tva: r.devis.totalTvaCentimes, ttc: r.devis.totalTtcCentimes,
           /* Les conditions telles que la BASE les a calculées (lot 2a). */
           reduction: r.devis.remiseHtCentimes ?? 0,
@@ -938,6 +1065,10 @@ export default function SaisieDevisScreen({
       if (!vivant) return;
       fileRef.current = f;
       desabonner = f.abonner(ecouter);
+      /* La photo de l'ouverture est celle de la génération de départ — si la
+         file n'écrit plus rien : sinon, la réponse vue attend les prochains
+         totaux (2b-2). */
+      if (ouverture.devisId && f.vide()) totauxGenRef.current = f.generation();
       setEtats(f.etats());
       /* UNE FILE QUI A SURVÉCU À L'ÉCRAN garde ses échecs : leurs phrases et
          ce qui est refusé définitivement se refont ici (point 1, par la porte
@@ -1080,6 +1211,9 @@ export default function SaisieDevisScreen({
        devis qui n'existe pas encore ne crée rien. */
     if (f.etatDe('devis') === 'locale' && !f.devisEnBase() && !Object.values(diff).some((x) => x != null)) return { ok, refus };
     f.devis(diff);
+    /* L'état « en route » de « À quel titre » et du chantier se lit tout de
+       suite (2b-2) : il ne dépend que de la file. */
+    majAttente();
     return { ok, refus };
   };
 
@@ -1159,8 +1293,9 @@ export default function SaisieDevisScreen({
       if (refConditions.current) refConditions.current.enregistrer();
       return;
     }
-    /* La liste « Pour le remettre » ne porte aucun champ : rien à lire. */
-    if (id === CARTE_POUR_REMETTRE) return;
+    /* La liste « Pour le remettre » ne porte aucun champ : rien à lire. La
+       carte « Le chantier » non plus : chaque pastille écrit à l'appui. */
+    if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER) return;
     if (!id || !refCarte.current) return;
     const lu = refCarte.current.lire();
     const f = fileRef.current;
@@ -1257,6 +1392,35 @@ export default function SaisieDevisScreen({
     poserCarte(CARTE_POUR_REMETTRE);
     setCleCarte((k) => k + 1);
     if (rappels.current.onCarte) rappels.current.onCarte(TITRE_POUR_REMETTRE);
+  };
+
+  /* « LE CHANTIER » (lot 2b-2, cahier §3.5) — une carte comme
+     « Conditions » : la carte ouverte s'enregistre d'abord, ce qui est tapé
+     dans l'en-tête part, et le clavier se ferme — il n'y a rien à écrire.
+     Ouverte depuis la liste (« Revoir « Le chantier » »), elle y ramène. */
+  const ouvrirChantier = () => {
+    if (carteRef.current && carteRef.current !== CARTE_CHANTIER) enregistrerCarte();
+    if (refEntete.current) refEntete.current.enregistrer();
+    Keyboard.dismiss();
+    poserRetour(null);
+    poserCarte(CARTE_CHANTIER);
+    setCleCarte((k) => k + 1);
+    if (rappels.current.onCarte) rappels.current.onCarte(LE_CHANTIER.titre);
+  };
+  const ouvrirChantierDepuisLaListe = () => {
+    ouvrirChantier();
+    poserRetour(CARTE_POUR_REMETTRE);
+  };
+  /* Une pastille de la carte : `{ chantierNeufConso: false }`,
+     `{ chantierNeufTva: … }` — par la file de l'en-tête. */
+  const repondreChantier = (changements) => { enregistrerEntete(changements); };
+  /* Le « Oui » à la première question RETIRE des protections au client : il
+     se confirme, par la feuille posée par-dessus la carte (l'état unique
+     `feuille`). Rien n'est écrit avant « Je confirme ». */
+  const demanderConfirmationChantier = () => setFeuille({ type: 'chantier_neuf' });
+  const confirmerChantierNeuf = () => {
+    setFeuille(null);
+    enregistrerEntete({ chantierNeufConso: true });
   };
 
   /* ------------------------------------------------------------------ */
@@ -1382,7 +1546,9 @@ export default function SaisieDevisScreen({
   const choisirClient = (fiche) => {
     setFeuille(null);
     if (!fiche || !fiche.id) return;
-    setClientAffiche({ nom: fiche.nom, ville: fiche.ville || null });
+    setClientAffiche({
+      nom: fiche.nom, ville: fiche.ville || null, type: fiche.type ?? null, siret: fiche.siret ?? null,
+    });
     const changements = { clientId: fiche.id };
     const lieu = refEntete.current ? refEntete.current.lire() : {};
     const lieuVide = !texteNet(lieu.lieuAdresse) && !texteNet(lieu.lieuCodePostal) && !texteNet(lieu.lieuVille);
@@ -1411,6 +1577,33 @@ export default function SaisieDevisScreen({
   };
 
   /* ------------------------------------------------------------------ */
+  /*  À QUEL TITRE ? (lot 2b-2, cahier §3.4)                              */
+  /* ------------------------------------------------------------------ */
+  /* « Répondre », « Autre réponse », « Changer » et le bouton du point
+     `devis_pour_qui` ouvrent LA MÊME feuille, par l'état unique `feuille`
+     (critique écran E-I11). Le clavier se ferme : il n'y a rien à écrire. */
+  const ouvrirAQuelTitre = () => {
+    Keyboard.dismiss();
+    setFeuille({ type: 'pour_qui' });
+  };
+  /* LA PAIRE, en une écriture : la réponse ET le client pour lequel elle est
+     donnée — l'identifiant lu À L'INSTANT de l'appui, jamais celui de
+     l'affichage (critique écran E-M8). Sans client, rien ne part. */
+  const ecrireAQuelTitre = (valeur) => {
+    const clientId = devisRef.current ? devisRef.current.clientId : null;
+    if (!clientId || !valeur) return;
+    enregistrerEntete({ pourQui: valeur, pourQuiClient: clientId });
+  };
+  const choisirAQuelTitre = (valeur) => {
+    setFeuille(null);
+    ecrireAQuelTitre(valeur);
+  };
+  /* « Oui, à titre privé » : le SEUL bouton qui écrit sans feuille, et
+     seulement quand la fiche LUE est « particulier » (décision du 09/11 :
+     Opus propose, l'artisan confirme). */
+  const ouiATitrePrive = () => ecrireAQuelTitre('consommateur');
+
+  /* ------------------------------------------------------------------ */
   /*  « POUR LE REMETTRE » — chaque point mène à son endroit (lot 2b-1)   */
   /* ------------------------------------------------------------------ */
   /* L'endroit vient de `endroitDuMotif` (devis.js) ; l'écran ne fait que
@@ -1429,6 +1622,14 @@ export default function SaisieDevisScreen({
     switch (e.endroit) {
       case 'client':
         ouvrirChoixClient();
+        return;
+      case 'pour_qui':
+        /* LA CARTE SE FERME et la feuille « À quel titre ? » s'ouvre (cahier
+           §3.6) : la réponse change le bloc de l'en-tête, qu'on revoit. */
+        poserRetour(null);
+        poserCarte(null);
+        if (rappels.current.onCarte) rappels.current.onCarte(null);
+        ouvrirAQuelTitre();
         return;
       case 'entreprise':
         if (e.section && onMonEntreprise) onMonEntreprise(e.section);
@@ -1458,6 +1659,12 @@ export default function SaisieDevisScreen({
         return;
       default:
     }
+  };
+  /* LE SECOND BOUTON D'UN POINT (2b-2) : « Revoir « Le chantier » » sur une
+     ligne à taux réduit d'un chantier neuf — la carte, qui ramène à la
+     liste. */
+  const agirAussiSurLePoint = (point, seconde) => {
+    if (seconde && seconde.endroit === 'chantier') ouvrirChantierDepuisLaListe();
   };
 
   /* ------------------------------------------------------------------ */
@@ -1753,7 +1960,15 @@ export default function SaisieDevisScreen({
   const rang = ligneOuverte ? voisines.findIndex((x) => x.id === ligneOuverte.id) : -1;
   const clientFiche = devis.clientId
     ? clients.find((c) => String(c.id) === String(devis.clientId)) : null;
-  const client = clientFiche ? { nom: clientFiche.nom, ville: clientFiche.ville } : clientAffiche;
+  /* LE TYPE ET LE SIRET DE LA FICHE (2b-2) : le bloc « À quel titre ? » ne
+     propose « à titre privé » que pour un type LU, et les avis lisent le
+     SIRET. Ceux du carnet sont sûrs (la colonne n'est jamais vide) ; sinon,
+     ce que le devis ouvert a joint, sans valeur par défaut. */
+  const client = clientFiche
+    ? {
+      nom: clientFiche.nom, ville: clientFiche.ville, type: clientFiche.type ?? null, siret: clientFiche.siret ?? null,
+    }
+    : clientAffiche;
   const nbIncompletes = lignes.filter((l) => !ligneVierge(l) && (erreurs[l.id] || etats[l.id] === 'locale')).length;
   const nbEchecs = Object.keys(etats).filter((id) => id !== 'devis' && etats[id] === 'echec').length;
   const nbNonEnregistrees = nbIncompletes + nbEchecs;
@@ -1768,13 +1983,19 @@ export default function SaisieDevisScreen({
      quitté), un échec, la liste. Ce qui n'est PAS ENREGISTRÉ se dit à côté
      (`ceQueLaListeNeComptePas`), avec LE compte du pied
      (`nbNonEnregistrees`) — jamais un second. */
+  /* LA PARTIE « VOTRE ENTREPRISE » SE TAIT AUSSI pendant qu'une réponse
+     « à quel titre » part (2b-2, cahier §3.8) : les mentions dues à un
+     particulier en dépendent. Calculé à chaque rendu, depuis l'état de la
+     file — jamais gardé : un échec la rend aussitôt. */
+  const relectureVue = attente.etatAQuelTitre.enRoute && !liste.relecture.entreprise
+    ? { ...liste.relecture, entreprise: true } : liste.relecture;
   const etatListe = etatDeLaListe({
     enBase: attente.devisEnBase,
     enRoute: attente.enCours,
     champOuvert,
     erreur: liste.erreur,
     lue,
-    relecture: liste.relecture,
+    relecture: relectureVue,
   });
   const pasCompte = ceQueLaListeNeComptePas({
     nbLignes: nbNonEnregistrees,
@@ -1794,7 +2015,7 @@ export default function SaisieDevisScreen({
      « ce devis ne coûte rien » se tait tant que la liste n'est pas sûre
      (relecture de 2b-1, PAR-8). */
   const avis = avisDuDevis({
-    devis, lignes, totaux, etat: etatListe, pasCompte,
+    devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste.reponseVue,
   });
   let erreurListe = null;
   if (liste.erreur) {
@@ -1803,6 +2024,22 @@ export default function SaisieDevisScreen({
       : messageClair(liste.erreur, 'La liste de ce qu’il manque pour remettre ce devis', { rienAffiche: true });
   }
   const listeReessayable = !!liste.erreur && !estUnRefusDefinitif(liste.erreur);
+
+  /* « À QUEL TITRE ? » ET « LE CHANTIER » (2b-2) — ce que l'écran a (la
+     réponse voulue), avec l'état de son écriture. La DATE du « Oui » au
+     chantier neuf est celle de la BASE (les totaux relus), et seulement
+     quand la base a ce « Oui ». */
+  const dejaVu = totaux && totaux.demande ? totaux.demande : null;
+  const confirmeLe = dejaVu && dejaVu.chantierNeufConso === true ? (dejaVu.chantierNeufConsoLe || null) : null;
+  const aQuelTitre = resumeAQuelTitre({
+    devis, client, enRoute: attente.etatAQuelTitre.enRoute, enEchec: attente.etatAQuelTitre.enEchec,
+  });
+  const resumeChantier = resumeDuChantier({
+    devis: { ...devis, chantierNeufConsoLe: confirmeLe },
+    regime,
+    enRoute: attente.etatChantier.enRoute,
+    enEchec: attente.etatChantier.enEchec,
+  });
   /* La ligne du haut et la rangée du bas : le MÊME composant, la même
      règle — deux écritures de la même vérité finiraient par se contredire
      (la leçon des voyants du 04/10). */
@@ -1813,7 +2050,7 @@ export default function SaisieDevisScreen({
       lue={lue}
       enLecture={liste.enLecture}
       pasCompte={pasCompte}
-      relecture={liste.relecture}
+      relecture={relectureVue}
       renvoi={attente.renvoisEnRoute > 0}
       erreurReessayable={listeReessayable}
       erreurPhrase={erreurListe}
@@ -1860,6 +2097,21 @@ export default function SaisieDevisScreen({
             onFermer={() => setFeuille(null)}
           />
         );
+      case 'pour_qui':
+        return (
+          <FeuilleAQuelTitre
+            valeur={pourQuiValable(devis)}
+            onChoisir={choisirAQuelTitre}
+            onFermer={() => setFeuille(null)}
+          />
+        );
+      case 'chantier_neuf':
+        return (
+          <FeuilleChantierNeuf
+            onConfirmer={confirmerChantierNeuf}
+            onFermer={() => setFeuille(null)}
+          />
+        );
       case 'poste': {
         /* Le poste relu dans la base à chaque rendu : une relecture
            (« modifié entre-temps ») lui donne la date à jour. Absent d'une
@@ -1899,6 +2151,9 @@ export default function SaisieDevisScreen({
       onFrappe={setChampOuvert}
       onChoisirClient={ouvrirChoixClient}
       onNouveauClient={nouveauClient}
+      aQuelTitre={aQuelTitre}
+      onRepondreAQuelTitre={ouvrirAQuelTitre}
+      onOuiATitrePrive={ouiATitrePrive}
       onMonEntreprise={() => onMonEntreprise('tva')}
       onRelireRegime={onRelireRegime}
       ligneRemise={ligneRemise('haut')}
@@ -1927,6 +2182,8 @@ export default function SaisieDevisScreen({
       confirmeSuppression={confirmeSuppression}
       phraseSuppression={phraseSuppressionDuBrouillon({ postes, postesEtat, devisId: devisIdInitial })}
       rangeeRemise={ligneRemise('bas')}
+      resumeChantier={resumeChantier}
+      onOuvrirChantier={ouvrirChantier}
     />
   );
 
@@ -2189,6 +2446,28 @@ export default function SaisieDevisScreen({
           onFermer={fermerCarte}
           champInitial={champConditions}
           depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+          /* Les aides de l'acompte suivent la réponse de l'ÉCRAN (ce sont des
+             aides, pas des comptes) ; la date du chantier neuf, celle de la
+             base (2b-2, cahier §3.5). */
+          reponseATitre={pourQuiValable(devis)}
+          chantierNeufConso={devis.chantierNeufConso ?? null}
+          chantierNeufConsoLe={confirmeLe}
+        />
+      )}
+
+      {/* « LE CHANTIER » (lot 2b-2) — une carte comme les autres ; la
+          confirmation du chantier neuf se pose par-dessus (`feuille`). */}
+      {carte === CARTE_CHANTIER && (
+        <ChantierDevis
+          key={`chantier-${cleCarte}`}
+          devis={devis}
+          regime={regime}
+          confirmeLe={confirmeLe}
+          etats={{ q1: attente.etatQ1, q2: attente.etatQ2 }}
+          onRepondre={repondreChantier}
+          onDemanderConfirmation={demanderConfirmationChantier}
+          onFermer={fermerCarte}
+          depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
         />
       )}
 
@@ -2202,13 +2481,15 @@ export default function SaisieDevisScreen({
           lue={lue}
           enLecture={liste.enLecture}
           pasCompte={pasCompte}
-          relecture={liste.relecture}
+          relecture={relectureVue}
           erreurPhrase={erreurListe}
           erreurReessayable={listeReessayable}
           avis={avis}
           lignes={lignes}
           chiffrerPossible={chiffrerPossible}
           onAgir={agirSurLePoint}
+          onAgirAussi={agirAussiSurLePoint}
+          reponseVue={liste.reponseVue}
           onReessayer={lireLaListe}
           onFermer={fermerCarte}
         />
@@ -2286,6 +2567,12 @@ const s = StyleSheet.create({
     paddingVertical: S.sm,
   },
   resumeTexte: { flex: 1, minWidth: 0, gap: S.xs },
+  /* LA SUPERPOSITION de la rangée « Le chantier » (la technique de
+     `LigneRemise`) : la rangée prend la hauteur de son plus grand gabarit. */
+  superpose: { flexDirection: 'row', alignItems: 'flex-start' },
+  couche: { width: '100%' },
+  coucheSuivante: { marginLeft: '-100%' },
+  gabarit: { opacity: 0, pointerEvents: 'none' },
   replieTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.accent2 },
   etiquette: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },

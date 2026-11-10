@@ -57,6 +57,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rowToDevis } from '../src/lib/devis.js';
+import { DECLARATION_TVA } from '../src/lib/tva.js';
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SORTIE = join(RACINE, 'supabase', 'cas-remise.json');
@@ -72,6 +73,9 @@ const BASE = `cas_remise_${process.pid}`;
 const A = 'a4900000-0000-4000-8000-00000000000a';
 const P = 'a4900000-0000-4000-8000-00000000000e';
 const C1 = 'c4900000-0000-4000-8000-0000000000c1';
+// 2b-2 : une seconde fiche du carnet de A, une entreprise — pour « la réponse
+// a été donnée pour un AUTRE client », et « on revient au client d'avant ».
+const C2 = 'c4900000-0000-4000-8000-0000000000c2';
 const QA = 'e4900000-0000-4000-8000-00000000a0a1';
 const SA = 'e4900000-0000-4000-8000-00000000b0a1';
 const idDevis = (n) => `d4940000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -119,6 +123,19 @@ const ENTREPRISES = {
     `update public.entreprise_registre set verifie_le = now() - interval '400 days' where pro_id = '${A}' and retiree_le is null;`],
   architecte: [FICHE('franchise'), FRAIS(3500),
     `update public.professional_profiles set metiers = array['architecte'] where id = '${A}';`],
+  // 2b-2 : au régime réel, le numéro calculé du SIREN fictif DÉCLARÉ SUR
+  // L'HONNEUR (posé en superutilisateur : la garde I1 l'accepte, le compte est
+  // en @exemple-opus.test) — la déclaration éteint `conso_tva_intra`.
+  reel_declare: [FICHE('reel'), FRAIS(3500),
+    `insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte) values ('${A}', '000049007', 'FR78000049007', 'declaration', ${q(DECLARATION_TVA)});`],
+  // 2b-2 : au régime réel, une fiche à peine remplie (le téléphone) : la
+  // plupart des mentions dues à un particulier manquent, `conso_tva_intra` et
+  // les deux adresses compris — de quoi voir le filtre « pour son
+  // entreprise », ses TROUS, et les natures selon la réponse.
+  partielle_reel: [`insert into public.emetteur (pro_id, telephone, regime_tva) values ('${A}', '04 42 00 00 00', 'reel');`,
+    // un établissement dont l'adresse n'a pas été transmise, et qui n'est pas
+    // le siège : les deux mentions d'adresse dues à un particulier manquent.
+    `update public.entreprise_registre set adresse = null, est_siege = false where pro_id = '${A}' and retiree_le is null;`],
 };
 
 /* ---------------------------------------------------------------------------
@@ -126,13 +143,17 @@ const ENTREPRISES = {
    situation le change par `devis` (des colonnes à écrire, aux noms de la
    base) ; ses lignes sont écrites dans l'ordre donné.
    --------------------------------------------------------------------------- */
+// 2b-2 : le devis « complet » répond à « À quel titre ? » POUR son client
+// (`pour_qui_client` = `client_id`) — sans quoi la base demanderait
+// `devis_pour_qui` à chaque situation.
 const COMPLET = {
   client_id: C1, lieu_adresse: '4 rue de l’Essai', lieu_code_postal: '13410', lieu_ville: 'Lambesc',
   delai_execution: 'Dans les 30 jours suivant la signature', validite_jours: 30,
+  pour_qui: 'consommateur', pour_qui_client: C1,
 };
 const VIDE = {
   client_id: null, lieu_adresse: null, lieu_code_postal: null, lieu_ville: null,
-  delai_execution: null, validite_jours: null,
+  delai_execution: null, validite_jours: null, pour_qui: null, pour_qui_client: null,
 };
 // Lignes : poste, option, et les trois sans chiffre.
 const poste = (prix, taux, extra = {}) => ({ type: 'poste', prix, taux, ...extra });
@@ -270,6 +291,59 @@ const SITUATIONS = [
     devis: { ...VIDE, sos_request_id: SA, source: 'urgence' }, lignes: [] },
   { nom: 'D4-c : devis NEUF VIDE venu d’une demande ET d’une urgence', e: 'franchise',
     devis: { ...VIDE, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
+  // --- 2b-2, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
+  //     « À quel titre ? » : la réponse ne vaut que pour le client à qui elle
+  //     a été donnée ; le rang 1 est EXCLUSIF.
+  { nom: 'à quel titre : un client, aucune réponse — devis_pour_qui seul (règle d’Opus)', e: 'franchise',
+    devis: { pour_qui: null, pour_qui_client: null }, lignes: UN_POSTE_0 },
+  { nom: 'à quel titre : la réponse donnée pour un AUTRE client ne vaut rien — devis_pour_qui', e: 'franchise',
+    devis: { pour_qui: 'consommateur', pour_qui_client: C2 }, lignes: UN_POSTE_0 },
+  { nom: 'à quel titre : une réponse sans témoin ne vaut rien — devis_pour_qui', e: 'franchise',
+    devis: { pour_qui: 'consommateur', pour_qui_client: null }, lignes: UN_POSTE_0 },
+  { nom: 'à quel titre : un témoin sans réponse — devis_pour_qui', e: 'franchise',
+    devis: { pour_qui: null, pour_qui_client: C1 }, lignes: UN_POSTE_0 },
+  { nom: 'à quel titre : le client a CHANGÉ (C2), la réponse est restée celle de C1 — devis_pour_qui', e: 'franchise',
+    devis: { client_id: C2, pour_qui: 'consommateur', pour_qui_client: C1 }, lignes: UN_POSTE_0 },
+  { nom: 'à quel titre : réponse posée, client vide, témoin vide — devis_client SEUL au rang 1, et toutes les mentions',
+    e: 'partielle_reel', devis: { client_id: null, pour_qui: 'professionnel', pour_qui_client: null }, lignes: UN_POSTE_20 },
+  { nom: 'à quel titre : la fiche du client supprimée (le lien passe à vide) — devis_client, et toutes les mentions comptent',
+    e: 'partielle_reel', devis: { pour_qui: 'professionnel' }, lignes: UN_POSTE_20,
+    apres: `delete from public.clients where id = '${C1}';` },
+  //     Le filtre et les natures, sur une entreprise à qui manquent beaucoup
+  //     de mentions dues à un particulier.
+  { nom: 'à titre privé (consommateur) : toutes les mentions dues à un particulier, en « loi » (sauf conso_tva_intra)',
+    e: 'partielle_reel', lignes: UN_POSTE_20 },
+  { nom: 'association, copropriété, société civile : toutes les mentions, en « prudence » — conso_tva_intra reste une règle d’Opus',
+    e: 'partielle_reel', devis: { pour_qui: 'non_professionnel' }, lignes: UN_POSTE_20 },
+  { nom: 'petite entreprise hors de son activité principale : toutes les mentions, en « loi »', e: 'partielle_reel',
+    devis: { pour_qui: 'professionnel_hors_activite' }, lignes: UN_POSTE_20 },
+  { nom: 'pour son entreprise, dans son activité principale : plus aucun conso_ sauf les deux adresses (en prudence), rangs À TROUS',
+    e: 'partielle_reel', devis: { pour_qui: 'professionnel' }, lignes: UN_POSTE_20 },
+  { nom: 'pour son entreprise, sans aucune fiche « Mon entreprise » : le filtre, les trous, le reste de l’entreprise',
+    e: 'vide', devis: { pour_qui: 'professionnel' }, lignes: UN_POSTE_20 },
+  { nom: 'pour son entreprise, au réel sans n° de TVA : conso_tva_intra ne compte plus — rien ne manque', e: 'reel',
+    devis: { pour_qui: 'professionnel' }, lignes: UN_POSTE_20 },
+  { nom: 'au réel, numéro DÉCLARÉ sur l’honneur : la déclaration éteint conso_tva_intra — rien ne manque', e: 'reel_declare',
+    lignes: UN_POSTE_20 },
+  //     Le taux réduit d'un chantier qui crée un bâtiment neuf : la question
+  //     TVA, et elle seule.
+  { nom: 'chantier neuf (question TVA à « Oui »), un poste à 10 % : devis_taux_reduit_neuf seul (une prudence)', e: 'reel_tva',
+    devis: { chantier_neuf_tva: true }, lignes: [poste(100000, 1000)] },
+  { nom: 'chantier neuf : 10 %, 0 %, option 5,5 %, 20 %, offert 10 %, 0 % — les deux clés de rang 3 ALTERNENT, dans l’ordre des lignes',
+    e: 'reel_tva', devis: { chantier_neuf_tva: true },
+    lignes: [poste(10000, 1000, { ordre: 1000 }), poste(10000, 0, { ordre: 2000 }), option(10000, 550, { ordre: 3000 }),
+      poste(10000, 2000, { ordre: 4000 }), poste(4500, 1000, { ordre: 5000, offert: true }), poste(10000, 0, { ordre: 6000 })] },
+  { nom: 'chantier neuf écrit dans le désordre, deux lignes au même ordre : départagées par l’identifiant', e: 'reel_tva',
+    devis: { chantier_neuf_tva: true },
+    lignes: [poste(10000, 550, { ordre: 3000 }), poste(10000, 1000, { ordre: 1000, id: 9 }), option(10000, 0, { ordre: 1000, id: 8 })] },
+  { nom: 'chantier neuf en FRANCHISE : la clé de la franchise, jamais celle du neuf', e: 'franchise',
+    devis: { chantier_neuf_tva: true }, lignes: [poste(100000, 1000)] },
+  { nom: 'chantier neuf, régime non déclaré : aucune ligne fautive', e: 'sans_regime',
+    devis: { chantier_neuf_tva: true }, lignes: [poste(100000, 1000)] },
+  { nom: 'question des DROITS du client à « Oui », question TVA vide : rien au rang 3', e: 'reel_tva',
+    devis: { chantier_neuf_conso: true }, lignes: [poste(100000, 1000)] },
+  { nom: 'question TVA à « Non » (faux, pas vide) : rien au rang 3', e: 'reel_tva',
+    devis: { chantier_neuf_tva: false }, lignes: [poste(100000, 1000), option(10000, 550)] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -290,7 +364,8 @@ insert into auth.users (id, email, raw_user_meta_data) values
    'entreprise','A Essais','metiers',jsonb_build_array('macon'),'ville','Lambesc (13)')),
  ('${P}', 'p-cas-remise@exemple-opus.test', jsonb_build_object('type','particulier','nom','P Essais','ville','Lambesc (13)'));
 insert into public.clients (id, pro_id, type, nom, adresse, code_postal, ville)
-values ('${C1}', '${A}', 'particulier', 'Client essai A', '4 rue de l''Essai', '13410', 'Lambesc');
+values ('${C1}', '${A}', 'particulier', 'Client essai A', '4 rue de l''Essai', '13410', 'Lambesc'),
+       ('${C2}', '${A}', 'entreprise', 'Client essai A2', '6 rue de l''Essai', '13410', 'Lambesc');
 insert into public.quote_requests (id, client_id, professional_id, metier, description, ville, statut)
 values ('${QA}', '${P}', '${A}', 'macon', 'Refaire la salle de bain', 'Lambesc', 'accepte');
 insert into public.sos_requests (id, client_id, professional_id, metier_key, probleme_key, statut)
@@ -315,6 +390,7 @@ values ('${id}', '${d}', ${ordre}, '${l.type}', 'Ligne ${i + 1}', 1000, 'forfait
 values ('${id}', '${d}', ${ordre}, '${l.type}', 'Titre ${i + 1}', ${i + 2});\n`;
     }
   });
+  if (s.apres) sql += `${s.apres}\n`;
   sql += `select 'DEVIS|${n}|' || row_to_json(x)::text from public.devis x where x.id = '${d}';
 select 'LIGNES|${n}|' || coalesce(json_agg(row_to_json(l) order by l.generation)::text, '[]') from public.devis_lignes l where l.devis_id = '${d}';
 select 'REGIME|${n}|' || coalesce((select to_json(e.regime_tva)::text from public.emetteur e where e.pro_id = '${A}'), 'null');
@@ -377,7 +453,9 @@ const cas = SITUATIONS.map((s, k) => {
   if (!r || !r.DEVIS || !r.LIGNES || !('REGIME' in r) || !r.EMET || !r.SORTIE) {
     throw new Error(`cas ${n} (${s.nom}) : la base n’a pas tout rendu`);
   }
-  const devis = { ...rowToDevis(r.DEVIS), createdAt: null, modifieLe: null };
+  /* La date du « Oui » au chantier neuf, posée par la base, change à chaque
+     génération : retirée comme les deux autres (la règle ne la lit pas). */
+  const devis = { ...rowToDevis(r.DEVIS), createdAt: null, modifieLe: null, chantierNeufConsoLe: null };
   const lignes = r.LIGNES.map(rowToLigne);
   const indice = (id) => {
     if (id === null) return null;
@@ -395,8 +473,9 @@ const cas = SITUATIONS.map((s, k) => {
    au moins une fois, chaque nature, un cas où rien ne manque, et des motifs
    de l'entreprise. Un fichier qui ne couvre plus quelque chose rougit à la
    génération, pas au premier défaut. */
-const CLES_DU_DEVIS = ['devis_client', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva', 'devis_lieu', 'devis_delai',
-  'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene', 'devis_reduction_ramenee'];
+const CLES_DU_DEVIS = ['devis_client', 'devis_pour_qui', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva',
+  'devis_taux_reduit_neuf', 'devis_lieu', 'devis_delai', 'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene',
+  'devis_reduction_ramenee'];
 for (const cle of CLES_DU_DEVIS) {
   if (!cas.some((c) => c.attendu.length > 0 && c.attendu.filter((m) => m.rang < 100).every((m) => m.cle === cle)
     && c.attendu.some((m) => m.cle === cle))) {
@@ -409,6 +488,26 @@ for (const nature of ['loi', 'prudence', 'regle_opus']) {
 if (!cas.some((c) => c.attendu.length === 0)) throw new Error('aucun cas où rien ne manque');
 if (!cas.some((c) => c.attendu.some((m) => m.rang > 100))) throw new Error('aucun motif de l’entreprise');
 if (!cas.some((c) => c.attendu.filter((m) => m.ligne_id !== null).length >= 3)) throw new Error('aucun cas à trois lignes fautives');
+/* 2b-2 : les deux clés de rang 3 qui ALTERNENT dans un même devis (les deux
+   tableaux de la base, alignés indice par indice) ; un filtre « pour son
+   entreprise » qui laisse des TROUS dans les rangs de l'entreprise ; les deux
+   adresses gardées ; chaque réponse « à quel titre » jouée. */
+const rang3 = (c) => c.attendu.filter((m) => m.rang === 3).map((m) => m.cle);
+if (!cas.some((c) => rang3(c).some((k, i, t) => i > 0 && k !== t[i - 1] && t.slice(i + 1).includes(t[i - 1])))) {
+  throw new Error('aucun cas où deux clés de rang 3 alternent');
+}
+const aTrous = (c) => {
+  const r = c.attendu.filter((m) => m.rang > 100).map((m) => m.rang);
+  return r.length > 1 && r.some((x, i) => i > 0 && x !== r[i - 1] + 1);
+};
+if (!cas.some((c) => c.devis.pourQui === 'professionnel' && c.devis.clientId && aTrous(c)
+  && c.attendu.some((m) => m.cle === 'conso_adresse_etablissement' || m.cle === 'conso_adresse_siege'))) {
+  throw new Error('aucun cas « pour son entreprise » à rangs troués qui garde une adresse');
+}
+for (const pq of ['consommateur', 'non_professionnel', 'professionnel_hors_activite', 'professionnel']) {
+  if (!cas.some((c) => c.devis.pourQui === pq && c.devis.clientId && c.devis.pourQuiClient === c.devis.clientId
+    && c.attendu.some((m) => m.rang > 100))) throw new Error(`aucun cas où la réponse « ${pq} » filtre les mentions`);
+}
 
 const LISEZ_MOI = 'Engendré par scripts/generer-cas-remise.mjs : ce que motifs_refus_remise() (schema.sql, section 49.9) '
   + 'rend pour chaque situation, jouée par la VRAIE base (le devis et ses lignes écrits par le chemin d’un client, la '

@@ -67,6 +67,7 @@ import {
 } from '../lib/emetteur';
 import { dateFrancaise } from '../lib/entreprise';
 import { messageTva } from '../lib/tva';
+import { messageDOccupationTva } from '../lib/declaration-tva';
 import {
   QUI_VOIT_LES_TARIFS, QUI_VERRAIT_LES_TARIFS, TARIFS_NON_AFFICHES, lignesTarifs,
 } from '../lib/tarifs';
@@ -184,14 +185,18 @@ export default function MonEntreprise({
      disait le contraire de ce qui se passait, puis laissait partir un
      second contrôle (relecture du 20/10/2026). On attend, comme pour un
      enregistrement. */
-  const [occupeTva, setOccupeTva] = useState(false);
+  /* …et depuis 2b-2, CE QUI PART : `null`, `'controle'`, `'declaration'`
+     ou `'retrait'` — le message d'attente le nomme (`messageDOccupationTva`,
+     declaration-tva.js). Une déclaration ou un retrait en vol ne s'annule pas
+     plus qu'un contrôle : la fonction Edge finirait d'écrire. */
+  const [occupeTva, setOccupeTva] = useState(null);
   /* Un message « attendez » ne survit pas à ce qu'il fait attendre : resté
      affiché après la réponse de VIES, il disait « en cours » au-dessus d'un
      numéro déjà reconnu (capture du 20/10/2026). Il part au moment même où
-     le contrôle se termine — dans le rappel, pas dans un effet. */
-  const occuperTva = (enCours) => {
-    setOccupeTva(enCours);
-    if (!enCours) setMessage((m) => (m && m.ton === 'attente' ? null : m));
+     l'envoi se termine — dans le rappel, pas dans un effet. */
+  const occuperTva = (quoi) => {
+    setOccupeTva(quoi || null);
+    if (!quoi) setMessage((m) => (m && m.ton === 'attente' ? null : m));
   };
   /* Le garde du RETRAIT, dans une référence : deux appuis arrivés dans la
      même image verraient encore tous les deux l'ancien état. */
@@ -256,7 +261,7 @@ export default function MonEntreprise({
       return;
     }
     if (occupeTva) {
-      afficher('Contrôle auprès de VIES en cours : attendez sa réponse.', 'attente');
+      afficher(messageDOccupationTva(occupeTva), 'attente');
       return;
     }
     setBrouillon(null);
@@ -360,7 +365,7 @@ export default function MonEntreprise({
       return;
     }
     if (occupeTva) {
-      afficher('Contrôle auprès de VIES en cours : attendez sa réponse. Fermer ne l’annulerait pas.', 'attente');
+      afficher(messageDOccupationTva(occupeTva, { fermer: true }), 'attente');
       return;
     }
     if (!quitter && aDesChangements()) {
@@ -541,7 +546,21 @@ export default function MonEntreprise({
       }));
       lireManques(setManques);
     } else if (r.issue === 'refuse') {
-      setDonnees((d) => (d.preuveTva && d.preuveTva.numero === r.numero ? { ...d, preuveTva: null } : d));
+      /* UNE DÉCLARATION DE CE NUMÉRO RESTE (la fonction le dit par
+         `declare_le`, 2b-2) : la preuve reste — ou redevient — une
+         déclaration. Sinon, la preuve locale du même numéro part, comme
+         avant. */
+      setDonnees((d) => {
+        if (r.declare_le && entreprise) {
+          return {
+            ...d,
+            preuveTva: {
+              siren: entreprise.siren, numero: r.numero, reconnu_le: r.declare_le, source: 'declaration', declare_le: r.declare_le,
+            },
+          };
+        }
+        return d.preuveTva && d.preuveTva.numero === r.numero ? { ...d, preuveTva: null } : d;
+      });
       lireManques(setManques);
     } else if (r.issue === 'deja_publie') {
       /* La base a déjà le numéro de l'annuaire, et l'écran ne l'avait pas
@@ -552,6 +571,39 @@ export default function MonEntreprise({
       if (onChargerEntreprise) onChargerEntreprise();
       lireManques(setManques);
       afficher(messageTva('deja_publie').texte);
+    }
+    return r;
+  };
+
+  /* DÉCLARER SON NUMÉRO SUR L'HONNEUR, OU RETIRER SA DÉCLARATION (2b-2) —
+     la fonction Edge a DÉJÀ écrit quand elle répond : l'écran pose ce
+     qu'elle a dit, puis relit ce qui manque (la base décide si
+     `conso_tva_intra` s'éteint). La date est celle de la BASE. */
+  const declarerTva = async (numero, options) => {
+    const r = await api.declarerTva(numero, options);
+    if (r.issue === 'declare' && entreprise) {
+      setDonnees((d) => ({
+        ...d,
+        preuveTva: {
+          siren: entreprise.siren, numero: r.numero, reconnu_le: r.declare_le || null, source: 'declaration',
+          declare_le: r.declare_le || null,
+        },
+      }));
+      lireManques(setManques);
+    } else if (r.issue === 'deja_publie') {
+      if (onChargerEntreprise) onChargerEntreprise();
+      lireManques(setManques);
+    }
+    return r;
+  };
+  const retirerTva = async () => {
+    const r = await api.retirerDeclarationTva();
+    if (r.issue === 'retire' || r.issue === 'rien_a_retirer') {
+      /* « Plus rien à retirer » peut vouloir dire que VIES a reconnu le
+         numéro entre-temps : on RELIT la fiche plutôt que de deviner. */
+      if (r.issue === 'retire') setDonnees((d) => (d.preuveTva && d.preuveTva.source === 'declaration' ? { ...d, preuveTva: null } : d));
+      else lireFiche(setDonnees, onTarifs, surEmetteur);
+      lireManques(setManques);
     }
     return r;
   };
@@ -661,6 +713,8 @@ export default function MonEntreprise({
                   preuveTva={donnees.etat === 'pret' ? donnees.preuveTva : null}
                   regimeTva={donnees.etat === 'pret' && donnees.emetteur ? donnees.emetteur.regime_tva : null}
                   onControlerTva={donnees.etat === 'pret' ? controlerTva : null}
+                  onDeclarerTva={donnees.etat === 'pret' ? declarerTva : null}
+                  onRetirerTva={donnees.etat === 'pret' ? retirerTva : null}
                   onOccupeTva={occuperTva}
                 />
                 {donnees.etat === 'pret' && entrepriseEtat === 'pret' && (
