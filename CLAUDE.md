@@ -11419,11 +11419,27 @@ démonstration (le bloc « À quel titre ? » à 120 points dans ses 7 états à
 21 + 7 (base), 51 (serveur TVA), 42 (calcul), 85 (le banc du cahier, deux
 trous fermés : S40, S10), 5 (T1) — tous refusés.
 
+#### ESSAYÉ SUR L'IPHONE le 12/11/2026
+
+Par le propriétaire, sur son compte principal, dans le build de
+développement après `git pull` et `npx expo start -c` : « tout fonctionne
+correctement ». Sans détailler les neuf questions du cahier (§6.2).
+
+Ce que la base en dit, relevé par la FORME seulement : un de ses trois
+brouillons porte une réponse « à titre privé », **valable** (le témoin vaut
+le client du devis) ; « Le chantier » y a reçu une réponse, et aucun « Oui »
+n'est resté ni aucune date posée. **Et une déclaration sur l'honneur de son
+numéro de TVA** existe sur son compte principal, avec sa date et le texte
+coché — la première sur la vraie base. Le refus RETENU de VIES et la
+déclaration sont donc passés par le vrai téléphone, la vraie fonction `tva`
+v2 et la vraie base. Elle l'engage pour de vrai : on la lui a rappelé.
+
 #### Ce qui n'a PAS été vérifié
 
-- **rien sur l'iPhone** : les neuf questions du cahier (§6.2) — la case au
-  pouce, la feuille et VoiceOver, le clavier, la hauteur sous iOS, Hermes ;
-- **l'écran sur la vraie base** : il n'a tourné qu'en démonstration ;
+- **le détail du toucher sur l'iPhone** (essayé en bloc le 12/11, ci-dessus) :
+  la feuille et VoiceOver, le clavier, la hauteur exacte sous iOS ;
+- **l'écran sur la vraie base au navigateur** : il n'y a tourné qu'en
+  démonstration (le propriétaire, lui, l'a utilisé sur la vraie base) ;
 - **le chemin « reconnu » par le vrai VIES** et la renaissance d'une
   déclaration jointe (il faudrait un vrai numéro valide, qu'on n'utilise
   jamais) ; **un refus FRAIS sur un numéro déclaré** (le refus est retenu

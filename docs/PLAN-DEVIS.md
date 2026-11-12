@@ -3910,6 +3910,9 @@ vérifications justes sur 54. Le cahier : `docs/CAHIER-LOT-2B-2.md` ; ce qui
 est construit et vérifié : CLAUDE.md, « À quel titre, le chantier, la TVA
 déclarée — étape 2b-2 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape
 2b-2 ». **Rien n'est remis, imprimé ni numéroté** : c'est 2c.
+**Essayée sur l'iPhone le 12/11/2026** par le propriétaire (« tout
+fonctionne correctement ») : une réponse valable et une déclaration de TVA
+sur l'honneur sont sur la vraie base. La suite est 2b-3.
 
 | question (09/11 au soir) | réponse du propriétaire | ce qu'elle change au plan |
 |---|---|---|

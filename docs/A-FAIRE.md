@@ -3340,7 +3340,13 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
 > sont pas dans le dépôt.
 
 **À essayer sur votre iPhone** (le build de développement, après `git pull`
-et `npx expo start -c`) — rien de 2b-2 n'y a encore tourné :
+et `npx expo start -c`) — **fait le 12/11/2026** : « tout fonctionne
+correctement ». Relevé par la forme : une réponse « à titre privé » valable
+sur un brouillon, « Le chantier » répondu sans « Oui » resté, et **votre
+déclaration sur l'honneur de votre n° de TVA** est enregistrée sur votre
+compte principal. Elle vous engage : si vous n'êtes pas sûr de ce numéro,
+« Mon entreprise » → TVA → « Retirer cette déclaration ». La liste reste
+ci-dessous pour mémoire :
 
 - [ ] « Mon entreprise » → TVA, après un refus de VIES : le bloc « Vous êtes
   sûr de ce numéro ? » apparaît SOUS le bouton VIES, qui ne bouge pas ; la
