@@ -2891,6 +2891,22 @@ Trois règles sont **plus strictes que la loi**, et le restent par choix ; il fa
 - exiger un délai pour une exécution immédiate, quand le contrat est conclu en établissement ;
 - refuser la remise sans attestation d'assurance quand une ligne relève de la construction (ligne « assurance » ci-dessus).
 
+> **Corrigé le 13/11/2026 (étape 2b-3, 10.21).** Deux affirmations de la ligne
+> « assurance » du tableau ci-dessus et de cette liste ne sont plus justes :
+>
+> - l'attestation décennale n'est pas due « face à un consommateur »
+>   seulement : L. 243-2 la fait joindre aux devis et factures des personnes
+>   soumises à la décennale, **quel que soit le client** — sauf peut-être le
+>   sous-traitant (C. civ. 1792-1, au juriste). Ce qui ne vaut que face au
+>   consommateur, ce sont les mentions de R. 111-2 9° (assureur, coordonnées,
+>   couverture) ;
+> - refuser la remise sans attestation, quand les travaux peuvent engager la
+>   décennale, n'est pas « plus strict que la loi » : c'est la loi (le motif
+>   `devis_attestation`, « La loi »). Ce qui est plus strict, c'est le
+>   déclencheur : « Oui » quand l'artisan n'a pas répondu, et une date de fin
+>   exigée (les motifs `devis_decennale` et `devis_attestation_date`, « Par
+>   prudence »). Et 2b-3 pose la question par DEVIS, pas par ligne.
+
 #### Nouveau : absent du plan
 
 | obligation | texte | ce qu'elle demande au devis | lot |
@@ -3929,6 +3945,12 @@ Ce que 2b-3, 2b-4 et 2c doivent savoir :
   bornes des gabarits (508 et 21) tiennent. **`OP028` reste libre** : la
   garde d'urgence de 2b-3 le prendra, et le motif « acompte à la signature »
   devra lire `chantier_neuf_conso`.
+
+  > **Corrigé le 13/11/2026 (2b-3, 10.21) : ni l'un ni l'autre.** La garde
+  > d'urgence n'est pas née, `OP028` reste libre ; et par la décision R1, le
+  > motif « acompte à la signature » ne lit plus du tout
+  > `chantier_neuf_conso`. La fonction porte désormais 16 clés sur 11 rangs,
+  > 510 motifs au plus.
 - **La réponse « à quel titre » ne vaut que pour son client** (`pour_qui`
   quand `client_id` n'est pas vide et vaut `pour_qui_client`). **2c en fige
   une COPIE calculée à la remise**, jamais redérivée de `client_id`, qu'une
@@ -3964,3 +3986,64 @@ Ce que 2b-3, 2b-4 et 2c doivent savoir :
 client pour les services à la personne) ; 2c (numéro, aperçu au format
 final, PDF, remise, tri des devis remis) ; puis, en lot à part, la
 signature par le client dans Opus.
+
+### 10.21 L'étape 2b-3 — FAITE le 13/11/2026 : la réparation urgente, la décennale, le moment du paiement
+
+**Sur la vraie base depuis le 13/11/2026 à 12 h 28** (migration
+`lot_2b_3_urgence_decennale_paiement_signature`) ; essai réel par le chemin
+de l'application : 118 vérifications justes sur 118. Le cahier :
+`docs/CAHIER-LOT-2B-3.md` ; ce qui est construit et vérifié : CLAUDE.md,
+« La réparation urgente, la décennale, le moment du paiement — étape
+2b-3 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape 2b-3 ». **Rien
+n'est remis, imprimé ni numéroté** : c'est 2c. **Pas encore essayée sur
+l'iPhone.**
+
+| question | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| P1 — comment Opus sait qu'un devis concerne la décennale (12/11) | **une question par devis**, dans « Le chantier » ; sans réponse, Opus compte « Oui » | `devis.engage_decennale` ; le rang 11 (`devis_attestation`, la loi ; `devis_attestation_date` et `devis_decennale`, par prudence) ; la remise de 2c refusera un devis sans attestation valable |
+| P2 — pouvoir choisir « à la signature » (12/11) | **oui** | `devis.acompte_a_la_signature`, la question « Quand le client paie-t-il cette somme ? » dans « Conditions », le rang 10 (`devis_acompte_signature`, par prudence) |
+| P3 — les mots de la réparation urgente (12/11) | **oui, ces mots** | `devis_lignes.urgence`, sur un poste seulement, jamais allumée d'office |
+| R1 — après la relecture : le bâtiment neuf (13/11) | **interdire « à la signature »** | pour la construction d'un logement, le code de la construction peut laisser au client dix jours et interdire tout paiement, ou engagement de payer, avant (L. 271-1, L. 271-2) : le rang 10 ne lit plus `chantier_neuf_conso` |
+| R2 — l'aide de l'urgence (13/11) | **la préciser** | « …le strict nécessaire pour répondre à l'urgence… » |
+| R3 — les sanctions (13/11) | **les compléter** | « …bien plus pour une société, et une interdiction d'exercer » |
+
+Ce que 2b-4 et 2c doivent savoir :
+
+- **`motifs_refus_remise()` porte 16 clés sur 11 rangs**, signature
+  inchangée ; au plus une clé au rang 11 ; 510 motifs au plus pour le
+  devis : les gabarits de « Pour le remettre » tiennent. **`OP028` reste
+  libre** : la « garde d'urgence » n'est pas née, ce que 2b-3 refuse est une
+  contrainte (`devis_ligne_urgence_check`) ou un motif.
+- **« À la signature » n'est permis que dans deux cas** (`signaturePermise`,
+  la même règle à la base, dans l'aide et dans la ligne « pourquoi ») : un
+  client « pour son entreprise » ; ou toutes les lignes chiffrées urgentes
+  (une option ne l'est jamais), pour un client à titre privé ou une
+  association. **Un bâtiment neuf dont toutes les lignes sont urgentes reste
+  permis, et un client « pour son entreprise » sur un neuf aussi** : au
+  juriste, avec J14 (`docs/A-FAIRE.md`).
+- **L'urgence ne lit jamais l'origine du devis** (D3, D4-c) : deux devis aux
+  lignes identiques, l'un venu d'une urgence, rendent la même liste.
+- **Une attestation « valable »** = une assurance `decennale`, un chemin
+  écrit, une date de fin au moins égale au jour de Paris. **2c la joint et la
+  FIGE**, après avoir vérifié que le fichier existe ; il la lit sous verrou
+  (`for share`), dans la même transaction que le statut, et recalcule la
+  liste au moment de la remise : elle dépend désormais d'une table de plus,
+  et du jour.
+- **2c n'imprime aucune échéance sur un devis « Oui » au bâtiment neuf**
+  avant la réponse du juriste : ni « à la signature » ni « dès le 8e jour »
+  n'est la règle du code de la construction.
+- **2c imprime « pas de droit de rétractation » pour les lignes urgentes
+  seulement pour un client à titre privé**, le formulaire dès qu'une ligne
+  ne l'est pas, et recueille la demande expresse du client, sur papier ou
+  support durable, pour commencer avant 14 jours une ligne non urgente. **Deux décisions avant 2c** : la règle des 7 jours vise
+  TOUT paiement (le solde d'un dépannage non urgent n'est signalé par rien),
+  et le texte libre des modalités qui parle d'un paiement à la signature.
+- **Le module facture** : la liste officielle des travaux d'urgence à 10 %
+  n'est jamais le marqueur de 2b-3.
+
+**La suite** : **2b-4**, ce que coûte le devis et ce qu'il laisse — devis
+payant ou gratuit, déchets de chantier, champ de l'arrêté de 2017, RGE ;
+l'avis « l'attestation expire avant le début des travaux » ; l'avis du
+franchisé au-delà du seuil ; l'adresse du client pour les services à la
+personne. Puis **2c** (numéro, aperçu au format final, PDF, remise, tri des
+devis remis) ; puis, en lot à part, la signature par le client dans Opus.

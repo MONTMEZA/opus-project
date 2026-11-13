@@ -1868,8 +1868,11 @@ développement, sans prévenir, et elle contient le code du 17/10 figé.
 
 - [ ] R. 123-237 (lieu du siège) face à un artisan au seul RNE ; les
   coopératives (formes 51xx) et l'EIRL, traitées au plus prudent.
-- [ ] La phrase sur L. 243-2 au §10.3 de `PLAN-DEVIS.md`, à corriger avant le
+- [x] La phrase sur L. 243-2 au §10.3 de `PLAN-DEVIS.md`, à corriger avant le
   lot 2 : l'attestation de décennale est due quel que soit le client.
+  **Fait le 13/11/2026** (étape 2b-3) : une note datée suit la liste des
+  « trois règles plus strictes que la loi », au §10.3, avec la réserve du
+  sous-traitant (J3 de 2b-3).
 - [ ] **L'affichage des tarifs aux particuliers** (lot T) : la mise en garde
   de `DONNEES-DES-ARTISANS.md` §5 sur des prix lus par des concurrents. Le
   risque est réduit (les artisans ne les lisent pas), pas nul (un second
@@ -3262,9 +3265,11 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
   bis 2), et un avis pour le SIREN d'un client professionnel. **Faits le
   10/11/2026** : `devis_taux_reduit_neuf`, et l'avis `avis_siret_client`,
   qui demande d'ajouter son SIRET à sa fiche.
-- [ ] **2b-3** : si la garde d'urgence naît, elle prend `OP028`.
+- [x] **2b-3** : si la garde d'urgence naît, elle prend `OP028`. **Sans
+  objet (13/11/2026)** : elle n'est pas née, `OP028` reste libre.
 - [ ] **Les gabarits de la ligne ont des bornes** : 500 lignes (OP014), 508
-  motifs pour le devis, 21 pour l'entreprise. Un lot qui dépasserait 999 ou
+  motifs pour le devis (**510 depuis 2b-3, le 13/11 : toujours trois
+  chiffres**), 21 pour l'entreprise. Un lot qui dépasserait 999 ou
   99 leur fait gagner un chiffre ; `CHIFFRE_LE_PLUS_LARGE` (« 4 » en Inter)
   se remesure avec toute nouvelle police ; et la superposition suppose un
   parent de largeur imposée.
@@ -3432,8 +3437,9 @@ aucune preuve de TVA sur la vraie base.
   rester affiché après un retrait jusqu'à la réouverture. Correction petite :
   relire la fiche sur `lent`, et une phrase d'échec propre à ces deux
   actions.
-- [ ] **E2 — la bande d'échec de l'en-tête nomme « l'objet, le lieu, le
-  délai ou les conditions »** quand c'est « À quel titre ? » ou « Le
+- [x] **E2 — la bande d'échec de l'en-tête nomme « l'objet, le lieu, le
+  délai ou les conditions »** — **fait le 13/11/2026** (2b-3 : elle nomme
+  aussi « À quel titre ? » et « Le chantier ») quand c'est « À quel titre ? » ou « Le
   chantier » qui n'est pas parti (`src/lib/devis.js`,
   `phraseEchecDuDevis`). Incomplète, pas contraire ; deux comparaisons mot
   pour mot de `verifier-devis` à mettre à jour avec elle.
@@ -3494,10 +3500,11 @@ aucune preuve de TVA sur la vraie base.
 - [ ] **T6 — la règle P5 est dite sans sa fenêtre de 24 heures**
   (`src/data/legal.js`, « Une décision automatique ») : un contrôle de plus,
   au pire.
-- [ ] **T7 — l'aide de la nature de l'acompte affirme 14 jours de
+- [x] **T7 — l'aide de la nature de l'acompte affirme 14 jours de
   rétractation pour une association** (`src/lib/devis.js`,
   `aidesDeLAcompte`), juste au-dessus de la phrase de prudence. Sens
-  protecteur.
+  protecteur. **Fait le 13/11/2026** (2b-3 :
+  `AIDE_NATURE_ACOMPTE_PRUDENCE`).
 - [ ] **T8 — l'aide de la question 1 du chantier ne dit pas qu'une
   extension, une véranda ou une annexe n'est pas un « bâtiment neuf »**
   (`src/lib/devis.js`, `LE_CHANTIER.q1.aide`) : « Dans le doute, gardez
@@ -3508,8 +3515,9 @@ aucune preuve de TVA sur la vraie base.
   `src/lib/devis.js`, `natureDuMotifEntreprise`) : la convention de 2b-1
   (l'étiquette dit d'où vient l'obligation). Rien à corriger ; au juriste,
   avec J4.
-- [ ] **L'essai 49 finit par « 73 refus attendus »** alors que 79 sortent
-  (`supabase/essais-section-49.sql`, antérieur à 2b-2).
+- [x] **L'essai 49 finit par « 73 refus attendus »** alors que 79 sortent
+  (`supabase/essais-section-49.sql`, antérieur à 2b-2). **Fait le
+  13/11/2026** (2b-3 : « 79 refus attendus »).
 
 **Reporté par le cahier** (`docs/CAHIER-LOT-2B-2.md`, §7) :
 
@@ -3562,6 +3570,9 @@ détail est au §1.5 du cahier) :
   d'état sur une construction neuve (et T8).
 - [ ] **J7** — le texte de la confirmation du « Oui », l'énoncé des
   sanctions, le régime de paiement des contrats de construction du CCH.
+  (13/11 : la relecture de 2b-3 a lu L. 271-1, L. 271-2, L. 231-4, L. 241-1
+  et L. 232-1 ; la confirmation les cite désormais — voir J14, « Après
+  l'étape 2b-3 ».)
 - [ ] **J8** — à 5,5 %, la certification et les autres taux réduits sur un
   bâtiment neuf ; la reprise de ces articles dans le CIBS au 01/01/2027.
 - [ ] **J9** (pour 2c) — imprimer la qualité du client ; affirmer l'absence
@@ -3572,8 +3583,11 @@ détail est au §1.5 du cahier) :
 
 **Pour 2b-3, 2b-4 et 2c — les règles à tenir** :
 
-- [ ] **2b-3** : la garde d'urgence prend `OP028` ; le motif « acompte à la
-  signature » devra lire `chantier_neuf_conso`.
+- [x] **2b-3** : la garde d'urgence prend `OP028` ; le motif « acompte à la
+  signature » devra lire `chantier_neuf_conso`. **Ni l'un ni l'autre
+  (13/11/2026)** : la garde n'est pas née, `OP028` reste libre ; et par la
+  décision R1, le motif ne lit plus du tout `chantier_neuf_conso` (un
+  bâtiment neuf ne permet plus le paiement à la signature).
 - [ ] **2c** fige sur chaque devis remis : le n° de TVA, sa source
   (annuaire, VIES, déclaration), sa date et le texte coché ; une COPIE de la
   réponse VALABLE « à quel titre » (jamais redérivée de `client_id`, qu'une
@@ -3598,6 +3612,295 @@ détail est au §1.5 du cahier) :
   vraie base, il ne voit pas le miroir (c'est `verifier-devis`) ; un essai
   qui lit un fichier voisin (`cas-*.json`, `schema.sql`) se rejoue avec ce
   fichier.
+
+### Après l'étape 2b-3 — ce qui reste (13/11/2026)
+
+> **La migration de 2b-3 est APPLIQUÉE sur la vraie base depuis le
+> 13/11/2026 à 12 h 28**, avec votre accord, Opus fermé (CLAUDE.md, « La
+> réparation urgente, la décennale, le moment du paiement — étape 2b-3 »).
+> Les avertissements « NE PAS FAIRE `git pull` AVANT LA MIGRATION 2b-3 » des
+> commits `3eded21`, `a6d4571` et `ceb7d96` ne valent plus : `git pull`, puis
+> `npx expo start -c`, suffisent (aucun module natif). L'essai sur la vraie
+> base a rendu 118 vérifications justes sur 118.
+>
+> **Règle « Accélérer »** : une seule relecture. Elle a trouvé deux défauts
+> graves, corrigés dans `ceb7d96` : le bâtiment neuf qui permettait le
+> paiement à la signature (décision R1), et « Valable jusqu'au … » sur une
+> décennale sans attestation jointe (E1). Les petits défauts ci-dessous n'ont
+> pas été corrigés. Leurs noms (B-P…, P…, M…, X…) viennent des comptes rendus
+> de la session, qui ne sont pas dans le dépôt.
+
+**Des gestes à vous** :
+
+- [ ] **Votre attestation décennale se termine dans 31 à 60 jours** (relevé
+  de forme du 12/11). Le jour où elle expire, vos brouillons sans réponse
+  « Non » gagneront le point « Joignez … votre attestation décennale et sa
+  date de fin ». Mettez la nouvelle dans « Mon entreprise » → Assurances,
+  AVEC sa date de fin : sans la date, le point reste (« Écrivez … la date de
+  fin »).
+- [ ] **Un de vos brouillons est valable plus de 30 jours** (même relevé) :
+  remis aujourd'hui, son chantier pourrait s'ouvrir après la fin de votre
+  attestation actuelle. La loi regarde la date d'ouverture du chantier :
+  question au juriste (J2), et un avis prévu en 2b-4.
+- [ ] **Vos modalités de paiement** (« Mon entreprise ») s'impriment sur tous
+  vos devis : si elles parlent d'un paiement à la signature, l'avis vous dit
+  maintenant de retirer cette formule, et de choisir dans les conditions de
+  chaque devis quand le client paie.
+
+**À essayer sur votre iPhone** (le build de développement, après `git pull`
+et `npx expo start -c`) — rien de 2b-3 n'y a encore tourné :
+
+- [ ] La carte d'un poste : « Réparation urgente expressément demandée par le
+  client » au pouce ; l'aide se lit ; allumée, le texte du risque apparaît
+  DESSOUS et rien ne saute ; dans la liste, la ligne dit « · réparation
+  urgente ».
+- [ ] Un prix tapé, puis glisser jusqu'à l'interrupteur (le clavier se ferme)
+  et l'allumer : le prix ET la marque sont dans la rangée.
+- [ ] Un devis venu d'une urgence (« Pour moi ») : la phrase « Ce devis vient
+  d'une demande d'urgence … » est là, l'interrupteur éteint.
+- [ ] « Le chantier » → « Ces travaux peuvent-ils engager votre garantie
+  décennale ? » : « Non » au même endroit que dans les deux autres
+  questions ; un appui suffit ; la rangée garde sa hauteur. Depuis « Pour le
+  remettre », « Répondre dans « Le chantier » » arrive SUR la question.
+- [ ] « Conditions » : « Quand le client paie-t-il cette somme ? » ; « À la
+  signature » → la phrase « pourquoi » dessous, le point dans « Pour le
+  remettre », son bouton rouvre « Conditions » sur la question ; fermez puis
+  rouvrez la carte : « À la signature » est toujours choisi. **Revenez
+  ensuite à « Dès le 8e jour »** (sinon le point reste sur votre brouillon).
+- [ ] « Le chantier » → « Oui » à la première question : la confirmation, plus
+  longue (le code de la construction), se lit en entier ; puis
+  « Conditions » → « À la signature » dit pourquoi Opus ne le permet pas.
+  **Revenez à « Non »**.
+- [ ] « Mon entreprise » → Assurances : votre décennale dit « Valable
+  jusqu'au … » sur sa propre ligne.
+- [ ] La ligne « Pour le remettre » garde ≈ 110 points sur votre iPhone 16.
+- [ ] VoiceOver : l'interrupteur dit « commutateur », activé ou non, avec son
+  aide ; à l'allumage, le texte du risque est annoncé ; la rangée d'un poste
+  urgent le dit. Et comment il lit le « · » de « Attestation non jointe · … »
+  (une virgule serait plus sûre, mais l'étiquette ne reprendrait plus la
+  ligne mot pour mot).
+
+**Au juriste, avant 2c — ce que la relecture a laissé ouvert** :
+
+- [x] **Trois formulations du code de la construction**, relues contre
+  L. 271-1 et L. 271-2 : « à compter du lendemain de la première
+  présentation » (et non « de la réception »), « tout paiement ou engagement
+  de payer », « jusqu'à 30 000 € d'amende, bien plus pour une société ».
+  **Corrigées le 13/11**, avant le commit `ceb7d96`.
+- [ ] **Un bâtiment neuf dont TOUTES les lignes sont urgentes : « À la
+  signature » reste permis** (cas 123 de `supabase/cas-remise.json`, vu au
+  navigateur). L'exception d'urgence appartient au code de la consommation,
+  que ces chantiers quittent (L. 221-2 12°), et L. 271-2 n'en a pas : Opus
+  permet peut-être ce que le code de la construction interdit. Rare (une
+  construction neuve faite toute de réparations urgentes suppose une marque
+  fausse, que l'avertissement déconseille déjà). Si l'interdiction doit être
+  totale : le rang 10 de la base, `signaturePermise`, l'ordre de
+  `aidesDeLAcompte`, et les cas 123 et 124.
+- [ ] **« Pour son entreprise » sur un bâtiment neuf : permis** (cas 124).
+  L. 271-1 vise l'« acquéreur non professionnel » — non professionnel de
+  l'immobilier, ce qui n'est pas le sens du code de la consommation. Avec
+  J14.
+- [ ] **L'échéance à écrire sur un devis « Oui » au bâtiment neuf.** Le point
+  du rang 10 dit « Choisissez « Dès le 8e jour » », et la pastille par
+  défaut aussi ; or le délai du code de la construction court du lendemain
+  de la première présentation de la lettre recommandée : le 8e jour après la
+  signature peut tomber DEDANS. **2c ne remet aucun devis « Oui » à la
+  première question avec une échéance tant que le juriste n'a pas répondu** ;
+  d'ici là, envisager une phrase du rang 10 propre au bâtiment neuf, qui ne
+  promette pas le 8e jour.
+- [ ] **J14, réécrit** : L. 271-1, L. 271-2, L. 231-4 (maison individuelle :
+  un dépôt de 3 % au plus), L. 241-1, L. 232-1 (gros œuvre d'une maison :
+  un règlement au fur et à mesure) — lus dans le dump LEGI par la relecture
+  —, et quelle échéance imprimer, puisque ni « à la signature » ni « dès le
+  8e jour » n'est la règle de ce code.
+- [ ] **Le reste de la liste du cahier** (`docs/CAHIER-LOT-2B-3.md`, §1.5) :
+  J1 (l'attestation sur tous les devis d'un constructeur, ou sur ceux qui
+  peuvent engager sa décennale ; « Non » pour un dépannage sans ouvrage) ;
+  J2 (la date qui compte est l'ouverture du chantier) ; J3 (le
+  sous-traitant) ; J4 (les travaux sur un existant) ; J5 (un devis mixte :
+  être payé tout de suite des seules lignes urgentes ? la ligne de
+  déplacement d'un dépannage est-elle « strictement nécessaire » ?) ; J6
+  (l'exception d'urgence pour une petite entreprise) ; J7 (une option
+  urgente) ; J8 (« en urgence », « au domicile », « expressément
+  sollicités ») ; J9 (pour 2c : le formulaire et la mention « pas de droit
+  de rétractation ») ; J10 (le texte libre des modalités, et les textes de
+  l'urgence relus mot pour mot) ; J11 (aucune sanction de l'attestation non
+  jointe dans les textes recopiés ; un PDF figé suffit-il ?) ; J12 (une
+  attestation d'un autre chantier, ou qui ne couvre pas ces activités) ;
+  J13 (un maître d'ouvrage professionnel).
+
+**Défauts connus, non corrigés — la base et le calcul** :
+
+- [ ] **B-P2 — sans réponse à la décennale, une attestation DÉJÀ jointe mais
+  sans date ou périmée** donne `devis_decennale` (`supabase/schema.sql`,
+  49.9) : « Joignez … votre attestation décennale et sa date de fin… » ne dit
+  pas que le fichier est là. Le choix du cahier (une clé au plus) ; la phrase
+  n'est pas fausse. Une variante « déjà jointe », si vous la voulez.
+- [ ] **Deux jours, deux horloges** (B-P3 de la base, P1 de l'écran) : la
+  base juge l'attestation au jour de Paris ; la rangée de « Mon entreprise »
+  (`src/lib/emetteur.js`, `etatDeLAssurance`), l'avis d'expiration et le
+  miroir de démonstration (`src/lib/devis.js`), au jour du téléphone. Le
+  jour de l'expiration, pendant quelques heures, un téléphone qui n'est pas
+  à l'heure de Paris lit « Valable » sous un point qui demande de la
+  joindre, ou l'inverse ; à l'est de Paris (Nouvelle-Calédonie), la base
+  tient pour valable une dizaine d'heures une attestation déjà expirée au
+  jour local. Piste : compter le jour de Paris des deux côtés ; en 2c, figer
+  le jour côté base à la remise, et demander au juriste quel jour compte
+  outre-mer.
+- [ ] **X1 n'est tenu que par la forme du corps** : une base qui exempterait
+  le rang 10 par la question TVA du chantier ne serait vue que par
+  `verifier-devis` (la forme exacte de `motifs_refus_remise`) ; aucun cas de
+  données ne combine « à la signature » et « Oui » à la question TVA. Un cas
+  de plus au générateur le dirait (« à la signature, à titre privé, « Oui »
+  à la question TVA, rien de marqué : le rang 10 »).
+- [ ] **L'invariant §9 de l'essai 49 ignore la réduction**
+  (`supabase/essais-section-49.sql`, depuis le lot 2a) : il compare le total
+  HT à la somme BRUTE des postes. Sur une base qui porte des réductions, il
+  rougit, d'un écart égal à la réduction (trouvé par le second regard sur la
+  migration, avec ses propres données ; mêmes nombres avant et après). À
+  corriger avant de jouer l'essai 49 sur une base qui en contient.
+- [ ] **P4 — `devis_acompte_signature` dit « signé chez le client »**
+  (`schema.sql`, 49.9, et son miroir) : la règle vaut hors établissement
+  (chantier, lieu tiers, vos locaux juste après une rencontre ailleurs). Un
+  exemple, pas une liste ; le motif demande de toute façon le 8e jour.
+  Seulement si la phrase est reprise : « signé hors de vos locaux », base et
+  miroir à l'octet, puis `cas-remise.json`.
+
+**Défauts connus, non corrigés — l'écran** :
+
+- [ ] **P6 — deux appuis rapides sur « Réparation urgente »** lisent tous
+  deux l'ancienne valeur : l'interrupteur finit allumé
+  (`src/components/CarteLigne.js`), comme « Offert ». L'état réel se voit
+  (l'interrupteur et le texte du risque). Un jour : un verrou par référence,
+  sur le modèle d'`enCours` de `FicheAssurance.js`.
+- [ ] **La ligne « pourquoi » se coupe au trait d'union à 393 points** :
+  « (art. L. 271-1 et L. 271- » / « 2). » (`src/lib/devis.js`, la cause
+  `chantier_neuf`). Un trait d'union insécable (U+2011) l'éviterait. Rien de
+  faux.
+- [ ] **À 320 points, « valable jusqu'au » se sépare de sa date** dans « Mon
+  entreprise » → Assurances (« … valable jusqu'au » / « 01/06/2027 ») : une
+  espace insécable après « jusqu'au » la garderait entière
+  (`src/lib/emetteur.js`, `etatDeLAssurance`).
+- [ ] **La ligne d'état d'une assurance a désormais SIX formes**, pas trois :
+  « Valable jusqu'au … », « Expirée le … », « Sans date de fin », et les
+  mêmes précédées de « Attestation non jointe · » pour une décennale sans
+  fichier. Le cahier (§3.2) n'en décrit que trois : le code fait foi.
+- [ ] **L'avis `decennale_sans_attestation` teste encore le chemin à la
+  main** (`src/lib/emetteur.js`, `avisEmetteur`) au lieu
+  d'`attestationJointe` : sans effet aujourd'hui (un chemin fait de blancs
+  n'existe ni en base ni en démonstration), à aligner.
+- [ ] **P3 — la ligne « pourquoi » parle de « ce client » quand le devis n'a
+  pas encore de client** (`POURQUOI_PAS_A_LA_SIGNATURE.sans_reponse`) : elle
+  renvoie à « À quel titre ? », qui ne s'affiche pas sans client. Une entrée
+  « sans client », facultative.
+- [ ] **P4 de l'écran — « Ces questions sont indépendantes… » s'affiche quand
+  une seule question est montrée** (client « pour son entreprise » en
+  franchise : Q3 seule ; `src/components/ChantierDevis.js`). N'afficher
+  l'introduction qu'à partir de deux questions.
+- [ ] **P1 et P2 du droit — la ligne « pourquoi »** : pour une petite
+  entreprise sans ligne urgente, elle parle de l'exception d'urgence avant
+  la règle ; pour un particulier, sa première cause (« aucune ligne n'est
+  marquée « réparation urgente » ») présente la marque comme le remède. Rien
+  de faux ; si le texte est repris, commencer par la règle.
+- [ ] **« Mon entreprise » s'ouvre sur Assurances, pas sur la date de
+  l'attestation** (M8) : dans la fiche, « Valable jusqu'au » vient après cinq
+  champs.
+- [ ] **Les lignes d'état de Q1 et Q2 poussent Q3 d'environ 24 points** (M11,
+  existant depuis 2b-2).
+- [ ] BANC7-X1, E4 et « Poste suivant » restent où ils sont (plus haut).
+
+**Défauts connus, non corrigés — les textes** :
+
+- [ ] **`ECHEANCE_ACOMPTE` cite encore le bâtiment neuf parmi les
+  exceptions** (« … la construction d'un bâtiment neuf ou la transformation
+  importante d'un bâtiment existant, à indiquer dans « Le chantier » ») :
+  exact pour le code de la consommation, mais un artisan peut y lire une
+  façon d'être payé plus tôt. L'écran n'est jamais faux (dès « Oui », l'aide
+  devient celle du neuf). Proposition, à vous : ajouter « — mais pour la
+  construction d'un logement, Opus ne permet pas non plus le paiement à la
+  signature ». Le texte est figé mot pour mot dans `verifier-devis` et
+  `mesure-devis`.
+- [ ] **La nature de l'acompte d'un bâtiment neuf** reste
+  `AIDE_NATURE_ACOMPTE` (les 14 jours d'un devis hors établissement, « sauf
+  exceptions »), pas les dix jours du code de la construction. Avec le
+  juriste, en même temps que l'échéance.
+- [ ] **P6 du droit — `PAS_ENCORE_VERIFIE`** ne dit pas qu'Opus ne vérifie
+  pas un « Non » à la décennale, ni que le fichier et la date sont bien ceux
+  de l'attestation. Facultatif.
+- [ ] **P9 — « quand l'acompte ou les arrhes sont payés »**
+  (`src/data/legal.js`, « Ce que nous collectons ») : Opus garde le moment
+  PRÉVU, pas la date d'un paiement. Ambigu, pas faux : « quand vous prévoyez
+  que… », si vous le voulez (et `VERSION` avec).
+- [ ] **P8 — « La loi » sur `devis_attestation` pour un sous-traitant** qui
+  garde « Oui » : L. 243-2 ne le vise peut-être pas. Sens protecteur ;
+  attendre J3.
+
+**Reporté par le cahier** (§7) :
+
+- [ ] deux avis : « l'urgence ne change rien pour ce client », et « une
+  réparation urgente sur un bâtiment neuf » ;
+- [ ] le paiement en deux temps d'un devis mixte (J5) ;
+- [ ] un métier qui n'est pas soumis à la décennale (catégorie « conseil »)
+  devra répondre « Non » à chaque devis — **jamais déduire la réponse du
+  métier** ;
+- [ ] la ré-acceptation des CGU : toujours absente, alors que `VERSION` a
+  encore changé (`'2026-11-13'`).
+
+**Pour 2c — ce que 2b-3 lui laisse** :
+
+- [ ] **joindre l'attestation et la FIGER** sur le devis remis, après avoir
+  vérifié que le fichier existe dans `documents` (un chemin écrit ne prouve
+  pas un fichier) ; **la lire sous verrou** (`for share` sur la ligne
+  d'`emetteur_assurances` choisie), dans la même transaction que le statut,
+  et recalculer la liste au moment de la remise : elle dépend maintenant
+  d'une table de plus, et du JOUR ;
+- [ ] imprimer « vous ne bénéficiez pas du droit de rétractation » pour les
+  lignes urgentes, **seulement pour un client qui commande à titre privé**
+  (pour une petite entreprise, la prudence vaut aussi pour cette
+  information) ; le formulaire dès qu'une ligne ne l'est pas ; la demande
+  EXPRESSE du client, sur papier ou support durable, pour commencer avant
+  14 jours une ligne non urgente d'un devis mixte ;
+- [ ] **la règle des 7 jours vise TOUT paiement**, pas seulement l'acompte :
+  le solde payé à la fin d'un dépannage NON urgent n'est signalé par rien —
+  **une question à vous avant 2c** (une échéance du solde, ou une règle) ;
+- [ ] **le texte libre des modalités qui parle d'un paiement à la
+  signature** : ne pas l'imprimer sur un devis « dès le 8e jour », ou en
+  faire un point — décision avant 2c (J10) ;
+- [ ] figer les marques d'urgence, la réponse décennale et l'échéance ; et
+  une phrase des conditions d'utilisation sur les déclarations de
+  l'artisan ;
+- [ ] **le module facture** : la liste officielle des travaux d'urgence à
+  10 % n'est JAMAIS le marqueur de 2b-3.
+
+**Ce que l'essai sur la vraie base n'a pas joué** :
+
+- [ ] aucun écran sur la vraie base (seulement en démonstration) ; les
+  requêtes ont été reproduites à la main, pas envoyées par la file
+  d'écriture ;
+- [ ] un devis venu d'une VRAIE urgence ; le régime franchise ; un chemin
+  écrit vers un fichier absent ; une écriture tardive (OP015) portant les
+  colonnes nouvelles ; une ancienne version de l'application qui créerait
+  une ligne sans `urgence` (éprouvé en local seulement : elle passe, à
+  faux) ; l'export au-delà de la présence des trois colonnes ; un téléphone
+  qui n'est pas à l'heure de Paris.
+
+**Contrôles et méthode** :
+
+- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+  comptes à relire après 2b-3 sont le 49-remise (19 erreurs, 268 justes), le
+  49-conditions (27, 43) et le 49 (79, 189) ; la parité base ↔ téléphone,
+  par `node scripts/generer-cas-remise.mjs --verifier` (125 cas, à la main).
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** (près de 900
+  mesures, environ 35 minutes) : à lancer avant toute livraison qui touche
+  l'écran du devis ou « Mon entreprise ». Un passage complet peut dépasser
+  la limite de temps d'une commande : lire le « ✘ », et rejouer la section
+  coupée seule (`SEULEMENT=`).
+- [ ] **Le banc complet n'a pas été rejoué après les trois retouches de texte
+  du 13/11** (seulement `verifier-devis`, `npm run verifier` et
+  `mesure-devis`).
+- [ ] **Quand la base, le miroir et `cas-remise.json` changent ENSEMBLE, la
+  parité ne voit rien** (banc S3) : ce qui garde, c'est la forme exacte du
+  corps dans `verifier-devis`, l'invariant et la couverture du générateur.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
