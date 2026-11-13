@@ -72,9 +72,9 @@
 --  `fiche_a` : les cas 3 c, 11, 13 et 16 lisent la liste sans `fiche_a`. Les
 --  attendus d'avant NE CHANGENT PAS ; les cas de la décennale la retirent
 --  dans leur transaction. Le cas 14 c nomme désormais aussi
---  `emetteur_assurances`, et `chantier_neuf_conso` sort de ses mots
---  interdits (le motif de l'acompte la lit ; la PROPRIÉTÉ qu'elle ne fait
---  pas sortir `devis_taux_reduit_neuf` reste jouée, cas 17). Et six cas
+--  `emetteur_assurances`, et `chantier_neuf_conso` est sorti de ses mots
+--  interdits le temps que le motif de l'acompte la lise — il y est REVENU
+--  le 13/11 (voir plus bas). Et six cas
 --  nouveaux — 19 : la réparation urgente, un POSTE seulement (cinq refus de
 --  `devis_ligne_urgence_check`, et `devis_ligne_forme_check` nommée devant
 --  elle) ; 20 : `devis_acompte_signature`, toutes les branches de la règle ;
@@ -85,6 +85,18 @@
 --  de ligne, jamais l'origine ; 24 : les onze rangs à la fois, le contrat de
 --  SEIZE clés. Quatre-vingts valeurs de plus (187 → 267), six refus de
 --  plus (13 → 19). Le compte est devenu le cas 25.
+--
+--  CE QUE LA DÉCISION DU PROPRIÉTAIRE DU 13/11 A CHANGÉ (relecture droit
+--  D1, réponse R1 « Interdire « à la signature » ») : le « Oui » à la
+--  question des DROITS du chantier (`chantier_neuf_conso`) NE PERMET PLUS
+--  « à la signature » — pour la construction d'un logement, le code de la
+--  construction peut laisser au client dix jours pour se rétracter et
+--  interdire tout paiement avant (CCH, L. 271-1 et L. 271-2). La fonction ne
+--  lit donc plus cette réponse du tout : le cas 14 c l'interdit de nouveau
+--  dans le corps (la PROPRIÉTÉ qui en découle : elle ne peut ni permettre ni
+--  bloquer aucun motif), et le cas 20 attend `devis_acompte_signature` là
+--  où il attendait « — » pour le bâtiment neuf. Aucune valeur ni aucun
+--  refus de plus : 267 valeurs, 19 refus.
 --
 --  CE QUE 2b-2 A AJOUTÉ (09/11/2026) : `devis_complet` donne sa réponse « à
 --  quel titre » POUR SON CLIENT (sinon `devis_pour_qui` sortirait partout) ;
@@ -1055,8 +1067,8 @@ select pg_temp.v(p.proacl::text !~ '(^\{|,)=X') as pas_public_attendu_t,
 \echo '--- 14 c. LE CORPS, commentaires et chaînes retirés : il ne nomme QUE devis, devis_lignes, emetteur et, depuis'
 \echo '          2b-3, emetteur_assurances (plus est_mon_entreprise et emetteur_incomplet), et AUCUN des mots de l’origine'
 \echo '          ni des lectures entières (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de'
-\echo '          rien). `chantier_neuf_conso` en est SORTI en 2b-3 : le motif de l’acompte la lit ; que le motif du taux'
-\echo '          réduit ne la lise pas reste PROUVÉ par sa propriété (cas 17) — attendu : la liste exacte, puis 0 | 0 | 0 | t'
+\echo '          rien) ; ni `chantier_neuf_conso`, de nouveau depuis le 13/11 : sortie en 2b-3 pour le motif de l’acompte,'
+\echo '          elle n’y permet plus rien (CCH L. 271-1, L. 271-2) — attendu : la liste exacte, puis 0 | 0 | 0 | t'
 with corps as (
   select regexp_replace(
            regexp_replace(
@@ -1072,7 +1084,7 @@ select pg_temp.v((select string_agg(distinct x[1], ',' order by x[1])
           from regexp_matches(src, 'public\s*\.\s*([a-z_][a-z0-9_]*)', 'g') as x)
          = 'devis,devis_lignes,emetteur,emetteur_assurances,emetteur_incomplet,est_mon_entreprise') as nomme_exactement_attendu_t,
        pg_temp.v((select count(*) from regexp_matches(src,
-          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients)\M',
+          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients|chantier_neuf_conso)\M',
           'gi'))) as mots_interdits_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi'))) as lectures_entieres_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi'))) as mots_d_origine_attendu_0,
@@ -1496,12 +1508,13 @@ select pg_temp.v(:'e19a_err' = 'true' and :'e19a_code' = '23514'
 -- ==========================================================================
 \echo ''
 \echo '=== 20. « À LA SIGNATURE » (2b-3, rang 10, devis_acompte_signature, une PRUDENCE) — permis seulement pour un client qui'
-\echo '        commande pour son entreprise, un bâtiment neuf (la question des DROITS), ou TOUTES les lignes chiffrées urgentes'
-\echo '        pour un client à titre privé ou une association ; jamais sans acompte demandé ==='
+\echo '        commande pour son entreprise, ou TOUTES les lignes chiffrées urgentes pour un client à titre privé ou une'
+\echo '        association ; JAMAIS par le bâtiment neuf (décision du 13/11, CCH L. 271-1 et L. 271-2) ; jamais sans acompte ==='
 \echo '    attendu, dans l’ordre : — (vide) ; — (faux) ; devis_acompte_signature (vrai : rang 10, prudence, la phrase) ;'
 \echo '      — (tout urgent, consommateur) ; devis_acompte_signature (une option) ; — (l’option retirée) ;'
 \echo '      devis_acompte_signature (un poste OFFERT non urgent) ; — (marqué) ; devis_acompte_signature (un poste non urgent) ;'
-\echo '      — (professionnel) ; — (chantier neuf, question des droits) ; devis_acompte_signature (chantier : non) ;'
+\echo '      — (professionnel) ; devis_acompte_signature (chantier neuf, question des droits : ne permet plus, 13/11) ;'
+\echo '      devis_acompte_signature (chantier : non) ;'
 \echo '      — (tout urgent) ; — (une pièce ajoutée : un titre n’est jamais urgent, il ne compte pas) ;'
 \echo '      devis_pour_qui,devis_acompte_signature (réponse vide ET tout urgent : la garde du « is not true ») ;'
 \echo '      devis_pour_qui,devis_acompte_signature (réponse donnée pour un AUTRE client) ;'
@@ -1542,8 +1555,10 @@ execute chiffree(:L4, :D1, 4000, 'poste', 10000, 0, false, 10);
 execute motifs(:D1, 'devis_acompte_signature');
 update public.devis set pour_qui = 'professionnel', generation = 11 where id = :D1;
 execute motifs(:D1, '—');
+-- Le bâtiment neuf ne permet PLUS « à la signature » (décision du
+-- propriétaire du 13/11) : le motif reste.
 update public.devis set pour_qui = 'consommateur', chantier_neuf_conso = true, generation = 12 where id = :D1;
-execute motifs(:D1, '—');
+execute motifs(:D1, 'devis_acompte_signature');
 update public.devis set chantier_neuf_conso = false, generation = 13 where id = :D1;
 execute motifs(:D1, 'devis_acompte_signature');
 update public.devis_lignes set urgence = true, generation = 14 where id = :L4;

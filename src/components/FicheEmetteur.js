@@ -55,7 +55,7 @@ import {
   tarifsDepuisFormulaire, pourcentDepuisSaisie,
   MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
-  parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance,
+  parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance, attestationJointe,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
@@ -844,8 +844,14 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
              du texte coupé à deux lignes, elle tombait sous « … » à 320
              points pour un assureur au nom long. Comparée au jour du
              TÉLÉPHONE ; la liste de ce qu'il manque, elle, juge au jour de
-             Paris (deux horloges, dit dans `docs/A-FAIRE.md`). */
+             Paris (deux horloges, dit dans `docs/A-FAIRE.md`).
+             Une DÉCENNALE sans fichier le dit en tête de cette ligne
+             (« Attestation non jointe · valable jusqu'au … », relecture
+             E1 / P7), et l'étiquette parlée la reprend. « · attestation
+             jointe » suit la MÊME règle (`attestationJointe`) : les deux ne
+             peuvent pas s'afficher ensemble. */
           const etat = etatDeLAssurance(a);
+          const jointe = attestationJointe(a);
           return (
             <Pressable
               key={String(a.id)}
@@ -857,7 +863,7 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
               <View style={s.optionTexte}>
                 <Text style={s.optionLibelle}>{n}</Text>
                 <Text style={s.optionAide} numberOfLines={2}>
-                  {`${a.assureur_nom} — ${a.couverture}${a.attestation_chemin ? ' · attestation jointe' : ''}`}
+                  {`${a.assureur_nom} — ${a.couverture}${jointe ? ' · attestation jointe' : ''}`}
                 </Text>
                 <Text style={s.optionAide}>{etat}</Text>
               </View>

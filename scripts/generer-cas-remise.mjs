@@ -371,8 +371,11 @@ const SITUATIONS = [
   { nom: 'question TVA à « Non » (faux, pas vide) : rien au rang 3', e: 'reel_tva',
     devis: { chantier_neuf_tva: false }, lignes: [poste(100000, 1000), option(10000, 550)] },
   // --- 2b-3, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
-  //     Le rang 10 : « à la signature », un acompte, et aucun des trois cas
-  //     qu'Opus permet (`signaturePermise`). Une PRUDENCE.
+  //     Le rang 10 : « à la signature », un acompte, et aucun des deux cas
+  //     qu'Opus permet (`signaturePermise`). Une PRUDENCE. Le bâtiment neuf
+  //     n'en est plus un depuis la décision du 13/11 (code de la
+  //     construction, L. 271-1 et L. 271-2) : son cas garde sa place et son
+  //     numéro, et attend désormais le rang 10.
   { nom: 'à la signature, à titre privé, un poste non marqué : devis_acompte_signature seul (une prudence)', e: 'franchise',
     devis: SIGNATURE, lignes: UN_POSTE_0 },
   { nom: 'à la signature, à titre privé, toutes les lignes chiffrées marquées « réparation urgente » : permis, rien ne manque',
@@ -387,8 +390,8 @@ const SITUATIONS = [
     e: 'franchise', devis: SIGNATURE, lignes: [titre('zone'), urgent(100000, 0), urgent(4500, 0, { offert: true }), titre('reserve')] },
   { nom: 'à la signature, pour son entreprise dans son activité principale, rien de marqué : permis', e: 'franchise',
     devis: { ...SIGNATURE, pour_qui: 'professionnel' }, lignes: UN_POSTE_0 },
-  { nom: 'à la signature, à titre privé, « Oui » à la question des DROITS (bâtiment neuf) : permis', e: 'franchise',
-    devis: { ...SIGNATURE, chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, à titre privé, « Oui » à la question des DROITS (bâtiment neuf) : le rang 10 (le bâtiment neuf ne permet plus, 13/11)',
+    e: 'franchise', devis: { ...SIGNATURE, chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
   { nom: 'à la signature, petite entreprise hors de son activité principale, tout marqué : le rang 10 (l’urgence ne lève pas le 8e jour)',
     e: 'franchise', devis: { ...SIGNATURE, pour_qui: 'professionnel_hors_activite' }, lignes: [urgent(100000, 0)] },
   { nom: 'à la signature, association, copropriété ou société civile, tout marqué : permis', e: 'franchise',
@@ -451,6 +454,17 @@ const SITUATIONS = [
     devis: { ...SIGNATURE, engage_decennale: true }, assur: [assurance('decennale', true, PASSEE)], lignes: UN_POSTE_0 },
   { nom: 'un devis NEUF (rien de dit) et aucune assurance : client, lignes, lieu, délai, validité, puis devis_decennale',
     e: 'franchise', devis: VIDE, assur: [], lignes: [] },
+  // --- La décision du 13/11 (R1), À LA FIN pour que les numéros des cas déjà
+  //     là ne bougent pas : le bâtiment neuf ne permet plus « à la
+  //     signature », mais il n'EMPÊCHE rien non plus — l'urgence et « pour son
+  //     entreprise » permettent toujours sur ce chantier, et une association
+  //     qui n'a pas tout marqué garde le rang 10.
+  { nom: 'à la signature, à titre privé, bâtiment neuf ET toutes les lignes marquées « réparation urgente » : permis (l’urgence permet toujours)',
+    e: 'franchise', devis: { ...SIGNATURE, chantier_neuf_conso: true }, lignes: [urgent(100000, 0), urgent(20000, 0)] },
+  { nom: 'à la signature, pour son entreprise dans son activité principale, bâtiment neuf : permis', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'professionnel', chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, association, copropriété ou société civile, bâtiment neuf, rien de marqué : le rang 10', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'non_professionnel', chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -651,23 +665,36 @@ for (const pq of ['consommateur', 'non_professionnel', 'professionnel_hors_activ
   if (!cas.some((c) => c.devis.pourQui === pq && c.devis.clientId && c.devis.pourQuiClient === c.devis.clientId
     && c.attendu.some((m) => m.rang > 100))) throw new Error(`aucun cas où la réponse « ${pq} » filtre les mentions`);
 }
-/* 2b-3 : « à la signature » PERMIS par chacun des trois cas (aucun rang 10),
-   et REFUSÉ pour chaque réponse qui ne le permet pas ; le rang 11 sur chacun
-   de ses trois états, et « Non » qui ne lit rien ; une assurance d'un AUTRE
-   artisan ; le rang 10 et le rang 11 ensemble ; et les 85 cas d'avant gardent
-   leur numéro (rien n'est inséré avant eux). */
+/* 2b-3 : « à la signature » PERMIS par chacun des deux cas (aucun rang 10)
+   — et, depuis le 13/11 (décision R1), sur un bâtiment neuf aussi quand l'un
+   d'eux tient —, et REFUSÉ pour chaque réponse qui ne le permet pas, le
+   bâtiment neuf compris ; le rang 11 sur chacun de ses trois états, et
+   « Non » qui ne lit rien ; une assurance d'un AUTRE artisan ; le rang 10 et
+   le rang 11 ensemble ; et les 85 cas d'avant gardent leur numéro (rien
+   n'est inséré avant eux). */
 const sig = (c) => c.devis.acompteALaSignature === true && (c.devis.acompteCentiemes != null || c.devis.acompteCentimes != null);
 const r10 = (c) => c.attendu.some((m) => m.cle === 'devis_acompte_signature');
 const urgents = (c) => c.lignes.filter((l) => l.type === 'poste' || l.type === 'option');
 const toutMarque = (c) => urgents(c).length > 0 && urgents(c).every((l) => l.urgence === true);
+const valableDe = (c, r) => c.devis.pourQui === r && c.devis.pourQuiClient === c.devis.clientId;
+const neuf = (c) => c.devis.chantierNeufConso === true;
 const permis = {
-  professionnel: (c) => c.devis.pourQui === 'professionnel' && c.devis.pourQuiClient === c.devis.clientId,
-  chantier_neuf: (c) => c.devis.chantierNeufConso === true,
-  urgence_prive: (c) => toutMarque(c) && c.devis.pourQui === 'consommateur' && c.devis.pourQuiClient === c.devis.clientId,
-  urgence_association: (c) => toutMarque(c) && c.devis.pourQui === 'non_professionnel' && c.devis.pourQuiClient === c.devis.clientId,
+  professionnel: (c) => valableDe(c, 'professionnel'),
+  urgence_prive: (c) => toutMarque(c) && valableDe(c, 'consommateur'),
+  urgence_association: (c) => toutMarque(c) && valableDe(c, 'non_professionnel'),
+  // 13/11 (R1) : sur un bâtiment neuf, les deux cas permettent toujours.
+  professionnel_neuf: (c) => neuf(c) && valableDe(c, 'professionnel'),
+  urgence_prive_neuf: (c) => neuf(c) && toutMarque(c) && valableDe(c, 'consommateur'),
 };
 for (const [cle, f] of Object.entries(permis)) {
   if (!cas.some((c) => sig(c) && f(c) && !r10(c))) throw new Error(`aucun cas où « à la signature » est permis par ${cle}`);
+}
+/* 13/11 (R1) : le bâtiment neuf ne permet PLUS « à la signature » — à titre
+   privé comme pour une association, rien de marqué : le rang 10. */
+for (const r of ['consommateur', 'non_professionnel']) {
+  if (!cas.some((c) => sig(c) && neuf(c) && !toutMarque(c) && valableDe(c, r) && r10(c))) {
+    throw new Error(`aucun cas où le bâtiment neuf, pour « ${r} », laisse le rang 10`);
+  }
 }
 if (!cas.some((c) => sig(c) && toutMarque(c) && c.devis.pourQui === 'professionnel_hors_activite' && r10(c))) {
   throw new Error('aucun cas où l’urgence ne lève pas le 8e jour pour une petite entreprise');

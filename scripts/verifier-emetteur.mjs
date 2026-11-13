@@ -962,6 +962,73 @@ if (E && M && D) {
       && EA({ valide_jusquau: null }, '2026-11-12') === 'Sans date de fin' && EA({}, '2026-11-12') === 'Sans date de fin'
       && EA(null, '2026-11-12') === 'Sans date de fin' && EA({ valide_jusquau: '' }, '2026-11-12') === 'Sans date de fin',
     [EA({ valide_jusquau: '2027-03-31' }, '2026-11-12'), EA({ valide_jusquau: '2026-11-11' }, '2026-11-12')].join(' | '));
+    /* LA DÉCENNALE SANS FICHIER (relecture de 2b-3, E1 / P7) : sa ligne d'état
+       commence par « Attestation non jointe · », puis l'état de la date en
+       minuscule. Une décennale JOINTE, une RC pro ou une « autre » sans
+       fichier : rien ne change. Un chemin fait seulement de blancs (espaces,
+       tabulations, retours à la ligne) n'est PAS écrit — la règle de
+       `tient_l_assurance()` ; un U+00A0, lui, n'est pas un blanc pour la
+       base : il est écrit. */
+    const NBSP = String.fromCharCode(0xa0);
+    const decen = (chemin, fin) => ({ nature: 'decennale', attestation_chemin: chemin, valide_jusquau: fin });
+    const casNonJointe = [
+      [EA(decen(null, '2027-03-31'), '2026-11-12'), 'Attestation non jointe · valable jusqu’au 31/03/2027'],
+      [EA(decen(null, '2026-11-12'), '2026-11-12'), 'Attestation non jointe · valable jusqu’au 12/11/2026'],
+      [EA(decen(null, '2026-11-11'), '2026-11-12'), 'Attestation non jointe · expirée le 11/11/2026'],
+      [EA(decen(null, null), '2026-11-12'), 'Attestation non jointe · sans date de fin'],
+      [EA({ nature: 'decennale', valide_jusquau: '2027-03-31' }, '2026-11-12'), 'Attestation non jointe · valable jusqu’au 31/03/2027'],
+      [EA(decen('', '2027-03-31'), '2026-11-12'), 'Attestation non jointe · valable jusqu’au 31/03/2027'],
+      [EA(decen(' \t\r\n ', '2027-03-31'), '2026-11-12'), 'Attestation non jointe · valable jusqu’au 31/03/2027'],
+    ];
+    const casJointe = [
+      [EA(decen('pro/attestation.pdf', '2027-03-31'), '2026-11-12'), 'Valable jusqu’au 31/03/2027'],
+      [EA(decen('pro/attestation.pdf', '2026-11-11'), '2026-11-12'), 'Expirée le 11/11/2026'],
+      [EA(decen('pro/attestation.pdf', null), '2026-11-12'), 'Sans date de fin'],
+      [EA(decen(NBSP, '2027-03-31'), '2026-11-12'), 'Valable jusqu’au 31/03/2027'],
+    ];
+    const casAutres = [
+      [EA({ nature: 'rc_pro', attestation_chemin: null, valide_jusquau: '2027-03-31' }, '2026-11-12'), 'Valable jusqu’au 31/03/2027'],
+      [EA({ nature: 'rc_pro', attestation_chemin: null, valide_jusquau: '2026-11-11' }, '2026-11-12'), 'Expirée le 11/11/2026'],
+      [EA({ nature: 'rc_pro', attestation_chemin: null, valide_jusquau: null }, '2026-11-12'), 'Sans date de fin'],
+      [EA({ nature: 'autre', libelle: 'Multirisque', attestation_chemin: null, valide_jusquau: '2027-03-31' }, '2026-11-12'), 'Valable jusqu’au 31/03/2027'],
+    ];
+    const fautifsEA = [...casNonJointe, ...casJointe, ...casAutres].filter(([obtenu, attendu]) => obtenu !== attendu);
+    verifier('`etatDeLAssurance`, FAITE TOURNER sur une DÉCENNALE SANS FICHIER (relecture E1 / P7) : « Attestation non jointe · valable '
+      + 'jusqu’au JJ/MM/AAAA », « … · expirée le … », « … · sans date de fin » (chemin vide, absent ou fait de blancs) ; une décennale '
+      + 'JOINTE, une RC pro et une « autre » SANS fichier gardent « Valable jusqu’au … », « Expirée le … », « Sans date de fin »',
+    fautifsEA.length === 0 && casNonJointe.length === 7 && casJointe.length === 4 && casAutres.length === 4,
+    fautifsEA.map(([o, a]) => `« ${o} » au lieu de « ${a} »`).join(' | '));
+    /* LA MÊME RÈGLE QUE `cheminEcrit` DE `devis.js` (le rang 11) : écrite
+       deux fois, parce qu'`emetteur.js` n'importe pas `devis.js` (sa liste
+       fermée d'imports, plus haut). Comparée de DEUX façons : le texte de
+       la règle (le même jeu de blancs aux deux bouts, des deux côtés, et
+       `attestationJointe` passe par `rogner`), et les deux fonctions FAITES
+       TOURNER sur les mêmes chemins — une décennale datée de 2099 est
+       « valable » pour `etatDeLAttestation` SI ET SEULEMENT SI
+       `attestationJointe` la dit jointe, et sa ligne d'état ne commence par
+       « Attestation non jointe » que dans le cas contraire. */
+    let DV = null;
+    try { DV = await import('../src/lib/devis.js'); } catch (e) { DV = null; }
+    const srcDevis = sansCommentaires(lire('src/lib/devis.js'));
+    const srcEm = sansCommentaires(lire('src/lib/emetteur.js'));
+    const REGLE = '/^[ \\t\\r\\n]+|[ \\t\\r\\n]+$/g';
+    const chemins = [null, undefined, '', ' ', '\t', '\r\n', ' \t\r\n ', 'x', ' x ', '\tpro/a.pdf\n', NBSP,
+      String.fromCharCode(0x200b), 'pro/attestation.pdf'];
+    const desaccords = DV ? chemins.filter((c) => {
+      const joint = E.attestationJointe({ nature: 'decennale', attestation_chemin: c });
+      const valable = DV.etatDeLAttestation([{ nature: 'decennale', attestation_chemin: c, valide_jusquau: '2099-01-01' }], '2026-11-12') === 'valable';
+      const nonJointe = EA({ nature: 'decennale', attestation_chemin: c, valide_jusquau: '2099-01-01' }, '2026-11-12').startsWith('Attestation non jointe');
+      return joint !== valable || nonJointe === joint;
+    }) : chemins;
+    verifier('`attestationJointe` (`emetteur.js`) et `cheminEcrit` (`devis.js`, le rang 11) : la MÊME règle, au texte près, et FAITES '
+      + 'TOURNER d’accord sur 13 chemins (vide, blancs, U+00A0, U+200B, un vrai chemin)',
+    !!DV && desaccords.length === 0
+      && srcDevis.includes(`const BORDS_DU_CHEMIN = ${REGLE};`)
+      && srcDevis.includes("const cheminEcrit = (c) => c != null && String(c).replace(BORDS_DU_CHEMIN, '') !== '';")
+      && srcEm.includes(`const s = String(v).replace(${REGLE}, '');`)
+      && /export function attestationJointe\(a\) \{\s*return rogner\(a \? a\.attestation_chemin : null\) !== null;\s*\}/.test(srcEm)
+      && /const nonJointe = !!a && a\.nature === 'decennale' && !attestationJointe\(a\);/.test(srcEm),
+    DV ? `désaccord sur : ${desaccords.map((c) => JSON.stringify(c)).join(', ') || '—'}` : '`devis.js` ne s’ouvre pas dans node');
     verifier('…et deux décennales donnent deux avis DISTINCTS, l’assureur nommé, chacun son `id`',
       dec.length === 2 && dec[0].texte !== dec[1].texte && /Premier assureur/.test(dec[0].texte)
       && dec[0].id === 'x1' && dec[1].id === 'x2');
@@ -2154,9 +2221,26 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     && /: 'Facultatif\. Touchez le dernier jour de validité de votre attestation\.'\)/.test(code.FicheAssurance),
     'sous une RC pro, « votre décennale en a besoin » ne s’appliquerait pas');
   verifier('la rangée d’une assurance dit son état SUR SA PROPRE LIGNE, hors du texte coupé à deux lignes (2b-3, E-I5)',
-    /const etat = etatDeLAssurance\(a\);/.test(fe)
-    && /numberOfLines=\{2\}>\s*\{`\$\{a\.assureur_nom\} — \$\{a\.couverture\}\$\{a\.attestation_chemin \? ' · attestation jointe' : ''\}`\}\s*<\/Text>\s*<Text style=\{s\.optionAide\}>\{etat\}<\/Text>/.test(fe),
+    /const etat = etatDeLAssurance\(a\);\s*const jointe = attestationJointe\(a\);/.test(fe)
+    && /numberOfLines=\{2\}>\s*\{`\$\{a\.assureur_nom\} — \$\{a\.couverture\}\$\{jointe \? ' · attestation jointe' : ''\}`\}\s*<\/Text>\s*<Text style=\{s\.optionAide\}>\{etat\}<\/Text>/.test(fe),
     'ajoutée au bout du texte coupé, la date tombait sous « … » à 320 points ; `mesure-devis` la mesure par sa boîte');
+  /* Relecture de 2b-3, E1 / P7 : « Attestation non jointe · … » (la ligne
+     d'état) et « · attestation jointe » (le texte coupé) viennent de la MÊME
+     règle, `attestationJointe` — jamais de `a.attestation_chemin` lu à la
+     main dans la rangée (un chemin fait de blancs dirait les deux à la
+     fois) ; et l'étiquette parlée reprend la ligne d'état. */
+  {
+    const debutRangee = fe.indexOf('{assurances.map((a) => {');
+    const finRangee = fe.indexOf('Ajouter une assurance', debutRangee);
+    const rangee = debutRangee >= 0 && finRangee > debutRangee ? fe.slice(debutRangee, finRangee) : '';
+    verifier('…« · attestation jointe » et « Attestation non jointe · … » suivent la MÊME règle (`attestationJointe`), jamais '
+      + '`a.attestation_chemin` lu dans la rangée, et l’étiquette parlée reprend la ligne d’état (relecture E1 / P7)',
+    rangee !== '' && !/a\.attestation_chemin/.test(rangee)
+      && (rangee.match(/attestation jointe/g) || []).length === 1
+      && /accessibilityLabel=\{`\$\{n\}, \$\{a\.assureur_nom\}, \$\{etat\}\. Modifier cette assurance`\}/.test(rangee)
+      && /import \{[^}]*\battestationJointe\b[^}]*\} from '\.\.\/lib\/emetteur'/.test(fe),
+    'un chemin fait de blancs afficherait « · attestation jointe » au-dessus de « Attestation non jointe · … »');
+  }
 
   /* ------------------------------------------------------------------ */
   /*  5c. LES DEUX PORTES, ET UNE SEULE FENÊTRE                          */

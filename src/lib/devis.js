@@ -2244,17 +2244,34 @@ export const ECHEANCE_ACOMPTE = 'Devis signé hors de vos locaux (chez le client
   + 'consommation, art. L.\u00a0221-10, L.\u00a0221-2 et L.\u00a0221-3). Opus ne sait pas encore où ce devis sera '
   + 'signé : comptez ce délai.';
 
-/* La suite commune des deux formes de `echeanceAcompteChantierNeuf`. */
+/* La suite commune des deux formes de `echeanceAcompteChantierNeuf`.
+   RÉÉCRITE LE 13/11 (décision R1 du propriétaire, « Interdire « à la
+   signature » », relecture droit D1) : elle disait « la règle du 8e jour ne
+   s'applique pas à ces chantiers », et laissait croire qu'on pouvait être
+   payé à la signature. C'est vrai du code de la consommation (L. 221-2 12°),
+   pas du code de la construction : pour un acte qui a pour objet la
+   construction d'un immeuble à usage d'habitation, l'acquéreur non
+   professionnel peut se rétracter pendant dix jours à compter du lendemain
+   de la première présentation de la lettre recommandée qui lui notifie
+   l'acte, et nul ne peut recevoir de lui aucun versement avant (CCH,
+   L. 271-1 et L. 271-2, relus dans le dump LEGI local, en vigueur). C'est
+   donc désormais une aide de cas NON permis : `signaturePermise` ne compte
+   plus le bâtiment neuf. */
 const SUITE_CHANTIER_NEUF = 'ce devis porte sur la construction d’un bâtiment neuf ou la transformation importante d’un '
-  + 'bâtiment existant : la règle du 8e jour ne s’applique pas à ces chantiers. Si ce n’est pas vraiment le cas, '
-  + 'revenez à « Non » dans « Le chantier » : un paiement reçu trop tôt permettrait au client d’annuler le contrat.';
+  + 'bâtiment existant : la règle du 8e jour du code de la consommation ne vaut pas pour ces chantiers. Mais pour la '
+  + 'construction d’un logement, le code de la construction peut laisser à votre client dix jours pour se rétracter, à '
+  + 'compter du lendemain de la première présentation du contrat par lettre recommandée, et interdire tout paiement '
+  + 'ou engagement de payer avant (art. L.\u00a0271-1 et '
+  + 'L.\u00a0271-2) : Opus ne permet pas le paiement à la signature, et l’échéance à écrire sur ces devis sera fixée '
+  + 'avec un juriste avant leur envoi. Si ce n’est pas vraiment le cas, revenez à « Non » dans « Le chantier ».';
 
 /**
  * L'aide du 8e jour quand l'artisan a répondu « Oui » à la première question
  * du chantier (2b-2, annexe A.6 : `ECHEANCE_ACOMPTE_CHANTIER_NEUF`) — avec la
  * date de la confirmation que la BASE a posée (`chantierNeufConsoLe`), ou,
  * pas encore relue, « Vous venez d'indiquer ». Une FONCTION : la phrase porte
- * une date. L. 221-2 12° (le champ), L. 221-10 (le 8e jour).
+ * une date. L. 221-2 12° (le champ), L. 221-10 (le 8e jour) ; depuis le
+ * 13/11, CCH L. 271-1 et L. 271-2 (les dix jours, et aucun versement avant).
  */
 export function echeanceAcompteChantierNeuf(confirmeLe = null) {
   const date = confirmeLe ? dateFrancaise(confirmeLe) : null;
@@ -2299,36 +2316,40 @@ export const AIDE_NATURE_ACOMPTE_PRUDENCE = 'Des arrhes : chacun peut renoncer �
  * lignes toutes marquées « réparation urgente » — ce sont des AIDES, pas des
  * comptes : elles suivent ce que l'artisan voit, comme les autres aides de la
  * carte. `{ nature, echeance }`, `echeance` à `null` quand elle n'a pas lieu
- * d'être. Dans cet ordre (D8) :
+ * d'être. Dans cet ordre (D8, refait le 13/11 — décision R1) :
  *   1. `professionnel` : ni le 8e jour, ni la rétractation — `AIDE_NATURE_ACOMPTE_PRO` ;
- *   2. le chantier neuf (« Oui » à la question des droits du client) : le
- *      8e jour ne s'applique pas — `echeanceAcompteChantierNeuf`, avec la
- *      date de la base. Il l'emporte sur la prudence d'une association : ce
- *      qui écarte la règle pour un consommateur l'écarte a fortiori ;
- *   3. tout urgent ET `consommateur` : `ECHEANCE_ACOMPTE_URGENCE` ;
- *   4. tout urgent ET `non_professionnel` : `AIDE_NATURE_ACOMPTE_PRO` (ni
+ *   2. tout urgent ET `consommateur` : `ECHEANCE_ACOMPTE_URGENCE` ;
+ *   3. tout urgent ET `non_professionnel` : `AIDE_NATURE_ACOMPTE_PRO` (ni
  *      « rendez-lui tout », ni « 14 jours », pour des lignes qui n'ont pas
  *      de rétractation) et `ECHEANCE_ACOMPTE_URGENCE` ;
+ *   4. le chantier neuf (« Oui » à la question des droits du client) :
+ *      `echeanceAcompteChantierNeuf`, avec la date de la base — le 8e jour
+ *      du code de la consommation n'y vaut pas, mais le code de la
+ *      construction peut interdire tout paiement avant dix jours : une aide
+ *      de cas NON permis depuis le 13/11, qui passe APRÈS les deux cas qui
+ *      permettent (« tout urgent » permet toujours, même sur ce chantier) ;
+ *      elle passe encore avant la prudence d'une association ;
  *   5. `non_professionnel` : `AIDE_NATURE_ACOMPTE_PRUDENCE` et
  *      `ECHEANCE_ACOMPTE_PRUDENCE` ;
  *   6. sinon (une petite entreprise hors de son activité, ou pas de
  *      réponse) : `ECHEANCE_ACOMPTE` — la ligne « pourquoi »
  *      (`pourquoiPasALaSignature`) dit la prudence d'Opus quand « À la
  *      signature » est choisi.
- * L'aide dit « ne s'applique pas » (`ECHEANCE_ACOMPTE_URGENCE`, l'aide du
- * chantier neuf ou `null`) SI ET SEULEMENT SI `signaturePermise` est vraie :
- * la même règle (`verifier-devis` la fait tourner sur toutes les
- * combinaisons). `toutUrgent` : `toutUrgent(lignes)`, calculé par l'écran.
+ * L'aide dit « permis » (`ECHEANCE_ACOMPTE_URGENCE` ou `null`) SI ET
+ * SEULEMENT SI `signaturePermise` est vraie : la même règle (`verifier-devis`
+ * la fait tourner sur toutes les combinaisons). L'aide du chantier neuf est
+ * une aide de cas NON permis, comme `ECHEANCE_ACOMPTE`. `toutUrgent` :
+ * `toutUrgent(lignes)`, calculé par l'écran.
  */
 export function aidesDeLAcompte({
   reponse = null, chantierNeufConso = null, chantierNeufConsoLe = null, toutUrgent: tout = false,
 } = {}) {
   if (reponse === 'professionnel') return { nature: AIDE_NATURE_ACOMPTE_PRO, echeance: null };
-  if (chantierNeufConso === true) return { nature: AIDE_NATURE_ACOMPTE, echeance: echeanceAcompteChantierNeuf(chantierNeufConsoLe) };
   if (tout === true && reponse === 'consommateur') return { nature: AIDE_NATURE_ACOMPTE, echeance: ECHEANCE_ACOMPTE_URGENCE };
   if (tout === true && reponse === 'non_professionnel') {
     return { nature: AIDE_NATURE_ACOMPTE_PRO, echeance: ECHEANCE_ACOMPTE_URGENCE };
   }
+  if (chantierNeufConso === true) return { nature: AIDE_NATURE_ACOMPTE, echeance: echeanceAcompteChantierNeuf(chantierNeufConsoLe) };
   if (reponse === 'non_professionnel') return { nature: AIDE_NATURE_ACOMPTE_PRUDENCE, echeance: ECHEANCE_ACOMPTE_PRUDENCE };
   return { nature: AIDE_NATURE_ACOMPTE, echeance: ECHEANCE_ACOMPTE };
 }
@@ -3709,8 +3730,9 @@ export const MOTIFS_DEVIS = Object.freeze({
       + 'ce que vous voulez.',
   }),
   /* 2b-3 (réponse P2 du 12/11 : « oui ») — « À la signature » choisi, un
-     acompte demandé, et aucun des trois cas qu'Opus permet (`signaturePermise`,
-     la MÊME règle que l'aide et la ligne « pourquoi ») : une PRUDENCE, parce
+     acompte demandé, et aucun des deux cas qu'Opus permet (`signaturePermise`,
+     la MÊME règle que l'aide et la ligne « pourquoi » ; le bâtiment neuf n'en
+     est plus un depuis la décision du 13/11) : une PRUDENCE, parce
      que la règle du 8e jour n'est la loi que hors établissement (L. 221-10,
      L. 242-7) et qu'Opus ne sait pas où le devis sera signé. « Dès le 8e
      jour » est le nom de la pastille : la seule phrase qui porte un chiffre. */
@@ -3953,35 +3975,58 @@ export function toutUrgent(lignes) {
 /**
  * « À LA SIGNATURE » EST-IL PERMIS ? (2b-3, réponse P2 du 12/11) — LA règle,
  * écrite UNE fois côté téléphone, la même que le rang 10 de la base
- * (`devis_acompte_signature`) et que `aidesDeLAcompte` : un client qui
- * commande pour son entreprise, dans son activité principale (réponse
- * VALABLE `professionnel`) ; la construction d'un bâtiment neuf ou la
- * transformation importante d'un existant (`chantierNeufConso`, la question
- * des DROITS) ; toutes les lignes chiffrées marquées « réparation urgente »,
- * pour un client à titre privé ou une association, une copropriété, une
- * société civile (L. 221-10 4°). Pour une petite entreprise hors de son
- * activité principale, ou sans réponse, l'urgence ne lève pas le 8e jour :
- * le cas le plus protecteur. `reponse` est la réponse VALABLE
- * (`pourQuiValable`), jamais `devis.pourQui` nu.
+ * (`devis_acompte_signature`) et que `aidesDeLAcompte` : DEUX cas, un client
+ * qui commande pour son entreprise, dans son activité principale (réponse
+ * VALABLE `professionnel`) ; toutes les lignes chiffrées marquées
+ * « réparation urgente », pour un client à titre privé ou une association,
+ * une copropriété, une société civile (L. 221-10 4°). Pour une petite
+ * entreprise hors de son activité principale, ou sans réponse, l'urgence ne
+ * lève pas le 8e jour : le cas le plus protecteur. `reponse` est la réponse
+ * VALABLE (`pourQuiValable`), jamais `devis.pourQui` nu.
+ *
+ * LE BÂTIMENT NEUF N'EN FAIT PLUS PARTIE (décision R1 du propriétaire, le
+ * 13/11 : « Interdire « à la signature » » ; relecture droit D1). Le « Oui »
+ * à la question des DROITS (`chantierNeufConso`) écarte la règle du 8e jour
+ * du code de la consommation (L. 221-2 12°), pas le code de la
+ * construction : pour la construction d'un logement, le client peut avoir
+ * dix jours pour se rétracter, à compter de la réception du contrat par
+ * lettre recommandée, et nul ne peut rien recevoir de lui avant — jusqu'à
+ * 30 000 euros d'amende (CCH, L. 271-1 et L. 271-2). Opus ne sait ni s'il
+ * s'agit d'un logement, ni quand la lettre sera présentée : la règle ne lit
+ * plus cette réponse, et la base non plus. La ligne « pourquoi » la nomme
+ * (`POURQUOI_PAS_A_LA_SIGNATURE.chantier_neuf`).
  */
-export function signaturePermise({ reponse = null, chantierNeufConso = null, toutUrgent: tout = false } = {}) {
+export function signaturePermise({ reponse = null, toutUrgent: tout = false } = {}) {
   return reponse === 'professionnel'
-    || chantierNeufConso === true
     || (tout === true && (reponse === 'consommateur' || reponse === 'non_professionnel'));
 }
 
 /**
  * POURQUOI « À LA SIGNATURE » N'EST PAS PERMIS (2b-3, annexe A.4) — `null`
  * quand `signaturePermise` est vraie, sinon LA première cause, dans cet
- * ordre : pas de réponse « à quel titre » ; une petite entreprise hors de
- * son activité principale ; aucune ligne chiffrée marquée ; une option ; la
- * première ligne non marquée (dans l'ordre du devis), nommée par sa
- * désignation. Elle dit ce qui EST, jamais « marquez la ligne » : marquer une
- * ligne qui n'est pas une vraie urgence engage l'artisan (E-I7, D4).
- * `lignes` : celles du devis, aux noms de l'application.
+ * ordre : pas de réponse « à quel titre » ; le bâtiment neuf (« Oui » à la
+ * question des droits du client — depuis la décision du 13/11, il ne permet
+ * plus « à la signature » : le code de la construction) ; une petite
+ * entreprise hors de son activité principale ; aucune ligne chiffrée
+ * marquée ; une option ; la première ligne non marquée (dans l'ordre du
+ * devis), nommée par sa désignation. Elle dit ce qui EST, jamais « marquez
+ * la ligne » : marquer une ligne qui n'est pas une vraie urgence engage
+ * l'artisan (E-I7, D4). `lignes` : celles du devis, aux noms de
+ * l'application.
  */
+/* L'AMENDE DU CODE DE LA CONSTRUCTION (L. 271-2 : « exiger ou recevoir un
+   versement ou un engagement de versement » pendant le délai de
+   rétractation) — écrite UNE fois, comme `AMENDE_DE_LA_LOI` : `devis.js`
+   n'écrit jamais « € » lui-même ailleurs (`verifier-devis`, section 8).
+   Déclarée AVANT `POURQUOI_PAS_A_LA_SIGNATURE`, qui la lit au chargement du
+   module : une `const` lue avant sa déclaration est un écran blanc. */
+const AMENDE_DU_CODE_DE_LA_CONSTRUCTION = 'jusqu’à 30\u00a0000\u00a0€ d’amende, bien plus pour une société';
 export const POURQUOI_PAS_A_LA_SIGNATURE = Object.freeze({
   sans_reponse: 'Dites d’abord à quel titre ce client commande : sans réponse, Opus compte le 8e jour.',
+  chantier_neuf: 'Pour la construction d’un logement, le code de la construction peut laisser à votre client dix jours '
+    + 'pour se rétracter, à compter du lendemain de la première présentation du contrat par lettre recommandée, et '
+    + 'interdire tout paiement ou engagement de payer avant : ' + AMENDE_DU_CODE_DE_LA_CONSTRUCTION + ' (art. L.\u00a0271-1 et L.\u00a0271-2). Opus ne permet donc pas le '
+    + 'paiement à la signature sur ce devis.',
   professionnel_hors_activite: 'Pour une entreprise, Opus n’applique pas l’exception des réparations urgentes, par '
     + 'prudence : la loi la prévoit au domicile d’un particulier.',
   aucune_marquee: 'Aucune ligne chiffrée de ce devis n’est marquée « réparation urgente ».',
@@ -3991,11 +4036,13 @@ export const POURQUOI_PAS_A_LA_SIGNATURE = Object.freeze({
 
 export function pourquoiPasALaSignature({ reponse = null, chantierNeufConso = null, lignes = [] } = {}) {
   const tri = trierLignes(Array.isArray(lignes) ? lignes : []);
-  if (signaturePermise({ reponse, chantierNeufConso, toutUrgent: toutUrgent(tri) })) return null;
+  if (signaturePermise({ reponse, toutUrgent: toutUrgent(tri) })) return null;
   const P = POURQUOI_PAS_A_LA_SIGNATURE;
   if (reponse !== 'consommateur' && reponse !== 'non_professionnel' && reponse !== 'professionnel_hors_activite') {
     return P.sans_reponse;
   }
+  /* `=== true` : comme `is true` côté base — un « Oui » confirmé, rien d'autre. */
+  if (chantierNeufConso === true) return P.chantier_neuf;
   if (reponse === 'professionnel_hors_activite') return P.professionnel_hors_activite;
   const chiffrees = tri.filter((l) => l && TYPES_CHIFFRES.includes(typeDe(l)));
   if (!chiffrees.some((l) => l.urgence === true)) return P.aucune_marquee;
@@ -4108,12 +4155,14 @@ export function motifsDeRemise({
   if ((present(d.acompteCentiemes) || present(d.acompteCentimes)) && !present(d.acompteNature)) motif('devis_acompte_nature');
   if (ramene('acompteCentimes', 'acompteTtcCentimes')) motif('devis_acompte_ramene');
   if (ramene('remiseCentimes', 'remiseHtCentimes')) motif('devis_reduction_ramenee');
-  /* 2b-3, rang 10 : « à la signature », un acompte, et aucun des trois cas
+  /* 2b-3, rang 10 : « à la signature », un acompte, et aucun des deux cas
      qu'Opus permet — `signaturePermise`, LA règle, la même que l'aide de la
-     carte et que la ligne « pourquoi ». `=== true` : comme `is true`. */
+     carte et que la ligne « pourquoi ». Le bâtiment neuf n'en est plus un
+     (décision du 13/11) : comme la base, le miroir ne lit plus
+     `chantierNeufConso` ici. `=== true` : comme `is true`. */
   if (d.acompteALaSignature === true
     && (present(d.acompteCentiemes) || present(d.acompteCentimes))
-    && !signaturePermise({ reponse: valable, chantierNeufConso: d.chantierNeufConso, toutUrgent: toutUrgent(tri) })) {
+    && !signaturePermise({ reponse: valable, toutUrgent: toutUrgent(tri) })) {
     motif('devis_acompte_signature');
   }
   /* 2b-3, rang 11 : la réponse n'est pas « Non » (vide = « Oui », par
@@ -5397,9 +5446,18 @@ export const GABARITS_A_QUEL_TITRE = Object.freeze([
    lue par deux phrases de droit : la confirmation du chantier neuf (2b-2) et
    l'avertissement d'une ligne « réparation urgente » (2b-3). `devis.js`
    n'écrit jamais « € » lui-même ailleurs : un montant ne s'écrit qu'à UN
-   endroit (`verifier-devis`, section 8). La phrase du chantier neuf n'a pas
-   changé d'un caractère : seule son écriture passe par cette constante. */
-const AMENDE_DE_LA_LOI = 'deux ans d’emprisonnement et 150\u00a0000\u00a0€ d’amende.';
+   endroit (`verifier-devis`, section 8) — et l'amende du code de la
+   construction (`AMENDE_DU_CODE_DE_LA_CONSTRUCTION`), écrite une fois elle
+   aussi.
+   COMPLÉTÉE LE 13/11 (décision R3 du propriétaire, « Oui, compléter » ;
+   relecture droit P5) : elle disait moins que la loi. L. 242-8 ajoute
+   l'interdiction d'exercer (jusqu'à cinq ans pour une personne) et, pour
+   une société, l'amende de l'article 131-38 du code pénal (le quintuple —
+   cet article n'est pas recopié dans le dump local) et les peines de
+   131-39 : d'où « bien plus pour une société, et une interdiction
+   d'exercer », sans chiffre que les textes recopiés ne donnent pas. Les
+   deux phrases qui la lisent changent donc avec elle. */
+const AMENDE_DE_LA_LOI = 'deux ans d’emprisonnement et 150\u00a0000\u00a0€ d’amende, bien plus pour une société, et une interdiction d’exercer.';
 
 /* LA LIGNE « RÉPARATION URGENTE » (2b-3, réponse P2 du 12/11, annexe A.2) —
    un FAIT DE LIGNE posé par l'artisan, sur un poste seulement, jamais
@@ -5410,10 +5468,15 @@ const AMENDE_DE_LA_LOI = 'deux ans d’emprisonnement et 150\u00a0000\u00a0€ d
    est d'ABUSER de la faiblesse). Au juriste (J10). Comparées par leur
    VALEUR (le modèle d'`AIDE_RETENUE`). */
 export const LIBELLE_URGENCE = 'Réparation urgente expressément demandée par le client';
-/** L'aide FIXE de l'interrupteur, sous son libellé. */
-export const AIDE_URGENCE = 'Seulement le strict nécessaire d’un entretien ou d’une réparation urgents que votre client '
-  + 'vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas de droit de rétractation pour '
-  + 'cette ligne.';
+/** L'aide FIXE de l'interrupteur, sous son libellé. PRÉCISÉE LE 13/11
+ *  (décision R2 du propriétaire, « Oui, préciser la phrase » ; relecture
+ *  droit P3) : « le strict nécessaire d'un entretien ou d'une réparation
+ *  urgents » pouvait se lire « toute la réparation ». La loi dit « pour
+ *  répondre à l'urgence » (L. 221-28 8°, L. 221-10 4°), comme
+ *  `ECHEANCE_ACOMPTE` (« nécessaires à l'urgence »). */
+export const AIDE_URGENCE = 'Seulement le strict nécessaire pour répondre à l’urgence, dans un entretien ou une '
+  + 'réparation que votre client vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas '
+  + 'de droit de rétractation pour cette ligne.';
 /** Sous la rangée, l'interrupteur ALLUMÉ seulement (et annoncée à VoiceOver
  *  à l'allumage) : la structure de la confirmation du chantier neuf,
  *  approuvée le 09/11. */
@@ -5448,19 +5511,29 @@ export const LE_CHANTIER = Object.freeze({
     non: 'Non',
     oui: 'Oui',
     aide: 'Ces chantiers échappent aux règles du devis signé hors de vos locaux : 14\u00a0jours pour se rétracter, '
-      + 'formulaire de rétractation, aucun paiement avant le 8e jour. Une réparation, un entretien ou une rénovation '
+      + 'formulaire de rétractation, aucun paiement avant le 8e jour. Mais pour la construction d’un logement, le code '
+      + 'de la construction peut laisser au client dix jours pour se rétracter et interdire tout paiement ou engagement '
+      + 'de payer avant (art. '
+      + 'L.\u00a0271-1 et L.\u00a0271-2). Une réparation, un entretien ou une rénovation '
       + 'ordinaire n’en font pas partie. Si vous ne faites qu’une partie des travaux d’un bâtiment neuf (l’électricité, '
       + 'la plomberie…), la loi ne dit pas clairement que votre devis en fait partie. Dans le doute, gardez « Non » : '
       + 'c’est le cas le plus sûr.',
   }),
   /* La feuille de confirmation du « Oui » à la première question (J7) :
      rien n'est écrit avant « Je confirme ». Sources : L. 221-2 12°,
-     L. 221-10, L. 221-20, L. 242-1, L. 242-5, L. 242-7. */
+     L. 221-10, L. 221-20, L. 242-1, L. 242-5, L. 242-7, L. 242-8 ; et,
+     depuis le 13/11 (décision R1), le code de la construction, L. 271-1 et
+     L. 271-2 : l'aide de la question et le premier paragraphe disaient
+     moins que la loi (« ne laissera pas 14 jours », sans dire les dix jours
+     qu'un logement à construire peut laisser au client). */
   confirmation: Object.freeze({
     titre: 'Bâtiment neuf ou transformation importante',
     paragraphes: Object.freeze([
       'Dans ce cas, le devis n’aura pas de formulaire de rétractation, ne laissera pas 14\u00a0jours au client pour '
-        + 'changer d’avis, et la règle du 8e jour ne s’appliquera pas.',
+        + 'changer d’avis, et la règle du 8e jour ne s’appliquera pas. Pour la construction d’un logement, le code de la '
+        + 'construction peut toutefois laisser au client dix jours pour se rétracter, à compter du lendemain de la '
+        + 'première présentation du contrat par lettre recommandée, et interdire tout paiement ou engagement de payer '
+        + 'avant.',
       'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client garde le droit de se rétracter '
         + 'pendant douze mois de plus ; un paiement reçu avant le 8e jour permet d’annuler le contrat ; et la loi punit '
         + 'ces manquements jusqu’à ' + AMENDE_DE_LA_LOI,

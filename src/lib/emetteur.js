@@ -1557,20 +1557,46 @@ function jourLocal(valeur) {
 }
 
 /**
+ * UNE ATTESTATION JOINTE : son chemin est ÉCRIT. C'est la règle de
+ * `tient_l_assurance()` (`btrim(…, E' \t\r\n')` ramène à `null` un chemin fait
+ * seulement d'espaces, de tabulations et de retours à la ligne), donc celle de
+ * `rogner` ci-dessus — et celle de `cheminEcrit` dans `devis.js`, qui décide
+ * si une décennale est « jointe » pour le rang 11. Elle est écrite ici une
+ * seconde fois, et pas importée : `devis.js` n'est pas dans la liste fermée
+ * des imports de ce fichier ; `verifier-emetteur` compare les deux écritures
+ * et les fait tourner sur les mêmes chemins. Un chemin écrit dit qu'un
+ * fichier est désigné, pas qu'il existe (2c le vérifiera).
+ */
+export function attestationJointe(a) {
+  return rogner(a ? a.attestation_chemin : null) !== null;
+}
+
+/**
  * L'ÉTAT D'UNE ASSURANCE, sur SA ligne dans « Mon entreprise » (2b-3,
  * cahier §3.2 et §3.9) : « Valable jusqu'au JJ/MM/AAAA » ; « Sans date de
  * fin » ; « Expirée le JJ/MM/AAAA ». Comparée au jour LOCAL du téléphone
  * (`jourLocal`), comme une CHAÎNE. La base, elle, juge l'attestation d'un
  * devis au jour de PARIS (49.9) : outre-mer, entre minuit à Paris et minuit
  * local, les deux peuvent différer quelques heures — dit au cahier, noté
- * dans `A-FAIRE`. « Valable » parle de la DATE seulement : une attestation
- * non jointe se signale à part (`decennale_sans_attestation`).
+ * dans `A-FAIRE`.
+ *
+ * « Valable » parle de la DATE seulement. Pour une DÉCENNALE sans fichier
+ * joint (`attestationJointe`), la ligne commence donc par « Attestation non
+ * jointe · », puis l'état de la date en minuscule : « Attestation non jointe ·
+ * valable jusqu'au JJ/MM/AAAA ». Relecture de 2b-3, E1 et P7 : c'est cet
+ * écran qu'ouvre le bouton du point « Joignez … votre attestation décennale »,
+ * et l'avis `decennale_sans_attestation` ne s'affiche qu'en LECTURE ; ici,
+ * en édition, « Valable jusqu'au … » seul laissait croire l'attestation en
+ * ordre. Une autre assurance, ou une décennale jointe : rien ne change.
  */
 export function etatDeLAssurance(a, jour = jourLocal(new Date())) {
   const fin = a && a.valide_jusquau != null ? String(a.valide_jusquau).match(/^(\d{4}-\d{2}-\d{2})/) : null;
-  if (!fin) return 'Sans date de fin';
+  const nonJointe = !!a && a.nature === 'decennale' && !attestationJointe(a);
+  if (!fin) return nonJointe ? 'Attestation non jointe · sans date de fin' : 'Sans date de fin';
   const auJour = jourLocal(jour);
-  return fin[1] >= auJour ? `Valable jusqu’au ${dateFrancaise(fin[1])}` : `Expirée le ${dateFrancaise(fin[1])}`;
+  const date = dateFrancaise(fin[1]);
+  if (fin[1] >= auJour) return nonJointe ? `Attestation non jointe · valable jusqu’au ${date}` : `Valable jusqu’au ${date}`;
+  return nonJointe ? `Attestation non jointe · expirée le ${date}` : `Expirée le ${date}`;
 }
 
 function plusUnAn(jour) {

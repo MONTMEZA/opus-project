@@ -13185,7 +13185,11 @@ comment on column public.devis_tva.remise_centimes is
 --      au client ses 14 jours de rétractation hors établissement ; l'écran
 --      le fait CONFIRMER, et la base garde la date de cette confirmation
 --      (`chantier_neuf_conso_le`, posée par `tient_le_devis()`, jamais
---      écrite par le téléphone : absente des droits de 49.7) ;
+--      écrite par le téléphone : absente des droits de 49.7). Il ne retire
+--      PAS les dix jours que le code de la construction peut laisser au
+--      client qui fait construire son logement (CCH, L. 271-1 et L. 271-2) :
+--      depuis la décision du 13/11, il ne permet donc pas « à la
+--      signature » (49.9, rang 10), et `motifs_refus_remise` ne le lit plus ;
 --    `chantier_neuf_tva` (POUR LA TVA) : les travaux font partie d'un
 --      chantier qui CRÉE un bâtiment neuf (CGI, art. 257 I 2 2°) — un « Oui »
 --      interdit le taux réduit : une ligne à 10 % ou 5,5 % devient un motif
@@ -14891,19 +14895,29 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  « À LA SIGNATURE » (2b-3, rang 10, `devis_acompte_signature`, une
 --  PRUDENCE) : l'artisan a répondu que le client paie l'acompte (ou les
 --  arrhes) à la signature (`acompte_a_la_signature is true`), un acompte
---  est demandé, et AUCUN des trois cas qu'Opus permet ne tient — un client
+--  est demandé, et AUCUN des deux cas qu'Opus permet ne tient — un client
 --  qui commande pour son entreprise, dans son activité principale
---  (réponse valable `professionnel`) ; la construction d'un bâtiment neuf
---  ou la transformation importante d'un existant (`chantier_neuf_conso`,
---  la question des DROITS, C. conso. L. 221-2 12°) ; toutes les lignes
---  chiffrées — postes ET options, offertes comprises ; aucune ligne
---  chiffrée = « pas toutes » — marquées « réparation urgente » (49.3 bis),
---  pour un client à titre privé ou une association, une copropriété, une
---  société civile (L. 221-10 4°). Pour une petite entreprise hors de son
---  activité principale, ou sans réponse, l'urgence ne lève pas le 8e jour :
---  le cas le plus protecteur. Une prudence et pas la loi : la règle du 8e
---  jour (L. 221-10 al. 1, L. 242-7) ne vaut que hors établissement, et Opus
---  ne demande pas où le devis sera signé (décision du 09/11) ; « toutes les
+--  (réponse valable `professionnel`) ; toutes les lignes chiffrées —
+--  postes ET options, offertes comprises ; aucune ligne chiffrée = « pas
+--  toutes » — marquées « réparation urgente » (49.3 bis), pour un client à
+--  titre privé ou une association, une copropriété, une société civile
+--  (L. 221-10 4°). LE BÂTIMENT NEUF NE PERMET PLUS « à la signature »
+--  (décision du propriétaire du 13/11, relecture droit D1) : le « Oui » à
+--  la question des DROITS (`chantier_neuf_conso`) écarte la règle du 8e
+--  jour du code de la consommation (L. 221-2 12°), mais pas le code de la
+--  construction — pour un acte qui a pour objet la construction d'un
+--  immeuble à usage d'habitation, l'acquéreur non professionnel peut se
+--  rétracter pendant dix jours à compter du lendemain de la première
+--  présentation de la lettre recommandée qui lui notifie l'acte, et nul ne
+--  peut recevoir de lui aucun versement avant (CCH, L. 271-1 et L. 271-2 :
+--  30 000 € d'amende). Opus ne sait ni s'il s'agit d'un logement, ni quand
+--  la lettre sera présentée : la fonction ne lit plus cette réponse, et le
+--  rang 10 sort comme pour un chantier ordinaire. Pour une petite
+--  entreprise hors de son activité principale, ou sans réponse, l'urgence
+--  ne lève pas le 8e jour : le cas le plus protecteur. Une prudence et pas
+--  la loi : la règle du 8e jour (L. 221-10 al. 1, L. 242-7) ne vaut que
+--  hors établissement, et Opus ne demande pas où le devis sera signé
+--  (décision du 09/11) ; « toutes les
 --  lignes » et « jamais pour une entreprise » sont des choix d'Opus — la
 --  phrase dit « pourrait ». `is not true`, jamais `not (…)` : sans réponse,
 --  `v_valable in (…)` vaut `null`, et une négation nulle laisserait passer
@@ -15020,7 +15034,6 @@ declare
   v_pour_qui       text;
   v_pour_qui_cl    uuid;
   v_neuf_tva       boolean;
-  v_neuf_conso     boolean;
   v_decennale      boolean;
   v_signature      boolean;
   v_valable        text;
@@ -15042,12 +15055,12 @@ begin
   select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville,
          d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
          d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes,
-         d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.chantier_neuf_conso,
+         d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva,
          d.engage_decennale, d.acompte_a_la_signature
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
          v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
-         v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_neuf_conso,
+         v_pour_qui, v_pour_qui_cl, v_neuf_tva,
          v_decennale, v_signature
     from public.devis d
    where d.id = p_devis
@@ -15179,18 +15192,20 @@ begin
     phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.';
     return next;
   end if;
-  -- « À la signature » (49.4 quater), un acompte demandé, et aucun des trois
+  -- « À la signature » (49.4 quater), un acompte demandé, et aucun des deux
   -- cas qu'Opus permet : un client qui commande pour son entreprise dans son
-  -- activité principale ; un bâtiment neuf ou une transformation importante
-  -- (la question des DROITS de « Le chantier ») ; toutes les lignes chiffrées
-  -- marquées « réparation urgente », pour un client à titre privé ou une
-  -- association, une copropriété, une société civile. `is not true`, et
-  -- jamais `not (…)` : sans réponse valable, la dernière condition vaut
-  -- `null`, et le motif doit sortir.
+  -- activité principale ; toutes les lignes chiffrées marquées « réparation
+  -- urgente », pour un client à titre privé ou une association, une
+  -- copropriété, une société civile. Le bâtiment neuf (la question des DROITS
+  -- de « Le chantier ») n'en est PLUS un, décision du propriétaire du 13/11 :
+  -- pour la construction d'un logement, le code de la construction peut
+  -- laisser au client dix jours pour se rétracter et interdire tout paiement
+  -- avant (CCH, L. 271-1 et L. 271-2) — la fonction ne lit donc plus cette
+  -- réponse. `is not true`, et jamais `not (…)` : sans réponse valable, la
+  -- dernière condition vaut `null`, et le motif doit sortir.
   if v_signature is true
      and (v_acompte_pct is not null or v_acompte_eur is not null)
      and v_valable is distinct from 'professionnel'
-     and v_neuf_conso is not true
      and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then
     rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence';
     phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.';

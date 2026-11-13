@@ -1418,12 +1418,22 @@ console.log('\n  8. une seule écriture des montants');
      l'amende que la loi prévoit (L. 242-5, L. 242-7), dans la feuille de
      confirmation du chantier neuf (annexe A.4) — une phrase de droit, pas un
      montant d'un devis. Elle est écrite UNE fois, telle quelle ; tout autre
-     « € » reste refusé. */
-  const AMENDE_SOURCE = 'deux ans d’emprisonnement et 150\\u00a0000\\u00a0€ d’amende.';
+     « € » reste refusé. COMPLÉTÉE le 13/11 (décision R3 : « bien plus pour
+     une société, et une interdiction d'exercer »), et une SECONDE exception
+     le même jour (décision R1) : l'amende du code de la construction
+     (L. 271-2), dans la ligne « pourquoi » du bâtiment neuf — écrite UNE
+     fois elle aussi (`AMENDE_DU_CODE_DE_LA_CONSTRUCTION`). */
+  const AMENDE_SOURCE = 'deux ans d’emprisonnement et 150\\u00a0000\\u00a0€ d’amende, bien plus pour une société, et une '
+    + 'interdiction d’exercer.';
+  const AMENDE_CONSTRUCTION_SOURCE = 'jusqu’à 30\\u00a0000\\u00a0€ d’amende, bien plus pour une société';
   const morceauxAmende = srcDevis.split(AMENDE_SOURCE);
+  const morceauxConstruction = morceauxAmende.join('').split(AMENDE_CONSTRUCTION_SOURCE);
   verifier('`devis.js` n’écrit jamais « € » lui-même : un montant ne s’écrit qu’à UN endroit — sauf l’amende de la loi, dans la '
-    + 'confirmation du chantier neuf, écrite UNE fois', morceauxAmende.length === 2 && !/€/.test(morceauxAmende.join('')),
-  `${morceauxAmende.length - 1} amende(s) ; « € » ailleurs : ${/€/.test(morceauxAmende.join(''))}`);
+    + 'confirmation du chantier neuf et l’avertissement de l’urgence, et celle du code de la construction, dans la ligne '
+    + '« pourquoi » du bâtiment neuf : chacune écrite UNE fois',
+  morceauxAmende.length === 2 && morceauxConstruction.length === 2 && !/€/.test(morceauxConstruction.join('')),
+  `${morceauxAmende.length - 1} amende(s) de la loi ; ${morceauxConstruction.length - 1} du code de la construction ; « € » ailleurs : `
+    + `${/€/.test(morceauxConstruction.join(''))}`);
 }
 
 console.log('\n  9. les dates, dans trois fuseaux, des deux côtés de minuit');
@@ -6363,14 +6373,18 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     /* 2b-3 (annexe A.2) : la ligne « réparation urgente » — libellé, aide
        FIXE, ce que coûte une erreur (l'amende de la loi, la même constante
        que la confirmation du chantier neuf), le rappel d'un devis venu d'une
-       urgence, le détail de la liste. */
+       urgence, le détail de la liste. Le 13/11, deux décisions du
+       propriétaire : l'aide dit « pour répondre à l'urgence » (R2), et
+       l'amende « bien plus pour une société, et une interdiction
+       d'exercer » (R3, L. 242-8). */
     LIBELLE_URGENCE: 'Réparation urgente expressément demandée par le client',
-    AIDE_URGENCE: 'Seulement le strict nécessaire d’un entretien ou d’une réparation urgents que votre client vous a expressément '
-      + 'demandés, chez lui : s’il commande à titre privé, il n’aura pas de droit de rétractation pour cette ligne.',
+    AIDE_URGENCE: 'Seulement le strict nécessaire pour répondre à l’urgence, dans un entretien ou une réparation que votre client '
+      + 'vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas de droit de rétractation pour cette ligne.',
     URGENCE_SI_ALLUMEE: 'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client peut se rétracter jusqu’à '
       + 'douze mois de plus, sans forcément vous devoir les travaux déjà faits ; un paiement reçu avant le 8e jour permet d’annuler le '
-      + 'contrat, et l’exiger ou le recevoir est puni jusqu’à deux ans d’emprisonnement et 150\u00a0000\u00a0€ d’amende. Profiter de '
-      + 'l’urgence pour faire signer davantage peut être un abus de faiblesse (code de la consommation, L.\u00a0121-9).',
+      + 'contrat, et l’exiger ou le recevoir est puni jusqu’à deux ans d’emprisonnement et 150\u00a0000\u00a0€ d’amende, bien plus pour une '
+      + 'société, et une interdiction d’exercer. Profiter de l’urgence pour faire signer davantage peut être un abus de faiblesse (code '
+      + 'de la consommation, L.\u00a0121-9).',
     DEPUIS_UNE_URGENCE: 'Ce devis vient d’une demande d’urgence : ne marquez une ligne que si elle remplit les conditions '
       + 'ci-dessous, et seulement le strict nécessaire.',
     DETAIL_URGENCE: 'réparation urgente',
@@ -8586,7 +8600,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      `devis_attestation` loi). Écarts VOULUS à l'esquisse du cahier :
      `v_att_valable is not true` et `elsif v_dec_sans_date is true` — jamais
      `not x` sur une valeur qui peut manquer (la leçon du lot 0a). */
-  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_neuf_conso boolean; v_decennale boolean; v_signature boolean; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.chantier_neuf_conso, d.engage_decennale, d.acompte_a_la_signature into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_neuf_conso, v_decennale, v_signature from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and v_neuf_conso is not true and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
+  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
   const defsMRR = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
   const vuMRR = defsMRR.length === 1 ? `${sansEspaces(defsMRR[0].attributs)} $$ ${sansEspaces(defsMRR[0].corps)} $$` : `(${defsMRR.length} définition(s) dans le fichier)`;
   verifier('a. `motifs_refus_remise` a EXACTEMENT la forme du contrat, relue et éprouvée par l’essai et `cas-remise.json` — une seule '
@@ -10783,18 +10797,27 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
         `AIDES_DE_DROIT_ATTENDUES`) ; ici, la phrase datée du chantier neuf
         et le choix par la réponse de l'écran. « professionnel » : ni le 8e
         jour, ni la rétractation ; le chantier neuf l'emporte sur la prudence
-        d'une association (ce qui écarte la règle pour un consommateur
-        l'écarte a fortiori — un choix, dit dans le compte rendu). */
+        d'une association. DEPUIS LE 13/11 (décision R1, « Interdire « à la
+        signature » ») : l'aide du chantier neuf est une aide de cas NON
+        permis — elle dit les dix jours du code de la construction (CCH
+        L. 271-1, L. 271-2) et « Opus ne permet pas le paiement à la
+        signature » —, et elle passe APRÈS les deux cas qui permettent
+        (« tout urgent » permet toujours, même sur ce chantier). */
   const SUITE_NEUF = 'ce devis porte sur la construction d’un bâtiment neuf ou la transformation importante d’un bâtiment '
-    + 'existant : la règle du 8e jour ne s’applique pas à ces chantiers. Si ce n’est pas vraiment le cas, revenez à « Non » dans '
-    + '« Le chantier » : un paiement reçu trop tôt permettrait au client d’annuler le contrat.';
+    + 'existant : la règle du 8e jour du code de la consommation ne vaut pas pour ces chantiers. Mais pour la construction d’un '
+    + 'logement, le code de la construction peut laisser à votre client dix jours pour se rétracter, à compter du lendemain de la '
+    + 'première présentation du contrat par lettre recommandée, et interdire tout paiement ou engagement de payer avant (art. '
+    + 'L.\u00a0271-1 et L.\u00a0271-2) : Opus ne permet pas le '
+    + 'paiement à la signature, et l’échéance à écrire sur ces devis sera fixée avec un juriste avant leur envoi. Si ce n’est pas '
+    + 'vraiment le cas, revenez à « Non » dans « Le chantier ».';
   const neufDate = D.echeanceAcompteChantierNeuf('2026-11-08T08:00:00Z');
   const A = D.aidesDeLAcompte;
   const ordinaire = { nature: D.AIDE_NATURE_ACOMPTE, echeance: D.ECHEANCE_ACOMPTE };
   verifier('e. l’aide du 8e jour suit la réponse de l’ÉCRAN : « pour son entreprise » n’a ni 8e jour ni rétractation '
-    + '(`AIDE_NATURE_ACOMPTE_PRO`) ; « Oui » au bâtiment neuf dit « Vous avez indiqué le JJ/MM/AAAA » avec la date de la BASE, '
-    + '« Vous venez d’indiquer » avant qu’elle soit relue ; tout urgent, à titre privé ou pour une association, '
-    + '`ECHEANCE_ACOMPTE_URGENCE` (2b-3) ; une association, la prudence, nature comprise (T7) ; sinon `ECHEANCE_ACOMPTE`',
+    + '(`AIDE_NATURE_ACOMPTE_PRO`) ; tout urgent, à titre privé ou pour une association, `ECHEANCE_ACOMPTE_URGENCE` (2b-3), même sur '
+    + 'un bâtiment neuf ; « Oui » au bâtiment neuf dit « Vous avez indiqué le JJ/MM/AAAA » avec la date de la BASE, « Vous venez '
+    + 'd’indiquer » avant qu’elle soit relue, les dix jours du code de la construction et « Opus ne permet pas le paiement à la '
+    + 'signature » (13/11) ; une association, la prudence, nature comprise (T7) ; sinon `ECHEANCE_ACOMPTE`',
   neufDate === `Vous avez indiqué le 08/11/2026 que ${SUITE_NEUF}`
     && D.echeanceAcompteChantierNeuf(null) === `Vous venez d’indiquer que ${SUITE_NEUF}`
     && egal(A({ reponse: 'professionnel', chantierNeufConso: true }), { nature: D.AIDE_NATURE_ACOMPTE_PRO, echeance: null })
@@ -10814,8 +10837,18 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
     && egal(A({ reponse: 'non_professionnel', toutUrgent: true }), { nature: D.AIDE_NATURE_ACOMPTE_PRO, echeance: D.ECHEANCE_ACOMPTE_URGENCE })
     && egal(A({ reponse: 'professionnel_hors_activite', toutUrgent: true }), ordinaire) && egal(A({ toutUrgent: true }), ordinaire)
     && egal(A({ reponse: 'professionnel', toutUrgent: true }), { nature: D.AIDE_NATURE_ACOMPTE_PRO, echeance: null })
+    /* 13/11 (R1) : tout urgent PERMET, même sur un bâtiment neuf — l'aide
+       de l'urgence, plus celle du chantier neuf ; et le chantier neuf passe
+       encore avant la prudence d'une association qui n'a pas tout marqué. */
     && egal(A({ reponse: 'consommateur', toutUrgent: true, chantierNeufConso: true }), { nature: D.AIDE_NATURE_ACOMPTE,
+      echeance: D.ECHEANCE_ACOMPTE_URGENCE })
+    && egal(A({ reponse: 'non_professionnel', toutUrgent: true, chantierNeufConso: true }), { nature: D.AIDE_NATURE_ACOMPTE_PRO,
+      echeance: D.ECHEANCE_ACOMPTE_URGENCE })
+    && egal(A({ reponse: 'professionnel_hors_activite', toutUrgent: true, chantierNeufConso: true }), { nature: D.AIDE_NATURE_ACOMPTE,
       echeance: `Vous venez d’indiquer que ${SUITE_NEUF}` })
+    && egal(A({ toutUrgent: true, chantierNeufConso: true }), { nature: D.AIDE_NATURE_ACOMPTE,
+      echeance: `Vous venez d’indiquer que ${SUITE_NEUF}` })
+    && /Opus ne permet pas le paiement à la signature/.test(SUITE_NEUF) && !/ne s’applique pas à ces chantiers/.test(SUITE_NEUF)
     && egal(A({ reponse: 'consommateur', toutUrgent: 'true' }), ordinaire)
     && egal(A({ chantierNeufConso: false }), ordinaire) && egal(A(), ordinaire)
     && !/rétract|L\.\s221/.test(D.AIDE_NATURE_ACOMPTE_PRO) && !/€|20\d\d/.test(D.ECHEANCE_ACOMPTE_PRUDENCE + SUITE_NEUF),
@@ -10966,8 +10999,13 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
       sousTitre: 'Pour les droits de votre client',
       question: 'Ce devis porte-t-il sur la construction d’un bâtiment neuf, ou sur la transformation importante d’un bâtiment existant ?',
       non: 'Non', oui: 'Oui',
+      /* 13/11 (décision R1) : une phrase de plus, pour ne pas dire moins
+         que le code de la construction (CCH L. 271-1, L. 271-2). */
       aide: `Ces chantiers échappent aux règles du devis signé hors de vos locaux : 14${nb}jours pour se rétracter, formulaire de `
-        + 'rétractation, aucun paiement avant le 8e jour. Une réparation, un entretien ou une rénovation ordinaire n’en font pas '
+        + 'rétractation, aucun paiement avant le 8e jour. Mais pour la construction d’un logement, le code de la construction peut '
+        + 'laisser au client dix jours pour se rétracter et interdire tout paiement ou engagement de payer avant (art. '
+        + `L.${nb}271-1 et L.${nb}271-2). `
+        + 'Une réparation, un entretien ou une rénovation ordinaire n’en font pas '
         + 'partie. Si vous ne faites qu’une partie des travaux d’un bâtiment neuf (l’électricité, la plomberie…), la loi ne dit pas '
         + 'clairement que votre devis en fait partie. Dans le doute, gardez « Non » : c’est le cas le plus sûr.',
     },
@@ -10975,10 +11013,12 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
       titre: 'Bâtiment neuf ou transformation importante',
       paragraphes: [
         `Dans ce cas, le devis n’aura pas de formulaire de rétractation, ne laissera pas 14${nb}jours au client pour changer d’avis, `
-          + 'et la règle du 8e jour ne s’appliquera pas.',
+          + 'et la règle du 8e jour ne s’appliquera pas. Pour la construction d’un logement, le code de la construction peut toutefois '
+          + 'laisser au client dix jours pour se rétracter, à compter du lendemain de la première présentation du contrat par lettre '
+          + 'recommandée, et interdire tout paiement ou engagement de payer avant.',
         'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client garde le droit de se rétracter pendant douze '
           + 'mois de plus ; un paiement reçu avant le 8e jour permet d’annuler le contrat ; et la loi punit ces manquements jusqu’à '
-          + `deux ans d’emprisonnement et 150${nb}000${nb}€ d’amende.`,
+          + `deux ans d’emprisonnement et 150${nb}000${nb}€ d’amende, bien plus pour une société, et une interdiction d’exercer.`,
         'La loi ne définit pas la « transformation importante », et ne dit pas clairement qu’un devis pour une partie seulement des '
           + 'travaux d’un bâtiment neuf en fait partie. Dans le doute, gardez « Non ».',
       ],
@@ -11156,11 +11196,17 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     && new Set(Object.values(D.MOTIFS_DEVIS).map((m) => m.rang)).size === 11, fauxA.join(', '));
 
   /* b. LA RÈGLE DE « À LA SIGNATURE », UNE SEULE FOIS : sur TOUTES les
-        combinaisons (réponse valable, chantier neuf, lignes), l'aide dit « ne
-        s'applique pas » SI ET SEULEMENT SI `signaturePermise` est vraie, ET
-        `pourquoiPasALaSignature` est `null` si et seulement si elle l'est, ET
-        le motif de rang 10 sort si et seulement si elle est fausse (avec un
-        acompte et « à la signature »). */
+        combinaisons (réponse valable, chantier neuf, lignes), l'aide dit
+        « permis » (`ECHEANCE_ACOMPTE_URGENCE` ou `null`) SI ET SEULEMENT SI
+        `signaturePermise` est vraie, ET `pourquoiPasALaSignature` est `null`
+        si et seulement si elle l'est, ET le motif de rang 10 sort si et
+        seulement si elle est fausse (avec un acompte et « à la
+        signature »). DEPUIS LE 13/11 (décision R1) : l'aide du chantier neuf
+        est une aide de cas NON permis — elle ne compte plus parmi les
+        « permis ». `chantierNeufConso` est passé EXPRÈS à `signaturePermise`,
+        qui ne le lit plus : une règle qui le relirait rendrait le bâtiment
+        neuf permis, et les trois autres côtés le diraient. Et, à réponse et
+        lignes égales, le chantier neuf ne change JAMAIS la règle. */
   const REPONSES = [null, 'consommateur', 'non_professionnel', 'professionnel_hors_activite', 'professionnel', 'inconnue'];
   const NEUFS = [null, false, true];
   const P0 = (id, plus = {}) => ({ id, type: 'poste', designation: `Poste ${id}`, tauxTvaCentiemes: 0, ordre: 1000, ...plus });
@@ -11171,9 +11217,9 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     [P0('a', { urgence: true, offert: true }), { id: 'r', type: 'reserve', ordre: 4000 }],
     [P0('a', { urgence: 'true' })],
   ];
-  const ECHEANCES_PERMISES = (aide) => aide.echeance === null || aide.echeance === D.ECHEANCE_ACOMPTE_URGENCE
-    || /la règle du 8e jour ne s’applique pas à ces chantiers/.test(aide.echeance);
+  const ECHEANCES_PERMISES = (aide) => aide.echeance === null || aide.echeance === D.ECHEANCE_ACOMPTE_URGENCE;
   const incoherences = [];
+  const neufChangeLaRegle = [];
   for (const reponse of REPONSES) {
     for (const neuf of NEUFS) {
       for (const lignes of JEUX) {
@@ -11187,25 +11233,34 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
         if (ECHEANCES_PERMISES(aide) !== permise || (pq === null) !== permise || r10 === permise) {
           incoherences.push(`${reponse}/${neuf}/${json(lignes.map((l) => `${l.type}${l.urgence === true ? '!' : ''}`))}`);
         }
+        if (permise !== D.signaturePermise({ reponse, toutUrgent: tout })) neufChangeLaRegle.push(`${reponse}/${neuf}`);
       }
     }
   }
-  verifier('b. « à la signature » : sur les 162 combinaisons (six réponses, trois chantiers, neuf jeux de lignes), l’aide dit « ne '
-    + 's’applique pas » ⇔ `signaturePermise` ⇔ `pourquoiPasALaSignature` est `null` ⇔ le rang 10 se tait — LA même règle partout ; '
-    + '« true » écrit en chaîne n’est pas une marque',
-  incoherences.length === 0 && D.toutUrgent([P0('a', { urgence: 'true' })]) === false && D.toutUrgent([]) === false,
-  incoherences.slice(0, 4).join(' | '));
+  verifier('b. « à la signature » : sur les 162 combinaisons (six réponses, trois chantiers, neuf jeux de lignes), l’aide dit '
+    + '« permis » ⇔ `signaturePermise` ⇔ `pourquoiPasALaSignature` est `null` ⇔ le rang 10 se tait — LA même règle partout ; le '
+    + 'bâtiment neuf ne la change JAMAIS (décision du 13/11 : il ne permet plus « à la signature ») ; « true » écrit en chaîne n’est '
+    + 'pas une marque',
+  incoherences.length === 0 && neufChangeLaRegle.length === 0
+    && D.signaturePermise({ reponse: 'consommateur', chantierNeufConso: true }) === false
+    && D.signaturePermise({ reponse: 'non_professionnel', chantierNeufConso: true }) === false
+    && D.signaturePermise({ reponse: 'consommateur', chantierNeufConso: true, toutUrgent: true }) === true
+    && D.signaturePermise({ reponse: 'professionnel', chantierNeufConso: true }) === true
+    && D.toutUrgent([P0('a', { urgence: 'true' })]) === false && D.toutUrgent([]) === false,
+  [...incoherences.slice(0, 4), ...neufChangeLaRegle.slice(0, 4)].join(' | '));
 
   /* c. LA LIGNE « POURQUOI » : la PREMIÈRE cause, dans l'ordre de l'annexe
-        A.4 ; la première ligne non marquée dans l'ordre du DEVIS, nommée par
-        sa désignation ; jamais « marquez ». */
+        A.4 — et, depuis le 13/11 (décision R1), le bâtiment neuf juste
+        après « pas de réponse » ; la première ligne non marquée dans l'ordre
+        du DEVIS, nommée par sa désignation ; jamais « marquez ». */
   const PQ = (reponse, lignes, neuf = null) => D.pourquoiPasALaSignature({ reponse, chantierNeufConso: neuf, lignes });
   const ordre2 = [P0('b', { ordre: 2000, designation: 'Second' }), P0('a', { ordre: 1000, urgence: true, designation: 'Premier' }),
     P0('c', { ordre: 3000, designation: 'Troisième' })];
   const textesPq = Object.values(D.POURQUOI_PAS_A_LA_SIGNATURE);
-  verifier('c. la ligne « pourquoi » dit LA première cause : pas de réponse ; une petite entreprise hors de son activité ; aucune ligne '
-    + 'chiffrée marquée ; une option ; la première ligne non marquée DANS L’ORDRE DU DEVIS, par sa désignation (sans désignation, '
-    + '« Une ligne… ») — jamais une invitation à marquer',
+  verifier('c. la ligne « pourquoi » dit LA première cause : pas de réponse ; le bâtiment neuf (13/11 : le code de la construction, '
+    + 'ses dix jours et ses 30 000 €) ; une petite entreprise hors de son activité ; aucune ligne chiffrée marquée ; une option ; la '
+    + 'première ligne non marquée DANS L’ORDRE DU DEVIS, par sa désignation (sans désignation, « Une ligne… ») — jamais une invitation '
+    + 'à marquer',
   PQ(null, [P0('a', { urgence: true })]) === D.POURQUOI_PAS_A_LA_SIGNATURE.sans_reponse
     && PQ('inconnue', []) === D.POURQUOI_PAS_A_LA_SIGNATURE.sans_reponse
     && PQ('professionnel_hors_activite', [P0('a', { urgence: true })]) === D.POURQUOI_PAS_A_LA_SIGNATURE.professionnel_hors_activite
@@ -11220,10 +11275,22 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     && PQ('consommateur', [P0('a', { urgence: true }), P0('b', { ordre: 2000, designation: '  ' })])
       === D.POURQUOI_PAS_A_LA_SIGNATURE.ligne_sans_nom
     && PQ('consommateur', [P0('a', { urgence: true })]) === null && PQ('professionnel', []) === null
-    && PQ('consommateur', [P0('a')], true) === null
+    /* 13/11 (R1) : le bâtiment neuf ne permet plus — sa cause, juste après
+       « pas de réponse », avant la petite entreprise ; « tout urgent » et
+       « pour son entreprise » permettent toujours, même sur ce chantier. */
+    && PQ('consommateur', [P0('a')], true) === D.POURQUOI_PAS_A_LA_SIGNATURE.chantier_neuf
+    && PQ('non_professionnel', [P0('a')], true) === D.POURQUOI_PAS_A_LA_SIGNATURE.chantier_neuf
+    && PQ('professionnel_hors_activite', [P0('a', { urgence: true })], true) === D.POURQUOI_PAS_A_LA_SIGNATURE.chantier_neuf
+    && PQ(null, [P0('a')], true) === D.POURQUOI_PAS_A_LA_SIGNATURE.sans_reponse
+    && PQ('consommateur', [P0('a'), { id: 'o', type: 'option', ordre: 9 }], true) === D.POURQUOI_PAS_A_LA_SIGNATURE.chantier_neuf
+    && PQ('consommateur', [P0('a', { urgence: true })], true) === null && PQ('professionnel', [P0('a')], true) === null
+    && PQ('consommateur', [P0('a')], false) === D.POURQUOI_PAS_A_LA_SIGNATURE.aucune_marquee
     && textesPq.every((t) => !/\bmarquez\b|\bmarquer\b/i.test(t))
     && egal(D.POURQUOI_PAS_A_LA_SIGNATURE, {
       sans_reponse: 'Dites d’abord à quel titre ce client commande : sans réponse, Opus compte le 8e jour.',
+      chantier_neuf: 'Pour la construction d’un logement, le code de la construction peut laisser à votre client dix jours pour se '
+        + 'rétracter, à compter du lendemain de la première présentation du contrat par lettre recommandée, et interdire tout '
+        + 'paiement ou engagement de payer avant : jusqu’à 30\u00a0000\u00a0€ d’amende, bien plus pour une société (art. L.\u00a0271-1 et L.\u00a0271-2). Opus ne permet donc pas le paiement à la signature sur ce devis.',
       professionnel_hors_activite: 'Pour une entreprise, Opus n’applique pas l’exception des réparations urgentes, par prudence : la '
         + 'loi la prévoit au domicile d’un particulier.',
       aucune_marquee: 'Aucune ligne chiffrée de ce devis n’est marquée « réparation urgente ».',

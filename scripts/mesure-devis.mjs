@@ -3906,9 +3906,11 @@ await section('« Sol du séjour », à 393 : le point d’une ligne à 10 % qua
    « Mon entreprise » appelle ; le calendrier de la date de fin n'est pas ce
    que ces sections mesurent. */
 const LIBELLE_URGENCE_ATTENDU = 'Réparation urgente expressément demandée par le client';
-const AIDE_URGENCE_ATTENDUE = 'Seulement le strict nécessaire d’un entretien ou d’une réparation urgents que votre client '
-  + 'vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas de droit de rétractation pour '
-  + 'cette ligne.';
+/* Précisée le 13/11 (décision R2 du propriétaire) : « pour répondre à
+   l'urgence ». */
+const AIDE_URGENCE_ATTENDUE = 'Seulement le strict nécessaire pour répondre à l’urgence, dans un entretien ou une '
+  + 'réparation que votre client vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas '
+  + 'de droit de rétractation pour cette ligne.';
 const RISQUE_URGENCE_DEBUT = 'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client peut se rétracter';
 const DEPUIS_URGENCE_ATTENDU = 'Ce devis vient d’une demande d’urgence : ne marquez une ligne que si elle remplit les '
   + 'conditions ci-dessous, et seulement le strict nécessaire.';
@@ -3976,13 +3978,15 @@ const ligneDEtatDeLAssurance = () => page.evaluate(() => {
   if (!r) return null;
   const br = r.getBoundingClientRect();
   const etat = [...r.querySelectorAll('div, span')].find((x) => x.children.length === 0
-    && /^(Valable jusqu’au \d\d\/\d\d\/\d{4}|Sans date de fin|Expirée le \d\d\/\d\d\/\d{4})$/.test(plat(x.innerText)));
+    && /^(Valable jusqu’au \d\d\/\d\d\/\d{4}|Sans date de fin|Expirée le \d\d\/\d\d\/\d{4}|Attestation non jointe · (valable jusqu’au \d\d\/\d\d\/\d{4}|sans date de fin|expirée le \d\d\/\d\d\/\d{4}))$/.test(plat(x.innerText)));
   if (!etat) return { rangee: { y: br.y, bas: br.bottom }, etat: null };
   const be = etat.getBoundingClientRect();
   return {
     rangee: { y: br.y, bas: br.bottom, l: br.width },
     etat: { texte: plat(etat.innerText), y: be.y, bas: be.bottom, h: be.height, l: be.width },
     largeur: window.innerWidth,
+    etiquette: plat(r.getAttribute('aria-label')),
+    texteRangee: plat(r.innerText),
   };
 });
 
@@ -4335,6 +4339,51 @@ await section('2b-3 : « Pour le remettre » — l’attestation décennale (dat
   if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
   await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
   verifier('…refermée sans rien changer, « Mon entreprise » part', (await parLibelle('Fermer « Mon entreprise »').count()) === 0);
+  /* LA DÉCENNALE SANS FICHIER (relecture de 2b-3, E1 / P7) : le fichier
+     retiré par l'API — comme une décennale redéclarée par « Ajouter une
+     assurance » sans toucher aux boutons de l'attestation —, puis le chemin
+     de E1 : le point « La loi — Joignez … » de « Sol du séjour », son bouton,
+     et « Mon entreprise » ouverte en ÉDITION sur Assurances. La ligne d'état
+     dit « Attestation non jointe · valable jusqu’au … » (sa BOÎTE dans la
+     rangée), l'étiquette parlée la reprend, et « · attestation jointe »
+     n'est nulle part dans la rangée. Puis le fichier remis. */
+  const sansFichier = (await assurancesDemo())[0];
+  await page.evaluate(async (id) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ attestation_chemin: null }, id); }, sansFichier.id);
+  exiger((await assurancesDemo()).length === 1 && !(await assurancesDemo())[0].attestation_chemin && (await assurancesDemo())[0].valide_jusquau === dateFin,
+    'la décennale de démonstration est redéclarée SANS fichier, sa date gardée');
+  for (const largeur of [393, 320]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(400);
+    await allerAMesDevis();
+    await ouvrirLeDevis('Sol du séjour');
+    await ouvrirLaListe();
+    const tNJ = await texteLu();
+    const iNJ = tNJ.indexOf(POINT_ATTESTATION);
+    verifier(`${largeur} : la décennale SANS fichier — le point « Joignez … : la loi demande de la joindre… », « La loi », et son bouton vers les assurances`,
+      iNJ >= 0 && tNJ.slice(Math.max(0, iNJ - 30), iNJ).includes('La loi')
+      && (await page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).count()) === 1, tNJ.slice(Math.max(0, iNJ - 60), iNJ + 40));
+    await toucher(page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).first());
+    await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+    await page.locator('[aria-label$="Modifier cette assurance"]').first().waitFor({ timeout: 6000 });
+    await attendre(700);
+    const nj = await ligneDEtatDeLAssurance();
+    verifier(`${largeur} : …« Mon entreprise » sur Assurances : « Attestation non jointe · valable jusqu’au … » sur SA ligne, sa BOÎTE dans la rangée, `
+      + `l’étiquette parlée la reprend, et « · attestation jointe » n’est pas dans la rangée (${JSON.stringify(nj && { etat: nj.etat, etiquette: nj.etiquette })})`,
+    !!nj && !!nj.etat && /^Attestation non jointe · valable jusqu’au \d\d\/\d\d\/\d{4}$/.test(nj.etat.texte) && nj.etat.h > 0
+      && nj.etat.y >= nj.rangee.y - 0.5 && nj.etat.bas <= nj.rangee.bas + 0.5 && nj.etat.l <= nj.largeur
+      && nj.etiquette.includes(nj.etat.texte) && /^Assurance décennale, /.test(nj.etiquette)
+      && !nj.texteRangee.includes('· attestation jointe') && !/^Valable/.test(nj.etat.texte));
+    await capture(`2b3-assurance-non-jointe-${largeur}`);
+    await toucher(parLibelle('Fermer « Mon entreprise »'));
+    await attendre(500);
+    if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
+    await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0 && (await enCarte()), 4000);
+    await fermerLaListe();
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  }
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ attestation_chemin: v.chemin }, v.id); },
+    { id: sansFichier.id, chemin: sansFichier.attestation_chemin });
   const fin = await assurancesDemo();
   exiger(fin.length === 1 && fin[0].valide_jusquau === dateFin && !!fin[0].attestation_chemin, 'la décennale de démonstration est REMISE, jointe et datée');
   await page.setViewportSize(tailleAvant);

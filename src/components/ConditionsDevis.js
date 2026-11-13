@@ -353,8 +353,10 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
         {sous('acompteNature')}
         {/* LA NATURE ET LE 8e JOUR, selon le client et le chantier (2b-2) :
             pour une entreprise dans son activité principale, ni le 8e jour ni
-            la rétractation ; pour un chantier neuf confirmé, le 8e jour ne
-            s'applique pas ; pour une association, par prudence. */}
+            la rétractation ; pour un chantier neuf confirmé, le 8e jour du
+            code de la consommation ne vaut pas, mais Opus ne permet pas le
+            paiement à la signature (le code de la construction, décision du
+            13/11) ; pour une association, par prudence. */}
         <Text style={s.aide}>{aides.nature}</Text>
 
         {/* QUAND LE CLIENT PAIE (2b-3) — TOUJOURS montrée, rien de choisi
