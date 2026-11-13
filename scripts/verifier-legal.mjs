@@ -2235,9 +2235,13 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
        R2T-11) : elle n'avait pas d'empreinte. */
     /* Étape 2b-2 (10/11/2026) : la déclaration sur l'honneur du n° de TVA,
        et ce que les devis portent depuis les lots 2a et 2b-2 (réduction,
-       acompte et sa nature, validité, à quel titre, le chantier). */
+       acompte et sa nature, validité, à quel titre, le chantier).
+       Étape 2b-3 (13/11/2026, annexe A.7 du cahier 2b-3, VERSION
+       2026-11-13) : si les travaux peuvent engager la garantie décennale,
+       quand l'acompte ou les arrhes sont payés, et, pour chaque ligne, si
+       c'est une réparation urgente expressément demandée par le client. */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      'ed764b70034533eb57cf05c9912d3c34ecd0ccb0d8284c006e369dbfd950788a'],
+      '58d1524f49baf5fd661487d309d1224189af8c50a4aa0a2dc00abd2f0ec10bc4'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2601,7 +2605,11 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
   const A7 = [
     ['Sources', sources, 'Un numéro de TVA que cette API ne publie pas, écrit par l’entreprise elle-même, est gardé si VIES, le service de la Commission européenne qui interroge l’administration fiscale de chaque pays, le reconnaît, et la date de ce contrôle l’accompagne ; sinon, seulement si l’entreprise déclare sur l’honneur, après un refus de VIES, ou après trois contrôles sans réponse, qu’il est celui que l’administration fiscale lui a attribué, et la date de cette déclaration l’accompagne.'],
     ['Ce que nous collectons (TVA)', collecte, 'et le numéro de TVA intracommunautaire que publie la DGFiP, s’il en existe un — sinon, celui que vous écrivez vous-même, et la date à laquelle VIES, le service de la Commission européenne, l’a reconnu — ou, s’il le refuse ou ne répond pas à trois contrôles, votre déclaration sur l’honneur, son texte et sa date.'],
-    ['Ce que nous collectons (devis)', collecte, 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, leurs lignes, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.'],
+    /* « Ce que nous collectons (devis) » a quitté cette liste à l'étape
+       2b-3 (13/11/2026) : la phrase s'est allongée (la décennale, le moment
+       du paiement, la réparation urgente d'une ligne), et elle est gardée
+       mot pour mot, ENTIÈRE, par la section « Étape 2b-3 » plus bas — avec
+       les réponses de 2b-2, qui en font toujours partie. */
     ['Pourquoi', pourquoi, 'Faire contrôler par VIES le numéro de TVA que vous écrivez, et le garder : exécution du contrat — c’est ce qui permet de l’imprimer sur vos devis — et intérêt légitime à ce qu’un devis ne porte pas un numéro que ni l’administration ne reconnaît, ni l’entreprise n’a déclaré sur l’honneur comme le sien. Garder votre déclaration sur l’honneur, son texte et sa date : exécution du contrat — c’est ce qui permet d’imprimer ce numéro sur vos devis — et intérêt légitime à garder la trace de votre engagement. Limiter le nombre de ces contrôles par compte : intérêt légitime, protéger le service et VIES contre les abus. Compter ceux auxquels VIES n’a pas répondu, pour vous proposer la déclaration sur l’honneur après trois : exécution du contrat.'],
     ['Combien de temps', combien, 'Le numéro de TVA que VIES a reconnu, et la date de ce contrôle, restent attachés à votre compte et partent avec lui ; de même votre déclaration sur l’honneur, son texte et sa date. Elle est effacée si vous la retirez, ou remplacée si un autre numéro prend sa place — un numéro que vous déclarez, ou que VIES reconnaît ; si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve, et reprend effet s’il le refuse de nouveau. Pour limiter les contrôles auprès de VIES, Opus compte ceux de chaque compte, et retient quelques heures qu’un numéro vient d’être refusé, et un jour que VIES n’a pas répondu pour lui, sous une empreinte qui ne laisse lire ni le compte ni le numéro ;'],
     ['Ce qui est interdit (P4)', interdit, 'Déclarer sur l’honneur un numéro de TVA qui n’est pas celui que l’administration fiscale a attribué à son entreprise : le compte peut être fermé.'],
@@ -2740,6 +2748,150 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
       ? `${colonnesDevis.length} colonnes lues : la table \`devis\` a changé de forme, ou ce contrôle a perdu sa cible`
       : [...sansPlaceDevis.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
         ...absentesDevis.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · '));
+}
+
+/* ==================================================================
+   ÉTAPE 2b-3 DU DEVIS (13/11/2026) — la réparation urgente d'une ligne,
+   la garantie décennale d'un devis, le moment où l'acompte est payé
+   (cahier 2b-3, §4 et annexe A.7 ; section 49 de `schema.sql` ; réponses
+   du propriétaire du 12/11 : P1 = A, P2 = oui).
+
+   Une seule phrase change, et elle est gardée MOT POUR MOT, ENTIÈRE —
+   avec ce que 2a et 2b-2 y avaient mis : une donnée collectée qui n'est
+   pas nommée n'est pas annoncée. Et ce qui la tient :
+     - la phrase de 2b-3 garde son ORDRE : les deux réponses du devis
+       avant « leurs lignes », la marque d'une ligne DANS « leurs lignes »
+       (elle appartient à la ligne, pas au devis), et la base de postes
+       toujours APRÈS (« devis en préparation » est l'ancre de plusieurs
+       contrôles plus haut) ;
+     - chaque colonne de `devis_lignes`, LUE DANS LE SCHÉMA (création et
+       `alter table … add column`), est NOMMÉE dans la phrase des devis
+       ou TECHNIQUE, avec sa raison : la marque d'urgence est née par un
+       `add column`, une colonne ajoutée demain sans sa place fait rougir ;
+     - « expressément » est dit, comme sur l'interrupteur (`LIBELLE_URGENCE`)
+       et dans la loi (L. 221-28 8°) : le texte ne dit pas moins que l'écran ;
+     - RIEN D'AUTRE ne bouge (cahier §4) : « Une décision automatique » ne
+       parle ni de la décennale, ni de la réparation urgente, ni du moment
+       du paiement — un motif dit à l'artisan ce qui manque à SON devis, il
+       ne décide rien pour personne ; et aucun texte ne promet quoi que ce
+       soit sur l'urgence ou l'attestation, puisque rien ne sort avant 2c ;
+     - le vocabulaire (annexe B, points 19 et 20) : jamais une attestation
+       « vérifiée », jamais « la loi l'exige », jamais « la rénovation n'est
+       pas concernée ».
+   ================================================================== */
+console.log('\nÉtape 2b-3 — la réparation urgente, la décennale, le moment du paiement : les textes et ce qui les tient');
+{
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const collecte = bloc(CONFIDENTIALITE, 'Ce que nous collectons');
+  const decision = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+
+  verifier('VERSION est au moins celle de l’étape 2b-3 (13/11/2026) : une donnée nouvelle collectée pour les devis',
+    VERSION >= '2026-11-13', `VERSION = ${VERSION}`);
+
+  /* LE BLOC D'HISTOIRE DE 2b-3 dit les trois faits et la limite connue —
+     cherché par son TITRE et non par la date (si le commit se fait un
+     autre jour, la date change avec `VERSION`). */
+  const sourceLegal2b3 = readFileSync('src/data/legal.js', 'utf8');
+  const iHist = sourceLegal2b3.indexOf('LA RÉPARATION URGENTE, LA GARANTIE DÉCENNALE ET LE MOMENT OÙ');
+  const histoire2b3 = iHist < 0 ? '' : sourceLegal2b3.slice(iHist, sourceLegal2b3.indexOf('*/', iHist));
+  verifier('le bloc d’historique de 2b-3 nomme les trois faits (décennale, moment du paiement, réparation urgente) et la limite connue',
+    /garantie\s+décennale/.test(histoire2b3) && /l'acompte ou les arrhes\s+sont payés/.test(histoire2b3)
+    && /réparations urgentes expressément demandées par le client/.test(histoire2b3)
+    && /LA MÊME LIMITE/.test(histoire2b3) && /ré-accepter/.test(histoire2b3) && /2019\/1150/.test(histoire2b3),
+    histoire2b3 ? histoire2b3.slice(0, 160) : 'bloc introuvable (« LA RÉPARATION URGENTE, LA GARANTIE DÉCENNALE ET LE MOMENT OÙ »)');
+
+  /* LA PHRASE DES DEVIS, ENTIÈRE (annexe A.7 avec 2a et 2b-2). */
+  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase de l’annexe A.7 de 2b-3',
+    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(380, 560)}… »`);
+  const iDevis3 = collecte.indexOf('devis en préparation');
+  const iPostes3 = collecte.indexOf('base de postes', iDevis3);
+  const iLignes3 = collecte.indexOf('leurs lignes', iDevis3);
+  verifier('…dans l’ORDRE : les deux réponses du devis avant « leurs lignes », la réparation urgente dans « leurs lignes », la base de postes après',
+    iDevis3 >= 0 && iLignes3 > iDevis3 && iPostes3 > iLignes3
+    && collecte.indexOf('garantie décennale', iDevis3) < iLignes3
+    && collecte.indexOf('quand l’acompte ou les arrhes sont payés', iDevis3) < iLignes3
+    && collecte.indexOf('réparation urgente', iDevis3) > iLignes3
+    && collecte.indexOf('réparation urgente', iDevis3) < collecte.indexOf('leurs prix', iDevis3)
+    && collecte.indexOf('leurs prix', iDevis3) < iPostes3);
+
+  /* « EXPRESSÉMENT » : le texte ne dit pas moins que l'interrupteur. Le
+     libellé de l'écran est lu dans `devis.js`, pas recopié ici. */
+  const { LIBELLE_URGENCE } = await import('../src/lib/devis.js');
+  verifier('…et « réparation urgente expressément demandée par le client » est le libellé de l’interrupteur (`LIBELLE_URGENCE`), sans un mot de moins',
+    typeof LIBELLE_URGENCE === 'string' && /expressément/.test(LIBELLE_URGENCE)
+    && collecte.includes(LIBELLE_URGENCE.charAt(0).toLowerCase() + LIBELLE_URGENCE.slice(1)),
+    String(LIBELLE_URGENCE));
+
+  /* CHAQUE COLONNE DE `devis_lignes`, lue dans le schéma, a sa place. */
+  const schemaLignes = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const corpsLignes = (schemaLignes.match(/create table if not exists public\.devis_lignes\s*\(([\s\S]*?)\n\);/) || [])[1] || '';
+  const colonnesLignes = [...new Set([
+    ...corpsLignes.split('\n').map((l) => (l.match(/^\s+([a-z_][a-z0-9_]*)\s+/) || [])[1])
+      .filter((c) => c && !['constraint', 'references', 'primary', 'unique', 'check', 'foreign'].includes(c)),
+    ...[...schemaLignes.matchAll(/alter table (?:only )?public\.devis_lignes\b([^;]*);/g)]
+      .flatMap((m) => [...m[1].matchAll(/add column (?:if not exists )?([a-z_][a-z0-9_]*)/g)].map((x) => x[1])),
+  ])];
+  const NOMMEES_LIGNES = {
+    /* Ce qu'une ligne DIT : « leurs lignes ». */
+    type: 'leurs lignes',
+    ordre: 'leurs lignes',
+    designation: 'leurs lignes',
+    quantite_milliemes: 'leurs lignes',
+    unite: 'leurs lignes',
+    taux_tva_centiemes: 'leurs lignes',
+    offert: 'leurs lignes',
+    main_oeuvre: 'leurs lignes',
+    fourniture_non_comprise: 'leurs lignes',
+    surface_sol_milliemes: 'leurs lignes',
+    surface_murs_milliemes: 'leurs lignes',
+    /* Ce qu'elle COÛTE : « leurs prix ». */
+    prix_unitaire_centimes: 'leurs prix',
+    total_centimes: 'leurs prix',
+    /* 2b-3 : la marque, nommée en toutes lettres — elle retire un droit au
+       client, et l'artisan doit savoir qu'elle est gardée. */
+    urgence: 'si c’est une réparation urgente expressément demandée par le client',
+  };
+  const TECHNIQUES_LIGNES = {
+    id: 'un identifiant, qui ne dit rien de personne',
+    devis_id: 'le devis lui-même, déjà nommé',
+    generation: 'l’horloge qui garde les écritures tardives',
+    modifie_le: 'une date technique',
+  };
+  const iPhrase3 = collecte.indexOf('devis en préparation');
+  const phraseDevis2b3 = iPhrase3 < 0 ? '' : collecte.slice(iPhrase3, collecte.indexOf('. ', iPhrase3));
+  const sansPlaceLignes = colonnesLignes.filter((c) => !(c in NOMMEES_LIGNES) && !(c in TECHNIQUES_LIGNES));
+  const absentesLignes = Object.entries(NOMMEES_LIGNES).filter(([c, mot]) => colonnesLignes.includes(c) && !phraseDevis2b3.includes(mot));
+  verifier(`« Ce que nous collectons » nomme chaque colonne de \`devis_lignes\`, lue dans le schéma (${colonnesLignes.length} colonnes), dans la phrase des devis`,
+    colonnesLignes.length >= 18 && colonnesLignes.includes('urgence') && sansPlaceLignes.length === 0 && absentesLignes.length === 0,
+    colonnesLignes.length < 18 || !colonnesLignes.includes('urgence')
+      ? `${colonnesLignes.length} colonnes lues${colonnesLignes.includes('urgence') ? '' : ', sans `urgence`'} : la table \`devis_lignes\` a changé de forme, ou ce contrôle a perdu sa cible`
+      : [...sansPlaceLignes.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
+        ...absentesLignes.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · '));
+
+  /* RIEN D'AUTRE : aucune décision automatique nouvelle, aucune promesse. */
+  verifier('« Une décision automatique » ne parle ni de la décennale, ni de la réparation urgente, ni du moment du paiement (un motif n’est pas une décision)',
+    decision.length > 0 && !/décennale|réparation urgente|urgente|à la signature|8e jour|arrhes/i.test(decision));
+  const tousTextes2b3 = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
+  const occurrencesUrgente = tousTextes2b3.join(' ').split('réparation urgente').length - 1;
+  verifier('« réparation urgente » n’apparaît qu’UNE fois dans les textes légaux : dans la collecte (aucune promesse avant 2c)',
+    occurrencesUrgente === 1, `${occurrencesUrgente} occurrence(s)`);
+  const avecDecennale = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /décennale/.test(b.texte)).map((b) => b.titre);
+  verifier('…et « décennale » ne se lit que dans « Le badge vérifié » (les pièces) et dans la collecte',
+    avecDecennale.length === 2 && avecDecennale.includes('Le badge vérifié') && avecDecennale.includes('Ce que nous collectons'),
+    avecDecennale.join(' · '));
+  verifier('aucun texte légal ne promet un délai de rétractation, ni son absence (rien ne s’imprime avant 2c)',
+    !/rétractation/i.test(tousTextes2b3.join(' ')));
+
+  /* LE VOCABULAIRE (annexe B, points 19 et 20). */
+  const fautes = [];
+  if (/attestations? (?:d.assurance |décennales? )?vérifiée/i.test(tousTextes2b3.join(' '))) fautes.push('une attestation « vérifiée »');
+  if (/la loi l.exige/i.test(tousTextes2b3.join(' '))) fautes.push('« la loi l’exige »');
+  if (/rénovation n.est pas concernée/i.test(tousTextes2b3.join(' '))) fautes.push('« la rénovation n’est pas concernée »');
+  verifier('le vocabulaire : jamais une attestation « vérifiée », jamais « la loi l’exige », jamais « la rénovation n’est pas concernée »',
+    fautes.length === 0, fautes.join(' · '));
 }
 
 console.log('');

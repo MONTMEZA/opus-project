@@ -4526,6 +4526,22 @@ console.log('\n  26. l’essai et le témoin');
   verifier('le cas 30 lit `supabase/cas-devis.json` et joue les cas par une fonction TEMPORAIRE (rien n’entre dans le schéma)',
     /\\set\s+cas\s+`cat\s+supabase\/cas-devis\.json`/.test(essai) && /create\s+or\s+replace\s+function\s+pg_temp\.jouer_cas\(/i.test(essai)
     && /écarts : /.test(essai));
+  /* LE JOUEUR DU CAS 30 FAIT NAÎTRE UNE LIGNE ENTIÈRE (banc des textes de
+     2b-3, S5) : `jsonb_populate_record` met `null` dans toute colonne absente
+     de l'objet, et chaque booléen `not null` de `devis_lignes` — lu dans le
+     schéma — doit y être nommé `false`. Sans `'urgence', false`, TOUS les cas
+     joués étaient refusés (23502) ; l'essai ne le disait que dans une phrase
+     lue à l'œil (« écarts : 66 ») : son bilan est désormais un nombre JUGÉ
+     (`ecarts_des_cas_attendu_0`). */
+  const ajout30 = (/insert\s+into\s+public\.devis_lignes\s+select\s+\*\s+from\s+jsonb_populate_record\(null::public\.devis_lignes,\s*jsonb_build_object\(([\s\S]*?)\)\s*\|\|/i
+    .exec(essai) || [])[1] || '';
+  const booleens30 = (colonnesDe('devis_lignes') || []).filter((c) => /^boolean$/i.test(c.type) && c.obligatoire).map((c) => c.nom);
+  const oublies30 = booleens30.filter((c) => !new RegExp(`'${c}'\\s*,\\s*false\\b`).test(ajout30));
+  verifier('…et son opération « ajouter » nomme `false` CHAQUE booléen `not null` de `devis_lignes` (lu dans le schéma, `urgence` '
+    + 'compris), et son bilan est un nombre JUGÉ (`ecarts_des_cas_attendu_0`)',
+  ajout30.length > 0 && booleens30.length >= 4 && booleens30.includes('urgence') && oublies30.length === 0
+    && /\bas\s+ecarts_des_cas_attendu_0\b/.test(essai),
+  `booléens : ${json(booleens30)} ; oubliés : ${json(oublies30)}`);
   const requis = ['14 bis', '14 ter', '14 quater', '14 quinquies', '16 bis', '16 ter', '31', '32', '33', '34'];
   const manquants = requis.filter((n) => !new RegExp(`\\\\echo\\s+'===\\s+${n.replace(' ', '\\s+')}\\.`).test(essai));
   verifier('il contient les cas 14 bis (un lien inchangé), 14 ter (la prémisse d’OP013), 14 quater (les identifiants), 14 quinquies '
@@ -4951,13 +4967,24 @@ console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire
     const attLc = [...attLm, 'id', 'devis_id'].sort();
     const partiel = versBaseD({ objet: 'x', clientId: undefined });
     const entiere = versBaseL({ id: 'i', devisId: 'd', ordre: 1000 }, { creation: true });
+    /* CHAQUE BOOLÉEN `not null` DE `devis_lignes`, LU DANS LE SCHÉMA, part
+       `false` à la création — pas seulement `offert` et `main_oeuvre` (banc
+       des textes de 2b-3, S4) : `urgence` oubliée dans `booleens` partait
+       `null`, la base refusait CHAQUE création de ligne (23502), et ce
+       contrôle restait vert. Une colonne booléenne ajoutée demain entre ici
+       toute seule. */
+    const booleensObligatoires = (colonnesDe('devis_lignes') || [])
+      .filter((c) => /^boolean$/i.test(c.type) && c.obligatoire).map((c) => c.nom);
     okListe = json(dm) === json(attDm) && json(dc) === json(attDc) && json(lm) === json(attLm) && json(lc) === json(attLc)
       && ![...dm, ...dc, ...lm, ...lc].some((k) => interdits.test(k))
       && json(Object.keys(partiel)) === json(['objet'])
       && versBaseD(tout, { creation: true, proId: 'p' }).pro_id === 'p'
       && Object.keys(entiere).length === attLc.length && entiere.type === 'poste' && entiere.offert === false
-      && entiere.main_oeuvre === false && entiere.designation === null && entiere.ordre === 1000;
-    det = `devis modifié ${json(dm)} ; créé ${json(dc)} ; ligne modifiée ${json(lm)} ; créée ${json(lc)}`;
+      && entiere.main_oeuvre === false && entiere.designation === null && entiere.ordre === 1000
+      && booleensObligatoires.length >= 4 && booleensObligatoires.includes('urgence')
+      && booleensObligatoires.every((c) => entiere[c] === false);
+    det = `devis modifié ${json(dm)} ; créé ${json(dc)} ; ligne modifiée ${json(lm)} ; créée ${json(lc)} ; `
+      + `booléens obligatoires ${json(booleensObligatoires.map((c) => `${c}=${json(entiere[c])}`))}`;
   } catch (e) {
     det = `la traduction ne tourne pas seule : ${e && e.message}`;
   }
@@ -5115,8 +5142,8 @@ console.log('\n  27. `api.js` : la forme, la liste fermée, la file, la mémoire
   const LECTURE_DU_REGIME = 'select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro;';
   verifier('aucune fonction SQL nouvelle ne lit l’émetteur ni les tarifs : pas de `.rpc(` dans les fonctions du devis (sauf '
     + '`peut_faire_un_devis`, qui ne lit que les blocages, et `motifs_refus_remise` sous sa seule forme), le régime passe par '
-    + '`monEmetteur…`, et la section 49 ne nomme ni `emetteur` ni `tarifs_pro` — HORS `motifs_refus_remise`, qui lit le seul régime, '
-    + 'une fois',
+    + '`monEmetteur…`, et la section 49 ne nomme ni `emetteur` ni `tarifs_pro` — HORS `motifs_refus_remise`, qui lit de l’émetteur le seul régime, '
+    + 'une fois (et, depuis 2b-3, la décennale par `emetteur_assurances`, sous la porte étroite que tient `verifier-emetteur`)',
   !/\.rpc\(/.test(blocDevis) && /monEmetteurSupabase\(\)/.test(corpsDeFonction(API, 'monRegimeSupabase') || '')
     && /monEmetteurDemo\(\)/.test(corpsDeFonction(API, 'monRegimeDemo') || '')
     && !!corpsMRR && s49SansMRR.length < S49.length
@@ -5756,7 +5783,7 @@ console.log('\n  28. la saisie : le bandeau, les claviers, le clavier qui monte,
     && (corpsFleche(ECR.saisie, 'const enregistrerConditions = ').match(/retour\.echec\(\)/g) || []).length === 1
     && /if \(!ok && vibrer\) retour\.echec\(\);/.test(corpsFleche(ECR.saisie, 'const enregistrerEntete = '))
     && ['remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
-      'retenueGarantieCentiemes'].every((c) => (/const CHAMPS_CONDITIONS = Object\.freeze\(\[([^\]]*)\]/.exec(ECR.saisie) || ['', ''])[1]
+      'retenueGarantieCentiemes', 'acompteALaSignature'].every((c) => (/const CHAMPS_CONDITIONS = Object\.freeze\(\[([^\]]*)\]/.exec(ECR.saisie) || ['', ''])[1]
       .includes(`'${c}'`))
     /* La bande nomme chaque champ UNE fois, et l'acompte sous le nom de sa
        NATURE (contre-vérification d'ÉCRAN-8) : `nomsDesRefus` le fait. */
@@ -11350,6 +11377,109 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     && ed3.assurances.every((a) => !a.attestation_chemin || String(a.attestation_chemin).startsWith(`${a.pro_id}/`))
     && !!refusDemo && /devis_ligne_urgence_check/.test(`${refusDemo.message || ''} ${refusDemo.constraint || ''} ${refusDemo.details || ''}`),
   `${jeu3.lignes.filter((l) => l.urgence !== false).length} ligne(s) sans urgence:false ; refus ${refusDemo && refusDemo.message}`);
+}
+
+/* i bis. CE QUE LE BANC DES TEXTES DE 2b-3 A TROUVÉ (13/11/2026) — trois
+      défauts remis à la main passaient au vert, parce que les vérifications
+      ci-dessus font tourner les FONCTIONS, pas leurs APPELANTS :
+        - S21 : `motifsRefusRemiseDemo` qui passait `jour: new
+          Date().toISOString().slice(0, 10)` — le jour d'UTC, faux chaque
+          nuit en métropole (de minuit à 1 h ou 2 h) et chaque soir aux
+          Antilles. Le miroir sans `jour` était juste ; son APPELANT ne
+          l'était plus ;
+        - S22 : la ligne neuve qui reprenait la marque de la précédente PAR
+          SON APPELANT (`{ ...ligneNeuve(…), urgence: … }`), `ligneNeuve`
+          restant intacte ;
+        - S26 : « · réparation urgente » posé APRÈS le total de la rangée —
+          `rangees()` lit le total en fin de texte (annexe B, point 9), et le
+          cahier ne le confiait qu'à `mesure-devis`, qui ne tourne pas ici. */
+{
+  /* S21 — LE JOUR QUI JUGE L'ATTESTATION, CHEZ CHAQUE APPELANT : aucun appel
+     de `motifsDeRemise`, `etatDeLAttestation` ou `etatDeLAssurance` dans
+     `src/` ne porte un jour calculé (`toISOString`, `getUTC…`, `Date.UTC`,
+     `slice(0, 10)`) ni un `jour` qui ne soit pas `jourDuTelephone()` ou
+     `jourLocal(…)` ; le seul appel qui passe un `jour` nu est celui de
+     `motifsDeRemise` à `etatDeLAttestation` — son propre paramètre, dont le
+     défaut est `jourDuTelephone()`. */
+  const fichiersJour = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
+    .stdout.split('\n').filter((f) => /\.js$/.test(f));
+  const JUGES = ['motifsDeRemise', 'etatDeLAttestation', 'etatDeLAssurance'];
+  const appelsJuges = [];
+  for (const f of fichiersJour) {
+    const src = sansCommentairesJs(lireSiExiste(f) || '');
+    for (const nom of JUGES) {
+      const re = new RegExp(`\\b${nom}\\s*\\(`, 'g');
+      let m;
+      while ((m = re.exec(src))) {
+        if (/function\s+$/.test(src.slice(Math.max(0, m.index - 12), m.index))) continue;
+        let p = 0;
+        let j = m.index + m[0].length - 1;
+        for (; j < src.length; j += 1) {
+          if (src[j] === '(') p += 1;
+          else if (src[j] === ')') { p -= 1; if (p === 0) break; }
+        }
+        appelsJuges.push({ f, nom, texte: sansEspaces(src.slice(m.index, j + 1)) });
+      }
+    }
+  }
+  const interne = 'etatDeLAttestation(assurances, jour, { proId: d.proId ?? null })';
+  const fautifsJour = appelsJuges.filter((a) => {
+    if (a.f === 'src/lib/devis.js' && a.texte === interne) return false;
+    const sansPermis = a.texte.replace(/\bjourDuTelephone\s*\(\s*\)/g, '').replace(/\bjourLocal\s*\(/g, '');
+    return /toISOString|getUTC|Date\.UTC|\.(slice|substring|substr)\(\s*0\s*,\s*10\s*\)/.test(a.texte) || /\bjour\b/.test(sansPermis);
+  });
+  const defauts = sansEspaces(sansCommentairesJs(lire('src/lib/devis.js')));
+  const defautsEm = sansEspaces(sansCommentairesJs(lire('src/lib/emetteur.js')));
+  verifier('i bis. le jour qui juge l’attestation décennale n’est JAMAIS celui d’UTC, chez AUCUN appelant : `motifsDeRemise`, '
+    + '`etatDeLAttestation` et `etatDeLAssurance` gardent leur défaut (`jourDuTelephone()`, `jourLocal(…)`), et aucun appel dans `src/` '
+    + 'ne leur passe un jour calculé (banc des textes, S21)',
+  appelsJuges.length >= 3 && appelsJuges.some((a) => a.f === 'src/lib/api.js' && a.nom === 'motifsDeRemise')
+    && fautifsJour.length === 0
+    && /assurances = \[\], jour = jourDuTelephone\(\), \} = \{\}\) \{/.test(defauts)
+    && /export function etatDeLAttestation\(assurances, jour = jourDuTelephone\(\), \{ proId = null \} = \{\}\) \{/.test(defauts)
+    && /export function etatDeLAssurance\(a, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm),
+  `${appelsJuges.length} appel(s) ; fautifs : ${fautifsJour.map((a) => `${a.f} : ${a.texte.slice(0, 140)}`).join(' | ') || '—'}`);
+
+  /* S22 — LA MARQUE D'UNE LIGNE NEUVE, CHEZ SON APPELANT : `ligneNeuve` est
+     appelée UNE fois, et sa ligne entre TELLE QUELLE dans la liste ; dans la
+     saisie, aucune clé `urgence:` n'est écrite hors de `ligneNeuve` (`false`)
+     et des deux qui portent l'URGENCE D'ORIGINE du devis (la demande SOS,
+     un autre objet), et aucune n'est affectée (`.urgence =`). La seule
+     écriture de la marque est l'appui sur l'interrupteur de la carte (j1). */
+  const SAi = ECR.saisie;
+  const appelsNeuve = [];
+  {
+    const re = /\bligneNeuve\s*\(/g;
+    let m;
+    while ((m = re.exec(SAi))) {
+      if (!/function\s+$/.test(SAi.slice(Math.max(0, m.index - 12), m.index))) appelsNeuve.push(m.index);
+    }
+  }
+  const clesUrgence = [...SAi.matchAll(/\burgence\s*:\s*([^,}\n]*)/g)].map((m) => sansEspaces(m[1]));
+  const PERMISES = ['false', 'ouverture.urgence || null', 'd.urgence || null'];
+  verifier('i bis. une ligne neuve naît ÉTEINTE chez son APPELANT aussi : `ligneNeuve` appelée une fois, sa ligne versée telle quelle '
+    + '(`changerLignes((ls) => [...ls, l])`), aucune clé `urgence:` ni affectation `.urgence =` ailleurs dans la saisie (banc des textes, S22)',
+  appelsNeuve.length === 1
+    && /const l = ligneNeuve\(type, id, ordre, tauxPour\(ordre, type\)\);\s*changerLignes\(\(ls\) => \[\.\.\.ls, l\]\);/.test(SAi)
+    && clesUrgence.length === 3 && clesUrgence.filter((v) => v === 'false').length === 1
+    && clesUrgence.every((v) => PERMISES.includes(v))
+    && !/\.urgence\s*=(?!=)/.test(SAi),
+  `${appelsNeuve.length} appel(s) de ligneNeuve ; clés urgence: ${json(clesUrgence)}`);
+
+  /* S26 — « · réparation urgente » AVANT LE TOTAL de la rangée : dans
+     `RangeeLigne`, la marque (`DETAIL_URGENCE`, et `DETAIL_URGENCE_SEUL`
+     sans quantité) vient avant `<Montant centimes={total} fort />`, et
+     jamais entre le total et l'étiquette parlée. */
+  const iRangee = SAi.indexOf('const RangeeLigne = React.memo(');
+  const iLibelleR = iRangee < 0 ? -1 : SAi.indexOf('const libelle =', iRangee);
+  const iTotalR = iRangee < 0 ? -1 : SAi.indexOf('<Montant centimes={total} fort />', iRangee);
+  const avantTotal = iRangee >= 0 && iTotalR > iRangee ? SAi.slice(iRangee, iTotalR) : '';
+  const apresTotal = iTotalR >= 0 && iLibelleR > iTotalR ? SAi.slice(iTotalR, iLibelleR) : 'introuvable';
+  verifier('i bis. la rangée d’un poste dit « · réparation urgente » AVANT son total (`rangees()` lit le total en fin de texte), jamais '
+    + 'après (banc des textes, S26 — que seul `mesure-devis` voyait)',
+  (avantTotal.match(/\bDETAIL_URGENCE\b/g) || []).length >= 1 && (avantTotal.match(/\bDETAIL_URGENCE_SEUL\b/g) || []).length >= 1
+    && !/DETAIL_URGENCE/.test(apresTotal),
+  `avant le total : ${(avantTotal.match(/DETAIL_URGENCE\w*/g) || []).join(', ') || '—'} ; après : ${(apresTotal.match(/DETAIL_URGENCE\w*/g) || []).join(', ') || '—'}`);
 }
 
 /* j. L'ÉCRAN DE 2b-3 (cahier §3.4-§3.8) — ce que les écrans font des

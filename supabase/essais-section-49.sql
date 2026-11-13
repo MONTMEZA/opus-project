@@ -1448,10 +1448,15 @@ select c->>'id' as cas, pg_temp.jouer_cas(c, :A) as obtenu, c->>'attendu' as att
 select c->>'id' as cas, f->>'nom' as fonction, pg_temp.jouer_fonction(f) as obtenu, coalesce(f->>'attendu', 'null') as attendu
   from jsonb_array_elements(:'cas'::jsonb->'cas') c, jsonb_array_elements(coalesce(c->'fonctions', '[]')) f
  where pg_temp.jouer_fonction(f) is distinct from coalesce(f->>'attendu', 'null');
-select 'écarts : ' || ((select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') c
-    where c->'operations' is not null and pg_temp.jouer_cas(c, :A) is distinct from c->>'attendu')
-  + (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') c, jsonb_array_elements(coalesce(c->'fonctions', '[]')) f
-    where pg_temp.jouer_fonction(f) is distinct from coalesce(f->>'attendu', 'null'))) as bilan_attendu_ecarts_0;
+-- Le bilan est JUGÉ (banc des textes de 2b-3, S5) : `ecarts_des_cas_attendu_0`
+-- est un nombre, que le juge lit ; la phrase « écarts : N » reste pour l'œil.
+-- Avant, le joueur privé de `'urgence', false` refusait les 66 suites (23502),
+-- et rien ne le comptait : ni une erreur (le joueur les rattrape), ni un `f`.
+select n as ecarts_des_cas_attendu_0, 'écarts : ' || n as bilan_attendu_ecarts_0
+  from (select (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') c
+                 where c->'operations' is not null and pg_temp.jouer_cas(c, :A) is distinct from c->>'attendu')
+             + (select count(*) from jsonb_array_elements(:'cas'::jsonb->'cas') c, jsonb_array_elements(coalesce(c->'fonctions', '[]')) f
+                 where pg_temp.jouer_fonction(f) is distinct from coalesce(f->>'attendu', 'null')) as n) x;
 \echo '-- et la preuve que le joueur JOUE : cinq cas lus en entier (un accepté, un refusé, un retrait ; une réduction répartie, une condition refusée)'
 select c->>'id' as cas, pg_temp.jouer_cas(c, :A) as obtenu
   from jsonb_array_elements(:'cas'::jsonb->'cas') c where c->>'id' in ('C01', 'C09', 'C14c', 'R01', 'R18') order by 1;

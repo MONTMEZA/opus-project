@@ -29,7 +29,30 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-10';
+export const VERSION = '2026-11-13';
+/* 13/11/2026 — LA RÉPARATION URGENTE, LA GARANTIE DÉCENNALE ET LE MOMENT OÙ
+   L'ACOMPTE EST PAYÉ (étape 2b-3 du module devis ; section 49 de
+   `schema.sql`, cahier 2b-3 §4 et annexe A.7 ; réponses du propriétaire du
+   12/11 : P1 = A, une question décennale par devis ; P2 = oui, « Quand le
+   client paie-t-il cette somme ? »). Ce qui a changé DE FOND :
+     - UNE DONNÉE NOUVELLE COLLECTÉE pour les devis : si leurs travaux
+       peuvent engager la garantie décennale, quand l'acompte ou les arrhes
+       sont payés (dès le 8e jour ou à la signature), et quelles lignes sont
+       des réparations urgentes expressément demandées par le client.
+       « Ce que nous collectons » les nomme, dans la phrase des devis ;
+     - RIEN D'AUTRE : « Ce qu'il manque pour remettre ce devis » gagne
+       quatre points, mais un motif n'est pas une décision automatique — il
+       dit à l'artisan ce qui manque à SON devis, sans rien décider pour
+       personne —, et aucun texte ne promet quoi que ce soit sur l'urgence
+       ou l'attestation décennale, puisque rien ne sort avant le lot 2c ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions à un compte existant, et le préavis de
+       quinze jours du règlement 2019/1150 (art. 3.2) s'appliquerait. Sans
+       effet tant que STATUT vaut 'essai' ; à organiser avant l'ouverture au
+       public (A-FAIRE).
+   Cette version prend la date du jour où ces textes ont été écrits ; si le
+   commit se fait un autre jour, `VERSION` prend la date de ce commit. */
+/* VERSION PRÉCÉDENTE : '2026-11-10'. */
 /* 10/11/2026 — À QUEL TITRE LE CLIENT COMMANDE, LE CHANTIER NEUF, ET LE N° DE
    TVA DÉCLARÉ SUR L'HONNEUR (étape 2b-2 du module devis ; sections 46, 48
    et 49 de `schema.sql`, fonction Edge `tva`). Ce qui a changé DE FOND :
@@ -1473,7 +1496,23 @@ export const CONFIDENTIALITE = [
        fiche comme le reste de l'identité. Le cahier écrivait « s'il le
        refuse » seulement ; la décision P5 du 09/11 l'ouvre aussi après trois
        contrôles sans réponse : le texte le dit, sinon il serait faux pour
-       ce cas-là. */
+       ce cas-là.
+
+       LES LIGNES ET LES DEUX RÉPONSES DE 2b-3 (13/11/2026, annexe A.7 du
+       cahier 2b-3 ; réponses du propriétaire du 12/11, P1 = A, P2 = oui) :
+       si les travaux peuvent engager la garantie décennale (une réponse
+       PAR DEVIS, `devis.engage_decennale`), quand l'acompte ou les arrhes
+       sont payés (`devis.acompte_a_la_signature`), et, pour chaque LIGNE,
+       si c'est une réparation urgente expressément demandée par le client
+       (`devis_lignes.urgence`). Insérés, comme ceux de 2b-2, AVANT « leurs
+       lignes » pour les deux réponses du devis, et DANS « leurs lignes »
+       pour la marque d'une ligne : elle appartient à la ligne, pas au
+       devis. « Expressément » est le mot de la loi (L. 221-28 8°) et celui
+       de l'interrupteur : le texte ne dit pas moins que l'écran. Rien
+       d'autre ne change : un motif n'est pas une décision automatique (il
+       dit à l'artisan ce qui manque à son propre devis), et aucun texte ne
+       promet quoi que ce soit sur l'urgence ou l'attestation — rien ne sort
+       avant le lot 2c. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -1525,8 +1564,10 @@ export const CONFIDENTIALITE = [
       + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel '
       + 'titre le client commande, si les travaux portent sur un bâtiment neuf ou une '
       + 'transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font '
-      + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, leurs lignes, leurs prix '
-      + 'et leurs totaux, le client de votre carnet auquel ils '
+      + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent '
+      + 'engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs '
+      + 'lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le '
+      + 'client —, leurs prix et leurs totaux, le client de votre carnet auquel ils '
       + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '
       + 'base de postes : les phrases que vous y rangez, leur unité, si la fourniture est comprise '
       + 'et s’il s’agit de main-d’œuvre, le prix de référence que vous fixez et sa date, et le '

@@ -182,6 +182,11 @@ const NOMS_ENTETE = Object.freeze({
 const CHAMPS_CONDITIONS = Object.freeze([
   'remiseCentiemes', 'remiseCentimes', 'acompteCentiemes', 'acompteCentimes', 'acompteNature', 'validiteJours',
   'retenueGarantieCentiemes',
+  /* 2b-3 : le moment où le client paie s'écrit dans la carte (annexe B,
+     point 21) — un refus de l'en-tête qui l'emporte se dit sur la rangée
+     « Conditions », et « Corriger » rouvre la CARTE, pas le haut de la
+     liste (`NOMS_ENTETE` le nomme déjà « Conditions »). */
+  'acompteALaSignature',
 ]);
 
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant

@@ -3986,6 +3986,21 @@ const ligneDEtatDeLAssurance = () => page.evaluate(() => {
   };
 });
 
+/* LE COMPTE DES BROUILLONS AVANT LES SECTIONS 2b-3 (§5.5, 13) : la
+   section des invariants, après la dernière d'entre elles, exige le même. */
+const BROUILLONS_AVANT_2B3 = { liste: null };
+const brouillonsDeMesDevis = async () => {
+  await allerAMesDevis();
+  await jusqua(async () => (await page.locator('button[aria-label^="Ouvrir le brouillon "]').count()) > 0, 8000);
+  await attendre(600);
+  return page.locator('button[aria-label^="Ouvrir le brouillon "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+};
+await section('2b-3 : le compte des brouillons AVANT les sections 2b-3 (§5.5, 13)', async () => {
+  BROUILLONS_AVANT_2B3.liste = await brouillonsDeMesDevis();
+  noter('les brouillons avant les sections 2b-3', JSON.stringify(BROUILLONS_AVANT_2B3.liste));
+  verifier(`des brouillons à compter (${BROUILLONS_AVANT_2B3.liste.length})`, BROUILLONS_AVANT_2B3.liste.length >= 4);
+});
+
 await section('2b-3 : un devis venu d’une URGENCE — « Ce devis vient d’une demande d’urgence… » au-dessus de l’interrupteur, ÉTEINT (§5.5, 7)', async () => {
   await toucher(page.getByRole('tab', { name: /^Découvrir/ }));
   await attendre(900);
@@ -4538,6 +4553,32 @@ await section('2b-3 : « Conditions » — quand le client paie : la question to
   await toucher(bouton('Confirmer la suppression de ce brouillon'));
   await jusqua(async () => !(await dansLaSaisie()), 6000);
   verifier(`le brouillon « ${OBJET} » est supprimé`, !(await texte()).includes(OBJET));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-3 : l’invariant de la démonstration — les sections 2b-3 ne laissent AUCUN brouillon derrière elles (§5.5, 13)', async () => {
+  /* « Muret de clôture » (« rien ne manque ») et « Terrasse en bois »
+     (exactement deux points) sont mesurés par les sections du lot 2b-1,
+     plus bas : l'attestation de démonstration, effacée puis retirée par les
+     sections 2b-3, y est revenue jointe et datée — sinon le rang 11 les
+     aurait allumés. Les QUATRE brouillons semés par la démonstration sont
+     comptés au départ (« quatre cartes de brouillon »).
+     ICI, ce que le cahier appelle « quatre devis à la fin » : aucune section
+     2b-3 n'en laisse un derrière elle — le compte est LE MÊME qu'avant la
+     première d'entre elles. Le compte de la toute fin du passage ne le dit
+     pas : des sections plus anciennes (lot 1, 2a, 2b-1, 2b-2) laissent les
+     leurs (« Essai OP027 », « Plafond (mesure) », deux « sans objet » —
+     mesuré le 13/11 : sept à la fin), et la dernière section passe sur
+     l'entreprise d'essai, qui n'en a aucun. */
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  const objets = await brouillonsDeMesDevis();
+  noter('les brouillons après les sections 2b-3', JSON.stringify(objets));
+  verifier(`les sections 2b-3 ne laissent aucun brouillon : ${BROUILLONS_AVANT_2B3.liste ? BROUILLONS_AVANT_2B3.liste.length : '?'} avant, ${objets.length} après, les mêmes`,
+    Array.isArray(BROUILLONS_AVANT_2B3.liste)
+    && JSON.stringify([...objets].sort()) === JSON.stringify([...BROUILLONS_AVANT_2B3.liste].sort()));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });
@@ -7531,23 +7572,6 @@ await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration 
   await toucher(parLibelle('Fermer « Mon entreprise »'));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
-});
-
-await section('2b-3 : les invariants de la fin — quatre devis dans « Mes devis » (§5.5, 13)', async () => {
-  /* « Muret de clôture » (« rien ne manque ») et « Terrasse en bois »
-     (exactement deux points) sont mesurés par les sections du lot 2b-1 :
-     l'attestation de démonstration, effacée puis retirée par les sections
-     2b-3, y est revenue jointe et datée — sinon le rang 11 les aurait
-     allumés. Ici, le compte des brouillons : aucune section 2b-3 n'en laisse
-     un derrière elle. */
-  await page.setViewportSize({ width: 390, height: 844 });
-  await attendre(400);
-  await allerAMesDevis();
-  await jusqua(async () => (await page.locator('button[aria-label^="Ouvrir le brouillon "]').count()) > 0, 8000);
-  await attendre(600);
-  const objets = await page.locator('button[aria-label^="Ouvrir le brouillon "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
-  noter('les brouillons de la fin', JSON.stringify(objets));
-  verifier(`quatre devis à la fin (${objets.length})`, objets.length === 4);
 });
 
 /* LA PROPRIÉTÉ DES RANGÉES, en un chiffre : combien de propositions ont été
