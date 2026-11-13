@@ -36,7 +36,7 @@
  * À RELANCER, et le fichier à COMMITER, dès que la règle de la base change.
  *
  * LE FORMAT DE CHAQUE CAS (un par ligne, lisible dans un diff) :
- *   { n, nom, devis, lignes, regime, motifsEmetteur, attendu }
+ *   { n, nom, devis, lignes, regime, motifsEmetteur, assurances, attendu }
  *   - `devis` : la ligne de la base passée par `rowToDevis` (`devis.js`),
  *     ses deux dates retirées (`createdAt`, `modifieLe` à `null`) — elles
  *     changeraient à chaque génération, et la règle ne les lit pas ;
@@ -48,6 +48,15 @@
  *   - `regime` : `emetteur.regime_tva` (`'franchise'`, `'reel'` ou `null`) ;
  *   - `motifsEmetteur` : la sortie de `emetteur_incomplet()`, telle quelle
  *     (des « clé: phrase ») ;
+ *   - `assurances` (2b-3) : TOUTES les lignes de `emetteur_assurances` de la
+ *     base, relues en superutilisateur — celles de A ET celles d'un autre
+ *     artisan (B) : le miroir doit écarter, comme la base (`a.pro_id =
+ *     v_pro`), ce qui n'est pas à l'entreprise du devis. Quatre colonnes
+ *     (`pro_id`, `nature`, `attestation_chemin`, `valide_jusquau`), dans un
+ *     ordre fixe. LES DATES SONT FIXES — 2001 (passée) ou 2999 (valable) —,
+ *     jamais relatives : le fichier ne vieillit pas, et le miroir peut les
+ *     juger au jour du TÉLÉPHONE (son défaut) quand la base les juge au jour
+ *     de PARIS. Le script REFUSE toute date entre 2002 et 2998 ;
  *   - `attendu` : les lignes de la fonction, dans son ordre de sortie —
  *     `{ rang, cle, phrase, nature, ligne_id }`, où `ligne_id` est remplacé
  *     par l'INDICE de la ligne désignée dans `lignes` (ou `null`).
@@ -71,6 +80,10 @@ const BASE = `cas_remise_${process.pid}`;
 // Les comptes et les SIRET FICTIFS de l'essai 49 (vérifiés absents du
 // répertoire Sirene le 21/10/2026) : A, une SARL en siège, SANS n° de TVA.
 const A = 'a4900000-0000-4000-8000-00000000000a';
+// 2b-3 : un SECOND artisan, B — sa décennale valable ne doit JAMAIS valoir
+// pour le devis de A (`a.pro_id = v_pro`, la seule barrière quand la remise
+// de 2c appellera la fonction depuis une fonction `security definer`).
+const B = 'a4900000-0000-4000-8000-00000000000b';
 const P = 'a4900000-0000-4000-8000-00000000000e';
 const C1 = 'c4900000-0000-4000-8000-0000000000c1';
 // 2b-2 : une seconde fiche du carnet de A, une entreprise — pour « la réponse
@@ -161,6 +174,19 @@ const option = (prix, taux, extra = {}) => ({ type: 'option', prix, taux, ...ext
 const titre = (type, extra = {}) => ({ type, ...extra });
 const UN_POSTE_0 = [poste(100000, 0)];
 const UN_POSTE_20 = [poste(100000, 2000)];
+// 2b-3 : un poste marqué « réparation urgente » (49.3 bis) — un fait de
+// ligne posé par l'artisan, jamais déduit de l'origine.
+const urgent = (prix, taux, extra = {}) => poste(prix, taux, { urgence: true, ...extra });
+// 2b-3 : l'acompte du devis « à la signature » — un acompte AVEC sa nature,
+// pour que seul le rang 10 puisse parler.
+const SIGNATURE = { acompte_centiemes: 3000, acompte_nature: 'acompte', acompte_a_la_signature: true };
+// 2b-3 : les assurances d'une situation — REMPLACENT celles du décor (la
+// décennale de A, jointe et valable). `pro` : A ou B ; `chemin` : vrai (un
+// fichier désigné dans le dossier de l'artisan), faux (aucun) ; `fin` : une
+// date FIXE ou `null`.
+const PASSEE = '2001-06-30';
+const VALABLE = '2999-12-31';
+const assurance = (nature, chemin, fin, pro = A) => ({ pro, nature, chemin, fin });
 
 const SITUATIONS = [
   // --- rien ne manque, et ce qui ne compte pas
@@ -344,6 +370,87 @@ const SITUATIONS = [
     devis: { chantier_neuf_conso: true }, lignes: [poste(100000, 1000)] },
   { nom: 'question TVA à « Non » (faux, pas vide) : rien au rang 3', e: 'reel_tva',
     devis: { chantier_neuf_tva: false }, lignes: [poste(100000, 1000), option(10000, 550)] },
+  // --- 2b-3, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
+  //     Le rang 10 : « à la signature », un acompte, et aucun des trois cas
+  //     qu'Opus permet (`signaturePermise`). Une PRUDENCE.
+  { nom: 'à la signature, à titre privé, un poste non marqué : devis_acompte_signature seul (une prudence)', e: 'franchise',
+    devis: SIGNATURE, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, à titre privé, toutes les lignes chiffrées marquées « réparation urgente » : permis, rien ne manque',
+    e: 'franchise', devis: SIGNATURE, lignes: [urgent(100000, 0), urgent(20000, 0)] },
+  { nom: 'à la signature, à titre privé, deux postes dont un seul marqué : le rang 10', e: 'franchise',
+    devis: SIGNATURE, lignes: [urgent(100000, 0), poste(20000, 0)] },
+  { nom: 'à la signature, à titre privé, un poste marqué et une OPTION (jamais marquable) : le rang 10', e: 'franchise',
+    devis: SIGNATURE, lignes: [urgent(100000, 0), option(20000, 0)] },
+  { nom: 'à la signature, à titre privé, un poste marqué et un poste OFFERT non marqué : le rang 10', e: 'franchise',
+    devis: SIGNATURE, lignes: [urgent(100000, 0), poste(4500, 0, { offert: true })] },
+  { nom: 'à la signature, à titre privé, un poste OFFERT marqué, une zone et une réserve : permis (les titres ne comptent pas)',
+    e: 'franchise', devis: SIGNATURE, lignes: [titre('zone'), urgent(100000, 0), urgent(4500, 0, { offert: true }), titre('reserve')] },
+  { nom: 'à la signature, pour son entreprise dans son activité principale, rien de marqué : permis', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'professionnel' }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, à titre privé, « Oui » à la question des DROITS (bâtiment neuf) : permis', e: 'franchise',
+    devis: { ...SIGNATURE, chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, petite entreprise hors de son activité principale, tout marqué : le rang 10 (l’urgence ne lève pas le 8e jour)',
+    e: 'franchise', devis: { ...SIGNATURE, pour_qui: 'professionnel_hors_activite' }, lignes: [urgent(100000, 0)] },
+  { nom: 'à la signature, association, copropriété ou société civile, tout marqué : permis', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'non_professionnel' }, lignes: [urgent(100000, 0)] },
+  { nom: 'à la signature, association, copropriété ou société civile, rien de marqué : le rang 10', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'non_professionnel' }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, AUCUNE réponse « à quel titre », tout marqué : devis_pour_qui ET le rang 10 (une réponse vide ne permet rien)',
+    e: 'franchise', devis: { ...SIGNATURE, pour_qui: null, pour_qui_client: null }, lignes: [urgent(100000, 0)] },
+  { nom: 'à la signature, réponse donnée pour un AUTRE client, tout marqué : devis_pour_qui ET le rang 10', e: 'franchise',
+    devis: { ...SIGNATURE, pour_qui: 'consommateur', pour_qui_client: C2 }, lignes: [urgent(100000, 0)] },
+  { nom: 'à la signature, sans client, tout marqué : devis_client ET le rang 10', e: 'franchise',
+    devis: { ...SIGNATURE, client_id: null }, lignes: [urgent(100000, 0)] },
+  { nom: 'à la signature, SANS acompte : rien (le rang 10 exige un acompte)', e: 'franchise',
+    devis: { acompte_a_la_signature: true }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, un acompte de 100,00 € (en euros) : le rang 10', e: 'franchise',
+    devis: { acompte_centimes: 10000, acompte_nature: 'arrhes', acompte_a_la_signature: true }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature, aucune ligne : devis_lignes ET le rang 10 (aucune ligne chiffrée = « pas toutes »)', e: 'franchise',
+    devis: SIGNATURE, lignes: [] },
+  { nom: 'à la signature, des titres et une réserve seulement : devis_lignes ET le rang 10', e: 'franchise',
+    devis: SIGNATURE, lignes: [titre('zone'), titre('piece'), titre('reserve')] },
+  { nom: '« Dès le 8e jour » (faux, pas vide), un acompte, rien de marqué : rien au rang 10', e: 'franchise',
+    devis: { ...SIGNATURE, acompte_a_la_signature: false }, lignes: UN_POSTE_0 },
+  { nom: 'à la signature au réel, à titre privé, rien de marqué : le rang 10 puis conso_tva_intra', e: 'reel',
+    devis: SIGNATURE, lignes: UN_POSTE_20 },
+  //     Le rang 11 : l'attestation décennale. Vide = « Oui », par prudence ;
+  //     « Non » ne lit rien ; une clé au plus.
+  { nom: 'décennale sans réponse, aucune assurance : devis_decennale seul (une prudence)', e: 'franchise',
+    assur: [], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », aucune assurance : devis_attestation (la loi)', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Non », aucune assurance : rien', e: 'franchise',
+    devis: { engage_decennale: false }, assur: [], lignes: UN_POSTE_0 },
+  { nom: 'décennale sans réponse, attestation jointe SANS date : devis_decennale (la réponse vide l’emporte)', e: 'franchise',
+    assur: [assurance('decennale', true, null)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », attestation jointe SANS date de fin : devis_attestation_date (une prudence)', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', true, null)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », attestation jointe PASSÉE : devis_attestation', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', true, PASSEE)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », date valable mais AUCUN fichier joint : devis_attestation', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', false, VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », une jointe sans date ET une jointe passée : devis_attestation_date', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', true, PASSEE), assurance('decennale', true, null)],
+    lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », une RC professionnelle seule, jointe et valable : devis_attestation (une RC pro ne compte jamais)',
+    e: 'franchise', devis: { engage_decennale: true }, assur: [assurance('rc_pro', true, VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », une passée et une VALABLE : rien (une seule suffit)', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', true, PASSEE), assurance('decennale', true, VALABLE)],
+    lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », la seule valable est celle d’un AUTRE artisan (B) : devis_attestation', e: 'franchise',
+    devis: { engage_decennale: true }, assur: [assurance('decennale', true, VALABLE, B)], lignes: UN_POSTE_0 },
+  { nom: 'décennale sans réponse, la seule valable est celle d’un AUTRE artisan (B) : devis_decennale', e: 'franchise',
+    assur: [assurance('decennale', true, VALABLE, B)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Non », celle d’un autre artisan seulement : rien', e: 'franchise',
+    devis: { engage_decennale: false }, assur: [assurance('decennale', true, VALABLE, B)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Non », attestation jointe sans date : rien (« Non » ne lit rien)', e: 'franchise',
+    devis: { engage_decennale: false }, assur: [assurance('decennale', true, null)], lignes: UN_POSTE_0 },
+  { nom: 'décennale « Oui », l’attestation du décor (jointe, valable) : rien', e: 'franchise',
+    devis: { engage_decennale: true }, lignes: UN_POSTE_0 },
+  { nom: 'le rang 10 ET le rang 11 dans le même devis, dans l’ordre des rangs', e: 'franchise',
+    devis: { ...SIGNATURE, engage_decennale: true }, assur: [assurance('decennale', true, PASSEE)], lignes: UN_POSTE_0 },
+  { nom: 'un devis NEUF (rien de dit) et aucune assurance : client, lignes, lieu, délai, validité, puis devis_decennale',
+    e: 'franchise', devis: VIDE, assur: [], lignes: [] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -358,10 +465,15 @@ insert into public.preuves_siret
    statut_diffusion, maj_insee, source, expire_le, pour_email) values
   ('00004900700016', 'ESSAIS 49 A', false, '5499', true, null,
    '1 RUE DE L ESSAI 13410 LAMBESC', '13410', 'LAMBESC', 'O', '2026-09-02',
+   'registre', now() + interval '1 hour', null),
+  ('00004910600016', 'ESSAIS 49 B', false, '5499', true, null,
+   '2 RUE DE L ESSAI 13100 AIX-EN-PROVENCE', '13100', 'AIX-EN-PROVENCE', 'O', '2026-09-02',
    'registre', now() + interval '1 hour', null);
 insert into auth.users (id, email, raw_user_meta_data) values
  ('${A}', 'a-cas-remise@exemple-opus.test', jsonb_build_object('type','pro','siret','00004900700016','nom','A Essais',
    'entreprise','A Essais','metiers',jsonb_build_array('macon'),'ville','Lambesc (13)')),
+ ('${B}', 'b-cas-remise@exemple-opus.test', jsonb_build_object('type','pro','siret','00004910600016','nom','B Essais',
+   'entreprise','B Essais','metiers',jsonb_build_array('plombier'),'ville','Aix (13)')),
  ('${P}', 'p-cas-remise@exemple-opus.test', jsonb_build_object('type','particulier','nom','P Essais','ville','Lambesc (13)'));
 insert into public.clients (id, pro_id, type, nom, adresse, code_postal, ville)
 values ('${C1}', '${A}', 'particulier', 'Client essai A', '4 rue de l''Essai', '13410', 'Lambesc'),
@@ -370,6 +482,14 @@ insert into public.quote_requests (id, client_id, professional_id, metier, descr
 values ('${QA}', '${P}', '${A}', 'macon', 'Refaire la salle de bain', 'Lambesc', 'accepte');
 insert into public.sos_requests (id, client_id, professional_id, metier_key, probleme_key, statut)
 values ('${SA}', '${P}', '${A}', 'plomberie', 'fuite', 'acceptee');
+-- 2b-3 : LA DÉCENNALE DE A, JOINTE ET VALABLE (une date FIXE et lointaine) —
+-- la forme du décor de l'essai 49-remise. Sans elle, une réponse vide
+-- comptant « Oui », les 85 cas d'avant gagnaient devis_decennale. Les cas du
+-- rang 11 la REMPLACENT dans leur savepoint (\`assur\`).
+insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture,
+                                        attestation_chemin, valide_jusquau)
+values ('${A}', 'decennale', 'Assureur d’essai', '1 rue de l’Essai, 13410 Lambesc', 'France métropolitaine',
+        '${A}/attestation.pdf', '${VALABLE}');
 `;
 SITUATIONS.forEach((s, k) => {
   const n = k + 1;
@@ -377,14 +497,22 @@ SITUATIONS.forEach((s, k) => {
   const cols = { source: 'manuelle', ...COMPLET, ...(s.devis || {}) };
   const noms = Object.keys(cols);
   sql += `savepoint s${n};\n${(ENTREPRISES[s.e] || []).join('\n')}\n`;
+  if (s.assur) {
+    sql += `delete from public.emetteur_assurances where pro_id in ('${A}', '${B}');\n`;
+    s.assur.forEach((a, i) => {
+      const chemin = a.chemin ? `${a.pro}/attestation-${n}-${i + 1}.pdf` : null;
+      sql += `insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture, attestation_chemin, valide_jusquau)
+values ('${a.pro}', ${q(a.nature)}, 'Assureur d’essai', '1 rue de l’Essai', 'France métropolitaine', ${q(chemin)}, ${q(a.fin)});\n`;
+    });
+  }
   sql += `set local role authenticated;\nset local request.jwt.claim.sub = '${A}';\n`;
   sql += `insert into public.devis (id, pro_id, ${noms.join(', ')}, generation) values ('${d}', '${A}', ${noms.map((c) => q(cols[c])).join(', ')}, 1);\n`;
   s.lignes.forEach((l, i) => {
     const id = idLigne(n, l.id ?? i + 1);
     const ordre = l.ordre ?? (i + 1) * 1000;
     if (l.type === 'poste' || l.type === 'option') {
-      sql += `insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes, offert, generation)
-values ('${id}', '${d}', ${ordre}, '${l.type}', 'Ligne ${i + 1}', 1000, 'forfait', ${l.prix}, ${l.taux}, ${l.offert === true}, ${i + 2});\n`;
+      sql += `insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes, offert, urgence, generation)
+values ('${id}', '${d}', ${ordre}, '${l.type}', 'Ligne ${i + 1}', 1000, 'forfait', ${l.prix}, ${l.taux}, ${l.offert === true}, ${l.urgence === true}, ${i + 2});\n`;
     } else {
       sql += `insert into public.devis_lignes (id, devis_id, ordre, type, designation, generation)
 values ('${id}', '${d}', ${ordre}, '${l.type}', 'Titre ${i + 1}', ${i + 2});\n`;
@@ -398,6 +526,11 @@ select 'EMET|${n}|' || to_json(public.emetteur_incomplet('${A}'))::text;
 select 'SORTIE|${n}|' || coalesce(json_agg(json_build_object('rang', m.rang, 'cle', m.cle, 'phrase', m.phrase,
        'nature', m.nature, 'ligne_id', m.ligne_id) order by m.o)::text, '[]')
   from public.motifs_refus_remise('${d}') with ordinality as m(rang, cle, phrase, nature, ligne_id, o);
+reset role;
+select 'ASSUR|${n}|' || coalesce(json_agg(json_build_object('pro_id', a.pro_id, 'nature', a.nature,
+       'attestation_chemin', a.attestation_chemin, 'valide_jusquau', a.valide_jusquau)
+       order by a.pro_id, a.nature, a.valide_jusquau nulls first, a.attestation_chemin nulls first)::text, '[]')
+  from public.emetteur_assurances a;
 rollback to savepoint s${n};
 `;
 });
@@ -419,7 +552,7 @@ try {
 
 const lu = {};
 for (const l of sortieBrute.split('\n')) {
-  const m = l.match(/^(DEVIS|LIGNES|REGIME|EMET|SORTIE)\|(\d+)\|(.*)$/);
+  const m = l.match(/^(DEVIS|LIGNES|REGIME|EMET|SORTIE|ASSUR)\|(\d+)\|(.*)$/);
   if (m) (lu[m[2]] ||= {})[m[1]] = JSON.parse(m[3]);
 }
 
@@ -443,6 +576,7 @@ const rowToLigne = (l) => ({
   fournitureNonComprise: l.fourniture_non_comprise === true,
   surfaceSolMilliemes: nombreOuNul(l.surface_sol_milliemes),
   surfaceMursMilliemes: nombreOuNul(l.surface_murs_milliemes),
+  urgence: l.urgence === true,
   generation: nombreOuNul(l.generation),
   modifieLe: null,
 });
@@ -450,7 +584,7 @@ const rowToLigne = (l) => ({
 const cas = SITUATIONS.map((s, k) => {
   const n = k + 1;
   const r = lu[n];
-  if (!r || !r.DEVIS || !r.LIGNES || !('REGIME' in r) || !r.EMET || !r.SORTIE) {
+  if (!r || !r.DEVIS || !r.LIGNES || !('REGIME' in r) || !r.EMET || !r.SORTIE || !r.ASSUR) {
     throw new Error(`cas ${n} (${s.nom}) : la base n’a pas tout rendu`);
   }
   /* La date du « Oui » au chantier neuf, posée par la base, change à chaque
@@ -466,7 +600,16 @@ const cas = SITUATIONS.map((s, k) => {
   const attendu = r.SORTIE.map((m) => ({
     rang: m.rang, cle: m.cle, phrase: m.phrase, nature: m.nature, ligne_id: indice(m.ligne_id),
   }));
-  return { n, nom: s.nom, devis, lignes, regime: r.REGIME, motifsEmetteur: r.EMET, attendu };
+  /* 2b-3 : AUCUNE date entre 2002 et 2998 — une date proche vieillirait le
+     fichier (une attestation « valable » le deviendrait plus) et le jour du
+     téléphone pourrait différer de celui de Paris. */
+  const assurances = r.ASSUR;
+  for (const a of assurances) {
+    if (a.valide_jusquau !== null && !(a.valide_jusquau <= '2001-12-31' || a.valide_jusquau >= '2999-01-01')) {
+      throw new Error(`cas ${n} : une date d’assurance proche (${a.valide_jusquau}) — 2001 ou 2999 seulement`);
+    }
+  }
+  return { n, nom: s.nom, devis, lignes, regime: r.REGIME, motifsEmetteur: r.EMET, assurances, attendu };
 });
 
 /* Ce que le fichier doit couvrir, vérifié ici : chaque motif du devis seul
@@ -475,7 +618,7 @@ const cas = SITUATIONS.map((s, k) => {
    génération, pas au premier défaut. */
 const CLES_DU_DEVIS = ['devis_client', 'devis_pour_qui', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva',
   'devis_taux_reduit_neuf', 'devis_lieu', 'devis_delai', 'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene',
-  'devis_reduction_ramenee'];
+  'devis_reduction_ramenee', 'devis_acompte_signature', 'devis_decennale', 'devis_attestation_date', 'devis_attestation'];
 for (const cle of CLES_DU_DEVIS) {
   if (!cas.some((c) => c.attendu.length > 0 && c.attendu.filter((m) => m.rang < 100).every((m) => m.cle === cle)
     && c.attendu.some((m) => m.cle === cle))) {
@@ -508,12 +651,47 @@ for (const pq of ['consommateur', 'non_professionnel', 'professionnel_hors_activ
   if (!cas.some((c) => c.devis.pourQui === pq && c.devis.clientId && c.devis.pourQuiClient === c.devis.clientId
     && c.attendu.some((m) => m.rang > 100))) throw new Error(`aucun cas où la réponse « ${pq} » filtre les mentions`);
 }
+/* 2b-3 : « à la signature » PERMIS par chacun des trois cas (aucun rang 10),
+   et REFUSÉ pour chaque réponse qui ne le permet pas ; le rang 11 sur chacun
+   de ses trois états, et « Non » qui ne lit rien ; une assurance d'un AUTRE
+   artisan ; le rang 10 et le rang 11 ensemble ; et les 85 cas d'avant gardent
+   leur numéro (rien n'est inséré avant eux). */
+const sig = (c) => c.devis.acompteALaSignature === true && (c.devis.acompteCentiemes != null || c.devis.acompteCentimes != null);
+const r10 = (c) => c.attendu.some((m) => m.cle === 'devis_acompte_signature');
+const urgents = (c) => c.lignes.filter((l) => l.type === 'poste' || l.type === 'option');
+const toutMarque = (c) => urgents(c).length > 0 && urgents(c).every((l) => l.urgence === true);
+const permis = {
+  professionnel: (c) => c.devis.pourQui === 'professionnel' && c.devis.pourQuiClient === c.devis.clientId,
+  chantier_neuf: (c) => c.devis.chantierNeufConso === true,
+  urgence_prive: (c) => toutMarque(c) && c.devis.pourQui === 'consommateur' && c.devis.pourQuiClient === c.devis.clientId,
+  urgence_association: (c) => toutMarque(c) && c.devis.pourQui === 'non_professionnel' && c.devis.pourQuiClient === c.devis.clientId,
+};
+for (const [cle, f] of Object.entries(permis)) {
+  if (!cas.some((c) => sig(c) && f(c) && !r10(c))) throw new Error(`aucun cas où « à la signature » est permis par ${cle}`);
+}
+if (!cas.some((c) => sig(c) && toutMarque(c) && c.devis.pourQui === 'professionnel_hors_activite' && r10(c))) {
+  throw new Error('aucun cas où l’urgence ne lève pas le 8e jour pour une petite entreprise');
+}
+if (!cas.some((c) => sig(c) && toutMarque(c) && c.devis.pourQuiClient !== c.devis.clientId && r10(c))) {
+  throw new Error('aucun cas où une réponse non valable laisse le rang 10, tout marqué');
+}
+if (!cas.some((c) => sig(c) && c.lignes.some((l) => l.type === 'option') && r10(c))) throw new Error('aucun cas où une option empêche');
+for (const [quoi, f] of [['« Non »', (c) => c.devis.engageDecennale === false && c.assurances.every((a) => a.pro_id !== c.devis.proId)],
+  ['B', (c) => c.assurances.some((a) => a.pro_id !== c.devis.proId)]]) {
+  if (!cas.some(f)) throw new Error(`aucun cas du rang 11 : ${quoi}`);
+}
+if (!cas.some((c) => c.attendu.some((m) => m.rang === 10) && c.attendu.some((m) => m.rang === 11))) {
+  throw new Error('aucun cas où les rangs 10 et 11 sortent ensemble');
+}
+if (cas.some((c) => c.attendu.filter((m) => m.rang === 11).length > 1)) throw new Error('le rang 11 a rendu plus d’une clé');
+if (cas.length < 85 || cas.slice(0, 85).some((c, i) => c.n !== i + 1)) throw new Error('les 85 cas d’avant ont bougé');
 
 const LISEZ_MOI = 'Engendré par scripts/generer-cas-remise.mjs : ce que motifs_refus_remise() (schema.sql, section 49.9) '
   + 'rend pour chaque situation, jouée par la VRAIE base (le devis et ses lignes écrits par le chemin d’un client, la '
   + 'fiche de l’entreprise posée en superutilisateur). Chaque cas : { n, nom, devis (rowToDevis, dates à null), lignes '
   + '(la traduction de rowToLigne, dans l’ordre où elles ont été ÉCRITES), regime (emetteur.regime_tva), motifsEmetteur '
-  + '(la sortie de emetteur_incomplet, des « clé: phrase »), attendu (les lignes de la fonction dans son ordre : rang, '
+  + '(la sortie de emetteur_incomplet, des « clé: phrase »), assurances (2b-3 : toutes les lignes de emetteur_assurances, '
+  + 'celles d’un autre artisan comprises, aux dates FIXES 2001 ou 2999), attendu (les lignes de la fonction dans son ordre : rang, '
   + 'cle, phrase, nature, et ligne_id remplacé par l’INDICE de la ligne dans lignes, ou null) }. verifier-devis fait '
   + 'tourner motifsDeRemise (src/lib/devis.js) dessus et exige zéro écart. À relancer et commiter dès que la règle change.';
 const texte = `{"_lisez_moi": ${JSON.stringify(LISEZ_MOI)},\n"cas": [\n${cas.map((c) => JSON.stringify(c)).join(',\n')}\n]}\n`;

@@ -13005,6 +13005,39 @@ create table if not exists public.devis_lignes (
 );
 
 -- --------------------------------------------------------------------------
+--  49.3 bis LA RÉPARATION URGENTE (lot 2b, étape 2b-3, 12/11/2026)
+--
+--  Posée par l'artisan, LIGNE PAR LIGNE, sur un POSTE seulement
+--  (`devis_ligne_urgence_check`, 49.5) : des travaux d'entretien ou de
+--  réparation urgents, expressément demandés par le client chez lui, dans la
+--  limite du strict nécessaire (C. conso. L. 221-28 8°, L. 221-10 4°). Une
+--  ligne ainsi marquée n'a pas de droit de rétractation pour un client qui
+--  commande à titre privé — c'est pourquoi elle naît ÉTEINTE (`not null
+--  default false`), comme `offert`, `main_oeuvre` et
+--  `fourniture_non_comprise` : « éteint » est le cas protecteur, et aucun
+--  « vide » n'est à interpréter. Ajoutée à défaut constant, elle n'écrit
+--  aucune ligne existante (PostgreSQL ≥ 11) : aucune horloge ne monte.
+--
+--  JAMAIS DÉDUITE DE L'ORIGINE DU DEVIS (D4-c) : aucune contrainte, aucun
+--  déclencheur, aucun motif ne la lie à la façon dont le brouillon a été
+--  ouvert ; une urgence peut arriver par téléphone, et une demande d'urgence
+--  ne prouve ni l'urgence au sens de la loi, ni le domicile. Et elle ne sert
+--  JAMAIS de critère de TVA : les « travaux d'urgence » du taux à 10 % sont
+--  une autre notion (module facture). Son seul lecteur côté base : le motif
+--  `devis_acompte_signature` (49.9), qui ne permet « à la signature » au
+--  titre de l'urgence que si TOUTES les lignes chiffrées la portent. Pas de
+--  date : la condition légale est la sollicitation expresse du CLIENT, pas
+--  le geste de l'artisan — une date posée ici n'aurait aucun lecteur.
+-- --------------------------------------------------------------------------
+alter table public.devis_lignes add column if not exists urgence boolean not null default false;
+
+comment on column public.devis_lignes.urgence is
+  'Posé par l''artisan, ligne par ligne, sur un POSTE seulement : des travaux d''entretien ou de réparation '
+  'urgents, expressément demandés par le client chez lui, dans la limite du strict nécessaire (C. conso. '
+  'L. 221-28 8°, L. 221-10 4°). Jamais déduit de l''origine du devis. Ne sert JAMAIS de critère de TVA : '
+  'les « travaux d''urgence » du taux à 10 % sont une autre notion (module facture). 49.3 bis.';
+
+-- --------------------------------------------------------------------------
 --  49.4 `public.devis_tva` — la ventilation, une ligne par taux
 --
 --  Recalculée EN ENTIER par la base à chaque écriture d'une ligne ; aucune
@@ -13189,8 +13222,54 @@ comment on column public.devis.chantier_neuf_tva is
   'ou false = Non. Lu par is true. 49.4 ter.';
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — trente-deux ici, toutes en `_check`, et une
---       trente-troisième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
+--  49.4 quater LA GARANTIE DÉCENNALE, ET LE MOMENT OÙ L'ACOMPTE EST PAYÉ
+--              (lot 2b, étape 2b-3, 12/11/2026)
+--
+--  Deux réponses de l'artisan, ajoutées ICI pour la même raison que 49.4 bis
+--  et ter (les droits d'écriture vivent en 49.7). NULLABLES, SANS DÉFAUT : un
+--  fait de 2b naît vide, et le vide vaut LE CAS LE PLUS PROTECTEUR. La base
+--  les lit par `is true`, `is not false`, `is null` — jamais par `not x`
+--  (`not null` vaut `null` : une condition ainsi écrite ne doit jamais lever
+--  une protection par accident, la leçon du lot 0a).
+--
+--    `engage_decennale` (réponse du propriétaire du 12/11, P1 = A) : la
+--      réponse à « Ces travaux peuvent-ils engager votre garantie
+--      décennale ? », dans « Le chantier ». UNE question PAR DEVIS : la loi
+--      joint l'attestation « aux devis et factures » (C. assur. L. 243-2
+--      al. 2), pas à une ligne. VIDE = « Oui », par prudence : un oubli ne
+--      retire jamais l'exigence. « Oui » ou vide, et aucune attestation
+--      décennale valable dans « Mon entreprise » : un motif de la liste
+--      (rang 11, 49.9), qui refusera la remise de 2c. Le nom évite
+--      « decennale » seul, qu'un contrôle de texte confondrait avec la
+--      nature d'une assurance (`emetteur_assurances.nature = 'decennale'`).
+--    `acompte_a_la_signature` (réponse P2 du 12/11) : la réponse à « Quand le
+--      client paie-t-il cette somme ? », dans « Conditions ». VRAI : l'artisan
+--      demande l'acompte (ou les arrhes) à la signature. VIDE OU FAUX : dès le
+--      8e jour après la signature — le cas le plus protecteur, celui que le
+--      propriétaire a gardé pour tous les devis le 09/11. Elle n'entre dans
+--      aucune paire de colonnes : elle ne viole aucune contrainte seule, et un
+--      acompte retiré la GARDE (à l'inverse de la nature). « À la signature »
+--      hors des cas qu'Opus permet est un motif de la liste (rang 10, 49.9).
+--
+--  AUCUNE CONTRAINTE NE LIE DEUX FAITS (urgence ⇒ acompte, décennale ⇒
+--  attestation) : une règle qui lie deux colonnes d'un brouillon écrit champ
+--  par champ refuserait la saisie à mi-chemin (49.5). Ce sont des MOTIFS.
+--  Pas de date : aucune n'aurait de lecteur.
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists engage_decennale       boolean;
+alter table public.devis add column if not exists acompte_a_la_signature boolean;
+
+comment on column public.devis.engage_decennale is
+  'La réponse à « Ces travaux peuvent-ils engager votre garantie décennale ? ». Vide = pas dit : Opus '
+  'compte « Oui » (prudence). « Oui » ou vide sans attestation décennale valable : un motif de refus de '
+  'la remise (rang 11). 49.4 quater.';
+comment on column public.devis.acompte_a_la_signature is
+  'Vrai : l''artisan demande l''acompte à la signature. Vide ou faux : dès le 8e jour après la signature. '
+  'Vrai hors des cas qu''Opus permet : un motif de refus de la remise (rang 10). 49.4 quater.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — trente-trois ici, toutes en `_check`, et une
+--       trente-quatrième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
 --       rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
@@ -13390,6 +13469,20 @@ alter table public.devis_lignes add constraint devis_ligne_type_check
 alter table public.devis_lignes drop constraint if exists devis_ligne_unite_check;
 alter table public.devis_lignes add constraint devis_ligne_unite_check
   check (unite is null or unite in ('m2', 'm', 'm3', 'u', 'h', 'jour', 'forfait'));
+/* LA RÉPARATION URGENTE (lot 2b, étape 2b-3, 49.3 bis) : seul un POSTE la
+   porte — ni une option (un travail que le client peut refuser n'est pas
+   « strictement nécessaire pour répondre à l'urgence », C. conso. L. 221-28
+   8°, et la marquer retirerait la rétractation d'un travail facultatif), ni
+   un titre, ni une réserve. UNE contrainte À PART, et pas une branche de
+   plus de `devis_ligne_forme_check` : la règle s'écrit une fois, avec SA
+   phrase ; et quand une ligne viole les deux (un titre urgent ET mal formé),
+   PostgreSQL nomme la première dans l'ordre alphabétique — `forme` avant
+   `urgence`, comme `CONTRAINTES_LIGNE` (devis.js) la range en dernier.
+   `urgence` est `not null` : `not urgence` n'est jamais `null`. Elle ne lit
+   AUCUNE origine du devis (D4-c) et ne nomme pas `client_id` (D4). */
+alter table public.devis_lignes drop constraint if exists devis_ligne_urgence_check;
+alter table public.devis_lignes add constraint devis_ligne_urgence_check
+  check (type = 'poste' or not urgence);
 
 alter table public.devis_tva drop constraint if exists devis_tva_arrondi_check;
 alter table public.devis_tva add constraint devis_tva_arrondi_check
@@ -14537,6 +14630,11 @@ create policy "ventilation de mes devis" on public.devis_tva
      Depuis 2b-2 (49.4 ter), un devis naît et se modifie AUSSI sur « à quel
      titre » (`pour_qui`, et le client pour lequel la réponse est donnée,
      `pour_qui_client`) et sur les deux réponses du chantier.
+     Depuis 2b-3, une ligne naît et se modifie AUSSI sur la réparation
+     urgente (`urgence`, 49.3 bis), et un devis sur la question de la
+     garantie décennale (`engage_decennale`) et sur le moment où l'acompte
+     est payé (`acompte_a_la_signature`, 49.4 quater) — trois réponses de
+     l'artisan, aucune date.
    Une colonne que l'application enverrait sans que la liste la rende ferait
    refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
    compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
@@ -14547,21 +14645,23 @@ grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, o
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
-              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva, generation)
+              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
+              engage_decennale, acompte_a_la_signature, generation)
   on public.devis to authenticated;
 grant update (client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
-              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva, generation)
+              pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
+              engage_decennale, acompte_a_la_signature, generation)
   on public.devis to authenticated;
 grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
-              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, generation)
+              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, urgence, generation)
   on public.devis_lignes to authenticated;
 grant update (ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
-              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, generation)
+              fourniture_non_comprise, surface_sol_milliemes, surface_murs_milliemes, urgence, generation)
   on public.devis_lignes to authenticated;
 grant select on public.devis_tva to authenticated;
 
@@ -14584,7 +14684,7 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 
 -- --------------------------------------------------------------------------
 --  49.9 CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b, étape 2b-1,
---       05/11/2026) — `motifs_refus_remise(p_devis)`
+--       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11) — `motifs_refus_remise(p_devis)`
 --
 --  CE QU'ELLE FAIT. Elle dit, pour UN devis, tout ce qui manque pour qu'il
 --  puisse être remis au client : ce qui manque au devis lui-même, puis ce
@@ -14606,6 +14706,14 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  `for share` : deux écritures de lignes simultanées s'interbloquaient
 --  alors avec le `for no key update` de `recalcule_devis` (mesuré, 40P01).
 --  À éprouver à deux sessions en 2c, avant de construire la remise.
+--  DEPUIS 2b-3, LA LISTE DÉPEND AUSSI d'une ligne d'`emetteur_assurances`
+--  et du JOUR (relecture de la base, I3) : elle peut changer à minuit sans
+--  aucune écriture, ou parce que l'attestation est retirée depuis « Mon
+--  entreprise » entre la lecture et la pose du statut. La remise de 2c
+--  lira l'attestation qu'elle fige SOUS VERROU (`for share` sur la ligne
+--  d'`emetteur_assurances` choisie), dans la même transaction que le
+--  statut, et recalculera la liste au moment de la remise. Rien à
+--  construire en 2b-3.
 --
 --  « RIEN NE MANQUE » = ZÉRO LIGNE. Et seulement cela : une lecture qui
 --  échoue, ou un brouillon que la base n'a pas encore (rien tapé), n'est
@@ -14645,7 +14753,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                (`devis_pour_qui`) — sans réponse, Opus compte tout ce
 --                qu'on doit à un particulier, et 2c imprimerait le
 --                formulaire de rétractation même pour un autre artisan qui
---                sous-traite. SEPT RÈGLES D'OPUS en tout. Et la TVA à 10 %
+--                sous-traite. SEPT RÈGLES D'OPUS en tout — 2b-3 n'en ajoute
+--                aucune (ses quatre motifs sont une prudence ou la loi). Et la TVA à 10 %
 --                ou 5,5 % : « tout permettre » ; c'est 2c qui imprimera la
 --                certification que le client signe. UNE SEULE EXCEPTION
 --                (2b-2) : l'artisan dit lui-même, dans « Le chantier », que
@@ -14701,8 +14810,10 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  et un UUID v4 ne se devine pas. Un visiteur n'a pas le droit de
 --  l'appeler (`revoke`) ; un particulier reçoit OP027 (il n'a pas de fiche
 --  pro). OP027 change de sens par rapport au cahier 2a archivé, qui le
---  réservait à une garde d'urgence restée sans objet : si elle naît en
---  2b-3, elle prendra OP028.
+--  réservait à une garde d'urgence restée sans objet. La garde d'urgence
+--  n'est pas née (2b-3 : une urgence ne dépend jamais de l'origine du
+--  devis, et ce que l'étape refuse est une contrainte ou un motif) :
+--  `OP028` reste libre.
 --
 --  « VIDE » = `null`, AU SENS DE LA CLASSE DE BLANCS DU PROJET.
 --  `tient_le_devis()` (49.6, point 1) range comme `null` un objet, une
@@ -14761,7 +14872,9 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  DEUX tableaux, les lignes et leurs clés, aux clauses IDENTIQUES (même
 --  `filter`, même `order by l.ordre, l.id`, unique) : ils s'alignent indice
 --  par indice, et la boucle les parcourt ensemble, dans l'ordre `ordre,
---  id`. La borne de la liste (508 motifs) ne bouge pas. Elle se lit dans
+--  id`. La borne de la liste — 500 lignes au rang 3, plus les rangs 1, 2
+--  et 4 à 11 : 510 motifs du devis depuis 2b-3 (le rang 11 n'en sort
+--  qu'un) — garde trois chiffres. Elle se lit dans
 --  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
 --  l'entreprise, `regime_tva`, le dit déjà.
@@ -14774,6 +14887,60 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  s'EXCLUENT. La fonction ne lit JAMAIS `clients` : le type de la fiche
 --  ne décide de rien (décision du 09/11), il ne choisit que la phrase de la
 --  proposition, à l'écran.
+--
+--  « À LA SIGNATURE » (2b-3, rang 10, `devis_acompte_signature`, une
+--  PRUDENCE) : l'artisan a répondu que le client paie l'acompte (ou les
+--  arrhes) à la signature (`acompte_a_la_signature is true`), un acompte
+--  est demandé, et AUCUN des trois cas qu'Opus permet ne tient — un client
+--  qui commande pour son entreprise, dans son activité principale
+--  (réponse valable `professionnel`) ; la construction d'un bâtiment neuf
+--  ou la transformation importante d'un existant (`chantier_neuf_conso`,
+--  la question des DROITS, C. conso. L. 221-2 12°) ; toutes les lignes
+--  chiffrées — postes ET options, offertes comprises ; aucune ligne
+--  chiffrée = « pas toutes » — marquées « réparation urgente » (49.3 bis),
+--  pour un client à titre privé ou une association, une copropriété, une
+--  société civile (L. 221-10 4°). Pour une petite entreprise hors de son
+--  activité principale, ou sans réponse, l'urgence ne lève pas le 8e jour :
+--  le cas le plus protecteur. Une prudence et pas la loi : la règle du 8e
+--  jour (L. 221-10 al. 1, L. 242-7) ne vaut que hors établissement, et Opus
+--  ne demande pas où le devis sera signé (décision du 09/11) ; « toutes les
+--  lignes » et « jamais pour une entreprise » sont des choix d'Opus — la
+--  phrase dit « pourrait ». `is not true`, jamais `not (…)` : sans réponse,
+--  `v_valable in (…)` vaut `null`, et une négation nulle laisserait passer
+--  le devis tout urgent sans réponse, le cas que le motif garde. La MÊME
+--  règle est écrite côté téléphone (`signaturePermise`, `src/lib/devis.js`).
+--  Le marqueur est un FAIT DE LIGNE posé par l'artisan, jamais l'origine :
+--  deux devis aux lignes identiques, l'un venu d'une urgence, rendent la
+--  même liste (D4-c).
+--
+--  L'ATTESTATION DÉCENNALE (2b-3, rang 11, réponse P1 du 12/11). La loi
+--  demande de JOINDRE l'attestation d'assurance décennale aux devis dont
+--  les travaux peuvent engager cette garantie (C. assur. L. 243-2 al. 2) ;
+--  l'attestation porte sa période de validité (A. 243-3 1° e), et la
+--  garantie vise les chantiers ouverts pendant cette période (2° a). Opus la
+--  lit dans « Mon entreprise » : une assurance `nature = 'decennale'` de
+--  l'entreprise du devis, avec un chemin d'attestation, est JOINTE ; elle
+--  est VALABLE si sa date de fin est au moins le jour de PARIS — la base
+--  tourne en UTC, d'où `(now() at time zone 'Europe/Paris')::date`, jamais
+--  `current_date`. Un chemin écrit dit qu'un fichier est désigné, pas qu'il
+--  existe : 2c vérifiera l'objet avant de le joindre. TROIS CLÉS, UNE AU
+--  PLUS (elles s'excluent, comme le rang 1) quand la réponse n'est pas
+--  « Non » et qu'aucune attestation n'est valable :
+--    `devis_decennale` (prudence) — pas de réponse : Opus compte « Oui » ;
+--    `devis_attestation_date` (prudence) — « Oui », une attestation jointe
+--      SANS date de fin écrite dans Opus : la date est sur l'attestation,
+--      c'est Opus qui ne sait pas la lire (une sans date à côté d'une date
+--      passée : cette forme-ci, Opus ne sait pas si elle court encore) ;
+--    `devis_attestation` (loi) — « Oui », et rien de joint, ou seulement
+--      des attestations dont la date est passée : « la loi » ne porte que
+--      sur le geste de JOINDRE.
+--  « Non » : rien n'est lu, aucun motif. Une RC professionnelle ne compte
+--  jamais. LA LECTURE EST UNE, ses colonnes nommées, filtrée par
+--  l'entreprise du devis (`a.pro_id = v_pro`) : aujourd'hui la RLS
+--  (« mes assurances ») filtre aussi, mais quand la remise de 2c appellera
+--  cette fonction depuis une fonction `security definer`, ce filtre sera la
+--  SEULE barrière — l'essai le prouve par une enveloppe `security definer`.
+--  La MÊME règle est écrite côté téléphone (`etatDeLAttestation`).
 --
 --  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
 --  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
@@ -14837,42 +15004,51 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_pro          uuid;
-  v_client       uuid;
-  v_adresse      text;
-  v_code_postal  text;
-  v_ville        text;
-  v_delai        text;
-  v_validite     integer;
-  v_acompte_pct  integer;
-  v_acompte_eur  bigint;
-  v_acompte_nat  text;
-  v_acompte_eff  bigint;
-  v_remise_eur   bigint;
-  v_remise_eff   bigint;
-  v_pour_qui     text;
-  v_pour_qui_cl  uuid;
-  v_neuf_tva     boolean;
-  v_valable      text;
-  v_regime       text;
-  v_un_poste     boolean;
-  v_fautives     uuid[];
-  v_cles_lignes  text[];
-  v_i            integer;
-  v_ligne        uuid;
-  v_motif        text;
-  v_position     bigint;
+  v_pro            uuid;
+  v_client         uuid;
+  v_adresse        text;
+  v_code_postal    text;
+  v_ville          text;
+  v_delai          text;
+  v_validite       integer;
+  v_acompte_pct    integer;
+  v_acompte_eur    bigint;
+  v_acompte_nat    text;
+  v_acompte_eff    bigint;
+  v_remise_eur     bigint;
+  v_remise_eff     bigint;
+  v_pour_qui       text;
+  v_pour_qui_cl    uuid;
+  v_neuf_tva       boolean;
+  v_neuf_conso     boolean;
+  v_decennale      boolean;
+  v_signature      boolean;
+  v_valable        text;
+  v_regime         text;
+  v_un_poste       boolean;
+  v_tout_urgent    boolean;
+  v_fautives       uuid[];
+  v_cles_lignes    text[];
+  v_jour           date := (now() at time zone 'Europe/Paris')::date;
+  v_dec_sans_date  boolean := false;
+  v_att_valable    boolean := false;
+  v_i              integer;
+  v_ligne          uuid;
+  v_motif          text;
+  v_position       bigint;
 begin
   -- 1. Le devis, s'il est à l'entreprise de l'appelant. La garde est DANS la
   --    lecture : elle tient d'où qu'on appelle.
   select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville,
          d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
          d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes,
-         d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva
+         d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.chantier_neuf_conso,
+         d.engage_decennale, d.acompte_a_la_signature
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
          v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
-         v_pour_qui, v_pour_qui_cl, v_neuf_tva
+         v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_neuf_conso,
+         v_decennale, v_signature
     from public.devis d
    where d.id = p_devis
      and public.est_mon_entreprise(d.pro_id);
@@ -14883,7 +15059,7 @@ begin
 
   -- 1 bis. La réponse « à quel titre » VALABLE (49.4 ter) : celle donnée
   --    pour le client du devis, sinon vide. La règle est écrite ICI, une
-  --    fois ; le rang 1, le filtre et les natures la lisent.
+  --    fois ; le rang 1, le rang 10, le filtre et les natures la lisent.
   v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end;
 
   -- 2. Le régime de TVA déclaré (vide s'il ne l'est pas).
@@ -14891,11 +15067,14 @@ begin
     from public.emetteur e
    where e.pro_id = v_pro;
 
-  -- 3. Les lignes, lues UNE fois : y a-t-il un poste, et quelles lignes
-  --    chiffrées sont fautives, avec la clé de chacune, dans l'ordre du
-  --    devis. Les deux tableaux ont la MÊME condition et le MÊME ordre
-  --    (unique : `ordre, id`) : ils s'alignent, indice par indice.
+  -- 3. Les lignes, lues UNE fois : y a-t-il un poste, toutes les lignes
+  --    chiffrées sont-elles marquées « réparation urgente » (aucune ligne
+  --    chiffrée : non), et quelles lignes chiffrées sont fautives, avec la
+  --    clé de chacune, dans l'ordre du devis. Les deux tableaux ont la MÊME
+  --    condition et le MÊME ordre (unique : `ordre, id`) : ils s'alignent,
+  --    indice par indice.
   select coalesce(bool_or(l.type = 'poste'), false),
+         coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false),
          coalesce(array_agg(l.id order by l.ordre, l.id)
                     filter (where l.type in ('poste', 'option')
                               and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0)
@@ -14913,9 +15092,27 @@ begin
                                    or (v_regime = 'reel' and v_neuf_tva is true
                                        and l.taux_tva_centiemes in (550, 1000)))),
                   '{}')
-    into v_un_poste, v_fautives, v_cles_lignes
+    into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes
     from public.devis_lignes l
    where l.devis_id = p_devis;
+
+  -- 3 bis. L'attestation décennale de l'entreprise (49.4 quater), lue
+  --    seulement si la réponse n'est pas « Non » : UNE lecture, ses colonnes
+  --    nommées, filtrée par l'entreprise du devis — la seule barrière quand
+  --    la remise de 2c l'appellera depuis une fonction `security definer`,
+  --    où la RLS ne filtre plus. Une attestation est JOINTE quand son chemin
+  --    est écrit ; VALABLE quand elle est jointe et que sa date de fin est au
+  --    moins le jour de PARIS (la base tourne en UTC) ; une date vide ne rend
+  --    jamais valable. Une seule valable suffit ; une RC pro ne compte pas.
+  if v_decennale is not false then
+    select coalesce(bool_or(a.valide_jusquau is null), false),
+           coalesce(bool_or(a.valide_jusquau >= v_jour), false)
+      into v_dec_sans_date, v_att_valable
+      from public.emetteur_assurances a
+     where a.pro_id = v_pro
+       and a.nature = 'decennale'
+       and a.attestation_chemin is not null;
+  end if;
 
   -- 4. Les motifs du devis, rang par rang.
   ligne_id := null;
@@ -14982,6 +15179,42 @@ begin
     phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.';
     return next;
   end if;
+  -- « À la signature » (49.4 quater), un acompte demandé, et aucun des trois
+  -- cas qu'Opus permet : un client qui commande pour son entreprise dans son
+  -- activité principale ; un bâtiment neuf ou une transformation importante
+  -- (la question des DROITS de « Le chantier ») ; toutes les lignes chiffrées
+  -- marquées « réparation urgente », pour un client à titre privé ou une
+  -- association, une copropriété, une société civile. `is not true`, et
+  -- jamais `not (…)` : sans réponse valable, la dernière condition vaut
+  -- `null`, et le motif doit sortir.
+  if v_signature is true
+     and (v_acompte_pct is not null or v_acompte_eur is not null)
+     and v_valable is distinct from 'professionnel'
+     and v_neuf_conso is not true
+     and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then
+    rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence';
+    phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.';
+    return next;
+  end if;
+  -- L'attestation décennale : « Oui » ou pas de réponse, et aucune
+  -- attestation valable. UNE clé au plus : pas de réponse ; « Oui » et une
+  -- attestation jointe sans date de fin (Opus ne sait pas si elle court
+  -- encore) ; « Oui » et rien de joint, ou seulement des dates passées.
+  if v_decennale is not false and v_att_valable is not true then
+    if v_decennale is null then
+      rang := 11; cle := 'devis_decennale'; nature := 'prudence';
+      phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.';
+      return next;
+    elsif v_dec_sans_date is true then
+      rang := 11; cle := 'devis_attestation_date'; nature := 'prudence';
+      phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.';
+      return next;
+    else
+      rang := 11; cle := 'devis_attestation'; nature := 'loi';
+      phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.';
+      return next;
+    end if;
+  end if;
 
   -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
   --    Le rang garde sa position d'origine (100 + position) : un motif
@@ -15025,7 +15258,8 @@ grant execute on function public.motifs_refus_remise(uuid) to authenticated;
 comment on function public.motifs_refus_remise(uuid) is
   'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
   'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
-  'à 9) puis ceux de l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
+  'à 11 : l''acompte à la signature et l''attestation décennale depuis 2b-3) puis ceux de '
+  'l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
   'réponse valable à « À quel titre ? », 2b-2). Aucune ligne = rien '
   'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '
   'refus pour un devis d''un autre et pour un devis qui n''existe pas). Ne lit jamais l''origine '

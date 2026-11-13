@@ -2939,6 +2939,9 @@ function rowToLigne(l) {
     fournitureNonComprise: l.fourniture_non_comprise === true,
     surfaceSolMilliemes: nombreOuNul(l.surface_sol_milliemes),
     surfaceMursMilliemes: nombreOuNul(l.surface_murs_milliemes),
+    /* 2b-3 : « Réparation urgente expressément demandée par le client » —
+       `not null default false` en base : seule une valeur VRAIE l'allume. */
+    urgence: l.urgence === true,
     generation: nombreOuNul(l.generation),
     modifieLe: l.modifie_le ?? null,
   };
@@ -2993,6 +2996,10 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
   poser('pour_qui_client', 'pourQuiClient');
   poser('chantier_neuf_conso', 'chantierNeufConso');
   poser('chantier_neuf_tva', 'chantierNeufTva');
+  /* 2b-3 : la question décennale de « Le chantier » et le moment où le
+     client paie (« Conditions ») — deux réponses de 49.4 quater, sans date. */
+  poser('engage_decennale', 'engageDecennale');
+  poser('acompte_a_la_signature', 'acompteALaSignature');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3023,6 +3030,8 @@ function ligneVersBase(v, { creation = false } = {}) {
     ['prix_unitaire_centimes', 'prixUnitaireCentimes'], ['taux_tva_centiemes', 'tauxTvaCentiemes'],
     ['offert', 'offert'], ['main_oeuvre', 'mainOeuvre'], ['fourniture_non_comprise', 'fournitureNonComprise'],
     ['surface_sol_milliemes', 'surfaceSolMilliemes'], ['surface_murs_milliemes', 'surfaceMursMilliemes'],
+    /* 2b-3 : la réparation urgente, posée par l'artisan, sur un poste. */
+    ['urgence', 'urgence'],
   ];
   colonnes.forEach(([colonne, cle]) => {
     if (v && Object.prototype.hasOwnProperty.call(v, cle) && v[cle] !== undefined) r[colonne] = v[cle];
@@ -3033,7 +3042,9 @@ function ligneVersBase(v, { creation = false } = {}) {
     /* ENTIÈRE : une colonne que l'écran n'a pas dite part vide — sauf
        l'ordre, que l'écran doit toujours donner (sans lui, la base refuse,
        et c'est un défaut de l'écran qu'il faut voir). */
-    const booleens = ['offert', 'main_oeuvre', 'fourniture_non_comprise'];
+    /* `urgence` y est (2b-3) : `not null` en base — partie `null`, la
+       création serait refusée (23502), chaque ligne neuve tomberait. */
+    const booleens = ['offert', 'main_oeuvre', 'fourniture_non_comprise', 'urgence'];
     colonnes.forEach(([colonne]) => {
       if (colonne === 'ordre' || Object.prototype.hasOwnProperty.call(r, colonne)) return;
       if (colonne === 'type') r.type = 'poste';
@@ -3426,11 +3437,15 @@ async function motifsRefusRemiseDemo(devisId) {
   const moi = moiEnDemo();
   const lu = await baseDevisDeDemo().un(moi, devisId);
   if (!lu) throw new ErreurDeLaBase('OP027', REFUS_REMISE.OP027);
+  /* 2b-3 : les assurances de « Mon entreprise » de démonstration — le rang
+     11 (l'attestation décennale) les lit ; le jour prend son défaut, celui
+     du téléphone. */
   return motifsDeRemise({
     devis: lu.devis,
     lignes: lu.lignes,
     regime: regimeEtSaDate(ficheEmetteurDemo(moi)).regime,
     motifsEmetteur: motifsEmetteur(entreeDesMotifsEmetteurDemo(moi)),
+    assurances: ficheEmetteurDemo(moi).assurances,
   });
 }
 export const motifsRefusRemise = hasSupabase ? motifsRefusRemiseSupabase : motifsRefusRemiseDemo;

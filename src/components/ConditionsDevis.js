@@ -47,6 +47,21 @@
  * qu'il ramène à la LISTE (`depuisLaListe`), où la saisie la rouvre. Le
  * défilement se pose une fois, quand le titre du champ a sa place : avant,
  * on ne sait pas où il est.
+ *
+ * QUAND LE CLIENT PAIE L'ACOMPTE (lot 2b-3, réponse P2 du 12/11, cahier
+ * §3.7, annexe A.4) : sous « Acompte ou arrhes ? », deux pastilles — « Dès
+ * le 8e jour (par défaut) » et « À la signature » —, TOUJOURS montrées,
+ * acompte ou non : montrées avec l'acompte seulement, elles naissaient sous
+ * la pastille touchée et poussaient « Validité » d'environ 90 points (E-I2).
+ * Rien n'est choisi d'office : vide, Opus compte le 8e jour. Elles écrivent
+ * par la VOIE UNIQUE de la carte (`etatInitialConditions` → `choisir` →
+ * `lireConditions`) : un choix qui ne passait pas par elle repartait vide à
+ * la fermeture, en silence (E-B1). Sous elles, quand « À la signature » est
+ * choisi, qu'un acompte est posé et que la règle ne le permet pas, UNE
+ * phrase dit la première cause (`pourquoiPasALaSignature`) — jamais un
+ * bouton qui proposerait de marquer des lignes « urgentes » : une marque
+ * fausse, c'est la nullité et le pénal. L'aide de l'échéance ne bouge pas :
+ * elle reste juste après.
  */
 import React, {
   forwardRef, useEffect, useImperativeHandle, useRef, useState,
@@ -66,6 +81,7 @@ import * as retour from '../lib/retour';
 import {
   NATURES_ACOMPTE, VALIDITES_PROPOSEES, PHRASE_RETENUE,
   aidesDeLAcompte, AIDE_REDUCTION, AIDE_ACOMPTE, AIDE_VALIDITE, AIDE_RETENUE,
+  ECHEANCE_DE_L_ACOMPTE, pastillesDeLEcheance, pourquoiPasALaSignature,
   centiemesEnSaisie, rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
   etatInitialConditions, lireConditions, texteEnregistreDans, phraseUniteEnAttente, libellesDesConditions,
   ligneDEtatDeLaCarte,
@@ -88,6 +104,12 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
      date que la BASE en a posée. Les aides de l'acompte les suivent
      (`aidesDeLAcompte`) : ce sont des aides, pas des comptes. */
   reponseATitre = null, chantierNeufConso = null, chantierNeufConsoLe = null,
+  /* 2b-3 : les lignes de l'ÉCRAN, et si toutes ses lignes chiffrées sont
+     marquées « réparation urgente » (`toutUrgent`, calculé par la saisie) —
+     pour l'aide de l'échéance et la ligne « pourquoi ». Le motif, lui, lit
+     les lignes de la BASE : l'écart est transitoire, et « Non enregistrée »
+     se voit sur la ligne. */
+  toutUrgent = false, lignes = [],
 }, ref) {
   const refReduction = useRef(null);
   const refAcompte = useRef(null);
@@ -166,7 +188,15 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
   };
 
   const noms = libellesDesConditions(regime, c.nature);
-  const aides = aidesDeLAcompte({ reponse: reponseATitre, chantierNeufConso, chantierNeufConsoLe });
+  const aides = aidesDeLAcompte({ reponse: reponseATitre, chantierNeufConso, chantierNeufConsoLe, toutUrgent });
+  /* LA LIGNE « POURQUOI » (2b-3, E-I7) : « À la signature » choisi, un
+     acompte posé, et la règle ne le permet pas — la même règle que le point
+     de la liste et que l'aide (`signaturePermise`). Sans acompte, rien : le
+     motif ne sort pas non plus. */
+  const acomptePose = present(devis.acompteCentiemes) || present(devis.acompteCentimes);
+  const pourquoi = c.echeance === true && acomptePose
+    ? pourquoiPasALaSignature({ reponse: reponseATitre, chantierNeufConso, lignes }) : null;
+  const [pastilleHuitieme, pastilleSignature] = pastillesDeLEcheance(c.echeance);
   const rangees = rangeesDesTotaux(totaux, regime, { nbOptions });
   const total = rangees.find((r) => r.cle === 'total');
   const reste = rangees.find((r) => r.cle === 'reste');
@@ -198,6 +228,13 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
     if (ramenees && ramenees !== annonce.current) retour.annoncer(ramenees);
     annonce.current = ramenees;
   }, [ramenees]);
+  /* La ligne « pourquoi » apparaît sous les pastilles qu'on vient de
+     toucher : elle s'annonce, une fois par phrase nouvelle. */
+  const annoncePourquoi = useRef('');
+  useEffect(() => {
+    if (pourquoi && pourquoi !== annoncePourquoi.current) retour.annoncer(pourquoi);
+    annoncePourquoi.current = pourquoi || '';
+  }, [pourquoi]);
 
   /* SOUS CHAQUE MONTANT, UNE PLACE RÉSERVÉE (ÉCRAN-12) : la faute, la valeur
      en attente d'une unité, ou l'effet — la place est là avant eux, et rien
@@ -319,6 +356,19 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
             la rétractation ; pour un chantier neuf confirmé, le 8e jour ne
             s'applique pas ; pour une association, par prudence. */}
         <Text style={s.aide}>{aides.nature}</Text>
+
+        {/* QUAND LE CLIENT PAIE (2b-3) — TOUJOURS montrée, rien de choisi
+            d'office : vide, Opus compte le 8e jour. Deux pastilles, pas un
+            second interrupteur (la carte n'en a qu'un, la retenue). */}
+        <Text style={s.etiquette} onLayout={ancre('echeance')}>{ECHEANCE_DE_L_ACOMPTE.etiquette}</Text>
+        <View style={s.pastilles}>
+          <Pastille label={pastilleHuitieme} choisie={c.echeance === false}
+            onPress={() => choisir({ echeance: false }, 'echeance')} />
+          <Pastille label={pastilleSignature} choisie={c.echeance === true}
+            onPress={() => choisir({ echeance: true }, 'echeance')} />
+        </View>
+        {/* Sous les pastilles, la cause — jamais un bouton. */}
+        {!!pourquoi && <Text style={s.pourquoi}>{pourquoi}</Text>}
         {!!aides.echeance && <Text style={s.aide}>{aides.echeance}</Text>}
 
         {/* LA VALIDITÉ — 15, 30, 60, 90 jours ou « Autre » ; RIEN de
@@ -422,6 +472,10 @@ const s = StyleSheet.create({
   etiquette: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, marginTop: S.md, marginBottom: S.xs },
   pastilles: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm, marginTop: S.xs, marginBottom: S.xs },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit), marginTop: S.xs },
+  /* La ligne « pourquoi » (2b-3) : à l'encre du texte, en demi-gras — elle
+     dit pourquoi le choix fait un point à corriger ; pas le rouge des refus :
+     rien n'est refusé à la saisie. */
+  pourquoi: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xs },
   /* LA PLACE RÉSERVÉE sous un montant (ÉCRAN-12) : deux lignes, la longueur
      des phrases d'effet et des fautes courantes, même à 320 points. Mesuré
      au navigateur avant la correction : la carte sautait de 24 px, puis de

@@ -2779,11 +2779,15 @@ try {
     const avecRef = sejour.filter((l) => P.referenceDuPoste(l, POSTES));
     /* QUATORZE depuis la reprise « écran » du lot 2a (04/11/2026) :
        `definitif`, ce qu'un refus DÉFINITIF vise (la ligne, le brouillon) — la rangée ne propose plus « Réessayer »
-       qui échouerait à l'identique. Rien de la base de postes. */
-    verifier('la rangée de la liste du devis (`proprietesDeLaRangee`) reçoit EXACTEMENT les quatorze valeurs de '
+       qui échouerait à l'identique. Rien de la base de postes.
+       QUINZE depuis 2b-3 (12/11/2026, cahier §3.5) : `urgence`, la marque
+       « réparation urgente » de la LIGNE — elle s'imprimera en 2c, ce n'est
+       pas une valeur de la base de postes (un poste ne la porte jamais). */
+    verifier('la rangée de la liste du devis (`proprietesDeLaRangee`) reçoit EXACTEMENT les quinze valeurs de '
       + '`PROPRIETES_DE_LA_RANGEE` — la phrase de la ligne mot pour mot, son total, son état — et rien de la base de postes : la liste '
       + 'est l’écran qu’on montre à un client (Q3 a ; la relecture y avait écrit la phrase de référence sans qu’un contrôle rougisse)',
-    sejour.length === 6 && avecRef.length >= 2 && fautes.length === 0 && D.PROPRIETES_DE_LA_RANGEE.length === 14
+    sejour.length === 6 && avecRef.length >= 2 && fautes.length === 0 && D.PROPRIETES_DE_LA_RANGEE.length === 15
+      && D.PROPRIETES_DE_LA_RANGEE.includes('urgence') && D.PROPRIETES_DE_LA_RANGEE.every((k) => !/r[ée]f/i.test(k))
       && D.proprietesDeLaRangee.length === 1, fautes.map((l) => l.designation).join(' | '));
   }
 
@@ -2914,7 +2918,7 @@ try {
       + 'rappels — l’élément est écrit EXACTEMENT ainsi : une valeur ajoutée, une désignation retouchée font rougir',
     balises.length === 1 && norm(element) === norm('<RangeeLigne {...proprietesDeLaRangee(item, { sousTotaux: sous, etats, erreurs, '
       + 'phrasesEchec, definitifs })} onOuvrir={ouvrirStable} onReessayer={reessayerStable} />'), norm(element).slice(0, 220));
-    verifier('…`RangeeLigne` n’accepte que les quatorze valeurs et les deux rappels ; la feuille d’ajout reçoit `postesLus(postes, postesEtat)`',
+    verifier('…`RangeeLigne` n’accepte que les quinze valeurs et les deux rappels ; la feuille d’ajout reçoit `postesLus(postes, postesEtat)`',
       json(params) === json([...D.PROPRIETES_DE_LA_RANGEE, 'onOuvrir', 'onReessayer'].sort())
       && /postes=\{postesLus\(postes, postesEtat\)\}/.test(balisesE(s, 'FeuilleAjoutPoste')[0] || ''), json(params));
   }
@@ -3080,7 +3084,11 @@ try {
      une ligne de DEVIS — son `proId` est celui du devis, pas celui d'un
      poste, et le compter ici retirait à `pro_id` son exception nommée sans
      qu'aucun écran ne lise l'appartenance d'un poste. */
-  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase'].reduce((s, nom) => {
+  /* …ni, depuis 2b-3 (12/11/2026), `motifsDeRemise` et `etatDeLAttestation` :
+     le miroir de la liste passe le `proId` du DEVIS à la lecture de
+     l'attestation décennale, qui ne garde que les assurances de CETTE
+     entreprise — une appartenance d'ASSURANCE, pas celle d'un poste. */
+  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation'].reduce((s, nom) => {
     const f = fonctionJs(s, nom);
     return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
   }, t);

@@ -901,16 +901,67 @@ if (E && M && D) {
       && !avis({ assurances: [{ nature: 'decennale', attestation_chemin: 'p/x.pdf', valide_jusquau: '2026-10-18' }] })
         .includes('attestation_expiree'));
     /* L. 243-2 joint l'attestation « aux devis et factures des
-       professionnels assurés » — QUEL QUE SOIT LE CLIENT (relu le
-       18/10/2026). Et deux décennales donnent deux avis qui se distinguent :
+       professionnels assurés » — PAS SEULEMENT pour un particulier (relu le
+       18/10/2026). 2b-3 (annexe A.6, D6) : « quel que soit le client »
+       était faux dans l'autre sens — un sous-traitant n'est peut-être pas
+       concerné (J3) —, d'où « et pas seulement pour un particulier », MOT
+       POUR MOT. Et deux décennales donnent deux avis qui se distinguent :
        l'assureur est nommé, et l'`id` voyage pour une clé d'écran unique. */
     const dec = E.avisEmetteur({ aujourdhui: '2026-10-18', assurances: [
       { id: 'x1', nature: 'decennale', assureur_nom: 'Premier assureur' },
       { id: 'x2', nature: 'decennale', assureur_nom: 'Second assureur' }] })
       .filter((a) => a.cle === 'decennale_sans_attestation');
-    verifier('l’attestation de décennale accompagne le devis QUEL QUE SOIT LE CLIENT (L. 243-2), jamais « à un particulier »',
-      dec.length === 2 && dec.every((a) => /quel que soit le client/.test(a.texte) && /L\. 243-2/.test(a.texte)
-        && !/particulier/.test(a.texte)), dec.map((a) => a.texte).join(' | '));
+    const DEC_SANS = (chez) => `Votre décennale${chez} n’a pas d’attestation jointe. Pour des travaux qui peuvent engager `
+      + 'votre décennale, son attestation est jointe au devis, et pas seulement pour un particulier (code des assurances, '
+      + 'L. 243-2) : chaque devis le demandera selon ses travaux.';
+    const decSeule = E.avisEmetteur({ aujourdhui: '2026-10-18', assurances: [{ nature: 'decennale' }] })
+      .filter((a) => a.cle === 'decennale_sans_attestation');
+    verifier('l’attestation de décennale accompagne le devis « et pas seulement pour un particulier » (L. 243-2) — MOT POUR MOT '
+      + '(annexe A.6, 252 caractères sans l’assureur), jamais « quel que soit le client » (D6 : le sous-traitant)',
+    dec.length === 2 && dec[0].texte === DEC_SANS(' (Premier assureur)') && dec[1].texte === DEC_SANS(' (Second assureur)')
+      && decSeule.length === 1 && decSeule[0].texte === DEC_SANS('') && decSeule[0].texte.length === 252
+      && dec.every((a) => !/quel que soit le client/.test(a.texte)), dec.map((a) => a.texte).join(' | '));
+    /* 2b-3 (annexe A.6) : l'avis `sans_assurance` dit ce qu'un devis
+       DEMANDERA (un futur : rien ne s'imprime avant 2c) et les mots de
+       R. 111-2 9° ; « Opus n'en exige aucune » n'est jamais remis SEUL
+       (S32). Et l'avis `a_la_signature` dit de RETIRER la formule et de
+       dire, dans les conditions de chaque devis, quand le client paie —
+       plus « Chaque devis dira… » (S33). */
+    const SANS_ASSURANCE = 'Aucune assurance déclarée. Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux '
+      + 'peuvent engager votre garantie décennale ne se remettra qu’avec son attestation, et pour un devis à un particulier, '
+      + 'la loi demande de lui communiquer l’assurance de responsabilité professionnelle que vous avez souscrite (code de la '
+      + 'consommation, R. 111-2) : si vous en avez une, déclarez-la, Opus l’imprimera sur vos devis.';
+    const A_LA_SIGNATURE = 'Vos modalités de paiement parlent d’un paiement à la signature (ou à la commande). Elles s’imprimeront '
+      + 'sur tous vos devis. Pour un devis à un particulier ou à une petite entreprise, signé hors de vos locaux (chez lui, sur '
+      + 'le chantier, ou dans vos locaux juste après l’avoir rencontré ailleurs), la loi interdit de recevoir un paiement avant '
+      + 'le 8e jour, sauf exceptions (code de la consommation, L. 221-10) : retirez cette formule de vos modalités, et dites, '
+      + 'dans les conditions de chaque devis, quand le client paie.';
+    const texteDe = (o, cle) => (E.avisEmetteur({ aujourdhui: '2026-10-18', ...o }).find((a) => a.cle === cle) || {}).texte;
+    verifier('l’avis `sans_assurance` (annexe A.6), MOT POUR MOT : « Opus n’en exige aucune pour votre fiche ; mais un devis… ne se '
+      + 'remettra qu’avec son attestation », les mots de R. 111-2 (« assurance de responsabilité professionnelle »), un FUTUR',
+    texteDe({}, 'sans_assurance') === SANS_ASSURANCE && SANS_ASSURANCE.length === 423,
+    texteDe({}, 'sans_assurance'));
+    verifier('l’avis `a_la_signature` (annexe A.6), MOT POUR MOT : il dit de RETIRER la formule et de dire, dans les conditions de '
+      + 'chaque devis, quand le client paie — jamais « Chaque devis dira… »',
+    texteDe({ emetteur: { modalites_paiement_texte: 'Acompte de 30 % à la signature' }, assurances: [{ nature: 'rc_pro' }] },
+      'a_la_signature') === A_LA_SIGNATURE && A_LA_SIGNATURE.length === 516 && !/chaque devis dira/i.test(A_LA_SIGNATURE),
+    texteDe({ emetteur: { modalites_paiement_texte: 'Acompte de 30 % à la signature' }, assurances: [{ nature: 'rc_pro' }] },
+      'a_la_signature'));
+    /* `etatDeLAssurance` (2b-3, §3.2) : l'état d'une assurance, à part du
+       texte coupé de la rangée, FAITE TOURNER — une date future, celle du
+       jour (valable : le dernier jour de validité compte), une date passée,
+       aucune date ; un horodatage relu garde son jour (une CHAÎNE comparée,
+       jamais `new Date`). */
+    const EA = E.etatDeLAssurance;
+    verifier('`etatDeLAssurance`, FAITE TOURNER : future → « Valable jusqu’au JJ/MM/AAAA », du jour → valable, passée → « Expirée le '
+      + '… », vide → « Sans date de fin » ; un horodatage garde son jour',
+    EA({ valide_jusquau: '2027-03-31' }, '2026-11-12') === 'Valable jusqu’au 31/03/2027'
+      && EA({ valide_jusquau: '2026-11-12' }, '2026-11-12') === 'Valable jusqu’au 12/11/2026'
+      && EA({ valide_jusquau: '2026-11-11' }, '2026-11-12') === 'Expirée le 11/11/2026'
+      && EA({ valide_jusquau: '2026-11-12T23:30:00+00:00' }, '2026-11-12') === 'Valable jusqu’au 12/11/2026'
+      && EA({ valide_jusquau: null }, '2026-11-12') === 'Sans date de fin' && EA({}, '2026-11-12') === 'Sans date de fin'
+      && EA(null, '2026-11-12') === 'Sans date de fin' && EA({ valide_jusquau: '' }, '2026-11-12') === 'Sans date de fin',
+    [EA({ valide_jusquau: '2027-03-31' }, '2026-11-12'), EA({ valide_jusquau: '2026-11-11' }, '2026-11-12')].join(' | '));
     verifier('…et deux décennales donnent deux avis DISTINCTS, l’assureur nommé, chacun son `id`',
       dec.length === 2 && dec[0].texte !== dec[1].texte && /Premier assureur/.test(dec[0].texte)
       && dec[0].id === 'x1' && dec[1].id === 'x2');
@@ -1306,6 +1357,16 @@ if (!E) {
        régime (critique B4 du lot 2b). Elle n'entre PAS dans la liste
        « tarifs » : elle appelle `emetteur_incomplet`, sans nommer
        `tarifs_pro`. */
+    /* …ET DEPUIS 2b-3 (12/11/2026, réponse P1 = A du propriétaire) ELLE LIT
+       AUSSI `emetteur_assurances` — DÉCIDÉ, pas glissé : pour dire qu'un
+       devis dont les travaux peuvent engager la décennale n'a pas
+       d'attestation VALABLE à joindre (L. 243-2, rang 11 de la liste). Elle
+       était déjà dans la liste « émetteur et assurances » (la même
+       expression régulière couvre les deux tables) ; ce qui change, c'est
+       sa porte étroite ci-dessous, réécrite en le décidant : UNE lecture de
+       la table, ses trois colonnes nommées, de la seule DÉCENNALE de
+       L'ENTREPRISE DU DEVIS (`a.pro_id = v_pro`) — et rien d'autre de
+       l'assureur (ni son nom, ni son adresse, ni la couverture). */
     const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
     const LISTES = [
       { tables: /\b(emetteur_assurances|emetteur)\b/,
@@ -1332,16 +1393,39 @@ if (!E) {
        commentaires ni chaînes, nomment `emetteur` UNE fois, dans UNE lecture
        d'UNE colonne — le régime. Une seconde lecture (le nom de
        l'entreprise, son médiateur…), ou `select *`, la ferait sortir de la
-       raison pour laquelle elle est dans la liste ci-dessus. */
+       raison pour laquelle elle est dans la liste ci-dessus.
+       RÉÉCRITE EN 2b-3, EN LE DÉCIDANT (cahier 2b-3, §5.4) : toujours UNE
+       mention d'`emetteur` (le régime) ; et désormais UNE mention
+       d'`emetteur_assurances`, dans UNE lecture qui n'en tire que trois
+       colonnes (`valide_jusquau`, `nature`, `attestation_chemin`), réduites
+       à deux booléens (« une décennale jointe sans date », « une décennale
+       jointe valable au jour de Paris »), filtrée par `a.pro_id = v_pro` et
+       par la nature `'decennale'` — et seulement quand la réponse de
+       l'artisan n'est pas « Non ». Sous un `security definer` de 2c, ce
+       filtre sera la SEULE barrière (la RLS ne filtrera plus) : le retirer
+       doit rougir ici, et pas seulement dans l'essai (cas 22). Jamais
+       `tarifs_pro`. La lecture est comparée chaînes vidées (sa forme), puis
+       chaînes gardées (`a.nature = 'decennale'`). */
     const mrr = fonctions.filter((f) => f.nom === 'motifs_refus_remise');
-    const mrrCode = mrr.length === 1 ? mrr[0].corps.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''") : '';
+    const mrrSansCom = mrr.length === 1 ? mrr[0].corps.replace(/--[^\n]*/g, ' ') : '';
+    const mrrCode = mrrSansCom.replace(/'(?:[^']|'')*'/g, "''");
     const mentions = (mrrCode.match(/\bemetteur\b/gi) || []).length;
+    const mentionsAss = (mrrCode.match(/\bemetteur_assurances\b/gi) || []).length;
     const lecture = /\bselect\s+e\.regime_tva\s+into\s+v_regime\s+from\s+public\.emetteur\s+e\s+where\s+e\.pro_id\s*=\s*v_pro\s*;/i.test(mrrCode);
-    verifier('…et `motifs_refus_remise` (lot 2b-1) ne lit de l’émetteur QUE le régime de TVA : une seule mention de la table, dans '
-      + '`select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro`, et jamais `emetteur_assurances` ni '
-      + '`tarifs_pro`',
-    mrr.length === 1 && mentions === 1 && lecture && !/\b(emetteur_assurances|tarifs_pro)\b/i.test(mrrCode),
-    `${mrr.length} définition(s) ; ${mentions} mention(s) ; lecture du seul régime : ${lecture}`);
+    const LECTURE_ASSURANCES = /\bif\s+v_decennale\s+is\s+not\s+false\s+then\s+select\s+coalesce\(bool_or\(a\.valide_jusquau\s+is\s+null\),\s*false\),\s*coalesce\(bool_or\(a\.valide_jusquau\s*>=\s*v_jour\),\s*false\)\s+into\s+v_dec_sans_date,\s*v_att_valable\s+from\s+public\.emetteur_assurances\s+a\s+where\s+a\.pro_id\s*=\s*v_pro\s+and\s+a\.nature\s*=\s*'(\w*)'\s+and\s+a\.attestation_chemin\s+is\s+not\s+null\s*;\s*end\s+if\s*;/i;
+    const lectureAssForme = LECTURE_ASSURANCES.exec(mrrCode);
+    const lectureAss = LECTURE_ASSURANCES.exec(mrrSansCom);
+    const jourDeParis = /\bv_jour\s+date\s*:=\s*\(now\(\)\s+at\s+time\s+zone\s+'Europe\/Paris'\)::date\s*;/i.test(mrrSansCom)
+      && !/\bcurrent_date\b|\blocaltimestamp\b|\bcurrent_timestamp\b/i.test(mrrCode);
+    verifier('…et `motifs_refus_remise` ne lit de l’émetteur QUE le régime de TVA (une seule mention de la table, dans '
+      + '`select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro`) et, depuis 2b-3, des assurances QUE la '
+      + 'décennale jointe de l’entreprise du devis (une seule mention, une lecture de `valide_jusquau`, `nature`, `attestation_chemin` '
+      + 'réduite à deux booléens, filtrée par `a.pro_id = v_pro` et `a.nature = \'decennale\'`, seulement si la réponse n’est pas « Non »), '
+      + 'au jour de PARIS — et jamais `tarifs_pro`',
+    mrr.length === 1 && mentions === 1 && lecture && mentionsAss === 1 && !!lectureAssForme && !!lectureAss
+      && lectureAss[1] === 'decennale' && jourDeParis && !/\btarifs_pro\b/i.test(mrrCode),
+    `${mrr.length} définition(s) ; ${mentions} mention(s) d’emetteur, ${mentionsAss} d’emetteur_assurances ; lecture du seul régime : `
+    + `${lecture} ; lecture de la décennale : ${!!lectureAssForme}/${lectureAss ? lectureAss[1] : '—'} ; jour de Paris : ${jourDeParis}`);
   }
 
   /* --- 6.3-22 : rien n'est `not null` hors des clés --- */
@@ -2050,8 +2134,29 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     fauxMots.length === 0,
     `${fauxMots.join(' | ')}. Le répertoire n’est pas un registre ; une attestation n’est exigée qu’au `
     + 'lot 2, selon les travaux ; et aucune assurance n’est exigée en général (réponse du 18/10)');
-  verifier('…et l’écran d’une assurance dit qu’Opus n’en exige aucune',
-    /Opus n’en exige aucune/.test(code.FicheAssurance) && /Opus n’en exige aucune/.test(fe));
+  /* 2b-3 (réponse P1 du 12/11 : « A », annexe A.6) — DÉCIDÉ, et réécrit :
+     « Opus n'en exige aucune » était vrai de la FICHE, il devient faux d'un
+     devis dont les travaux peuvent engager la garantie décennale (le rang 11
+     refuse sa remise sans attestation valable). La phrase reste, mais jamais
+     SEULE (S32) : elle dit « pour votre fiche ; mais un devis… ». */
+  const EXIGE_SEUL = /Opus n’en exige aucune(?! pour votre fiche ; mais un devis dont les travaux)/;
+  verifier('…et l’écran d’une assurance dit qu’Opus n’en exige aucune POUR LA FICHE, mais qu’un devis dont les travaux peuvent '
+    + 'engager la décennale demande son attestation (2b-3, annexe A.6) — jamais la première moitié seule',
+    /Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux peuvent engager votre garantie /.test(code.FicheAssurance)
+    && /demande son attestation, avec sa date de fin\. Pour un devis à un particulier, la loi demande de /.test(code.FicheAssurance)
+    && /Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux /.test(fe)
+    && /'peuvent engager votre garantie décennale demande son attestation : déclarez celles que vous avez '/.test(fe)
+    && !EXIGE_SEUL.test(code.FicheAssurance) && !EXIGE_SEUL.test(fe),
+    'sans cette fin, « Opus n’en exige aucune » dirait faux d’un devis à une décennale');
+  verifier('l’aide de « Valable jusqu’au », SANS date, ne parle de la décennale QUE pour une décennale (2b-3, M9 écran)',
+    /nature === 'decennale'\s*\?\s*'Nécessaire pour vos devis dont les travaux peuvent engager votre décennale\. Touchez le dernier jour de '/
+      .test(code.FicheAssurance)
+    && /: 'Facultatif\. Touchez le dernier jour de validité de votre attestation\.'\)/.test(code.FicheAssurance),
+    'sous une RC pro, « votre décennale en a besoin » ne s’appliquerait pas');
+  verifier('la rangée d’une assurance dit son état SUR SA PROPRE LIGNE, hors du texte coupé à deux lignes (2b-3, E-I5)',
+    /const etat = etatDeLAssurance\(a\);/.test(fe)
+    && /numberOfLines=\{2\}>\s*\{`\$\{a\.assureur_nom\} — \$\{a\.couverture\}\$\{a\.attestation_chemin \? ' · attestation jointe' : ''\}`\}\s*<\/Text>\s*<Text style=\{s\.optionAide\}>\{etat\}<\/Text>/.test(fe),
+    'ajoutée au bout du texte coupé, la date tombait sous « … » à 320 points ; `mesure-devis` la mesure par sa boîte');
 
   /* ------------------------------------------------------------------ */
   /*  5c. LES DEUX PORTES, ET UNE SEULE FENÊTRE                          */

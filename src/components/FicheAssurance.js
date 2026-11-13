@@ -169,10 +169,16 @@ const FicheAssurance = forwardRef(function FicheAssurance({
   return (
     <View style={s.fiche}>
       <Text style={s.titre}>{assurance ? 'Modifier cette assurance' : 'Ajouter une assurance'}</Text>
+      {/* 2b-3 (réponse P1 du 12/11 : « A », annexe A.6) : rien n'est exigé
+          pour la fiche, mais un devis dont les travaux peuvent engager la
+          garantie décennale demande son attestation, avec sa date de fin.
+          « L'assurance de responsabilité professionnelle » : les mots de
+          R. 111-2 9° ; un futur, rien ne s'imprime avant 2c. */}
       <Text style={s.aide}>
-        Opus n’en exige aucune. Pour un devis à un particulier, la loi demande de communiquer au
-        client les assurances professionnelles que vous avez souscrites (code de la consommation,
-        R. 111-2) : déclarez celles que vous avez, Opus les imprimera sur vos devis.
+        {'Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux peuvent engager votre garantie '
+          + 'décennale demande son attestation, avec sa date de fin. Pour un devis à un particulier, la loi demande de '
+          + 'lui communiquer l’assurance de responsabilité professionnelle que vous avez souscrite (code de la '
+          + 'consommation, R. 111-2) : déclarez celles que vous avez, Opus les imprimera sur vos devis.'}
       </Text>
 
       <Text style={s.label}>Nature</Text>
@@ -252,10 +258,16 @@ const FicheAssurance = forwardRef(function FicheAssurance({
           dessus une fenêtre plein écran, ce sont deux fenêtres empilées —
           le voile invisible qui avale les touches sur iPhone. */}
       <Text style={s.label}>Valable jusqu’au</Text>
+      {/* SANS DATE, l'aide dit ce qui en dépend — pour une DÉCENNALE seulement
+          (2b-3, M9 écran) : sous une RC pro, « votre décennale en a besoin »
+          ne s'appliquerait pas. */}
       <Text style={s.aide}>
         {valideJusquau
           ? `Jusqu’au ${dateFrancaise(valideJusquau)}. Opus vous préviendra ici quand la date sera passée.`
-          : 'Facultatif. Touchez le dernier jour de validité de votre attestation.'}
+          : (nature === 'decennale'
+            ? 'Nécessaire pour vos devis dont les travaux peuvent engager votre décennale. Touchez le dernier jour de '
+              + 'validité de votre attestation.'
+            : 'Facultatif. Touchez le dernier jour de validité de votre attestation.')}
       </Text>
       <Calendrier debut={valideJusquau} fin={null} onJour={(iso) => setValideJusquau(iso)} />
       {!!valideJusquau && (

@@ -823,7 +823,14 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
          dans sa lecture), en `security invoker`, sans rien écrire.
      Aucun écran ne montre à un artisan les prix d'un autre : elle ne rend
      aucun montant, seulement des phrases (« Vos tarifs et vos prix » ne
-     change pas). */
+     change pas).
+     DEPUIS 2b-3 (12/11/2026, réponse P1 = A), elle lit AUSSI
+     `emetteur_assurances` — la MÊME liste « émetteur » (son expression
+     couvre les deux tables) : la décennale jointe de l'entreprise du devis,
+     trois colonnes réduites à deux booléens, pour dire qu'aucune attestation
+     valable n'est à joindre (rang 11). Sa porte étroite, réécrite en le
+     décidant, est tenue par `verifier-emetteur` ; elle ne rend toujours
+     aucun montant, ni rien de l'assureur. */
   const LISTES = [
     { tables: /\b(emetteur_assurances|emetteur)\b/,
       permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees', 'motifs_refus_remise'] },
@@ -2700,6 +2707,11 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
     chantier_neuf_conso: 'si les travaux portent sur un bâtiment neuf ou une transformation importante',
     chantier_neuf_conso_le: 'la date à laquelle vous l’avez confirmé',
     chantier_neuf_tva: 's’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA',
+    /* 2b-3 (annexe A.7 du cahier 2b-3) : deux réponses de l'artisan sur le
+       devis. La troisième, la réparation urgente, vit sur la LIGNE
+       (`devis_lignes.urgence`) : la phrase la dit avec les lignes. */
+    engage_decennale: 'si leurs travaux peuvent engager votre garantie décennale',
+    acompte_a_la_signature: 'quand l’acompte ou les arrhes sont payés',
     total_ht_centimes: 'leurs totaux',
     total_tva_centimes: 'leurs totaux',
     total_ttc_centimes: 'leurs totaux',

@@ -81,6 +81,16 @@
  *     mentions dues à un particulier suit la réponse rangée AVEC la liste
  *     (`liste.reponseVue`), jamais celle de l'écran.
  *
+ * LOT 2b-3 (cahier §3.4-§3.8) — LES LIGNES :
+ *   - une ligne neuve naît avec la réparation urgente ÉTEINTE (`ligneNeuve`),
+ *     jamais reprise ; la carte d'un poste porte l'interrupteur, et reçoit
+ *     UNE valeur de plus, `depuisUneUrgence` (la carte ne lit pas le devis) ;
+ *   - « Le chantier » gagne une troisième question (la décennale), avec son
+ *     état calculé depuis la file (`etatQ3`) ; ouverte depuis un point, la
+ *     carte s'ouvre SUR la question visée (`questionChantier`) ;
+ *   - « Conditions » reçoit les lignes de l'écran et `toutUrgent`, pour
+ *     l'aide de l'échéance et la ligne « pourquoi ».
+ *
  * EN DÉMONSTRATION, tout cela VIT : la base en mémoire de
  * `src/data/devis-demo.js` refuse avec les mots de la vraie base, une
  * écriture y prend un tiers de seconde, et les états « enregistrement… » ou
@@ -126,7 +136,8 @@ import {
   echecASignaler, renvoyerLesRetraits, retraitsARenvoyer, bilanDeLaGarde, ENTETE_EN_COURS, devisPourMesDevis,
   lireMotifsDeRemise, avisDuDevis, CARTE_POUR_REMETTRE, TITRE_POUR_REMETTRE, etatDeLaListe, ceQueLaListeNeComptePas,
   pourQuiValable, resumeAQuelTitre, resumeDuChantier, etatDesChampsDuDevis,
-  CHAMPS_A_QUEL_TITRE, CHAMPS_DU_CHANTIER, GABARITS_DU_CHANTIER, LE_CHANTIER,
+  CHAMPS_A_QUEL_TITRE, CHAMPS_DU_CHANTIER, GABARITS_DU_CHANTIER, LE_CHANTIER, DETAIL_URGENCE, DETAIL_URGENCE_SEUL,
+  toutUrgent,
 } from '../lib/devis';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
@@ -160,6 +171,10 @@ const NOMS_ENTETE = Object.freeze({
   pourQuiClient: 'À quel titre',
   chantierNeufConso: 'Le chantier',
   chantierNeufTva: 'Le chantier',
+  /* 2b-3 : la question de la décennale (« Le chantier ») et le moment où le
+     client paie (« Conditions »). */
+  engageDecennale: 'Le chantier',
+  acompteALaSignature: 'Conditions',
 });
 
 /* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
@@ -176,7 +191,8 @@ const CHAMPS_CONDITIONS = Object.freeze([
    retour, la garde et VoiceOver les traitent pareil. Un identifiant de ligne
    est un UUID : il ne vaut jamais « conditions » ni « pour_remettre ». */
 const CARTE_CONDITIONS = 'conditions';
-/* …et `CARTE_CHANTIER` (lot 2b-2) : la carte des deux questions sur le neuf. */
+/* …et `CARTE_CHANTIER` (lot 2b-2) : la carte des questions sur le chantier
+   (deux sur le neuf ; 2b-3 : la troisième, la garantie décennale). */
 const CARTE_CHANTIER = 'chantier';
 
 /* « Rien en route, rien en échec » : l'état de départ d'un ensemble de
@@ -200,6 +216,11 @@ function ligneNeuve(type, id, ordre, taux) {
     tauxTvaCentiemes: chiffree ? taux : null,
     offert: false, mainOeuvre: false, fournitureNonComprise: false,
     surfaceSolMilliemes: null, surfaceMursMilliemes: null,
+    /* 2b-3 : la réparation urgente naît ÉTEINTE, toujours — jamais reprise
+       de la ligne précédente (à l'inverse du taux, `tauxPour`), jamais
+       déduite de l'origine du devis : allumée, elle retire des droits au
+       client. Seul un appui sur son interrupteur l'allume. */
+    urgence: false,
   };
 }
 
@@ -278,7 +299,7 @@ function EtatDeLaRangee({
 }
 
 const RangeeLigne = React.memo(function RangeeLigne({
-  id, type, designation, total, offert, fournitureNonComprise, quantite, unite, prix,
+  id, type, designation, total, offert, fournitureNonComprise, urgence, quantite, unite, prix,
   sousTotal, etat, erreurTexte, incomplete, definitif, onOuvrir, onReessayer,
 }) {
   const u = uniteDe(unite);
@@ -311,15 +332,23 @@ const RangeeLigne = React.memo(function RangeeLigne({
               {`${milliemesLisibles(quantite)}${u ? ` ${u.court}` : ''} × `}
               <Montant centimes={offert && prix === 0 ? null : prix} enLigne style={s.detailMontant} />
               {fournitureNonComprise ? ' · fourniture non comprise' : ''}
+              {/* 2b-3 (cahier §3.5) : APRÈS « fourniture non comprise », et
+                  avant le total — la liste est l'écran qu'on montre à un
+                  client, et la marque s'imprimera en 2c. */}
+              {urgence ? ` · ${DETAIL_URGENCE}` : ''}
             </Text>
           )}
           {quantite == null && fournitureNonComprise && <Text style={s.detail}>Fourniture non comprise</Text>}
+          {quantite == null && urgence && (
+            <Text style={s.detail}>{DETAIL_URGENCE_SEUL}</Text>
+          )}
         </View>
         {offert ? <Text style={s.offert}>Offert</Text> : <Montant centimes={total} fort />}
       </View>
     );
   }
-  const libelle = type === 'reserve' ? `Réserve : ${designation || ''}` : `${designation || 'Ligne'}, ouvrir`;
+  const libelle = type === 'reserve' ? `Réserve : ${designation || ''}`
+    : `${designation || 'Ligne'}${urgence ? `, ${DETAIL_URGENCE}` : ''}, ouvrir`;
   return (
     <View style={[s.rangee, (type === 'zone' || type === 'piece') && s.rangeeTitre]}>
       <Pressable
@@ -633,7 +662,7 @@ export default function SaisieDevisScreen({
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
   const [attente, setAttente] = useState({
     nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
-    etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT,
+    etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT,
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
@@ -717,6 +746,9 @@ export default function SaisieDevisScreen({
   /* Le champ sur lequel « Conditions » s'ouvre, et le champ de l'en-tête
      qui doit prendre le focus une fois la liste fermée. */
   const [champConditions, setChampConditions] = useState(null);
+  /* …et la question sur laquelle « Le chantier » s'ouvre, depuis un point
+     de la liste (2b-3, E-I1) : `'q2'`, `'q3'` ou `null` (en haut). */
+  const [questionChantier, setQuestionChantier] = useState(null);
   const [focusDemande, setFocusDemande] = useState(null);
   /* Les rappels d'`OpusApp`, toujours les derniers : la file écoute depuis
      son ouverture, et un rappel capturé ce jour-là serait périmé. */
@@ -815,6 +847,11 @@ export default function SaisieDevisScreen({
       etatChantier: etatDesChampsDuDevis(entrees, CHAMPS_DU_CHANTIER),
       etatQ1: etatDesChampsDuDevis(entrees, ['chantierNeufConso']),
       etatQ2: etatDesChampsDuDevis(entrees, ['chantierNeufTva']),
+      /* 2b-3 (E-I6) : la question de la décennale a son état, comme les
+         deux autres — une réponse refusée ne laisse pas « Non » choisi dans
+         la carte sans « pas enregistré », pendant que la base compte
+         « Oui ». */
+      etatQ3: etatDesChampsDuDevis(entrees, ['engageDecennale']),
     });
   };
 
@@ -1403,16 +1440,24 @@ export default function SaisieDevisScreen({
     if (refEntete.current) refEntete.current.enregistrer();
     Keyboard.dismiss();
     poserRetour(null);
+    setQuestionChantier(null);
     poserCarte(CARTE_CHANTIER);
     setCleCarte((k) => k + 1);
     if (rappels.current.onCarte) rappels.current.onCarte(LE_CHANTIER.titre);
   };
-  const ouvrirChantierDepuisLaListe = () => {
+  /* OUVERTE DEPUIS UN POINT (2b-3, E-I1) : la carte s'ouvre SUR la question
+     que vise le point — la TVA (`q2`) pour une ligne à taux réduit d'un
+     chantier neuf, la décennale (`q3`) pour une réponse vide. Sans elle,
+     la troisième question tombait sous le pli sur les trois tailles. */
+  const ouvrirChantierDepuisLaListe = (question = null) => {
     ouvrirChantier();
+    setQuestionChantier(question === 'q2' || question === 'q3' ? question : null);
     poserRetour(CARTE_POUR_REMETTRE);
   };
   /* Une pastille de la carte : `{ chantierNeufConso: false }`,
-     `{ chantierNeufTva: … }` — par la file de l'en-tête. */
+     `{ chantierNeufTva: … }`, `{ engageDecennale: … }` (2b-3) — par la file
+     de l'en-tête. La décennale n'a PAS de confirmation : la réponse se dit
+     par devis, son défaut est le cas protecteur. */
   const repondreChantier = (changements) => { enregistrerEntete(changements); };
   /* Le « Oui » à la première question RETIRE des protections au client : il
      se confirme, par la feuille posée par-dessus la carte (l'état unique
@@ -1662,9 +1707,11 @@ export default function SaisieDevisScreen({
   };
   /* LE SECOND BOUTON D'UN POINT (2b-2) : « Revoir « Le chantier » » sur une
      ligne à taux réduit d'un chantier neuf — la carte, qui ramène à la
-     liste. */
+     liste. 2b-3 : « Répondre dans « Le chantier » » sur la décennale sans
+     réponse ; chacun ouvre la carte SUR sa question (`secondeActionDuPoint`
+     la dit). */
   const agirAussiSurLePoint = (point, seconde) => {
-    if (seconde && seconde.endroit === 'chantier') ouvrirChantierDepuisLaListe();
+    if (seconde && seconde.endroit === 'chantier') ouvrirChantierDepuisLaListe(seconde.question || null);
   };
 
   /* ------------------------------------------------------------------ */
@@ -2414,6 +2461,10 @@ export default function SaisieDevisScreen({
           onDescendre={() => deplacer(1)}
           onRetirer={retirer}
           depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+          /* 2b-3 : une VALEUR — la carte ne reçoit pas le devis, et la source
+             ne se récrit jamais (D3). Elle pose une ligne fixe au-dessus de
+             l'interrupteur « Réparation urgente », jamais la case cochée. */
+          depuisUneUrgence={devis.source === 'urgence'}
         />
       )}
 
@@ -2452,6 +2503,12 @@ export default function SaisieDevisScreen({
           reponseATitre={pourQuiValable(devis)}
           chantierNeufConso={devis.chantierNeufConso ?? null}
           chantierNeufConsoLe={confirmeLe}
+          /* 2b-3 : les lignes de l'ÉCRAN — l'aide de l'échéance et la ligne
+             « pourquoi » les lisent (une marque pas encore enregistrée y
+             compte, et « Non enregistrée » se voit sur la ligne) ; le motif,
+             lui, lit celles de la BASE. */
+          toutUrgent={toutUrgent(lignes)}
+          lignes={lignes}
         />
       )}
 
@@ -2463,11 +2520,12 @@ export default function SaisieDevisScreen({
           devis={devis}
           regime={regime}
           confirmeLe={confirmeLe}
-          etats={{ q1: attente.etatQ1, q2: attente.etatQ2 }}
+          etats={{ q1: attente.etatQ1, q2: attente.etatQ2, q3: attente.etatQ3 }}
           onRepondre={repondreChantier}
           onDemanderConfirmation={demanderConfirmationChantier}
           onFermer={fermerCarte}
           depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+          questionInitiale={questionChantier}
         />
       )}
 

@@ -267,13 +267,13 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 1. LES COLONNES — la liste FERMÉE (cahier §2.2-2.4, plus `generation`, 49.5 bis, plus les CONDITIONS du lot 2a, 49.4 bis : neuf sur devis, une sur devis_tva, plus « À QUEL TITRE » ET LE CHANTIER, 2b-2, 49.4 ter : cinq sur devis, toutes nullables) ==='
+\echo '=== 1. LES COLONNES — la liste FERMÉE (cahier §2.2-2.4, plus `generation`, 49.5 bis, plus les CONDITIONS du lot 2a, 49.4 bis : neuf sur devis, une sur devis_tva, plus « À QUEL TITRE » ET LE CHANTIER, 2b-2, 49.4 ter : cinq sur devis, toutes nullables, plus 2b-3 : la RÉPARATION URGENTE sur une ligne, 49.3 bis, not null, et la DÉCENNALE et le MOMENT DE L’ACOMPTE sur devis, 49.4 quater, nullables) ==='
 -- ==========================================================================
 select t.table_name,
        string_agg(c.column_name || ':' || c.data_type || ':' || c.is_nullable, ',' order by c.ordinal_position)
          = case t.table_name
-             when 'devis' then 'id:uuid:NO,pro_id:uuid:NO,client_id:uuid:YES,quote_request_id:uuid:YES,sos_request_id:uuid:YES,source:text:NO,statut:text:NO,objet:text:YES,lieu_adresse:text:YES,lieu_code_postal:text:YES,lieu_ville:text:YES,delai_execution:text:YES,retenue_garantie_centiemes:integer:YES,total_ht_centimes:bigint:NO,total_tva_centimes:bigint:NO,total_ttc_centimes:bigint:NO,generation:bigint:NO,created_at:timestamp with time zone:NO,modifie_le:timestamp with time zone:NO,remise_centiemes:integer:YES,remise_centimes:bigint:YES,acompte_centiemes:integer:YES,acompte_centimes:bigint:YES,acompte_nature:text:YES,validite_jours:integer:YES,remise_ht_centimes:bigint:NO,acompte_ttc_centimes:bigint:NO,total_ttc_options_centimes:bigint:NO,pour_qui:text:YES,pour_qui_client:uuid:YES,chantier_neuf_conso:boolean:YES,chantier_neuf_conso_le:timestamp with time zone:YES,chantier_neuf_tva:boolean:YES'
-             when 'devis_lignes' then 'id:uuid:NO,devis_id:uuid:NO,ordre:integer:NO,type:text:NO,designation:text:YES,quantite_milliemes:bigint:YES,unite:text:YES,prix_unitaire_centimes:bigint:YES,taux_tva_centiemes:integer:YES,total_centimes:bigint:YES,offert:boolean:NO,main_oeuvre:boolean:NO,fourniture_non_comprise:boolean:NO,surface_sol_milliemes:bigint:YES,surface_murs_milliemes:bigint:YES,generation:bigint:NO,modifie_le:timestamp with time zone:NO'
+             when 'devis' then 'id:uuid:NO,pro_id:uuid:NO,client_id:uuid:YES,quote_request_id:uuid:YES,sos_request_id:uuid:YES,source:text:NO,statut:text:NO,objet:text:YES,lieu_adresse:text:YES,lieu_code_postal:text:YES,lieu_ville:text:YES,delai_execution:text:YES,retenue_garantie_centiemes:integer:YES,total_ht_centimes:bigint:NO,total_tva_centimes:bigint:NO,total_ttc_centimes:bigint:NO,generation:bigint:NO,created_at:timestamp with time zone:NO,modifie_le:timestamp with time zone:NO,remise_centiemes:integer:YES,remise_centimes:bigint:YES,acompte_centiemes:integer:YES,acompte_centimes:bigint:YES,acompte_nature:text:YES,validite_jours:integer:YES,remise_ht_centimes:bigint:NO,acompte_ttc_centimes:bigint:NO,total_ttc_options_centimes:bigint:NO,pour_qui:text:YES,pour_qui_client:uuid:YES,chantier_neuf_conso:boolean:YES,chantier_neuf_conso_le:timestamp with time zone:YES,chantier_neuf_tva:boolean:YES,engage_decennale:boolean:YES,acompte_a_la_signature:boolean:YES'
+             when 'devis_lignes' then 'id:uuid:NO,devis_id:uuid:NO,ordre:integer:NO,type:text:NO,designation:text:YES,quantite_milliemes:bigint:YES,unite:text:YES,prix_unitaire_centimes:bigint:YES,taux_tva_centiemes:integer:YES,total_centimes:bigint:YES,offert:boolean:NO,main_oeuvre:boolean:NO,fourniture_non_comprise:boolean:NO,surface_sol_milliemes:bigint:YES,surface_murs_milliemes:bigint:YES,generation:bigint:NO,modifie_le:timestamp with time zone:NO,urgence:boolean:NO'
              when 'devis_tva' then 'devis_id:uuid:NO,taux_tva_centiemes:integer:NO,base_centimes:bigint:NO,tva_centimes:bigint:NO,nb_lignes:integer:NO,remise_centimes:bigint:NO'
            end as liste_fermee_attendu_t,
        count(*) as colonnes
@@ -290,14 +290,14 @@ select count(*) as colonnes_interdites_attendu_0
 
 -- ==========================================================================
 \echo ''
-\echo '=== 2. LES CONTRAINTES — 33 check (23 du lot 1, neuf du lot 2a : acompte, acompte_nature, acompte_une_forme, calculs, remise, remise_une_forme, validite, tva_remise, tva_vide ; une de 2b-2 : pour_qui), toutes en _check, aucune numérotée ==='
+\echo '=== 2. LES CONTRAINTES — 34 check (23 du lot 1, neuf du lot 2a : acompte, acompte_nature, acompte_une_forme, calculs, remise, remise_une_forme, validite, tva_remise, tva_vide ; une de 2b-2 : pour_qui ; une de 2b-3 : ligne_urgence), toutes en _check, aucune numérotée ==='
 -- ==========================================================================
-select count(*) as check_attendu_33,
+select count(*) as check_attendu_34,
        count(*) filter (where conname !~ '_check$') as non_suffixees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as numerotees_attendu_0
   from pg_constraint
  where contype = 'c' and conrelid in ('public.devis'::regclass, 'public.devis_lignes'::regclass, 'public.devis_tva'::regclass);
-\echo '-- les dix de devis_lignes, dans l''ordre où PostgreSQL les applique (designation < forme < offert < prix < quantite < surfaces < taux < total < type < unite)'
+\echo '-- les onze de devis_lignes, dans l''ordre où PostgreSQL les applique (designation < forme < offert < prix < quantite < surfaces < taux < total < type < unite < urgence)'
 select string_agg(conname, ' ' order by conname) as contraintes_de_ligne
   from pg_constraint where contype = 'c' and conrelid = 'public.devis_lignes'::regclass;
 
@@ -1366,6 +1366,10 @@ rollback;
 -- ici, c'est le calcul). Chaque écriture porte un numéro qui monte : le
 -- devis naît à 1, chaque opération prend le suivant. Une exception de fin
 -- annule tout : le cas suivant part d'une base vide.
+-- UNE LIGNE NAÎT ENTIÈRE, booléens compris : `jsonb_populate_record` met
+-- `null` dans toute colonne absente de l'objet, et `urgence` (2b-3, 49.3
+-- bis) est `not null` comme `offert` — sans `'urgence', false` ci-dessous,
+-- TOUS les cas joués seraient refusés (23502).
 create or replace function pg_temp.jouer_cas(c jsonb, pro uuid) returns text language plpgsql as $$
 declare d uuid; op jsonb; rang int := 0; num bigint := 1; ids jsonb := '{}'; lid uuid; res text; nom text; etat text;
 begin
@@ -1378,7 +1382,8 @@ begin
         rang := rang + 1; lid := gen_random_uuid(); ids := ids || jsonb_build_object(op->>'ligne', lid);
         insert into public.devis_lignes select * from jsonb_populate_record(null::public.devis_lignes,
           jsonb_build_object('id', lid, 'devis_id', d, 'ordre', rang * 1000, 'type', 'poste', 'offert', false,
-            'main_oeuvre', false, 'fourniture_non_comprise', false, 'modifie_le', now(), 'generation', num) || (op->'valeurs'));
+            'main_oeuvre', false, 'fourniture_non_comprise', false, 'urgence', false, 'modifie_le', now(),
+            'generation', num) || (op->'valeurs'));
       elsif op->>'op' = 'modifier' then
         lid := (ids->>(op->>'ligne'))::uuid;
         update public.devis_lignes t set (type, designation, quantite_milliemes, unite, prix_unitaire_centimes, taux_tva_centiemes,
@@ -1719,4 +1724,4 @@ rollback;
 \set VERBOSITY default
 \set SHOW_CONTEXT errors
 \echo ''
-\echo '=== FIN — 73 refus attendus, chacun annoncé par son nom ci-dessus ==='
+\echo '=== FIN — 79 refus attendus, chacun annoncé par son nom ci-dessus ==='

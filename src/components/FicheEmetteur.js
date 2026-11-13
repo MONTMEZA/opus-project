@@ -55,7 +55,7 @@ import {
   tarifsDepuisFormulaire, pourcentDepuisSaisie,
   MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
-  parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime,
+  parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
@@ -824,24 +824,34 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         )}
       </Section>
 
-      {/* 7. — LES ASSURANCES : déclarées, jamais exigées */}
+      {/* 7. — LES ASSURANCES : déclarées, jamais exigées pour la fiche — mais,
+          depuis 2b-3 (réponse P1 du 12/11 : « A »), un devis dont les travaux
+          peuvent engager la garantie décennale ne se remettra qu'avec son
+          attestation, et sa date de fin (annexe A.6). */}
       <Section ancre="assurances" titre="Assurances" onPosition={pos}>
         {assurances.length === 0 && (
           <Aide>
-            Aucune assurance déclarée. Opus n’en exige aucune ; déclarez celles que vous avez
-            souscrites, elles s’imprimeront sur vos devis.
+            {'Aucune assurance déclarée. Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux '
+              + 'peuvent engager votre garantie décennale demande son attestation : déclarez celles que vous avez '
+              + 'souscrites, elles s’imprimeront sur vos devis.'}
           </Aide>
         )}
         {assurances.map((a) => {
           const n = a.nature === 'autre'
             ? (a.libelle || 'Autre assurance')
             : ((NATURES_ASSURANCE.find((x) => x.cle === a.nature) || {}).libelle || 'Assurance');
+          /* SA DATE DE FIN, SUR SA PROPRE LIGNE (2b-3, E-I5) : ajoutée au bout
+             du texte coupé à deux lignes, elle tombait sous « … » à 320
+             points pour un assureur au nom long. Comparée au jour du
+             TÉLÉPHONE ; la liste de ce qu'il manque, elle, juge au jour de
+             Paris (deux horloges, dit dans `docs/A-FAIRE.md`). */
+          const etat = etatDeLAssurance(a);
           return (
             <Pressable
               key={String(a.id)}
               onPress={() => onOuvrirAssurance(a)}
               accessibilityRole="button"
-              accessibilityLabel={`${n}, ${a.assureur_nom}. Modifier cette assurance`}
+              accessibilityLabel={`${n}, ${a.assureur_nom}, ${etat}. Modifier cette assurance`}
               style={({ pressed }) => [s.assurance, pressed && APPUI.discret]}
             >
               <View style={s.optionTexte}>
@@ -849,6 +859,7 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
                 <Text style={s.optionAide} numberOfLines={2}>
                   {`${a.assureur_nom} — ${a.couverture}${a.attestation_chemin ? ' · attestation jointe' : ''}`}
                 </Text>
+                <Text style={s.optionAide}>{etat}</Text>
               </View>
               <ChevronRight size={15} color={C.muted} />
             </Pressable>

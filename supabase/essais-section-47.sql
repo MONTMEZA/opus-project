@@ -755,7 +755,10 @@ select string_agg(p.proname, ', ' order by p.proname) as nomment_tarifs_pro,
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\mtarifs_pro\M';
 -- `motifs_refus_remise` depuis le lot 2b (05/11/2026) : elle lit le régime
--- de TVA de la fiche de son appelant (section 49.9, et l'essai 46, cas 26 bis).
+-- de TVA de la fiche de son appelant (section 49.9, et l'essai 46, cas 26 bis)
+-- — et, depuis 2b-3 (12/11/2026), PLUS SEULEMENT LUI : l'attestation décennale
+-- dans `emetteur_assurances`, une lecture, colonnes nommées, filtrée par
+-- `a.pro_id = v_pro` (rang 11). La liste ne change pas.
 select string_agg(p.proname, ', ' order by p.proname) as nomment_emetteur,
        string_agg(p.proname, ', ' order by p.proname)
          = 'emetteur_incomplet, mes_donnees, motifs_refus_remise' as liste_fermee_attendu_t

@@ -1302,8 +1302,12 @@ await section('La carte d’un poste prend l’écran', async () => {
   verifier('l’unité est AVANT la quantité', !!q && Math.max(...rangs) < q.y);
   verifier(`quantité et prix côte à côte (y = ${q && Math.round(q.y)} et ${prix && Math.round(prix.y)})`, !!q && !!prix && Math.abs(q.y - prix.y) < 2 && prix.x > q.x);
   verifier(`trois taux au régime réel (${await page.locator('[aria-label^="TVA à "]').count()})`, (await page.locator('[aria-label^="TVA à "]').count()) === 3);
-  verifier('trois interrupteurs : Main-d’œuvre, Fourniture non comprise, Offert',
-    (await page.getByRole('switch', { name: /^(Main-d’œuvre|Fourniture non comprise|Offert)\b/ }).count()) === 3);
+  /* 2b-3 (cahier §5.5, 1) : QUATRE interrupteurs sur un poste, dans cet
+     ordre — la réparation urgente en dernier, sous son sous-titre. */
+  const interrupteurs = await page.getByRole('switch').evaluateAll((es) => es.map((e) => (e.getAttribute('aria-label') || '').split('.')[0]));
+  verifier(`quatre interrupteurs, dans l’ordre : Main-d’œuvre, Fourniture non comprise, Offert, Réparation urgente… (${interrupteurs.join(' | ')})`,
+    interrupteurs.length === 4 && interrupteurs[0] === 'Main-d’œuvre' && interrupteurs[1] === 'Fourniture non comprise'
+    && interrupteurs[2] === 'Offert' && interrupteurs[3] === 'Réparation urgente expressément demandée par le client');
   await jugerCibles('La carte d’un poste', (c) => c.dansCarte);
   await capture('04-carte-poste');
   await fermerCarte();
@@ -3170,11 +3174,14 @@ await section('Le régime de TVA : réel → franchise → réel, sans recharger
      n'y a pas répondu. La question des droits du client reste (Mme Martin n'a
      encore aucune réponse « à quel titre »). */
   await toucher(page.getByRole('button', { name: /^Le chantier : / }).first());
-  await jusqua(async () => (await texteLu()).includes('Deux questions indépendantes'), 4000);
+  await jusqua(async () => (await texteLu()).includes('Ces questions sont indépendantes'), 4000);
   const tChantier = await texteLu();
-  verifier('en franchise, la carte « Le chantier » ne pose pas la question TVA (« Pour la TVA » absent), seulement celle des droits du client',
-    tChantier.includes('Pour les droits de votre client') && !tChantier.includes('Pour la TVA'),
-    tChantier.slice(tChantier.indexOf('Deux questions'), tChantier.indexOf('Deux questions') + 300));
+  /* 2b-3 : la question de la décennale (« Pour votre assurance ») est
+     TOUJOURS posée, quel que soit le régime. */
+  verifier('en franchise, la carte « Le chantier » ne pose pas la question TVA (« Pour la TVA » absent), seulement celle des droits du client '
+    + 'et celle de la décennale (« Pour votre assurance », 2b-3)',
+  tChantier.includes('Pour les droits de votre client') && !tChantier.includes('Pour la TVA') && tChantier.includes('Pour votre assurance'),
+  tChantier.slice(tChantier.indexOf('Ces questions'), tChantier.indexOf('Ces questions') + 300));
   await toucher(parLibelle('Revenir au devis'));
   await attendre(400);
   /* Le bouton du bandeau ouvre « Mon entreprise » sur la TVA ; au retour, le
@@ -3490,7 +3497,9 @@ const ORDRE_DE_LA_FEUILLE = [
   'Pour son entreprise, dans son activité principale, ou une entreprise de plus de 5 salariés',
 ];
 const DANS_LE_DOUTE = 'Dans le doute, choisissez une autre réponse : c’est la plus sûre.';
-const INTRO_CHANTIER = 'Deux questions indépendantes : on peut répondre « Oui » à l’une et « Non » à l’autre.';
+/* 2b-3 (annexe A.3) : trois questions désormais — l'introduction ne les
+   compte plus. */
+const INTRO_CHANTIER = 'Ces questions sont indépendantes : on peut répondre « Oui » à l’une et « Non » à une autre.';
 const CONFIRMATION_CHANTIER = 'Bâtiment neuf ou transformation importante';
 const DATE_JJ_MM = '\\d{2}/\\d{2}/\\d{4}';
 
@@ -3702,9 +3711,11 @@ await section('« Le chantier » sur « Rénovation salle de bains », à 393 : 
   await toucher(rangeeChantier());
   await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
   const tc = await texteLu();
-  verifier('la carte pose les deux questions, et le dit : « Deux questions indépendantes… », « Pour les droits de votre client », « Pour la TVA », « Non (par défaut) »',
-    tc.includes(INTRO_CHANTIER) && tc.includes('Pour les droits de votre client') && tc.includes('Pour la TVA') && tc.includes('Non (par défaut)'));
-  await jugerCibles('la carte « Le chantier »', (c) => /^(Non|Oui : à confirmer|Non \(par défaut\)|Oui|Revenir au devis)$/.test(c.libelle));
+  verifier('la carte pose les trois questions, et le dit : « Ces questions sont indépendantes… », « Pour les droits de votre client », '
+    + '« Pour la TVA », « Non (par défaut) », « Pour votre assurance », « Oui (par défaut) » (2b-3)',
+  tc.includes(INTRO_CHANTIER) && tc.includes('Pour les droits de votre client') && tc.includes('Pour la TVA') && tc.includes('Non (par défaut)')
+    && tc.includes('Pour votre assurance') && tc.includes('Oui (par défaut)'));
+  await jugerCibles('la carte « Le chantier »', (c) => /^(Non|Oui : à confirmer|Non \(par défaut\)|Oui \(par défaut\)|Oui|Revenir au devis)$/.test(c.libelle));
   await capture('2b2-carte-chantier');
   /* « OUI » SE CONFIRME : rien n'est écrit avant « Je confirme ». */
   const e0 = await ecrituresDemo();
@@ -3757,7 +3768,8 @@ await section('À 320 sur « Sol du séjour » : pas de bloc sans client, la pro
   verifier('sans client, pas de bloc « À quel titre ? »', (await hauteurDuBloc()) === null);
   const hr = [await hauteurDeLaRangee()];
   const l0 = await libelleDeLaRangee();
-  exiger(/^Le chantier : Crée un bâtiment neuf : taux normal de TVA\. Ouvrir$/.test(l0), `« Sol du séjour » a répondu « Oui » à la question TVA (${l0})`);
+  /* 2b-3 : « Sol du séjour » répond aussi « Oui » à la décennale. */
+  exiger(/^Le chantier : Crée un bâtiment neuf : taux normal de TVA ; décennale : oui\. Ouvrir$/.test(l0), `« Sol du séjour » a répondu « Oui » à la question TVA (${l0})`);
   const hb = [];
   await choisirAuCarnet('Mme Martin', 'mart');
   hb.push(await hauteurDuBloc());
@@ -3793,14 +3805,14 @@ await section('À 320 sur « Sol du séjour » : pas de bloc sans client, la pro
   await attendre(500);
   hr.push(await hauteurDeLaRangee());
   const l1 = await libelleDeLaRangee();
-  verifier(`les deux « Oui » : « Bâtiment neuf, confirmé le … ; taux normal de TVA » (${l1})`,
-    new RegExp(`^Le chantier : Bâtiment neuf, confirmé le ${DATE_JJ_MM} ; taux normal de TVA\\. Ouvrir$`).test(l1));
+  verifier(`les deux « Oui » : « Bâtiment neuf, confirmé le … ; taux normal de TVA ; décennale : oui » (${l1})`,
+    new RegExp(`^Le chantier : Bâtiment neuf, confirmé le ${DATE_JJ_MM} ; taux normal de TVA ; décennale : oui\\. Ouvrir$`).test(l1));
   await capture('2b2-sol-320');
   await toucher(rangeeChantier());
   await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
   await toucher(page.locator('[aria-label="Non"]').first());
   await toucher(parLibelle('Revenir au devis'));
-  await jusqua(async () => /^Le chantier : Crée un bâtiment neuf : taux normal de TVA\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
+  await jusqua(async () => /^Le chantier : Crée un bâtiment neuf : taux normal de TVA ; décennale : oui\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
   hr.push(await hauteurDeLaRangee());
   noter('320 : hauteur de la rangée « Le chantier » (TVA seule, les deux, TVA seule)', JSON.stringify(hr));
   verifier(`320 : la rangée « Le chantier » ne change pas de hauteur, son plus long résumé compris (${JSON.stringify(hr)})`,
@@ -3827,11 +3839,15 @@ await section('« Sol du séjour », à 393 : le point d’une ligne à 10 % qua
   await capture('2b2-liste-taux-neuf');
   await toucher(bouton('Revoir « Le chantier »'));
   await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
-  verifier('« Revoir « Le chantier » » ouvre la carte, « ‹ Liste » en tête, le « Oui » de la question TVA choisi',
-    (await texteLu()).includes('‹ Liste') && (await page.locator('[aria-label="Oui"][aria-selected="true"]').count()) === 1);
+  /* 2b-3 : deux « Oui » choisis — la question TVA ET celle de la décennale
+     (« Sol du séjour » répond « Oui » aux deux). */
+  verifier('« Revoir « Le chantier » » ouvre la carte, « ‹ Liste » en tête, le « Oui » de la question TVA choisi (et celui de la décennale)',
+    (await texteLu()).includes('‹ Liste') && (await page.locator('[aria-label="Oui"][aria-selected="true"]').count()) === 2);
   /* « CHANGEZ VOTRE RÉPONSE » : « Non » à la question TVA, puis « ‹ Liste » —
      les points s'éteignent. */
-  await toucher(page.locator('[aria-label="Non"]').last());
+  /* Le « Non » de la question TVA : le DEUXIÈME — depuis 2b-3, le dernier
+     est celui de la décennale. */
+  await toucher(page.locator('[aria-label="Non"]').nth(1));
   await attendre(PAUSE_DEMO + 400);
   await toucher(parLibelle('Revenir à la liste de ce qu’il manque'));
   await jusqua(enCarte, 4000);
@@ -3840,6 +3856,688 @@ await section('« Sol du séjour », à 393 : le point d’une ligne à 10 % qua
   await fermerLaListe();
   await toucher(parLibelle('Revenir en arrière'));
   await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* ======================================================================== */
+/*  2b-3 — LES LIGNES : LA RÉPARATION URGENTE, LA DÉCENNALE, L'ÉCHÉANCE     */
+/*  (cahier 2b-3 v3, §5.5)                                                  */
+/* ======================================================================== */
+/* Ce qu'elles mesurent, et pourquoi ICI, avant « Supprimer ce brouillon » :
+   « Sol du séjour » y est encore (« Oui » à la décennale), « Rénovation salle
+   de bains » n'a pas encore répondu à la question de la décennale (le point
+   « Répondre dans « Le chantier » » ne se voit que là), et l'option
+   « Peinture du plafond », la zone « Rez-de-chaussée », la pièce « Cuisine »
+   et la réserve sont posées.
+     - la carte d'un poste : QUATRE interrupteurs à 393 et à 320, chacun de
+       44 points par sa boîte, le sous-titre « Pour les droits de votre
+       client », aucun débordement ; une option, une zone, une pièce, une
+       réserve : aucun interrupteur d'urgence (§5.5, 1 et 2) ;
+     - rien ne saute sous le doigt : l'interrupteur garde son `y`, le risque
+       paraît DESSOUS et part à l'extinction (3) ;
+     - l'écriture : un appui = une écriture qui porte la marque ; un prix
+       tapé puis l'appui : la base porte les deux (4) ;
+     - la liste : « · réparation urgente » AVANT le total, dans l'étiquette
+       parlée aussi (5) ; une ligne neuve où l'on n'a touché que l'urgence
+       reste « Incomplète » (6) ; la garde de sortie attend l'écriture (12) ;
+     - « Le chantier » : la troisième question, « Non » à gauche, le `x` de
+       « Non » égal dans les trois questions, la hauteur de la rangée égale
+       dans tous ses états à 393 et à 320, et « Répondre dans « Le
+       chantier » » qui ouvre la carte AVEC la question dans la fenêtre (8) ;
+     - « Pour le remettre » : la date de l'attestation effacée, puis
+       l'assurance retirée — les trois clés du rang 11, leur nature, leur
+       bouton, aucun second bouton sur l'attestation ; « Mon entreprise »
+       ouverte sur « Assurances », refermée : UNE relecture, le point éteint,
+       la ligne du haut à la même hauteur (9) ; la ligne d'état de
+       l'assurance mesurée par sa BOÎTE, jamais par `innerText` (10) ;
+     - « Conditions » : la question de l'échéance toujours là, « Validité de
+       l'offre » qui ne bouge pas quand l'acompte s'enregistre, les deux
+       pastilles sur une rangée à 320 et rien de choisi d'office, la ligne
+       « pourquoi », « Choisir le moment du paiement », l'urgence qui éteint
+       le point, l'option qui le rallume, et la carte refermée puis rouverte
+       sans écriture d'en-tête (11).
+   Les textes attendus sont écrits EN TOUTES LETTRES (annexe A du cahier) :
+   une mesure qui les importerait du code ne vérifierait rien.
+
+   CE QUI EST POSÉ PAR L'API, ET LE DIT : la date de l'attestation effacée,
+   l'assurance retirée puis remise passent par `api.enregistrerAssurance` et
+   `api.retirerAssurance`, dans la page — les MÊMES fonctions que la fiche
+   « Mon entreprise » appelle ; le calendrier de la date de fin n'est pas ce
+   que ces sections mesurent. */
+const LIBELLE_URGENCE_ATTENDU = 'Réparation urgente expressément demandée par le client';
+const AIDE_URGENCE_ATTENDUE = 'Seulement le strict nécessaire d’un entretien ou d’une réparation urgents que votre client '
+  + 'vous a expressément demandés, chez lui : s’il commande à titre privé, il n’aura pas de droit de rétractation pour '
+  + 'cette ligne.';
+const RISQUE_URGENCE_DEBUT = 'Si ce n’est pas vraiment le cas, c’est vous qui prenez le risque : le client peut se rétracter';
+const DEPUIS_URGENCE_ATTENDU = 'Ce devis vient d’une demande d’urgence : ne marquez une ligne que si elle remplit les '
+  + 'conditions ci-dessous, et seulement le strict nécessaire.';
+const SOUS_TITRE_URGENCE = 'Pour les droits de votre client';
+const Q3_SOUS_TITRE = 'Pour votre assurance';
+const Q3_QUESTION = 'Ces travaux peuvent-ils engager votre garantie décennale ?';
+const POINT_DECENNALE = 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » '
+  + 'dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.';
+const POINT_ATTESTATION_DATE = 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, '
+  + 'Opus ne sait pas si l’attestation jointe est encore valable.';
+const POINT_ATTESTATION = 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de '
+  + 'la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.';
+const POINT_SIGNATURE = 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis '
+  + 'pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.';
+const ECHEANCE_ETIQUETTE = 'Quand le client paie-t-il cette somme ?';
+const POURQUOI_SANS_REPONSE = 'Dites d’abord à quel titre ce client commande : sans réponse, Opus compte le 8e jour.';
+const POURQUOI_OPTION = 'Une option n’est jamais une réparation urgente : tant que ce devis en porte une, comptez le 8e jour.';
+const AIDE_ECHEANCE_URGENCE = 'Toutes les lignes chiffrées de ce devis sont marquées « réparation urgente » : pour elles, '
+  + 'la règle du 8e jour ne s’applique pas. Si une ligne ne l’est pas vraiment, retirez sa marque : un paiement reçu trop '
+  + 'tôt permettrait au client d’annuler le contrat.';
+const COMPLETER_ASSURANCES = 'Compléter dans « Mon entreprise » : Assurances';
+const REPONDRE_CHANTIER = 'Répondre dans « Le chantier »';
+const RETOUR_CHANTIER_LISTE = 'Revenir à la liste de ce qu’il manque';
+const ASSURANCE_DEMO = 'demo-assurance-1';
+
+const interrupteurUrgence = () => page.getByRole('switch', { name: new RegExp(`^${LIBELLE_URGENCE_ATTENDU}`) }).first();
+const boiteDe = async (loc) => {
+  const b = await loc.boundingBox().catch(() => null);
+  return b ? { x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10, l: Math.round(b.width * 10) / 10, h: Math.round(b.height * 10) / 10 } : null;
+};
+/** La boîte du texte (une FEUILLE du DOM, hors gabarits cachés) qui commence par `debut`. */
+const boiteDuTexte = (debut) => page.evaluate((d) => {
+  const plat = (x) => (x || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
+  /* Un sous-titre (`accessibilityRole="header"`) est rendu en `h1`…`h6` par
+     react-native-web : il faut le chercher aussi. */
+  const e = [...document.querySelectorAll('div, span, h1, h2, h3, h4, h5, h6')].find((x) => x.children.length === 0
+    && plat(x.innerText).startsWith(plat(d)) && !x.closest('[aria-hidden="true"]'));
+  if (!e) return null;
+  const b = e.getBoundingClientRect();
+  return { y: b.y, bas: b.bottom, h: b.height, l: b.width, fenetre: window.innerHeight };
+}, debut);
+/** La ligne de la base de démonstration dont la désignation commence par `debut`, dans le devis `objet`. */
+const ligneEnBase = (objet, debut) => page.evaluate(async ({ o, d }) => {
+  const api = window.__opusModule('src/lib/api.js');
+  const l = await api.mesDevis();
+  const dv = (l.devis || []).find((x) => x.objet === o);
+  if (!dv) return null;
+  const r = await api.unDevis(dv.id);
+  const li = (r.lignes || []).find((x) => (x.designation || '').startsWith(d));
+  return li ? { urgence: li.urgence, prix: li.prixUnitaireCentimes, engageDecennale: r.devis.engageDecennale } : null;
+}, { o: objet, d: debut });
+const champPrix = () => page.getByLabel(/^(Prix unitaire HT|Taux horaire \(HT\)|Prix unitaire)$/).first();
+const ecrituresEnRepos = async () => jusqua(async () => !/enregistrement…|Enregistrement en cours/.test(await texteLu()), DELAI_ECRITURE + 3000);
+const hauteurLigneHaut = async () => { const b = await ligneHaut().boundingBox().catch(() => null); return b ? Math.round(b.height * 10) / 10 : null; };
+const assurancesDemo = () => page.evaluate(async () => {
+  const api = window.__opusModule('src/lib/api.js');
+  const f = await api.monEmetteur();
+  return (f.assurances || []).map((a) => ({ ...a }));
+});
+/** La rangée d'une assurance dans « Mon entreprise » : sa boîte, et la boîte de SA ligne d'état — la feuille dont le
+ *  texte EST l'état, cherchée dans la rangée (E-I5 : jamais `innerText` de la rangée, qui lit aussi le texte rogné). */
+const ligneDEtatDeLAssurance = () => page.evaluate(() => {
+  const plat = (x) => (x || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
+  const r = document.querySelector('[aria-label$="Modifier cette assurance"]');
+  if (!r) return null;
+  const br = r.getBoundingClientRect();
+  const etat = [...r.querySelectorAll('div, span')].find((x) => x.children.length === 0
+    && /^(Valable jusqu’au \d\d\/\d\d\/\d{4}|Sans date de fin|Expirée le \d\d\/\d\d\/\d{4})$/.test(plat(x.innerText)));
+  if (!etat) return { rangee: { y: br.y, bas: br.bottom }, etat: null };
+  const be = etat.getBoundingClientRect();
+  return {
+    rangee: { y: br.y, bas: br.bottom, l: br.width },
+    etat: { texte: plat(etat.innerText), y: be.y, bas: be.bottom, h: be.height, l: be.width },
+    largeur: window.innerWidth,
+  };
+});
+
+await section('2b-3 : un devis venu d’une URGENCE — « Ce devis vient d’une demande d’urgence… » au-dessus de l’interrupteur, ÉTEINT (§5.5, 7)', async () => {
+  await toucher(page.getByRole('tab', { name: /^Découvrir/ }));
+  await attendre(900);
+  await toucher(page.getByRole('tab', { name: 'Pour moi' }));
+  await attendre(900);
+  await toucher(page.getByRole('button', { name: /^En cours/ }));
+  const faire = page.getByLabel(`Faire un devis pour la demande de ${URGENCE.nom}`, { exact: true });
+  exiger((await faire.count()) === 1, `l’urgence de ${URGENCE.nom} est acceptée (« Faire un devis »)`);
+  await toucher(faire.first());
+  /* Sa fiche existe déjà (la section « Pour moi » l'a créée) : « Faire un
+     devis » montre la fiche, et « Choisir … pour le devis en cours » ouvre
+     le devis de l'urgence — ou la saisie s'ouvre directement. */
+  const choisir = page.getByLabel(`Choisir ${URGENCE.nom} pour le devis en cours`, { exact: true });
+  await jusqua(async () => (await dansLaSaisie()) || (await choisir.count()) > 0, 8000);
+  if (!(await dansLaSaisie()) && (await choisir.count()) > 0) {
+    await toucher(choisir.first());
+    await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  }
+  await attendre(600);
+  exiger((await dansLaSaisie()) && /depuis une urgence du \d\d\/\d\d\/\d{4}/.test(await texteLu()), 'le devis de l’urgence est ouvert');
+  const e0 = await ecrituresDemo();
+  await toucher(parLibelle('Ajouter un premier poste chiffré'));
+  exiger(await carteOuverte(), 'la carte d’un poste neuf est ouverte');
+  await interrupteurUrgence().scrollIntoViewIfNeeded();
+  await attendre(400);
+  const depuis = await boiteDuTexte(DEPUIS_URGENCE_ATTENDU);
+  const sw = await boiteDe(interrupteurUrgence());
+  const fois = ((await texteLu()).split('Ce devis vient d’une demande d’urgence').length - 1);
+  verifier(`la ligne « ${DEPUIS_URGENCE_ATTENDU.slice(0, 48)}… », UNE fois, AU-DESSUS de l’interrupteur (${depuis && Math.round(depuis.bas)} ≤ ${sw && sw.y})`,
+    !!depuis && !!sw && depuis.bas <= sw.y + 0.5 && fois === 1);
+  verifier('…et l’interrupteur est ÉTEINT : jamais allumé d’office', (await interrupteurUrgence().getAttribute('aria-checked')) === 'false');
+  await capture('2b3-depuis-une-urgence');
+  await fermerCarte();
+  await attendre(PAUSE_DEMO + 400);
+  verifier(`la carte refermée VIERGE : rien d’incomplet, rien d’écrit (${(await ecrituresDemo()) - e0})`,
+    !/Incomplète/.test(await texteLu()) && (await ecrituresDemo()) === e0);
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+});
+
+await section('2b-3 : la carte d’un poste — « Réparation urgente », quatre interrupteurs à 393 et à 320, rien ne saute, l’écriture, la liste, la ligne incomplète, la garde (§5.5, 1 à 6 et 12)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(400);
+    await allerAMesDevis();
+    await ouvrirLeDevis('Rénovation salle de bains');
+    await ouvrirRangee('Pose de faïence murale');
+    exiger(await carteOuverte(), `${largeur} : la carte de « Pose de faïence murale » est ouverte`);
+    const noms = await page.getByRole('switch').evaluateAll((es) => es.map((e) => (e.getAttribute('aria-label') || '').split('.')[0]));
+    verifier(`${largeur} : QUATRE interrupteurs, l’urgence en dernier (${noms.join(' | ')})`,
+      noms.length === 4 && noms[3] === LIBELLE_URGENCE_ATTENDU && noms.slice(0, 3).join('|') === 'Main-d’œuvre|Fourniture non comprise|Offert');
+    const boites = await page.getByRole('switch').evaluateAll((es) => es.map((e) => { const b = e.getBoundingClientRect(); return [Math.round(b.width), Math.round(b.height)]; }));
+    verifier(`${largeur} : chacun de 44 points au moins par sa BOÎTE (${JSON.stringify(boites)})`,
+      boites.length === 4 && boites.every(([l, h]) => l >= TOUCHE - 0.5 && h >= TOUCHE - 0.5));
+    const tCarte = await texteLu();
+    verifier(`${largeur} : le sous-titre « ${SOUS_TITRE_URGENCE} » et l’aide FIXE, mot pour mot ; aucune ligne « vient d’une demande d’urgence » (devis ouvert à la main)`,
+      tCarte.includes(SOUS_TITRE_URGENCE) && tCarte.includes(net(AIDE_URGENCE_ATTENDUE)) && !tCarte.includes('Ce devis vient d’une demande d’urgence'));
+    const sousTitre = await boiteDuTexte(SOUS_TITRE_URGENCE);
+    const bu = await boiteDe(interrupteurUrgence());
+    verifier(`${largeur} : le sous-titre est AU-DESSUS de l’interrupteur (${sousTitre && Math.round(sousTitre.bas)} ≤ ${bu && bu.y})`,
+      !!sousTitre && !!bu && sousTitre.bas <= bu.y + 0.5);
+    const deborde = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 0.5);
+    verifier(`${largeur} : aucun débordement horizontal`, !deborde);
+    await capture(`2b3-carte-poste-${largeur}`);
+    if (largeur === 393) {
+      /* 3. RIEN NE SAUTE SOUS LE DOIGT, et le risque paraît DESSOUS. */
+      await interrupteurUrgence().scrollIntoViewIfNeeded();
+      await attendre(400);
+      const avant = await boiteDe(interrupteurUrgence());
+      const e0 = await ecrituresDemo();
+      const a0 = (await annonces()).length;
+      await toucher(interrupteurUrgence());
+      await ecrituresEnRepos();
+      await attendre(PAUSE_DEMO + 300);
+      const apres = await boiteDe(interrupteurUrgence());
+      const risque = await boiteDuTexte(RISQUE_URGENCE_DEBUT);
+      verifier(`allumé : l’interrupteur garde son y (${avant && avant.y} → ${apres && apres.y}) et sa hauteur à 2 points près (${avant && avant.h} → ${apres && apres.h})`,
+        !!avant && !!apres && Math.abs(avant.y - apres.y) < 0.5 && apres.h <= avant.h + 2
+        && (await interrupteurUrgence().getAttribute('aria-checked')) === 'true');
+      verifier(`…le risque paraît SOUS la rangée (${risque && Math.round(risque.y)} ≥ ${apres && Math.round(apres.y + apres.h)}), et l’aide de la rangée n’a pas changé`,
+        !!risque && !!apres && risque.y >= apres.y + apres.h - 0.5
+        && (await interrupteurUrgence().getAttribute('aria-label')).includes(AIDE_URGENCE_ATTENDUE.slice(0, 60)));
+      const lues = (await annonces()).slice(a0);
+      verifier(`…et il s’ANNONCE à VoiceOver (${lues.length} annonce(s))`, lues.some((a) => a.startsWith(RISQUE_URGENCE_DEBUT)), JSON.stringify(lues).slice(0, 200));
+      /* 4. UN APPUI = UNE ÉCRITURE, qui porte la marque. */
+      const enBase1 = await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale');
+      verifier(`un appui = UNE écriture (${(await ecrituresDemo()) - e0}), et la base porte la marque`, (await ecrituresDemo()) - e0 === 1 && !!enBase1 && enBase1.urgence === true);
+      await capture('2b3-urgence-allumee');
+      await toucher(interrupteurUrgence());
+      await ecrituresEnRepos();
+      await attendre(PAUSE_DEMO + 300);
+      const eteint = await boiteDe(interrupteurUrgence());
+      verifier('éteint : le risque part, l’interrupteur n’a pas bougé', !(await boiteDuTexte(RISQUE_URGENCE_DEBUT)) && !!eteint && Math.abs(eteint.y - avant.y) < 0.5
+        && (await interrupteurUrgence().getAttribute('aria-checked')) === 'false');
+      /* Un prix TAPÉ (champ pas quitté), puis l'appui : la base porte les deux. */
+      const prixAvant = (await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale')).prix;
+      await viderEtTaper(champPrix(), '61');
+      await toucher(interrupteurUrgence());
+      await ecrituresEnRepos();
+      await attendre(PAUSE_DEMO + 600);
+      const enBase2 = await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale');
+      verifier(`un prix tapé, puis l’appui : la base porte LES DEUX (prix ${enBase2 && enBase2.prix}, marque ${enBase2 && enBase2.urgence})`,
+        !!enBase2 && enBase2.prix === 6100 && enBase2.urgence === true);
+      /* 5. LA LISTE : « · réparation urgente » AVANT le total. */
+      await fermerCarte();
+      await ecrituresEnRepos();
+      const rangee = page.locator('button[aria-label^="Pose de faïence murale"]').first();
+      const lbl = net((await rangee.getAttribute('aria-label')) || '');
+      const tRangee = net(sansIcones(await rangee.innerText()));
+      const iMarque = tRangee.indexOf('réparation urgente');
+      /* Le TOTAL est le DERNIER montant de la rangée (le détail porte aussi
+         le prix unitaire, avant la marque). */
+      const montantsRangee = [...tRangee.matchAll(/\d,\d\d €/g)];
+      const iTotal = montantsRangee.length ? montantsRangee[montantsRangee.length - 1].index : -1;
+      verifier(`la rangée : « · réparation urgente » AVANT le total (« ${tRangee} »)`, iMarque > 0 && iTotal > iMarque && tRangee.includes('· réparation urgente'));
+      verifier(`…l’étiquette parlée la dit (« ${lbl} »)`, /, réparation urgente, ouvrir$/.test(lbl));
+      const rs = await rangees();
+      const r = rs.find((x) => x.libelle.startsWith('Pose de faïence murale'));
+      verifier(`…et la liste lit toujours son total (${r && r.total})`, !!r && r.total !== null);
+      await capture('2b3-rangee-urgente');
+      /* On remet le prix et on éteint : rien ne doit rester de la mesure. */
+      await ouvrirRangee('Pose de faïence murale');
+      await viderEtTaper(champPrix(), String(prixAvant / 100).replace('.', ','));
+      await toucher(interrupteurUrgence());
+      await ecrituresEnRepos();
+      await attendre(PAUSE_DEMO + 600);
+      const remis = await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale');
+      exiger(!!remis && remis.prix === prixAvant && remis.urgence === false, 'le prix et la marque de la faïence sont REMIS');
+      /* 2. UNE OPTION : trois interrupteurs ; une zone, une pièce, une réserve : aucun interrupteur d'urgence. */
+      await fermerCarte();
+      await ecrituresEnRepos();
+      await toucher(page.locator('button[aria-label^="Option : Peinture du plafond"]').first());
+      exiger(await carteOuverte(), 'la carte de l’option « Peinture du plafond » est ouverte');
+      const nomsOption = await page.getByRole('switch').evaluateAll((es) => es.map((e) => (e.getAttribute('aria-label') || '').split('.')[0]));
+      verifier(`une OPTION : trois interrupteurs, aucun d’urgence, aucun sous-titre (${nomsOption.join(' | ')})`,
+        nomsOption.length === 3 && !nomsOption.includes(LIBELLE_URGENCE_ATTENDU) && !(await texteLu()).includes(SOUS_TITRE_URGENCE));
+      await fermerCarte();
+      for (const [quoi, selecteur] of [['une zone', 'button[aria-label^="Rez-de-chaussée"]'], ['une pièce', 'button[aria-label^="Cuisine"]'],
+        ['une réserve', 'button[aria-label^="Réserve : Accès au compteur"]']]) {
+        await toucher(page.locator(selecteur).first());
+        exiger(await carteOuverte(), `la carte (${quoi}) est ouverte`);
+        verifier(`${quoi} : aucun interrupteur d’urgence, aucun sous-titre « ${SOUS_TITRE_URGENCE} »`,
+          (await interrupteurUrgence().count()) === 0 && !(await texteLu()).includes(SOUS_TITRE_URGENCE));
+        await fermerCarte();
+      }
+      /* 6. UNE LIGNE NEUVE où l'on n'a touché QUE l'urgence : elle reste
+         « Incomplète » — pas de disparition muette. */
+      const e1 = await ecrituresDemo();
+      await toucher(parLibelle('Ajouter un poste chiffré'));
+      await toucher(interrupteurUrgence());
+      await fermerCarte();
+      await attendre(PAUSE_DEMO + 400);
+      verifier(`une ligne neuve où l’on n’a touché que l’urgence reste « Incomplète », sans écriture (${(await ecrituresDemo()) - e1})`,
+        /Incomplète/.test(await texteLu()) && (await ecrituresDemo()) === e1);
+      await toucher(page.getByLabel(/incomplète\. La compléter$/).first());
+      await toucher(parLibelle('Retirer cette ligne'));
+      await toucher(parLibelle('Confirmer : retirer cette ligne'));
+      verifier('…retirée, plus rien d’incomplet', !(await carteOuverte()) && !/Incomplète/.test(await texteLu()));
+      /* 12. LA GARDE DE SORTIE : la marque touchée, la carte fermée, puis la
+         barre du bas — l'écriture est en route, la garde l'attend, puis part. */
+      await ouvrirRangee('Pose de faïence murale');
+      await page.evaluate(() => { window.__opusPauseEcritures = 4000; });
+      await toucher(interrupteurUrgence());
+      await fermerCarte();
+      await toucher(page.getByRole('tab', { name: 'Accueil' }));
+      const attente = await jusqua(async () => (await texteLu()).includes('Enregistrement avant de partir'), 3000, 50);
+      const resteLa = await dansLaSaisie();
+      const parti = await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 4000);
+      await page.evaluate(() => { window.__opusPauseEcritures = null; });
+      const marque = await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale');
+      verifier('la garde : « Enregistrement avant de partir… », l’écran attend l’écriture de la marque, puis part — et la marque est en base',
+        !!attente && resteLa && !!parti && !!marque && marque.urgence === true);
+      /* …et on l'éteint de nouveau. */
+      await allerAMesDevis();
+      await ouvrirLeDevis('Rénovation salle de bains');
+      await ouvrirRangee('Pose de faïence murale');
+      await toucher(interrupteurUrgence());
+      await fermerCarte();
+      await ecrituresEnRepos();
+      await attendre(PAUSE_DEMO + 400);
+      exiger((await ligneEnBase('Rénovation salle de bains', 'Pose de faïence murale')).urgence === false, 'la marque de la faïence est ÉTEINTE');
+    } else {
+      await fermerCarte();
+    }
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-3 : « Pour le remettre » — l’attestation décennale (date effacée, assurance retirée), « Mon entreprise » sur Assurances, la ligne d’état de l’assurance par sa BOÎTE, et « Répondre dans « Le chantier » » (§5.5, 8 à 10)', async () => {
+  const tailleAvant = page.viewportSize();
+  await ecouterLaListe(true);
+  const avantTout = await assurancesDemo();
+  exiger(avantTout.length === 1 && avantTout[0].id === ASSURANCE_DEMO && !!avantTout[0].valide_jusquau && !!avantTout[0].attestation_chemin,
+    'la démonstration porte UNE décennale jointe et datée');
+  const dateFin = avantTout[0].valide_jusquau;
+  /* LA DATE EFFACÉE (par l'API, voir l'en-tête). */
+  await page.evaluate(async (id) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: null }, id); }, ASSURANCE_DEMO);
+  exiger(!(await assurancesDemo())[0].valide_jusquau, 'la date de fin de l’attestation est effacée');
+  for (const largeur of [393, 320]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(400);
+    /* « Rénovation » n'a pas répondu : `devis_decennale`, « Par prudence »,
+       et le second bouton qui ouvre « Le chantier » SUR la question. */
+    await allerAMesDevis();
+    await ouvrirLeDevis('Rénovation salle de bains');
+    await ouvrirLaListe();
+    const tR = await texteLu();
+    verifier(`${largeur} : « Rénovation » (sans réponse) — le point de la décennale, « Par prudence », « ${COMPLETER_ASSURANCES} » et « ${REPONDRE_CHANTIER} »`,
+      tR.includes(POINT_DECENNALE) && !tR.includes(POINT_ATTESTATION_DATE) && !tR.includes(POINT_ATTESTATION)
+      && (await page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).count()) === 1
+      && (await page.getByRole('button', { name: REPONDRE_CHANTIER, exact: true }).count()) === 1);
+    await jugerLaCarte(`${largeur} : la liste de « Rénovation »`);
+    await toucher(page.getByRole('button', { name: REPONDRE_CHANTIER, exact: true }).first());
+    await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+    await attendre(500);
+    const q3 = await boiteDuTexte(Q3_SOUS_TITRE);
+    const q3q = await boiteDuTexte(Q3_QUESTION);
+    const ouiDefaut = await boiteDe(page.locator('[aria-label="Oui (par défaut)"]').first());
+    verifier(`${largeur} : ouverte par « ${REPONDRE_CHANTIER} », la question de la décennale est DANS LA FENÊTRE (sous-titre à ${q3 && Math.round(q3.y)}, `
+      + `pastilles à ${ouiDefaut && ouiDefaut.y}, fenêtre ${q3 && q3.fenetre})`,
+    !!q3 && !!q3q && !!ouiDefaut && q3.y >= 0 && q3q.bas <= q3.fenetre && ouiDefaut.y + ouiDefaut.h <= q3.fenetre
+      && (await texteLu()).includes('‹ Liste'));
+    await capture(`2b3-chantier-q3-${largeur}`);
+    await toucher(parLibelle(RETOUR_CHANTIER_LISTE));
+    await jusqua(enCarte, 4000);
+    await fermerLaListe();
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+    /* « Sol du séjour » a répondu « Oui » : `devis_attestation_date`, « Par
+       prudence », SANS second bouton. */
+    await allerAMesDevis();
+    await ouvrirLeDevis('Sol du séjour');
+    const hLigne0 = await hauteurLigneHaut();
+    await ouvrirLaListe();
+    const tS = await texteLu();
+    const iDate = tS.indexOf(POINT_ATTESTATION_DATE);
+    verifier(`${largeur} : « Sol du séjour » (« Oui ») — « Écrivez … la date de fin… », « Par prudence », un bouton vers les assurances, `
+      + 'et AUCUN bouton vers « Le chantier »',
+    iDate >= 0 && !tS.includes(POINT_DECENNALE) && tS.slice(Math.max(0, iDate - 40), iDate).includes('Par prudence')
+      && (await page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).count()) === 1
+      && (await page.getByRole('button', { name: REPONDRE_CHANTIER, exact: true }).count()) === 0
+      && (await page.getByRole('button', { name: 'Revoir « Le chantier »', exact: true }).count()) === 0, tS.slice(Math.max(0, iDate - 60), iDate + 60));
+    await jugerLaCarte(`${largeur} : la liste de « Sol du séjour », date effacée`);
+    /* 10. « MON ENTREPRISE » SUR ASSURANCES, et la ligne d'état « Sans date
+       de fin » mesurée par sa BOÎTE. */
+    const avantME = await lectures();
+    await toucher(page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).first());
+    await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+    await attendre(900);
+    const ligneEtat = await ligneDEtatDeLAssurance();
+    verifier(`${largeur} : « Mon entreprise » s’ouvre sur « Assurances », et la ligne d’état « Sans date de fin » a sa BOÎTE dans la rangée `
+      + `(${JSON.stringify(ligneEtat && ligneEtat.etat)})`,
+    !!ligneEtat && !!ligneEtat.etat && ligneEtat.etat.texte === 'Sans date de fin' && ligneEtat.etat.h > 0
+      && ligneEtat.etat.y >= ligneEtat.rangee.y - 0.5 && ligneEtat.etat.bas <= ligneEtat.rangee.bas + 0.5
+      && ligneEtat.rangee.y >= 0 && ligneEtat.rangee.bas <= 852);
+    await capture(`2b3-assurance-sans-date-${largeur}`);
+    await toucher(parLibelle('Fermer « Mon entreprise »'));
+    await jusqua(async () => (await lectures()) - avantME >= 1 && (await enCarte()), 4000);
+    verifier(`${largeur} : la fermeture relit la liste UNE fois (${(await lectures()) - avantME})`, (await lectures()) - avantME === 1);
+    await fermerLaListe();
+    const hLigne1 = await hauteurLigneHaut();
+    verifier(`${largeur} : la ligne du haut ne change pas de hauteur (${hLigne0} → ${hLigne1})`, hLigne0 !== null && hLigne0 === hLigne1);
+    if (largeur === 393) noter('393 : hauteur de la ligne « Pour le remettre » de « Sol du séjour »', hLigne0);
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  }
+  /* L'ASSURANCE RETIRÉE (par l'API) : `devis_attestation`, « La loi », sur
+     « Sol du séjour » ; puis remise pendant que « Mon entreprise » est
+     ouverte — sa fermeture relit UNE fois, et le point s'éteint. */
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await page.evaluate(async (id) => { await window.__opusModule('src/lib/api.js').retirerAssurance(id); }, ASSURANCE_DEMO);
+  exiger((await assurancesDemo()).length === 0, 'l’assurance de démonstration est retirée');
+  await allerAMesDevis();
+  await ouvrirLeDevis('Sol du séjour');
+  const hAvant = await hauteurLigneHaut();
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iLoi = tL.indexOf(POINT_ATTESTATION);
+  verifier('393 : l’assurance retirée — « Joignez … : la loi demande de la joindre… », « La loi », un bouton vers les assurances, aucun second bouton',
+    iLoi >= 0 && tL.slice(Math.max(0, iLoi - 30), iLoi).includes('La loi') && !tL.includes(POINT_ATTESTATION_DATE)
+    && (await page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).count()) === 1
+    && (await page.getByRole('button', { name: REPONDRE_CHANTIER, exact: true }).count()) === 0, tL.slice(Math.max(0, iLoi - 60), iLoi + 40));
+  await jugerLaCarte('393 : la liste de « Sol du séjour », assurance retirée');
+  await capture('2b3-attestation-absente');
+  const avantME = await lectures();
+  await toucher(page.getByLabel(COMPLETER_ASSURANCES, { exact: true }).first());
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(700);
+  verifier('…« Mon entreprise » s’ouvre sur « Assurances », qui dit ce que demande un devis (« Aucune assurance déclarée. Opus n’en exige aucune pour votre fiche ; mais… »)',
+    (await texteLu()).includes('Aucune assurance déclarée. Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux peuvent engager votre garantie décennale demande son attestation'));
+  verifier(`…sans relire la liste (${(await lectures()) - avantME})`, (await lectures()) - avantME === 0);
+  /* REMISE, avec sa date de fin (par l'API, comme la fiche l'enregistre). */
+  const valeurs = Object.fromEntries(Object.entries(avantTout[0]).filter(([k]) => k !== 'id' && k !== 'created_at'));
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance(v); }, { ...valeurs, valide_jusquau: dateFin });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await lectures()) - avantME >= 1 && (await enCarte()) && !/Calcul en cours|mise à jour…/.test(await texteLu()), 4000);
+  const tApres = await texteLu();
+  verifier(`remise, puis « Mon entreprise » fermée : UNE relecture (${(await lectures()) - avantME}), et le point de l’attestation s’ÉTEINT`,
+    (await lectures()) - avantME === 1 && !tApres.includes(POINT_ATTESTATION) && !tApres.includes(POINT_ATTESTATION_DATE) && !tApres.includes(POINT_DECENNALE));
+  await fermerLaListe();
+  const hApres = await hauteurLigneHaut();
+  verifier(`…la ligne du haut garde sa hauteur (${hAvant} → ${hApres})`, hAvant !== null && hAvant === hApres);
+  /* 10, avec une date : « Valable jusqu'au … », par sa boîte, à 320. */
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(400);
+  /* Depuis le profil, « Mon entreprise » s'ouvre en LECTURE : la fiche (et
+     ses rangées d'assurance) s'ouvre par « Modifier mes informations de
+     devis » — refermée ensuite sans rien changer. */
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+  await page.locator('[aria-label$="Modifier cette assurance"]').first().waitFor({ timeout: 6000 });
+  await page.locator('[aria-label$="Modifier cette assurance"]').first().scrollIntoViewIfNeeded();
+  await attendre(500);
+  const etatDate = await ligneDEtatDeLAssurance();
+  verifier(`320 : la rangée de l’assurance remise — « Valable jusqu’au … » sur SA ligne, sa BOÎTE dans la rangée (${JSON.stringify(etatDate && etatDate.etat)})`,
+    !!etatDate && !!etatDate.etat && /^Valable jusqu’au \d\d\/\d\d\/\d{4}$/.test(etatDate.etat.texte) && etatDate.etat.h > 0
+    && etatDate.etat.y >= etatDate.rangee.y - 0.5 && etatDate.etat.bas <= etatDate.rangee.bas + 0.5 && etatDate.etat.l <= etatDate.largeur);
+  await capture('2b3-assurance-datee-320');
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await attendre(500);
+  /* Rien n'a été changé : si la fiche demande quand même, on quitte. */
+  if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  verifier('…refermée sans rien changer, « Mon entreprise » part', (await parLibelle('Fermer « Mon entreprise »').count()) === 0);
+  const fin = await assurancesDemo();
+  exiger(fin.length === 1 && fin[0].valide_jusquau === dateFin && !!fin[0].attestation_chemin, 'la décennale de démonstration est REMISE, jointe et datée');
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-3 : « Le chantier » — la question de la décennale, « Non » à gauche, le x de « Non » égal, la hauteur de la rangée égale à 393 et à 320 (§5.5, 8)', async () => {
+  const tailleAvant = page.viewportSize();
+  for (const largeur of [393, 320]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(400);
+    await allerAMesDevis();
+    await ouvrirLeDevis('Rénovation salle de bains');
+    const hr = [await hauteurDeLaRangee()];
+    await toucher(rangeeChantier());
+    await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+    const tc = await texteLu();
+    verifier(`${largeur} : « ${Q3_SOUS_TITRE} », « ${Q3_QUESTION} »`, tc.includes(Q3_SOUS_TITRE) && tc.includes(Q3_QUESTION));
+    const pastillesQ3 = await page.evaluate((sous) => {
+      const plat = (x) => (x || '').replace(/[\u00a0\u202f]/g, ' ').trim();
+      const titre = [...document.querySelectorAll('div, span, h1, h2, h3, h4, h5, h6')].find((x) => x.children.length === 0 && plat(x.innerText) === sous);
+      if (!titre) return null;
+      const yT = titre.getBoundingClientRect().y;
+      return [...document.querySelectorAll('[role="button"][aria-label]')]
+        .map((e) => ({ l: e.getAttribute('aria-label'), b: e.getBoundingClientRect(), sel: e.getAttribute('aria-selected') }))
+        .filter((e) => e.b.y > yT && /^(Non|Oui|Oui \(par défaut\))$/.test(e.l))
+        .slice(0, 2).map((e) => ({ l: e.l, x: Math.round(e.b.x), sel: e.sel }));
+    }, Q3_SOUS_TITRE);
+    /* À 393, « Rénovation » n'a pas répondu : « Oui (par défaut) ». À 320,
+       la boucle de 393 a répondu « Oui » : la pastille dit « Oui ». */
+    const ouiAttendu = largeur === 393 ? 'Oui (par défaut)' : 'Oui';
+    verifier(`${largeur} : « Non » À GAUCHE, puis « ${ouiAttendu} », choisi (${JSON.stringify(pastillesQ3)})`,
+      !!pastillesQ3 && pastillesQ3.length === 2 && pastillesQ3[0].l === 'Non' && pastillesQ3[1].l === ouiAttendu
+      && pastillesQ3[0].x < pastillesQ3[1].x && pastillesQ3[1].sel === 'true');
+    const xNon = await page.locator('[role="button"][aria-label^="Non"]').evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x * 10) / 10));
+    verifier(`${largeur} : le x de « Non » est le MÊME dans les ${xNon.length} questions (${JSON.stringify(xNon)})`,
+      xNon.length >= 2 && xNon.every((x) => Math.abs(x - xNon[0]) < 0.5));
+    await jugerCibles(`${largeur} : la carte « Le chantier » à trois questions`, (c) => /^(Non|Oui : à confirmer|Non \(par défaut\)|Oui \(par défaut\)|Oui|Revenir au devis)$/.test(c.libelle));
+    await capture(`2b3-chantier-trois-questions-${largeur}`);
+    /* « NON » D'UN APPUI, l'écriture ralentie : en route, puis le résumé. */
+    const e0 = await ecrituresDemo();
+    await page.evaluate(() => { window.__opusPauseEcritures = 2500; });
+    const nonQ3 = page.locator('[role="button"][aria-label="Non"]').last();
+    await toucher(nonQ3);
+    verifier(`${largeur} : « Non » s’écrit d’un appui, sans confirmation`, (await bouton('Je confirme').count()) === 0);
+    await toucher(parLibelle('Revenir au devis'));
+    const enRoute = await jusqua(async () => / — enregistrement…\. Ouvrir$/.test(await libelleDeLaRangee()), 2000, 50);
+    hr.push(await hauteurDeLaRangee());
+    const fini = await jusqua(async () => /décennale : non\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
+    await page.evaluate(() => { window.__opusPauseEcritures = null; });
+    hr.push(await hauteurDeLaRangee());
+    verifier(`${largeur} : « — enregistrement… » pendant l’envoi, puis le résumé « … ; décennale : non » (${await libelleDeLaRangee()}), une écriture (${(await ecrituresDemo()) - e0})`,
+      !!enRoute && !!fini && (await ecrituresDemo()) - e0 === 1);
+    /* « Oui » de nouveau (sans confirmation non plus). */
+    await toucher(rangeeChantier());
+    await jusqua(async () => (await texteLu()).includes(INTRO_CHANTIER), 4000);
+    await toucher(page.locator('[role="button"][aria-label="Oui"]').last());
+    verifier(`${largeur} : « Oui » non plus ne demande pas de confirmation`, (await bouton('Je confirme').count()) === 0);
+    await toucher(parLibelle('Revenir au devis'));
+    await jusqua(async () => /décennale : oui\. Ouvrir$/.test(await libelleDeLaRangee()), DELAI_ECRITURE);
+    hr.push(await hauteurDeLaRangee());
+    noter(`${largeur} : hauteur de la rangée « Le chantier » (rien, en route, « non », « oui »)`, JSON.stringify(hr));
+    verifier(`${largeur} : la rangée « Le chantier » ne change pas de hauteur (${JSON.stringify(hr)})`,
+      hr.length === 4 && hr.every((h) => h !== null && Math.abs(h - hr[0]) < 0.5));
+    await toucher(parLibelle('Revenir en arrière'));
+    await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  }
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-3 : « Conditions » — quand le client paie : la question toujours là, « Validité » qui ne bouge pas, « pourquoi », « Choisir le moment du paiement », l’urgence et l’option, la carte rouverte (§5.5, 11)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(400);
+  await ecouterLaListe(true);
+  const OBJET = 'Échéance (mesure)';
+  const nouveauPoste = async (libelle, designation, prix) => {
+    await toucher(parLibelle(libelle));
+    await taper(designation);
+    await toucher(parLibelle('forfait'));
+    await viderEtTaper(parLibelle('Quantité'), '1');
+    await viderEtTaper(parLibelle('Prix unitaire HT'), prix);
+    await toucher(parLibelle('TVA à 20 %'));
+    await fermerCarte();
+    await ecrituresEnRepos();
+    await attendre(PAUSE_DEMO + 400);
+  };
+  const ouvrirConditions = async () => {
+    await toucher(page.getByLabel(/^Conditions : /).first());
+    await page.getByText(ECHEANCE_ETIQUETTE, { exact: true }).first().waitFor({ timeout: 6000 });
+    await attendre(500);
+  };
+  const fermerConditions = async () => {
+    await toucher(parLibelle('Enregistrer les conditions et revenir au devis'));
+    await ecrituresEnRepos();
+    await attendre(PAUSE_DEMO + 400);
+  };
+  /* Le y d'un titre de la carte DANS SON CONTENU (le défilement retiré). */
+  const yDansLaCarte = (t) => page.evaluate((titre) => {
+    const plat = (x) => (x || '').replace(/[\u00a0\u202f]/g, ' ').trim();
+    const e = [...document.querySelectorAll('div, span, h1, h2, h3, h4, h5, h6')].find((x) => x.children.length === 0 && plat(x.innerText) === titre && !x.closest('[aria-hidden="true"]'));
+    if (!e) return null;
+    let d = e.parentElement;
+    while (d && !/(auto|scroll)/.test(getComputedStyle(d).overflowY)) d = d.parentElement;
+    const r = e.getBoundingClientRect();
+    return d ? Math.round((r.top - d.getBoundingClientRect().top + d.scrollTop) * 10) / 10 : null;
+  }, t);
+  const pastillesEcheance = () => page.evaluate(() => [...document.querySelectorAll('[role="button"]')]
+    .filter((e) => /^(Dès le 8e jour( \(par défaut\))?|À la signature)$/.test(e.getAttribute('aria-label') || ''))
+    .map((e) => { const b = e.getBoundingClientRect(); return { l: e.getAttribute('aria-label'), y: Math.round(b.y * 10) / 10, sel: e.getAttribute('aria-selected'), h: Math.round(b.height) }; }));
+
+  await allerAMesDevis();
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), OBJET);
+  await nouveauPoste('Ajouter un premier poste chiffré', 'Recherche de fuite', '120');
+  /* LA QUESTION TOUJOURS LÀ, sans acompte ; rien de choisi d'office. */
+  await ouvrirConditions();
+  const p0 = await pastillesEcheance();
+  verifier(`sans acompte : « ${ECHEANCE_ETIQUETTE} », deux pastilles sur UNE rangée à 320, aucune choisie (${JSON.stringify(p0)})`,
+    p0.length === 2 && p0[0].l === 'Dès le 8e jour (par défaut)' && p0[1].l === 'À la signature' && Math.abs(p0[0].y - p0[1].y) < 0.5
+    && p0.every((p) => p.sel === 'false' && p.h >= TOUCHE - 0.5));
+  const yValidite0 = await yDansLaCarte('Validité de l’offre');
+  await viderEtTaper(page.getByLabel(/^(Acompte ou arrhes|Acompte|Arrhes), en pour cent$/).first(), '30');
+  await toucher(page.getByText(ECHEANCE_ETIQUETTE, { exact: true }).first());
+  await attendre(PAUSE_DEMO + 400);
+  const yValidite1 = await yDansLaCarte('Validité de l’offre');
+  await fermerConditions();
+  await ouvrirConditions();
+  const yValidite2 = await yDansLaCarte('Validité de l’offre');
+  verifier(`« Validité de l’offre » ne bouge pas quand l’acompte s’enregistre (${yValidite0} → ${yValidite1} → ${yValidite2})`,
+    yValidite0 !== null && yValidite0 === yValidite1 && yValidite0 === yValidite2);
+  /* « À LA SIGNATURE » : la pastille touchée reste à son y, et la ligne
+     « pourquoi » (aucune réponse « à quel titre » encore). */
+  /* La pastille d'abord AMENÉE à l'écran (l'appui la ferait défiler) : on
+     mesure ce que le doigt voit bouger, pas le défilement. */
+  await page.locator('[role="button"][aria-label="À la signature"]').first().scrollIntoViewIfNeeded();
+  await attendre(500);
+  const avantSig = (await pastillesEcheance()).find((p) => p.l === 'À la signature');
+  await toucher(page.locator('[role="button"][aria-label="À la signature"]').first());
+  await attendre(400);
+  const apresSig = (await pastillesEcheance()).find((p) => p.l === 'À la signature');
+  const tPourquoi = await texteLu();
+  verifier(`« À la signature » : la pastille garde son y (${avantSig && avantSig.y} → ${apresSig && apresSig.y}), choisie, et la ligne « pourquoi » : « ${POURQUOI_SANS_REPONSE} »`,
+    !!avantSig && !!apresSig && Math.abs(avantSig.y - apresSig.y) < 0.5 && apresSig.sel === 'true' && tPourquoi.includes(POURQUOI_SANS_REPONSE));
+  verifier('…et aucun bouton qui proposerait de « marquer » des lignes', (await page.getByRole('button', { name: /marqu/i }).count()) === 0);
+  await capture('2b3-conditions-signature');
+  await fermerConditions();
+  /* LA LISTE : le point de l'échéance, « Par prudence », et son bouton. */
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iSig = tL.indexOf(POINT_SIGNATURE);
+  verifier('la liste : « Choisissez « Dès le 8e jour »… », « Par prudence », et « Choisir le moment du paiement »',
+    iSig >= 0 && tL.slice(Math.max(0, iSig - 40), iSig).includes('Par prudence')
+    && (await page.getByRole('button', { name: 'Choisir le moment du paiement', exact: true }).count()) === 1);
+  await jugerLaCarte('la liste du devis « Échéance (mesure) »');
+  await toucher(page.getByRole('button', { name: 'Choisir le moment du paiement', exact: true }).first());
+  await page.getByText(ECHEANCE_ETIQUETTE, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(700);
+  const etiquette = await boiteDuTexte(ECHEANCE_ETIQUETTE);
+  const sig = (await pastillesEcheance()).find((p) => p.l === 'À la signature');
+  verifier(`« Choisir le moment du paiement » ouvre « Conditions » SUR l’échéance (y ${etiquette && Math.round(etiquette.y)}, fenêtre ${etiquette && etiquette.fenetre}), « À la signature » choisi`,
+    !!etiquette && etiquette.y >= 0 && etiquette.bas <= etiquette.fenetre && !!sig && sig.sel === 'true');
+  await toucher(parLibelle(RETOUR_LISTE_CONDITIONS));
+  await jusqua(enCarte, 4000);
+  await fermerLaListe();
+  /* À TITRE PRIVÉ, LA LIGNE MARQUÉE : le point et la ligne « pourquoi »
+     s'éteignent, l'aide de l'échéance devient celle de l'urgence. */
+  await choisirAuCarnet('Mme Martin', 'mart');
+  await toucher(bouton('Oui, à titre privé'));
+  await reponseVue(REPONSE_PRIVE);
+  await ouvrirRangee('Recherche de fuite');
+  await toucher(interrupteurUrgence());
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await ouvrirConditions();
+  const tU = await texteLu();
+  verifier('à titre privé et toutes les lignes marquées : plus de ligne « pourquoi », l’aide de l’urgence sous l’échéance',
+    !tU.includes(POURQUOI_SANS_REPONSE) && !tU.includes(POURQUOI_OPTION) && !tU.includes('n’est marquée') && tU.includes(net(AIDE_ECHEANCE_URGENCE)));
+  await fermerConditions();
+  await ouvrirLaListe();
+  verifier('…et le point de l’échéance s’éteint', !(await texteLu()).includes(POINT_SIGNATURE));
+  await fermerLaListe();
+  /* UNE OPTION : la ligne « Une option… » et le point reviennent. */
+  await toucher(parLibelle('Ajouter une option'));
+  await taper('Remplacement du siphon');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '40');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await ouvrirConditions();
+  verifier(`une option ajoutée : la ligne « ${POURQUOI_OPTION.slice(0, 40)}… » revient`, (await texteLu()).includes(POURQUOI_OPTION));
+  await fermerConditions();
+  await ouvrirLaListe();
+  verifier('…et le point de l’échéance aussi', (await texteLu()).includes(POINT_SIGNATURE));
+  await fermerLaListe();
+  /* E-B1 : FERMÉE PUIS ROUVERTE, « À la signature » reste choisi, et
+     ouvrir la carte n'écrit RIEN dans l'en-tête. */
+  const e0 = await ecrituresDemo();
+  await ouvrirConditions();
+  await attendre(PAUSE_DEMO + 400);
+  const e1 = await ecrituresDemo();
+  const sig2 = (await pastillesEcheance()).find((p) => p.l === 'À la signature');
+  await fermerConditions();
+  const e2 = await ecrituresDemo();
+  verifier(`rouverte : « À la signature » toujours choisi, et aucune écriture d’en-tête à l’ouverture (${e1 - e0}) ni à la fermeture sans changement (${e2 - e1})`,
+    !!sig2 && sig2.sel === 'true' && e1 === e0 && e2 === e1);
+  /* On efface ce brouillon de mesure : « quatre devis à la fin ». */
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), 6000);
+  verifier(`le brouillon « ${OBJET} » est supprimé`, !(await texte()).includes(OBJET));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });
@@ -4223,9 +4921,12 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
   verifier('la carte : « Ce devis — aucun point », puis « Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui. »',
     t.includes('Ce devis — aucun point') && t.includes('Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.'));
   verifier('…et JUSTE SOUS elle, « Pas encore vérifié : … » (sans elle, « rien ne manque » mentirait)',
-    t.includes('Pas encore vérifié : le moment de la signature, l’urgence, la garantie décennale, si le devis lui-même '
-      + 'est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, et les conditions du taux réduit de TVA '
-      + '(l’ancienneté du logement, la certification du client).')
+    /* 2b-3 (annexe A.6) : « la garantie décennale » sort, la réparation
+       urgente et la couverture de l'attestation entrent. */
+    t.includes('Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, '
+      + 'si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, les conditions du '
+      + 'taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre attestation décennale couvre '
+      + 'ces travaux (ses activités, la date où le chantier s’ouvrira).')
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
   /* 2b-2 (cahier §3.6, annexe A.3) : le Muret est commandé « à titre privé »
      — la démonstration porte la réponse POUR Mme Martin, et la base l'a vue
@@ -6830,6 +7531,23 @@ await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration 
   await toucher(parLibelle('Fermer « Mon entreprise »'));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
+});
+
+await section('2b-3 : les invariants de la fin — quatre devis dans « Mes devis » (§5.5, 13)', async () => {
+  /* « Muret de clôture » (« rien ne manque ») et « Terrasse en bois »
+     (exactement deux points) sont mesurés par les sections du lot 2b-1 :
+     l'attestation de démonstration, effacée puis retirée par les sections
+     2b-3, y est revenue jointe et datée — sinon le rang 11 les aurait
+     allumés. Ici, le compte des brouillons : aucune section 2b-3 n'en laisse
+     un derrière elle. */
+  await page.setViewportSize({ width: 390, height: 844 });
+  await attendre(400);
+  await allerAMesDevis();
+  await jusqua(async () => (await page.locator('button[aria-label^="Ouvrir le brouillon "]').count()) > 0, 8000);
+  await attendre(600);
+  const objets = await page.locator('button[aria-label^="Ouvrir le brouillon "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  noter('les brouillons de la fin', JSON.stringify(objets));
+  verifier(`quatre devis à la fin (${objets.length})`, objets.length === 4);
 });
 
 /* LA PROPRIÉTÉ DES RANGÉES, en un chiffre : combien de propositions ont été

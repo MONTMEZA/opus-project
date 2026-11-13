@@ -96,7 +96,13 @@ export function fabriquerEmetteurDemo(maintenant = new Date()) {
         couverture: 'France métropolitaine',
         numero_contrat: null,
         valide_jusquau: jour(new Date(t + 200 * JOUR_MS)),
-        attestation_chemin: null,
+        /* 2b-3 : l'attestation est JOINTE (la forme d'`envoyerAttestationDemo`
+           et de `emetteur_assurance_chemin_check`) — avec sa date (+ 200
+           jours), elle est valable, et le rang 11 (`devis_attestation`) se
+           tait sur les devis de démonstration. Sans elle, « Muret de
+           clôture » ne serait plus complet. Aucun fichier n'existe derrière :
+           la démonstration n'en ouvre aucun. */
+        attestation_chemin: `${PRO_DEMO_EMETTEUR}/attestation-assurance-demo.pdf`,
         created_at: ilYA20Jours,
       },
     ],

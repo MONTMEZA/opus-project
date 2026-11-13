@@ -917,6 +917,17 @@ select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
 -- ouvre la TABLE entière : c'est sa forme entière, comparée par
 -- `verifier-devis`, et l'essai 49-remise (cas 14 c), qui la restreignent à
 -- la colonne du régime.
+--
+-- ET DEPUIS 2b-3 (12/11/2026), CE N'EST PLUS « LE SEUL RÉGIME » : elle lit
+-- AUSSI `emetteur_assurances` — UNE lecture, colonnes nommées (`nature`,
+-- `attestation_chemin`, `valide_jusquau`), filtrée par l'entreprise du devis
+-- (`a.pro_id = v_pro`) — pour dire si une attestation décennale est jointe et
+-- valable (rang 11 de la liste). Décidé avec le cahier 2b-3 (§1.2) : une
+-- lecture dans la fonction plutôt qu'une petite fonction de plus, ouverte à
+-- tout compte connecté. La porte reste ÉTROITE : `verifier-emetteur` (sa
+-- « porte étroite ») et l'essai 49-remise (cas 14 c, et cas 22 par une
+-- enveloppe `security definer`) la tiennent. La liste ci-dessous ne change
+-- pas : elle l'admettait déjà parmi les lectrices de `emetteur_assurances`.
 -- --------------------------------------------------------------------------
 select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune

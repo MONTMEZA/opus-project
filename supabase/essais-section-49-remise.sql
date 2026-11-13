@@ -2,7 +2,9 @@
 --  ESSAIS DE LA SECTION 49.9 — « Ce qu'il manque pour remettre ce devis »
 --  (lot 2b, étape 2b-1, 05/11/2026) : `motifs_refus_remise(p_devis)` — et
 --  ce que l'étape 2b-2 (09/11/2026) y a ajouté : « à quel titre », le
---  chantier neuf et sa date (49.4 ter)
+--  chantier neuf et sa date (49.4 ter) — et l'étape 2b-3 (12/11/2026) : la
+--  réparation urgente (49.3 bis), l'acompte à la signature et l'attestation
+--  décennale (49.4 quater, rangs 10 et 11)
 --
 --  À lancer sur un PostgreSQL ordinaire, après `local-prelude.sql` puis
 --  `schema.sql` rejoué DEUX fois :
@@ -16,12 +18,13 @@
 --  tête : les trois fichiers 49 peuvent se jouer l'un après l'autre sur la
 --  même base. A est une SARL en siège (5499), SANS n° de TVA connu.
 --
---  TREIZE CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité
+--  DIX-NEUF CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité
 --  qui ne montre aucun refus n'éprouve rien. Joué comme ci-dessus sur une
---  base neuve, ce fichier écrit EXACTEMENT 13 lignes `psql:… ERROR`
---  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 13). Un autre compte est un ÉCHEC,
+--  base neuve, ce fichier écrit EXACTEMENT 19 lignes `psql:… ERROR`
+--  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 19). Un autre compte est un ÉCHEC,
 --  même quand toutes les colonnes valent `t`. Les onze de 2b-1, tous au cas
---  12, puis les deux de 2b-2 (cas 15 g et 18 b) :
+--  12, puis les deux de 2b-2 (cas 15 g et 18 b), puis les six de 2b-3 (cas
+--  19 a à f) :
 --
 --     1  12 a   A demande la liste du devis de B             → OP027
 --     2  12 b   A, un identifiant inventé                     → OP027
@@ -36,24 +39,52 @@
 --    11  12 h   un visiteur (anon)  → « permission denied for function motifs_refus_remise »
 --    12  15 g   une réponse « à quel titre » inconnue        → devis_pour_qui_check (23514)
 --    13  18 b   le téléphone écrit la date du « Oui »         → « permission denied for table devis »
+--    14  19 a   une OPTION marquée « réparation urgente »     → devis_ligne_urgence_check (23514)
+--    15  19 b   une ZONE marquée urgente                       → devis_ligne_urgence_check (23514)
+--    16  19 c   une PIÈCE marquée urgente                      → devis_ligne_urgence_check (23514)
+--    17  19 d   une RÉSERVE marquée urgente                    → devis_ligne_urgence_check (23514)
+--    18  19 e   un poste urgent changé en OPTION (update)      → devis_ligne_urgence_check (23514)
+--    19  19 f   une zone urgente ET mal formée (une quantité)  → devis_ligne_forme_check (23514), nommée d'abord
 --
 --  ET CHACUN EST JUGÉ EN SQL, pas à l'œil (la leçon de RBM-1, lot 2a) :
 --  `:ERROR`, `LAST_ERROR_SQLSTATE` et `LAST_ERROR_MESSAGE` sont relevés
 --  juste après l'ordre, puis comparés, la transaction annulée, au code et au
 --  message attendus — le MÊME message pour les dix OP027. Un refus qui
---  manque laisse un `f`, pas seulement une ligne de moins. Les trente-neuf
---  variables (trente-trois de 2b-1, six de 2b-2) sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
+--  manque laisse un `f`, pas seulement une ligne de moins. Les cinquante-sept
+--  variables (trente-trois de 2b-1, six de 2b-2, dix-huit de 2b-3) sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
 --  entier laisse un `f` à sa place, au lieu d'une erreur de syntaxe qui
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 187 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 188e qui les compte (cas 19) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 267 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 268e qui les compte (cas 25) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
---  transaction déjà annulée, un cas retiré) manque au compte, et le cas 15
---  vaut `f`. Joué comme ci-dessus, le juge relit 188 colonnes `…_attendu_`
+--  transaction déjà annulée, un cas retiré) manque au compte, et le cas 25
+--  vaut `f`. Joué comme ci-dessus, le juge relit 268 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
+--
+--  CE QUE 2b-3 A AJOUTÉ (12/11/2026) : LA FICHE D'ESSAI DE A REÇOIT, DANS LE
+--  DÉCOR COMMUN, UNE DÉCENNALE JOINTE ET VALABLE (jusqu'au 31/12/2999) —
+--  sans elle, une réponse décennale vide comptant « Oui » (P1 = A), TOUS les
+--  cas d'avant gagnaient `devis_decennale`, et leurs attendus perdaient leur
+--  sens (relecture BASE, I1). Posée dans le décor et non à côté de
+--  `fiche_a` : les cas 3 c, 11, 13 et 16 lisent la liste sans `fiche_a`. Les
+--  attendus d'avant NE CHANGENT PAS ; les cas de la décennale la retirent
+--  dans leur transaction. Le cas 14 c nomme désormais aussi
+--  `emetteur_assurances`, et `chantier_neuf_conso` sort de ses mots
+--  interdits (le motif de l'acompte la lit ; la PROPRIÉTÉ qu'elle ne fait
+--  pas sortir `devis_taux_reduit_neuf` reste jouée, cas 17). Et six cas
+--  nouveaux — 19 : la réparation urgente, un POSTE seulement (cinq refus de
+--  `devis_ligne_urgence_check`, et `devis_ligne_forme_check` nommée devant
+--  elle) ; 20 : `devis_acompte_signature`, toutes les branches de la règle ;
+--  21 : les trois clés du rang 11, le jour de PARIS éprouvé sous deux AUTRES
+--  fuseaux (21 b) ; 22 : la décennale d'une AUTRE entreprise, par une
+--  enveloppe `security definer` (I2 : sous la RLS, l'oubli du filtre
+--  `a.pro_id = v_pro` passerait au vert) ; 23 : D4-c, l'urgence est un fait
+--  de ligne, jamais l'origine ; 24 : les onze rangs à la fois, le contrat de
+--  SEIZE clés. Quatre-vingts valeurs de plus (187 → 267), six refus de
+--  plus (13 → 19). Le compte est devenu le cas 25.
 --
 --  CE QUE 2b-2 A AJOUTÉ (09/11/2026) : `devis_complet` donne sa réponse « à
 --  quel titre » POUR SON CLIENT (sinon `devis_pour_qui` sortirait partout) ;
@@ -128,13 +159,13 @@
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 187. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 267. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
--- pas. Le jugement final (cas 19) compare le compte à l’annonce.
-\set VALEURS_ANNONCEES 187
+-- pas. Le jugement final (cas 25) compare le compte à l’annonce.
+\set VALEURS_ANNONCEES 267
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -152,7 +183,7 @@ language sql volatile as $c$
   select case when is_called then last_value else 0 end from pg_temp.essai_valeurs;
 $c$;
 
--- LES TREIZE REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
+-- LES DIX-NEUF REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
 -- jugement illisible (une variable indéfinie ferait échouer l'ordre — une
 -- AUTRE erreur à la place de la sienne, et six valeurs de moins), il laisse
 -- un `f` à sa place.
@@ -195,6 +226,24 @@ $c$;
 \set e18b_err 'jamais relevé'
 \set e18b_code 'jamais relevé'
 \set e18b_msg 'jamais relevé'
+\set e19a_err 'jamais relevé'
+\set e19a_code 'jamais relevé'
+\set e19a_msg 'jamais relevé'
+\set e19b_err 'jamais relevé'
+\set e19b_code 'jamais relevé'
+\set e19b_msg 'jamais relevé'
+\set e19c_err 'jamais relevé'
+\set e19c_code 'jamais relevé'
+\set e19c_msg 'jamais relevé'
+\set e19d_err 'jamais relevé'
+\set e19d_code 'jamais relevé'
+\set e19d_msg 'jamais relevé'
+\set e19e_err 'jamais relevé'
+\set e19e_code 'jamais relevé'
+\set e19e_msg 'jamais relevé'
+\set e19f_err 'jamais relevé'
+\set e19f_code 'jamais relevé'
+\set e19f_msg 'jamais relevé'
 
 -- --------------------------------------------------------------------------
 --  LE MÉNAGE DE TÊTE — le fichier se rejoue (en local seulement).
@@ -229,6 +278,15 @@ insert into public.quote_requests (id, client_id, professional_id, metier, descr
 insert into public.sos_requests (id, client_id, professional_id, metier_key, probleme_key, statut) values
  (:SA, :P, :A, 'plomberie', 'fuite', 'acceptee'),
  (:SB, :P, :B, 'plomberie', 'fuite', 'acceptee');
+-- 2b-3 (relecture BASE, I1) : LA DÉCENNALE DE A, JOINTE ET VALABLE (une date
+-- FIXE et lointaine, jamais relative : l'essai ne vieillit pas). Sans elle,
+-- une réponse décennale vide comptant « Oui », tous les cas d'avant
+-- gagnaient `devis_decennale` (rang 11). Les cas 21 à 24 la retirent dans
+-- leur transaction.
+insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture,
+                                        attestation_chemin, valide_jusquau)
+values (:A, 'decennale', 'Assureur d’essai', '1 rue de l’Essai, 13410 Lambesc', 'France métropolitaine',
+        :A || '/attestation.pdf', '2999-12-31');
 commit;
 
 -- LA FICHE « MON ENTREPRISE » DE A, COMPLÈTE, au régime passé en paramètre
@@ -268,6 +326,12 @@ prepare chiffree(uuid, uuid, integer, text, bigint, integer, boolean, bigint) as
   insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
                                    prix_unitaire_centimes, taux_tva_centiemes, offert, generation)
   values ($1, $2, $3, $4, 'Ligne d’essai', 1000, 'forfait', $5, $6, $7, $8);
+-- 2b-3 : une ASSURANCE de A (nature, chemin de l'attestation ou vide, date de fin
+-- ou vide), posée en superutilisateur dans les cas de la décennale.
+prepare assurance_a(text, text, date) as
+  insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture,
+                                          attestation_chemin, valide_jusquau)
+  values (:A, $1, 'Assureur d’essai', '1 rue de l’Essai, 13410 Lambesc', 'France métropolitaine', $2, $3);
 -- Une ligne SANS chiffre (zone, pièce, réserve) : (id, devis, ordre, type, numéro).
 prepare titre(uuid, uuid, integer, text, bigint) as
   insert into public.devis_lignes (id, devis_id, ordre, type, designation, generation)
@@ -763,7 +827,7 @@ rollback;
 -- ==========================================================================
 
 \echo ''
-\echo '--- 12 a. A demande la liste du devis de B → OP027 (refus 1/13)'
+\echo '--- 12 a. A demande la liste du devis de B → OP027 (refus 1/19)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :B;
@@ -777,7 +841,7 @@ select * from public.motifs_refus_remise(:DB);
 \set e12a_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 b. A, un identifiant inventé → OP027 (refus 2/13)'
+\echo '--- 12 b. A, un identifiant inventé → OP027 (refus 2/19)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -787,7 +851,7 @@ select * from public.motifs_refus_remise(:DI);
 \set e12b_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 c. A, un identifiant vide → OP027 (refus 3/13)'
+\echo '--- 12 c. A, un identifiant vide → OP027 (refus 3/19)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -797,7 +861,7 @@ select * from public.motifs_refus_remise(null);
 \set e12c_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/13)'
+\echo '--- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/19)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -810,7 +874,7 @@ select * from public.motifs_refus_remise(:D1);
 \set e12d_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 e. P, un identifiant inventé → OP027 (refus 5/13)'
+\echo '--- 12 e. P, un identifiant inventé → OP027 (refus 5/19)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :P;
@@ -823,7 +887,7 @@ rollback;
 \echo '--- 12 f. DEPUIS UNE FONCTION security definer — comme la remise de 2c l’appellera. L’enveloppe est'
 \echo '          créée ET retirée dans la même transaction (le rollback la retire : sinon l’essai 49, cas 27b,'
 \echo '          compterait une definer de plus). Le devis de A passe (attendu t), puis, derrière deux'
-\echo '          savepoints : le devis de B → OP027 (refus 6/13), un identifiant inventé → OP027 (refus 7/13)'
+\echo '          savepoints : le devis de B → OP027 (refus 6/19), un identifiant inventé → OP027 (refus 7/19)'
 begin;
 create function public.essai_remise_enveloppe(p uuid)
 returns table (cle text)
@@ -857,8 +921,8 @@ rollback;
 select pg_temp.v(count(*)) as enveloppe_retiree_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
 
 \echo '--- 12 g. PAR LA CLÉ DE SERVICE (bypassrls) — jeton de A : son devis passe (attendu t), le devis de B → OP027'
-\echo '          (refus 8/13), un identifiant inventé → OP027 (refus 9/13) ; SANS jeton, le devis de A lui-même'
-\echo '          → OP027 (refus 10/13) : la clé de service n’est l’entreprise de personne'
+\echo '          (refus 8/19), un identifiant inventé → OP027 (refus 9/19) ; SANS jeton, le devis de A lui-même'
+\echo '          → OP027 (refus 10/19) : la clé de service n’est l’entreprise de personne'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :B;
@@ -892,7 +956,7 @@ select * from public.motifs_refus_remise(:D1);
 \set e12g3_msg :LAST_ERROR_MESSAGE
 rollback;
 
-\echo '--- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/13)'
+\echo '--- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/19)'
 begin;
 set local role anon;
 select * from public.motifs_refus_remise(:DI);
@@ -988,11 +1052,11 @@ select pg_temp.v(p.proacl::text !~ '(^\{|,)=X') as pas_public_attendu_t,
   from pg_proc p
  where p.oid = 'public.motifs_refus_remise(uuid)'::regprocedure;
 
-\echo '--- 14 c. LE CORPS, commentaires et chaînes retirés : il ne nomme QUE devis, devis_lignes et emetteur (plus'
-\echo '          est_mon_entreprise et emetteur_incomplet), et AUCUN des mots de l’origine ni des lectures entières'
-\echo '          (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de rien) ni'
-\echo '          `chantier_neuf_conso` (le motif du taux réduit ne lit que la question TVA) — attendu : la liste exacte,'
-\echo '          puis 0 | 0 | 0 | t'
+\echo '--- 14 c. LE CORPS, commentaires et chaînes retirés : il ne nomme QUE devis, devis_lignes, emetteur et, depuis'
+\echo '          2b-3, emetteur_assurances (plus est_mon_entreprise et emetteur_incomplet), et AUCUN des mots de l’origine'
+\echo '          ni des lectures entières (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de'
+\echo '          rien). `chantier_neuf_conso` en est SORTI en 2b-3 : le motif de l’acompte la lit ; que le motif du taux'
+\echo '          réduit ne la lise pas reste PROUVÉ par sa propriété (cas 17) — attendu : la liste exacte, puis 0 | 0 | 0 | t'
 with corps as (
   select regexp_replace(
            regexp_replace(
@@ -1006,9 +1070,9 @@ with corps as (
 )
 select pg_temp.v((select string_agg(distinct x[1], ',' order by x[1])
           from regexp_matches(src, 'public\s*\.\s*([a-z_][a-z0-9_]*)', 'g') as x)
-         = 'devis,devis_lignes,emetteur,emetteur_incomplet,est_mon_entreprise') as nomme_exactement_attendu_t,
+         = 'devis,devis_lignes,emetteur,emetteur_assurances,emetteur_incomplet,est_mon_entreprise') as nomme_exactement_attendu_t,
        pg_temp.v((select count(*) from regexp_matches(src,
-          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients|chantier_neuf_conso)\M',
+          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients)\M',
           'gi'))) as mots_interdits_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi'))) as lectures_entieres_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi'))) as mots_d_origine_attendu_0,
@@ -1087,7 +1151,7 @@ select pg_temp.v(client_id is null and pour_qui = 'consommateur' and pour_qui_cl
 execute motifs(:D1, 'devis_client');
 rollback;
 
-\echo '--- 15 g. une réponse INCONNUE → devis_pour_qui_check (refus 12/13), jugé en SQL juste après'
+\echo '--- 15 g. une réponse INCONNUE → devis_pour_qui_check (refus 12/19), jugé en SQL juste après'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -1296,7 +1360,7 @@ select pg_temp.v(count(*) filter (where id = :DX and chantier_neuf_conso_le >= n
   from public.devis where id in (:DX, :DY, :DZ);
 rollback;
 
-\echo '--- 18 b. le TÉLÉPHONE écrit la date → « permission denied for table devis » (refus 13/13), jugé en SQL juste après'
+\echo '--- 18 b. le TÉLÉPHONE écrit la date → « permission denied for table devis » (refus 13/19), jugé en SQL juste après'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -1311,9 +1375,454 @@ select pg_temp.v(:'e18b_err' = 'true' and :'e18b_code' = '42501'
 
 -- ==========================================================================
 \echo ''
-\echo '=== 19. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
+\echo '=== 19. LA RÉPARATION URGENTE (2b-3, 49.3 bis) — un POSTE seulement, par une contrainte À PART (devis_ligne_urgence_check) ==='
+\echo '    a. la donnée existe : un poste naît ÉTEINT (le défaut) ; A l’allume, en crée un né urgent, puis l’éteint, par'
+\echo '       le chemin d’un client (droits de colonne insert ET update) ; la liste n’en dit rien (« — » ×2)'
+\echo '    puis six refus, chacun le dernier ordre de sa transaction, jugés en SQL (refus 14 à 19 / 19)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+select pg_temp.v(urgence is false) as nait_eteinte_attendu_t from public.devis_lignes where id = :L1;
+update public.devis_lignes set urgence = true, generation = 3 where id = :L1;
+select pg_temp.v(urgence is true) as allumee_par_le_client_attendu_t from public.devis_lignes where id = :L1;
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+                                 prix_unitaire_centimes, taux_tva_centiemes, urgence, generation)
+values (:L2, :D1, 2000, 'poste', 'Ligne d’essai urgente', 1000, 'forfait', 5000, 0, true, 4);
+select pg_temp.v(count(*) = 2 and bool_and(urgence)) as deux_postes_urgents_attendu_t
+  from public.devis_lignes where devis_id = :D1;
+execute motifs(:D1, '—');
+update public.devis_lignes set urgence = false, generation = 5 where id = :L1;
+select pg_temp.v(urgence is false) as eteinte_par_le_client_attendu_t from public.devis_lignes where id = :L1;
+execute motifs(:D1, '—');
+rollback;
+
+\echo '--- 19 a. une OPTION marquée urgente → devis_ligne_urgence_check (refus 14/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+                                 prix_unitaire_centimes, taux_tva_centiemes, urgence, generation)
+values (:L1, :D1, 1000, 'option', 'Option d’essai', 1000, 'forfait', 5000, 0, true, 2);
+\set e19a_err :ERROR
+\set e19a_code :LAST_ERROR_SQLSTATE
+\set e19a_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 b. une ZONE marquée urgente → devis_ligne_urgence_check (refus 15/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, urgence, generation)
+values (:L1, :D1, 1000, 'zone', 'Zone d’essai', true, 2);
+\set e19b_err :ERROR
+\set e19b_code :LAST_ERROR_SQLSTATE
+\set e19b_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 c. une PIÈCE marquée urgente → devis_ligne_urgence_check (refus 16/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, urgence, generation)
+values (:L1, :D1, 1000, 'piece', 'Pièce d’essai', true, 2);
+\set e19c_err :ERROR
+\set e19c_code :LAST_ERROR_SQLSTATE
+\set e19c_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 d. une RÉSERVE marquée urgente → devis_ligne_urgence_check (refus 17/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, urgence, generation)
+values (:L1, :D1, 1000, 'reserve', 'Réserve d’essai', true, 2);
+\set e19d_err :ERROR
+\set e19d_code :LAST_ERROR_SQLSTATE
+\set e19d_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 e. un POSTE urgent changé en OPTION par update (l’application ne change jamais un type ; un client modifié'
+\echo '          le peut, `type` est dans grant update) → devis_ligne_urgence_check (refus 18/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
+                                 prix_unitaire_centimes, taux_tva_centiemes, urgence, generation)
+values (:L1, :D1, 1000, 'poste', 'Poste d’essai urgent', 1000, 'forfait', 5000, 0, true, 2);
+update public.devis_lignes set type = 'option', generation = 3 where id = :L1;
+\set e19e_err :ERROR
+\set e19e_code :LAST_ERROR_SQLSTATE
+\set e19e_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 f. une ZONE urgente ET mal formée (une quantité) → devis_ligne_forme_check, nommée la PREMIÈRE dans l’ordre'
+\echo '          alphabétique — la preuve, côté base, que CONTRAINTES_LIGNE range « urgence » en dernier (refus 19/19)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+insert into public.devis_lignes (id, devis_id, ordre, type, designation, quantite_milliemes, urgence, generation)
+values (:L1, :D1, 1000, 'zone', 'Zone d’essai', 1000, true, 2);
+\set e19f_err :ERROR
+\set e19f_code :LAST_ERROR_SQLSTATE
+\set e19f_msg :LAST_ERROR_MESSAGE
+rollback;
+
+\echo '--- 19 g. LE JUGEMENT : cinq refus de devis_ligne_urgence_check (23514), et devis_ligne_forme_check nommée devant elle (attendu : t ×6)'
+select pg_temp.v(:'e19a_err' = 'true' and :'e19a_code' = '23514'
+         and :'e19a_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"') as a_option_urgente_attendu_t,
+       pg_temp.v(:'e19b_err' = 'true' and :'e19b_code' = '23514'
+         and :'e19b_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"') as b_zone_urgente_attendu_t,
+       pg_temp.v(:'e19c_err' = 'true' and :'e19c_code' = '23514'
+         and :'e19c_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"') as c_piece_urgente_attendu_t,
+       pg_temp.v(:'e19d_err' = 'true' and :'e19d_code' = '23514'
+         and :'e19d_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"') as d_reserve_urgente_attendu_t,
+       pg_temp.v(:'e19e_err' = 'true' and :'e19e_code' = '23514'
+         and :'e19e_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"') as e_poste_change_en_option_attendu_t,
+       pg_temp.v(:'e19f_err' = 'true' and :'e19f_code' = '23514'
+         and :'e19f_msg' = 'new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"') as f_forme_nommee_d_abord_attendu_t;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 20. « À LA SIGNATURE » (2b-3, rang 10, devis_acompte_signature, une PRUDENCE) — permis seulement pour un client qui'
+\echo '        commande pour son entreprise, un bâtiment neuf (la question des DROITS), ou TOUTES les lignes chiffrées urgentes'
+\echo '        pour un client à titre privé ou une association ; jamais sans acompte demandé ==='
+\echo '    attendu, dans l’ordre : — (vide) ; — (faux) ; devis_acompte_signature (vrai : rang 10, prudence, la phrase) ;'
+\echo '      — (tout urgent, consommateur) ; devis_acompte_signature (une option) ; — (l’option retirée) ;'
+\echo '      devis_acompte_signature (un poste OFFERT non urgent) ; — (marqué) ; devis_acompte_signature (un poste non urgent) ;'
+\echo '      — (professionnel) ; — (chantier neuf, question des droits) ; devis_acompte_signature (chantier : non) ;'
+\echo '      — (tout urgent) ; — (une pièce ajoutée : un titre n’est jamais urgent, il ne compte pas) ;'
+\echo '      devis_pour_qui,devis_acompte_signature (réponse vide ET tout urgent : la garde du « is not true ») ;'
+\echo '      devis_pour_qui,devis_acompte_signature (réponse donnée pour un AUTRE client) ;'
+\echo '      devis_acompte_signature (petite entreprise hors de son activité, tout urgent) ; — (non_professionnel, tout urgent) ;'
+\echo '      — (consommateur) ; devis_acompte_signature (en EUROS, petite entreprise) ; — (sans acompte : l’échéance GARDÉE) ;'
+\echo '      devis_lignes,devis_acompte_signature (aucune ligne) ×2 (un titre n’est pas une ligne chiffrée)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+execute client_c2;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+update public.devis set acompte_centiemes = 3000, acompte_nature = 'acompte', generation = 3 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set acompte_a_la_signature = false, generation = 4 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set acompte_a_la_signature = true, generation = 5 where id = :D1;
+select pg_temp.v(acompte_a_la_signature is true) as a_la_signature_ecrite_par_le_client_attendu_t
+  from public.devis where id = :D1;
+execute motifs(:D1, 'devis_acompte_signature');
+select pg_temp.v(count(*) = 1 and bool_and(rang = 10 and nature = 'prudence' and ligne_id is null
+         and phrase = 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.')) as signature_rang_nature_phrase_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_acompte_signature';
+update public.devis_lignes set urgence = true, generation = 6 where id = :L1;
+execute motifs(:D1, '—');
+execute chiffree(:L2, :D1, 2000, 'option', 10000, 0, false, 7);
+execute motifs(:D1, 'devis_acompte_signature');
+delete from public.devis_lignes where id = :L2;
+execute motifs(:D1, '—');
+execute chiffree(:L3, :D1, 3000, 'poste', 4500, 0, true, 8);
+execute motifs(:D1, 'devis_acompte_signature');
+update public.devis_lignes set urgence = true, generation = 9 where id = :L3;
+execute motifs(:D1, '—');
+execute chiffree(:L4, :D1, 4000, 'poste', 10000, 0, false, 10);
+execute motifs(:D1, 'devis_acompte_signature');
+update public.devis set pour_qui = 'professionnel', generation = 11 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'consommateur', chantier_neuf_conso = true, generation = 12 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set chantier_neuf_conso = false, generation = 13 where id = :D1;
+execute motifs(:D1, 'devis_acompte_signature');
+update public.devis_lignes set urgence = true, generation = 14 where id = :L4;
+select pg_temp.v(count(*) filter (where type in ('poste', 'option')) = 3 and bool_and(urgence))
+         as toutes_les_lignes_chiffrees_urgentes_attendu_t
+  from public.devis_lignes where devis_id = :D1;
+execute motifs(:D1, '—');
+-- Un TITRE (une pièce) n'entre pas dans « tout urgent » : il n'est jamais
+-- urgent (49.5), et ne doit pas faire revenir le motif (sabotage s8 de la
+-- phase de la base : le filtre `type in ('poste', 'option')` retiré passait
+-- au vert sans ce cas — un titre est faux, donc « pas toutes »).
+execute titre(:L6, :D1, 500, 'piece', 15);
+execute motifs(:D1, '—');
+update public.devis set pour_qui = null, generation = 16 where id = :D1;
+execute motifs(:D1, 'devis_pour_qui,devis_acompte_signature');
+update public.devis set pour_qui = 'consommateur', pour_qui_client = :C2, generation = 17 where id = :D1;
+execute motifs(:D1, 'devis_pour_qui,devis_acompte_signature');
+update public.devis set pour_qui = 'professionnel_hors_activite', pour_qui_client = :C1, generation = 18 where id = :D1;
+execute motifs(:D1, 'devis_acompte_signature');
+update public.devis set pour_qui = 'non_professionnel', generation = 19 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'consommateur', generation = 20 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set pour_qui = 'professionnel_hors_activite', acompte_centiemes = null, acompte_centimes = 5000,
+                        generation = 21 where id = :D1;
+execute motifs(:D1, 'devis_acompte_signature');
+update public.devis set acompte_centimes = null, acompte_nature = null, generation = 22 where id = :D1;
+execute motifs(:D1, '—');
+select pg_temp.v(acompte_a_la_signature is true) as echeance_gardee_sans_acompte_attendu_t from public.devis where id = :D1;
+update public.devis set pour_qui = 'consommateur', acompte_centiemes = 3000, acompte_nature = 'acompte', generation = 23
+ where id = :D1;
+delete from public.devis_lignes where devis_id = :D1;
+execute motifs(:D1, 'devis_lignes,devis_acompte_signature');
+execute titre(:L5, :D1, 500, 'zone', 24);
+execute motifs(:D1, 'devis_lignes,devis_acompte_signature');
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 21. L’ATTESTATION DÉCENNALE (2b-3, rang 11) — UNE clé au plus : devis_decennale (pas de réponse, prudence),'
+\echo '        devis_attestation_date (« Oui », jointe SANS date, prudence), devis_attestation (« Oui », rien de joint ou des'
+\echo '        dates passées, LA LOI) ; « Non » : rien n’est lu. La décennale du décor est retirée d’abord (la donnée existe) ==='
+\echo '    attendu, dans l’ordre : 0 assurance ; devis_decennale (rang, nature, phrase) ; devis_attestation (idem) ; — (« Non ») ;'
+\echo '      devis_attestation_date (idem) ; devis_decennale SEUL (réponse vidée, même assurance) ;'
+\echo '      devis_attestation_date (une sans date + une passée) ; devis_attestation (il ne reste que la passée) ;'
+\echo '      devis_attestation (+ une décennale SANS fichier datée 2999, + une RC pro jointe et valable) ;'
+\echo '      — (une décennale jointe valable jusqu’au jour de Paris, dans la même transaction) ; trois décennales ;'
+\echo '      — (une sans date en plus) ; — (« Non »)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+delete from public.emetteur_assurances where pro_id = :A;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+select pg_temp.v(count(*)) as aucune_assurance_attendu_0 from public.emetteur_assurances where pro_id = :A;
+execute motifs(:D1, 'devis_decennale');
+select pg_temp.v(count(*) = 1 and bool_and(rang = 11 and nature = 'prudence' and ligne_id is null
+         and phrase = 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.')) as decennale_rang_nature_phrase_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_decennale';
+update public.devis set engage_decennale = true, generation = 3 where id = :D1;
+select pg_temp.v(engage_decennale is true) as oui_ecrit_par_le_client_attendu_t from public.devis where id = :D1;
+execute motifs(:D1, 'devis_attestation');
+select pg_temp.v(count(*) = 1 and bool_and(rang = 11 and nature = 'loi' and ligne_id is null
+         and phrase = 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.')) as attestation_rang_nature_phrase_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_attestation';
+update public.devis set engage_decennale = false, generation = 4 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set engage_decennale = true, generation = 5 where id = :D1;
+reset role;
+execute assurance_a('decennale', :A || '/attestation-sans-date.pdf', null);
+set local role authenticated;
+execute motifs(:D1, 'devis_attestation_date');
+select pg_temp.v(count(*) = 1 and bool_and(rang = 11 and nature = 'prudence' and ligne_id is null
+         and phrase = 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.')) as attestation_date_rang_nature_phrase_attendu_t
+  from public.motifs_refus_remise(:D1) where cle = 'devis_attestation_date';
+update public.devis set engage_decennale = null, generation = 6 where id = :D1;
+execute motifs(:D1, 'devis_decennale');
+update public.devis set engage_decennale = true, generation = 7 where id = :D1;
+reset role;
+execute assurance_a('decennale', :A || '/attestation-hier.pdf', (now() at time zone 'Europe/Paris')::date - 1);
+set local role authenticated;
+execute motifs(:D1, 'devis_attestation_date');
+reset role;
+delete from public.emetteur_assurances where pro_id = :A and valide_jusquau is null;
+set local role authenticated;
+execute motifs(:D1, 'devis_attestation');
+reset role;
+execute assurance_a('decennale', null, '2999-12-31');
+execute assurance_a('rc_pro', :A || '/rc-pro.pdf', '2999-12-31');
+set local role authenticated;
+execute motifs(:D1, 'devis_attestation');
+reset role;
+execute assurance_a('decennale', :A || '/attestation-jour.pdf', (now() at time zone 'Europe/Paris')::date);
+set local role authenticated;
+execute motifs(:D1, '—');
+select pg_temp.v(count(*) filter (where nature = 'decennale')) as trois_decennales_attendu_3
+  from public.emetteur_assurances where pro_id = :A;
+reset role;
+execute assurance_a('decennale', :A || '/attestation-sans-date-2.pdf', null);
+set local role authenticated;
+execute motifs(:D1, '—');
+update public.devis set engage_decennale = false, generation = 8 where id = :D1;
+execute motifs(:D1, '—');
+rollback;
+
+\echo '--- 21 b. LE JOUR DE PARIS, ÉPROUVÉ ET NON LU (relecture BASE, M5) — la fonction tourne sous un AUTRE fuseau :'
+\echo '          Kiritimati (UTC+14), une attestation valable jusqu’au jour de Paris → — ; puis UTC−12 (Etc/GMT+12), une'
+\echo '          attestation qui finissait HIER à Paris → devis_attestation. Avec `current_date`, l’un des deux rougit À TOUTE'
+\echo '          HEURE : le premier quand Paris a passé midi environ, le second avant (attendu : t, —, devis_attestation, t)'
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+delete from public.emetteur_assurances where pro_id = :A;
+execute assurance_a('decennale', :A || '/attestation-jour.pdf', (now() at time zone 'Europe/Paris')::date);
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+update public.devis set engage_decennale = true, generation = 3 where id = :D1;
+set local timezone = 'Pacific/Kiritimati';
+select pg_temp.v(current_setting('TimeZone') = 'Pacific/Kiritimati') as fuseau_kiritimati_attendu_t;
+select current_date as jour_du_fuseau, (now() at time zone 'Europe/Paris')::date as jour_de_paris;
+execute motifs(:D1, '—');
+reset role;
+update public.emetteur_assurances set valide_jusquau = (now() at time zone 'Europe/Paris')::date - 1 where pro_id = :A;
+set local role authenticated;
+set local timezone = 'Etc/GMT+12';
+select current_date as jour_du_fuseau, (now() at time zone 'Europe/Paris')::date as jour_de_paris;
+execute motifs(:D1, 'devis_attestation');
+select pg_temp.v((now() at time zone 'Pacific/Kiritimati')::date <> (now() at time zone 'Europe/Paris')::date
+              or (now() at time zone 'Etc/GMT+12')::date <> (now() at time zone 'Europe/Paris')::date)
+         as la_paire_departage_a_cette_heure_attendu_t;
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 22. LA DÉCENNALE D’UNE AUTRE ENTREPRISE NE COMPTE PAS — éprouvé par une ENVELOPPE security definer (relecture'
+\echo '        BASE, I2) : comme la remise de 2c l’appellera, la RLS ne filtre plus, et seul `a.pro_id = v_pro` sépare A de B ==='
+\echo '    A sans décennale, B avec une décennale jointe et valable. attendu : 1 ; devis_decennale (par l’enveloppe) ;'
+\echo '    devis_attestation (par l’enveloppe, « Oui ») ; devis_attestation (appel direct) ; puis l’enveloppe retirée (0)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+delete from public.emetteur_assurances where pro_id = :A;
+insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture,
+                                        attestation_chemin, valide_jusquau)
+values (:B, 'decennale', 'Assureur d’essai', '1 rue de l’Essai, 13100 Aix-en-Provence', 'France métropolitaine',
+        :B || '/attestation.pdf', '2999-12-31');
+select pg_temp.v(count(*)) as decennale_valable_de_b_attendu_1
+  from public.emetteur_assurances
+ where pro_id = :B and nature = 'decennale' and attestation_chemin is not null and valide_jusquau >= current_date;
+create function public.essai_remise_enveloppe(p uuid)
+returns table (cle text)
+language plpgsql
+security definer
+set search_path = public
+as $enveloppe$
+begin
+  return query select m.cle from public.motifs_refus_remise(p) m;
+end;
+$enveloppe$;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = 'devis_decennale') as enveloppe_sans_reponse_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+update public.devis set engage_decennale = true, generation = 3 where id = :D1;
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = 'devis_attestation') as enveloppe_oui_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+execute motifs(:D1, 'devis_attestation');
+rollback;
+select pg_temp.v(count(*)) as enveloppe_retiree_22_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 23. D4-c, ENCORE (2b-3) — l’urgence est un FAIT DE LIGNE, jamais l’origine : trois devis identiques sauf leurs liens et'
+\echo '        la façon dont ils ont été ouverts (manuelle ; demande + urgence ; urgence seule), « à la signature », un acompte,'
+\echo '        à titre privé, A sans décennale, rendent la MÊME liste ==='
+\echo '    état 1 : un poste urgent et un poste NON urgent → devis_acompte_signature,devis_decennale ;'
+\echo '    état 2 : les deux urgents → devis_decennale ; état 3 : « Non » à la décennale → « — » (t, t à chaque fois)'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+delete from public.emetteur_assurances where pro_id = :A;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, client_id, quote_request_id, sos_request_id, source, objet,
+                          lieu_adresse, lieu_code_postal, lieu_ville, delai_execution, validite_jours,
+                          acompte_centiemes, acompte_nature, acompte_a_la_signature, pour_qui, pour_qui_client, generation) values
+ (:DX, :A, :C1, null, null, 'manuelle', 'Fuite', '4 rue de l''Essai', '13410', 'Lambesc', 'Aujourd’hui', 30,
+  3000, 'acompte', true, 'consommateur', :C1, 1),
+ (:DY, :A, :C1, :QA,  :SA,  'demande',  'Fuite', '4 rue de l''Essai', '13410', 'Lambesc', 'Aujourd’hui', 30,
+  3000, 'acompte', true, 'consommateur', :C1, 1),
+ (:DZ, :A, :C1, null, :SA,  'urgence',  'Fuite', '4 rue de l''Essai', '13410', 'Lambesc', 'Aujourd’hui', 30,
+  3000, 'acompte', true, 'consommateur', :C1, 1);
+select pg_temp.v(string_agg(source || ':' || (quote_request_id is not null) || ':' || (sos_request_id is not null), ',' order by id)
+         = 'manuelle:false:false,demande:true:true,urgence:false:true') as origines_differentes_23_attendu_t
+  from public.devis where id in (:DX, :DY, :DZ);
+execute chiffree('f4930000-0000-4000-8000-0000000000a1', :DX, 1000, 'poste', 15000, 0, false, 2);
+execute chiffree('f4930000-0000-4000-8000-0000000000a2', :DX, 2000, 'poste', 9000,  0, false, 3);
+execute chiffree('f4930000-0000-4000-8000-0000000000b1', :DY, 1000, 'poste', 15000, 0, false, 2);
+execute chiffree('f4930000-0000-4000-8000-0000000000b2', :DY, 2000, 'poste', 9000,  0, false, 3);
+execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste', 15000, 0, false, 2);
+execute chiffree('f4930000-0000-4000-8000-0000000000c2', :DZ, 2000, 'poste', 9000,  0, false, 3);
+update public.devis_lignes set urgence = true, generation = 4 where ordre = 1000 and devis_id in (:DX, :DY, :DZ);
+\echo '-- état 1 (attendu : t, t)'
+execute trois_listes(:DX, :DY, :DZ, 'devis_acompte_signature,devis_decennale');
+\echo '-- état 2 (attendu : t, t)'
+update public.devis_lignes set urgence = true, generation = 5 where ordre = 2000 and devis_id in (:DX, :DY, :DZ);
+execute trois_listes(:DX, :DY, :DZ, 'devis_decennale');
+\echo '-- état 3 (attendu : « — », t, t)'
+update public.devis set engage_decennale = false, generation = 6 where id in (:DX, :DY, :DZ);
+execute trois_listes(:DX, :DY, :DZ, '—');
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 24. LES ONZE RANGS À LA FOIS (2b-3) — le devis du cas 10, plus « à la signature » et A sans décennale : rangs 1 à 11,'
+\echo '        chaque phrase celle du contrat (SEIZE clés sur onze rangs), ligne_id posée sur le seul motif 3 ; aucune'
+\echo '        phrase ne porte d’euro, d’apostrophe droite, d’espace insécable ni de barre oblique, et le seul chiffre est'
+\echo '        le « 8e » de « Dès le 8e jour » (le libellé de la pastille) ==='
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+delete from public.emetteur_assurances where pro_id = :A;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.devis (id, pro_id, acompte_centimes, remise_centimes, acompte_a_la_signature, generation)
+values (:D1, :A, 5000, 100, true, 1);
+execute chiffree(:L1, :D1, 1000, 'option', 10000, 2000, false, 2);
+execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee,devis_acompte_signature,devis_decennale');
+with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)),
+     contrat(rang, cle, nature, phrase) as (values
+  (1, 'devis_client',            'regle_opus', 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'),
+  (1, 'devis_pour_qui',          'regle_opus', 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'),
+  (2, 'devis_lignes',            'regle_opus', 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'),
+  (3, 'devis_taux_franchise',    'loi',        'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'),
+  (3, 'devis_taux_sans_tva',     'prudence',   'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'),
+  (3, 'devis_taux_reduit_neuf',  'prudence',   'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'),
+  (4, 'devis_lieu',              'prudence',   'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
+  (5, 'devis_delai',             'regle_opus', 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'),
+  (6, 'devis_validite',          'prudence',   'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'),
+  (7, 'devis_acompte_nature',    'prudence',   'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'),
+  (8, 'devis_acompte_ramene',    'prudence',   'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'),
+  (9, 'devis_reduction_ramenee', 'prudence',   'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'),
+  (10, 'devis_acompte_signature', 'prudence',  'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'),
+  (11, 'devis_attestation',       'loi',       'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'),
+  (11, 'devis_attestation_date',  'prudence',  'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'),
+  (11, 'devis_decennale',         'prudence',  'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'))
+select pg_temp.v((select count(*) from m)) as lignes_attendu_11,
+       pg_temp.v((select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9,10,11') as rangs_dans_l_ordre_attendu_t,
+       pg_temp.v((select count(*) from m join contrat c using (rang)
+         where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase)) as conformes_au_contrat_attendu_11,
+       pg_temp.v((select count(*) from contrat) = 16 and (select count(distinct rang) from contrat) = 11) as seize_cles_onze_rangs_attendu_t,
+       pg_temp.v((select bool_and((m.ligne_id is not null) = (m.rang = 3)) from m)) as ligne_id_seulement_au_3_attendu_t,
+       pg_temp.v((select bool_and(position('€' in phrase) = 0 and position('''' in phrase) = 0
+                        and position(chr(160) in phrase) = 0 and position(chr(8239) in phrase) = 0
+                        and position(chr(92) in phrase) = 0
+                        and replace(phrase, 'Dès le 8e jour', '') !~ '[0-9]') from contrat)) as phrases_propres_attendu_t,
+       pg_temp.v((select bool_and(char_length(phrase) <= 200) from contrat where rang >= 10)) as phrases_courtes_attendu_t;
+rollback;
+
+
+-- ==========================================================================
+\echo ''
+\echo '=== 25. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 188e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 268e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

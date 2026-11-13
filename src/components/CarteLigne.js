@@ -57,6 +57,25 @@
  * effacée au premier champ quitté passaient tous au vert (relecture
  * « écran » du lot P, ECRAN1).
  *
+ * LA RÉPARATION URGENTE (lot 2b-3, cahier §3.4, annexe A.2) — sur un POSTE
+ * seulement, APRÈS les trois interrupteurs du prix et avant « Monter /
+ * Descendre » : le sous-titre « Pour les droits de votre client », puis un
+ * interrupteur, la brique d'« Offert ». Trois règles, et aucune n'est
+ * cosmétique :
+ *   - IL N'EST JAMAIS ALLUMÉ SANS UN APPUI : ni par l'origine du devis, ni
+ *     par la ligne précédente, ni par une proposition (la base de postes, la
+ *     mémoire). Allumé, il RETIRE des droits au client ;
+ *   - SON AIDE EST FIXE, dans la rangée touchée : si elle changeait avec
+ *     l'état, la rangée changerait de hauteur sous le doigt. Ce qui dépend
+ *     de l'état — le prix d'une erreur — va DESSOUS, dans un texte à part,
+ *     et il est annoncé à VoiceOver à l'allumage (`accessibilityLiveRegion`
+ *     n'existe que sur Android). L'urgence vient EN DERNIER : ce texte ne
+ *     pousse que « Monter / Descendre / Retirer », jamais une autre cible ;
+ *   - SUR UN DEVIS VENU D'UNE URGENCE, une ligne FIXE au-dessus le dit, et
+ *     elle LIMITE (« ne marquez une ligne que si… ») : un texte, jamais la
+ *     case cochée. La carte reçoit cette VALEUR (`depuisUneUrgence`) : elle
+ *     ne lit pas l'origine du devis.
+ *
  * TOUCHER « Ajouter à ma base » (ou « Changer ma référence », « Modifier »,
  * « Fixer le prix ») : la carte s'ENREGISTRE d'abord (le même travail que
  * quitter un champ), FERME le clavier — sur iOS, il resterait sinon attaché
@@ -78,9 +97,11 @@ import ChampDesignation from './ChampDesignation';
 import ChampMontant from './ChampMontant';
 import { CLAVIER } from '../lib/clavier';
 import { versCentimes } from '../lib/centimes';
+import * as retour from '../lib/retour';
 import {
   UNITES, UNITE_MAIN_OEUVRE, tauxLisible, versMilliemes, milliemesEnSaisie, centimesEnSaisie,
   milliemesLisibles, AIDE_TAUX_REDUIT,
+  LE_CHANTIER, LIBELLE_URGENCE, AIDE_URGENCE, URGENCE_SI_ALLUMEE, DEPUIS_UNE_URGENCE,
 } from '../lib/devis';
 import {
   vueDeLaBase, posteDeLaLigne, posteDepuisLaLigne, valeursDeLaProposition, prixAEcrire, phraseUniteApres, PHRASE_UNITE_VIDE,
@@ -125,6 +146,11 @@ const CarteLigne = forwardRef(function CarteLigne({
   /* OUVERTE DEPUIS « POUR LE REMETTRE » (lot 2b-1) : son retour ramène à la
      LISTE de ce qui manque, et le dit. */
   depuisLaListe = false,
+  /* LE DEVIS VIENT D'UNE DEMANDE D'URGENCE (lot 2b-3) : une VALEUR, calculée
+     par la saisie — la carte ne reçoit pas le devis. Elle pose une ligne
+     fixe au-dessus de l'interrupteur « Réparation urgente », jamais la case
+     cochée. */
+  depuisUneUrgence = false,
   onEnregistrer, onFermer, onPosteSuivant, onPosteDansPiece, onMonter, onDescendre, onRetirer,
 }, ref) {
   const refDesignation = useRef(null);
@@ -513,6 +539,36 @@ const CarteLigne = forwardRef(function CarteLigne({
                 onPress={() => enregistrer({ offert: !ligne.offert })}
               />
             </View>
+
+            {/* LA RÉPARATION URGENTE (lot 2b-3) — sur un POSTE seulement :
+                une option, un titre, une réserve n'en ont pas
+                (`devis_ligne_urgence_check`). */}
+            {ligne.type === 'poste' && (
+              <View style={s.blocUrgence}>
+                {/* Un devis venu d'une urgence : une ligne FIXE, posée quel
+                    que soit l'état de l'interrupteur (rien ne bouge à
+                    l'appui) — elle limite, elle n'invite pas à marquer. */}
+                {depuisUneUrgence && <Text style={s.aide}>{DEPUIS_UNE_URGENCE}</Text>}
+                <Text style={s.sousTitre} accessibilityRole="header">{LE_CHANTIER.q1.sousTitre}</Text>
+                <Interrupteur
+                  actif={!!ligne.urgence}
+                  libelle={LIBELLE_URGENCE}
+                  aide={AIDE_URGENCE}
+                  onPress={() => {
+                    const allume = !ligne.urgence;
+                    /* Le prix d'une erreur s'ANNONCE à l'allumage : le texte
+                       apparaît sous la rangée, et rien d'autre ne le dirait
+                       à VoiceOver. */
+                    if (allume) retour.annoncer(URGENCE_SI_ALLUMEE);
+                    enregistrer({ urgence: allume });
+                  }}
+                />
+                {sous('urgence')}
+                {/* SOUS la rangée, allumé seulement : la rangée touchée ne
+                    change pas de hauteur. */}
+                {!!ligne.urgence && <Text style={s.risque}>{URGENCE_SI_ALLUMEE}</Text>}
+              </View>
+            )}
           </>
         )}
 
@@ -621,6 +677,13 @@ const s = StyleSheet.create({
   deux: { flexDirection: 'row', gap: S.sm },
   moitie: { flex: 1, minWidth: 0 },
   interrupteurs: { gap: S.sm, marginTop: S.md },
+  /* Le bloc de la réparation urgente (2b-3) : un sous-titre comme ceux de
+     « Le chantier », puis l'interrupteur — et, allumé, le risque dessous. */
+  blocUrgence: { gap: S.xs, marginTop: S.lg },
+  sousTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accent2, marginTop: S.xs },
+  /* Le prix d'une erreur : à l'encre du texte, pas le rouge des refus —
+     rien n'est refusé, la phrase dit ce que la marque engage. */
+  risque: { fontFamily: F.inter, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xs },
   aide: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit), marginTop: S.xs },
   /* Le montant d'une phrase d'aide : à l'encre du texte, chiffres alignés. */
   aideMontant: { fontSize: T.petit, color: C.ink },

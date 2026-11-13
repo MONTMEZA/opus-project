@@ -177,7 +177,7 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   client_ville_check: TEXTE_TROP_LONG,
 
   /* --- Le chiffrage d'un devis : section 49 (lot 1 du module devis) ---
-     LES TRENTE ET UNE (vingt-trois au lot 1, sept au lot 2a, une à 2b-2), et pas seulement celles qu'on tape. L'écran refuse
+     LES TRENTE-DEUX (vingt-trois au lot 1, sept au lot 2a, une à 2b-2, une à 2b-3), et pas seulement celles qu'on tape. L'écran refuse
      AVANT d'envoyer (`validerLigne`, `validerDevis`, dans `devis.js`, avec
      les mêmes noms) : ces phrases sortent donc d'une version en retard,
      d'un client modifié — ou de la base qui voit ce que l'écran ne voit
@@ -249,6 +249,12 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
     + 'y a sans doute un zéro de trop dans la quantité ou le prix.',
   devis_ligne_type_check: APPLICATION_EN_RETARD,
   devis_ligne_unite_check: 'choisissez une unité dans la liste.',
+  /* 2b-3 (annexe A.5) : la marque « réparation urgente » ne va que sur un
+     poste. L'écran ne la propose que là ; cette phrase sort d'une version
+     en retard ou d'un client modifié. Rien n'est enregistré : la ligne
+     entière est refusée. */
+  devis_ligne_urgence_check: 'seul un poste peut être marqué « réparation urgente » — ni une option, ni un titre, ni '
+    + 'une réserve. Rien n’a été enregistré.',
   devis_tva_arrondi_check: APPLICATION_EN_RETARD,
   devis_tva_nb_check: APPLICATION_EN_RETARD,
   devis_tva_remise_check: APPLICATION_EN_RETARD,

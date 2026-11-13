@@ -1,8 +1,9 @@
 /**
- * « LE CHANTIER » — la carte des deux questions sur le neuf (lot 2b-2 du
- * module devis, cahier §3.5, annexe A.4).
+ * « LE CHANTIER » — la carte des questions sur le chantier (lot 2b-2 du
+ * module devis, cahier §3.5, annexe A.4 ; lot 2b-3, cahier §3.6, annexe
+ * A.3 : la troisième, la garantie décennale).
  *
- * DEUX QUESTIONS INDÉPENDANTES, parce que leurs « Oui » vont en sens
+ * DES QUESTIONS INDÉPENDANTES, parce que leurs « Oui » vont en sens
  * inverse (cahier §1.2, C) :
  *   1. « Pour les droits de votre client » — le « Oui » RETIRE des
  *      protections (C. consom. L. 221-2 12°) : il se CONFIRME, par une
@@ -11,7 +12,16 @@
  *      « Non » se fait d'un appui, sans confirmation ;
  *   2. « Pour la TVA » — le « Oui » AJOUTE une garde : une ligne à 10 % ou
  *      5,5 % empêchera de remettre le devis (`devis_taux_reduit_neuf`).
- *      « Non (par défaut) » tant que rien n'est répondu.
+ *      « Non (par défaut) » tant que rien n'est répondu ;
+ *   3. « Pour votre assurance » (2b-3, réponse P1 du 12/11 : « A ») — « Ces
+ *      travaux peuvent-ils engager votre garantie décennale ? ». Vide, Opus
+ *      compte « Oui », par prudence : la pastille le dit (« Oui (par
+ *      défaut) »). « Oui » (ou rien) sans attestation valable dans « Mon
+ *      entreprise » empêchera de remettre le devis. AUCUNE confirmation : la
+ *      réponse se dit par devis, et son défaut est le cas protecteur.
+ * « NON » EST À GAUCHE DANS LES TROIS (E-I3) : un pouce qui vise « Oui » à
+ * droite par habitude toucherait sinon « Non » — la réponse qui retire
+ * l'exigence.
  *
  * UNE CARTE PLEIN ÉCRAN, une valeur de plus de l'état UNIQUE `carte` de la
  * saisie (`CARTE_CHANTIER`), ouverte par la rangée « Le chantier » posée
@@ -23,14 +33,22 @@
  * CE QUI EST MONTRÉ VIENT DE `questionsDuChantier` (devis.js) : la première
  * question se tait pour une réponse « pour son entreprise » (sans objet), la
  * seconde n'existe qu'au régime réel LU — ou quand sa valeur est vraie : on
- * ne renvoie jamais vers une question invisible.
+ * ne renvoie jamais vers une question invisible. La troisième est toujours
+ * là.
+ *
+ * OUVERTE DEPUIS UN POINT (2b-3, E-I1) : la carte s'ouvre SUR la question
+ * visée (`questionInitiale`, `'q2'` ou `'q3'`) — sans elle, la troisième
+ * tombait sous le pli sur les trois tailles, sous deux aides longues. Le
+ * défilement se pose UNE fois, quand la question a sa place (le modèle de
+ * `champInitial` dans « Conditions ») ; ouverte depuis sa rangée, elle
+ * s'ouvre en haut.
  *
  * Chaque pastille ÉCRIT par la file de l'en-tête (`onRepondre`), et
  * l'écriture se DIT : « enregistrement… », « pas enregistré », calculés à
  * chaque événement de la file, jamais mémorisés (cahier §3.8). La date du
  * « Oui » est celle de la BASE.
  */
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View, Text, Pressable, ScrollView, StyleSheet,
 } from 'react-native';
@@ -39,7 +57,8 @@ import {
 } from '../theme';
 import { Pastille } from './ui';
 import {
-  LE_CHANTIER, questionsDuChantier, libelleOuiDuChantier, pastillesDeLaQuestionTva, suffixeDEtat,
+  LE_CHANTIER, questionsDuChantier, libelleOuiDuChantier, pastillesDeLaQuestionTva, pastillesDeLaQuestionDecennale,
+  suffixeDEtat,
 } from '../lib/devis';
 
 /* L'état de l'écriture d'UNE réponse, dit sous ses pastilles : « en
@@ -54,14 +73,29 @@ function etatDeLaReponse(e) {
 
 export default function ChantierDevis({
   devis, regime = null, confirmeLe = null, etats = null, onRepondre, onDemanderConfirmation, onFermer,
-  depuisLaListe = false,
+  depuisLaListe = false, questionInitiale = null,
 }) {
   const d = devis || {};
-  const { q1, q2 } = questionsDuChantier({ devis: d, regime });
+  const { q1, q2, q3 } = questionsDuChantier({ devis: d, regime });
   /* L'état de chaque réponse, calculé par la saisie depuis la file à chaque
-     événement (jamais mémorisé) : `{ q1: { enRoute, enEchec }, q2: … }`. */
+     événement (jamais mémorisé) : `{ q1: { enRoute, enEchec }, q2: …, q3: … }`. */
   const e1 = (etats && etats.q1) || {};
   const e2 = (etats && etats.q2) || {};
+  const e3 = (etats && etats.q3) || {};
+  /* LA QUESTION SUR LAQUELLE LA CARTE S'OUVRE (2b-3, E-I1) : le défilement
+     se pose UNE fois, à la mise en page de la question visée — après, c'est
+     l'artisan qui défile. */
+  const refDefile = useRef(null);
+  const place = useRef(false);
+  /* Appelée par la mise en page, jamais pendant le rendu : une fonction
+     posée telle quelle (`onLayout={(e) => ancrer(e, 'q3')}`), pas une
+     fonction qui en fabrique une — le linter refuse qu'une référence passe
+     dans une fonction appelée au rendu. */
+  const ancrer = (e, cle) => {
+    if (place.current || cle !== questionInitiale || !refDefile.current) return;
+    place.current = true;
+    refDefile.current.scrollTo({ y: Math.max(0, e.nativeEvent.layout.y - S.md), animated: false });
+  };
   const oui1 = d.chantierNeufConso === true;
   const oui2 = d.chantierNeufTva === true;
   const [nonTva, ouiTva] = pastillesDeLaQuestionTva(d.chantierNeufTva);
@@ -70,6 +104,12 @@ export default function ChantierDevis({
   const ouiDit = libelleOuiDuChantier({ confirmeLe, enRoute: !!e1.enRoute, enEchec: !!e1.enEchec });
   const etat1 = oui1 ? null : etatDeLaReponse(e1);
   const etat2 = etatDeLaReponse(e2);
+  /* La décennale (2b-3) : vide = « Oui », par prudence — la pastille
+     « Oui (par défaut) » est donc la réponse comptée, comme « Non (par
+     défaut) » à la question TVA. « Non » à GAUCHE. */
+  const non3 = d.engageDecennale === false;
+  const [nonDec, ouiDec] = pastillesDeLaQuestionDecennale(d.engageDecennale);
+  const etat3 = etatDeLaReponse(e3);
 
   return (
     /* MODALE pour VoiceOver, comme les autres cartes : sous elle, la liste,
@@ -90,7 +130,7 @@ export default function ChantierDevis({
         <View style={s.place} />
       </View>
 
-      <ScrollView contentContainerStyle={s.contenu} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={refDefile} contentContainerStyle={s.contenu} keyboardShouldPersistTaps="handled">
         <Text style={s.grandTitre} accessibilityRole="header">{LE_CHANTIER.titre}</Text>
         <Text style={s.aide}>{LE_CHANTIER.introduction}</Text>
 
@@ -119,7 +159,7 @@ export default function ChantierDevis({
         )}
 
         {q2 && (
-          <View style={s.question}>
+          <View style={s.question} onLayout={(e) => ancrer(e, 'q2')}>
             <Text style={s.sousTitre} accessibilityRole="header">{LE_CHANTIER.q2.sousTitre}</Text>
             <Text style={s.enonce}>{LE_CHANTIER.q2.question}</Text>
             <View style={s.pastilles}>
@@ -136,6 +176,30 @@ export default function ChantierDevis({
             </View>
             {!!etat2 && <Text style={s.etat} accessibilityLiveRegion="polite">{etat2}</Text>}
             <Text style={s.aide}>{LE_CHANTIER.q2.aide}</Text>
+          </View>
+        )}
+
+        {/* LA DÉCENNALE (2b-3) — toujours montrée. Un appui écrit, sans
+            confirmation ; « Oui (par défaut) » touché sur une réponse vide
+            écrit « Oui » : l'artisan confirme ce qu'Opus comptait. */}
+        {q3 && (
+          <View style={s.question} onLayout={(e) => ancrer(e, 'q3')}>
+            <Text style={s.sousTitre} accessibilityRole="header">{LE_CHANTIER.q3.sousTitre}</Text>
+            <Text style={s.enonce}>{LE_CHANTIER.q3.question}</Text>
+            <View style={s.pastilles}>
+              <Pastille
+                label={nonDec}
+                choisie={non3}
+                onPress={() => { if (d.engageDecennale !== false) onRepondre({ engageDecennale: false }); }}
+              />
+              <Pastille
+                label={ouiDec}
+                choisie={!non3}
+                onPress={() => { if (d.engageDecennale !== true) onRepondre({ engageDecennale: true }); }}
+              />
+            </View>
+            {!!etat3 && <Text style={s.etat} accessibilityLiveRegion="polite">{etat3}</Text>}
+            <Text style={s.aide}>{LE_CHANTIER.q3.aide}</Text>
           </View>
         )}
       </ScrollView>

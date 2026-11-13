@@ -37,8 +37,9 @@
  *      ne doit son adresse qu'au particulier : `conso_`.
  *   2. AUCUNE assurance n'est exigée en général : la table et l'écran
  *      restent, l'assurance est facultative. Ce qui est dû selon les
- *      travaux d'un devis (la décennale jointe pour un ouvrage) relève des
- *      lots 1 et 2 ; ici, un AVIS seulement (`avisEmetteur`).
+ *      travaux d'un devis (la décennale jointe pour un ouvrage) relève de
+ *      l'étape 2b-3 (le rang 11 de `motifs_refus_remise()`, au DEVIS) ;
+ *      ici, un AVIS seulement (`avisEmetteur`).
  *   3. La seule règle plus stricte que la loi qu'il garde : relire le SIRET
  *      chaque année (`entreprise_ancienne`), présentée comme une règle
  *      d'Opus. Les frais de déplacement restent à déclarer pour tout devis :
@@ -1555,6 +1556,23 @@ function jourLocal(valeur) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/**
+ * L'ÉTAT D'UNE ASSURANCE, sur SA ligne dans « Mon entreprise » (2b-3,
+ * cahier §3.2 et §3.9) : « Valable jusqu'au JJ/MM/AAAA » ; « Sans date de
+ * fin » ; « Expirée le JJ/MM/AAAA ». Comparée au jour LOCAL du téléphone
+ * (`jourLocal`), comme une CHAÎNE. La base, elle, juge l'attestation d'un
+ * devis au jour de PARIS (49.9) : outre-mer, entre minuit à Paris et minuit
+ * local, les deux peuvent différer quelques heures — dit au cahier, noté
+ * dans `A-FAIRE`. « Valable » parle de la DATE seulement : une attestation
+ * non jointe se signale à part (`decennale_sans_attestation`).
+ */
+export function etatDeLAssurance(a, jour = jourLocal(new Date())) {
+  const fin = a && a.valide_jusquau != null ? String(a.valide_jusquau).match(/^(\d{4}-\d{2}-\d{2})/) : null;
+  if (!fin) return 'Sans date de fin';
+  const auJour = jourLocal(jour);
+  return fin[1] >= auJour ? `Valable jusqu’au ${dateFrancaise(fin[1])}` : `Expirée le ${dateFrancaise(fin[1])}`;
+}
+
 function plusUnAn(jour) {
   const [a, m, j] = jour.split('-');
   return `${Number(a) + 1}-${m}-${j}`;
@@ -1581,10 +1599,15 @@ export function avisEmetteur({ assurances = [], emetteur = null, aujourdhui = ne
   if (!liste.length) {
     avis.push({
       cle: 'sans_assurance',
-      texte: 'Aucune assurance déclarée. Opus n’en exige aucune ; mais pour un devis à un '
-        + 'particulier, la loi demande de communiquer au client les assurances professionnelles que '
-        + 'vous avez souscrites (code de la consommation, R. 111-2) — Opus le fait en les imprimant '
-        + 'sur le devis : si vous en avez, déclarez-les.',
+      /* 2b-3 (annexe A.6) : un devis dont les travaux peuvent engager la
+         décennale ne se REMETTRA qu'avec son attestation (le rang 11) — un
+         futur : rien ne s'imprime avant 2c (M9 droit). « Assurance de
+         responsabilité professionnelle » : les mots de R. 111-2 9°. */
+      texte: 'Aucune assurance déclarée. Opus n’en exige aucune pour votre fiche ; mais un devis dont les travaux '
+        + 'peuvent engager votre garantie décennale ne se remettra qu’avec son attestation, et pour un devis à un '
+        + 'particulier, la loi demande de lui communiquer l’assurance de responsabilité professionnelle que vous avez '
+        + 'souscrite (code de la consommation, R. 111-2) : si vous en avez une, déclarez-la, Opus l’imprimera sur vos '
+        + 'devis.',
     });
   }
   for (const a of liste) {
@@ -1594,15 +1617,18 @@ export function avisEmetteur({ assurances = [], emetteur = null, aujourdhui = ne
     const chez = a.assureur_nom ? ` (${a.assureur_nom})` : '';
     if (a.nature === 'decennale' && !a.attestation_chemin) {
       /* L. 243-2 joint l'attestation « aux devis et factures des
-         professionnels assurés » — QUEL QUE SOIT LE CLIENT (relu le
-         18/10/2026). La première version la réservait au particulier, et un
-         artisan l'aurait crue facultative pour une SCI ou un promoteur. */
+         professionnels assurés » — PAS SEULEMENT pour un particulier (relu
+         le 18/10/2026). La première version la réservait au particulier, et
+         un artisan l'aurait crue facultative pour une SCI ou un promoteur.
+         2b-3 (D6) : « quel que soit le client » était faux dans l'autre
+         sens — un sous-traitant n'est peut-être pas concerné (J3). Et
+         chaque devis le DEMANDE désormais : le rang 11. */
       avis.push({
         cle: 'decennale_sans_attestation',
         id: a.id == null ? null : a.id,
-        texte: `Votre décennale${chez} n’a pas d’attestation jointe. Pour des travaux de `
-          + 'construction, l’attestation de votre décennale est jointe au devis, quel que soit le '
-          + 'client (code des assurances, L. 243-2) : chaque devis le demandera selon ses travaux.',
+        texte: `Votre décennale${chez} n’a pas d’attestation jointe. Pour des travaux qui peuvent engager votre `
+          + 'décennale, son attestation est jointe au devis, et pas seulement pour un particulier (code des '
+          + 'assurances, L. 243-2) : chaque devis le demandera selon ses travaux.',
       });
     }
     if (a.valide_jusquau && String(a.valide_jusquau).slice(0, 10) < jour) {
@@ -1623,13 +1649,20 @@ export function avisEmetteur({ assurances = [], emetteur = null, aujourdhui = ne
     });
   }
   if (parleDUnPaiementALaSignature(e.modalites_paiement_texte)) {
+    /* 2b-3 (annexe A.6, réponse P2 du 12/11) : chaque devis dit désormais,
+       dans ses conditions, QUAND le client paie (« Dès le 8e jour » ou « À
+       la signature »). L'ancienne phrase promettait « chaque devis dira,
+       au moment de le remettre, comment il est signé » — une question
+       qu'Opus ne pose pas (décision du 09/11). « Juste après l'avoir
+       rencontré ailleurs » : L. 221-1 I 2° b ; la petite entreprise :
+       L. 221-3. */
     avis.push({
       cle: 'a_la_signature',
-      texte: 'Vos modalités de paiement parlent d’un paiement à la signature (ou à la commande). '
-        + 'Elles s’imprimeront sur tous vos devis. Sur un devis signé le jour de votre passage chez '
-        + 'le client, aucun paiement ne peut être exigé avant le 8e jour (code de la consommation, '
-        + 'L. 221-10) ; sur un devis envoyé après la visite et accepté plus tard, la formule est '
-        + 'permise. Chaque devis dira, au moment de le remettre, comment il est signé.',
+      texte: 'Vos modalités de paiement parlent d’un paiement à la signature (ou à la commande). Elles s’imprimeront '
+        + 'sur tous vos devis. Pour un devis à un particulier ou à une petite entreprise, signé hors de vos locaux '
+        + '(chez lui, sur le chantier, ou dans vos locaux juste après l’avoir rencontré ailleurs), la loi interdit de '
+        + 'recevoir un paiement avant le 8e jour, sauf exceptions (code de la consommation, L. 221-10) : retirez cette '
+        + 'formule de vos modalités, et dites, dans les conditions de chaque devis, quand le client paie.',
     });
   }
   return avis;

@@ -197,6 +197,11 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          portent `devis_taux_reduit_neuf` : le seul endroit où ce motif se
          voit sans `.env` (cahier §3.9). */
       chantierNeufTva: true,
+      /* 2b-3 (réponse P1 du 12/11 : « A ») : « Oui » à la question de la
+         décennale — un sol refait engage la garantie. L'attestation de
+         démonstration (`emetteur-demo.js`) est jointe et valable : le rang 11
+         se tait, et la réponse se voit dans la rangée « Le chantier ». */
+      engageDecennale: true,
       generation: num(2 * HEURE),
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
@@ -276,6 +281,11 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
     fournitureNonComprise: false,
     surfaceSolMilliemes: null,
     surfaceMursMilliemes: null,
+    /* 2b-3 : `false`, jamais une clé absente — `renvoyerLaLigne` compare
+       `?? null`, et `false` contre `null` ferait croire à un changement.
+       Aucune ligne de démonstration n'est marquée « réparation urgente » :
+       la marque ne se pose que d'un appui. */
+    urgence: false,
     ...valeurs,
     generation: num(age),
     modifieLe: il(age),
