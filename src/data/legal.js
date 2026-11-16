@@ -29,7 +29,38 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-13';
+export const VERSION = '2026-11-17';
+/* 17/11/2026 — LE PRIX DU DEVIS LUI-MÊME (étape 2b-4 du module devis ;
+   section 49 de `schema.sql`, cahier 2b-4 §4 et annexe A.6 ; réponses du
+   propriétaire du 16/11 : Q1 = trois étapes, Q2 = un point « par
+   prudence », Q3 = pas pour l'instant). Ce qui a changé DE FOND :
+     - UNE DONNÉE NOUVELLE COLLECTÉE pour les devis : s'ils sont gratuits ou
+       payants, et ce que coûte un devis payant (`devis.cout_devis_centimes`
+       : vide tant que l'artisan n'a rien dit, 0 pour « gratuit », un montant
+       pour « payant »). « Ce que nous collectons » la nomme, dans la phrase
+       des devis ;
+     - RIEN D'AUTRE : « Ce qu'il manque pour remettre ce devis » gagne un
+       point, mais un motif n'est pas une décision automatique — il dit à
+       l'artisan ce qui manque à SON devis, sans rien décider pour
+       personne —, et les avis ne décident rien. Aucun texte ne promet la
+       mention « gratuit » ou « payant » imprimée, ni ne parle des services
+       à la personne, des déchets ou du label RGE : rien ne sort avant le
+       lot 2c, et les déchets et le RGE sont les étapes 2b-5 et 2b-6.
+       « Vos tarifs et vos prix » ne change pas d'un mot : sa promesse
+       (« le prix de vos devis serviront à préparer vos devis ») devient
+       vraie, puisque la carte « Conditions » propose désormais le prix lu
+       dans les tarifs de l'artisan — à l'écran seulement, la base ne lisant toujours pas
+       `tarifs_pro` pour un devis ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions à un compte existant, et le préavis de
+       quinze jours du règlement 2019/1150 (art. 3.2) s'appliquerait. Sans
+       effet tant que STATUT vaut 'essai' ; à organiser avant l'ouverture au
+       public (A-FAIRE).
+   Cette version prend la date prévue du commit des textes (17/11/2026) ;
+   si le commit se fait un autre jour, `VERSION` prend la date de ce
+   commit — jamais plus loin que le lendemain du jour où l'on publie, sinon
+   la base range la trace d'acceptation à vide (`verifier-legal`). */
+/* VERSION PRÉCÉDENTE : '2026-11-13'. */
 /* 13/11/2026 — LA RÉPARATION URGENTE, LA GARANTIE DÉCENNALE ET LE MOMENT OÙ
    L'ACOMPTE EST PAYÉ (étape 2b-3 du module devis ; section 49 de
    `schema.sql`, cahier 2b-3 §4 et annexe A.7 ; réponses du propriétaire du
@@ -1252,7 +1283,21 @@ export const CGU = [
        « s’engage à ne pas consulter ceux que vous n’affichez pas » reste mot
        pour mot (le contrôle du lot T le tient), et « les consulter » reste
        absent : cette formule promettrait de ne pas regarder les tarifs
-       affichés, que tout particulier connecté lit déjà. */
+       affichés, que tout particulier connecté lit déjà.
+
+       L'ÉTAPE 2b-4 DU DEVIS (17/11/2026) NE CHANGE PAS CE TEXTE D'UN MOT, et
+       elle rend vraie une de ses promesses : « le prix de vos devis
+       serviront à préparer vos devis » ne l'était pas — aucun écran du devis
+       ne lisait `tarifs_pro.prix_devis_centimes` (critique M5 du cahier
+       2b-4). La carte « Conditions » d'un devis le PROPOSE désormais (« Dans
+       vos tarifs : … », et le champ pré-rempli après un appui sur
+       « Payant »), à l'écran seulement : la base ne lit toujours pas
+       `tarifs_pro` pour un devis, et les listes fermées de ses lecteurs
+       (`verifier-legal`, `verifier-emetteur`) ne changent pas. Le futur
+       « serviront » reste, comme dans `TARIFS_NON_AFFICHES` (`tarifs.js`) :
+       les deux ne changent qu'ensemble (`verifier-tarifs`, vérification 40).
+       `verifier-legal` (section « Étape 2b-4 ») garde ce texte par son
+       empreinte. */
     titre: 'Vos tarifs et vos prix',
     texte: 'Les tarifs que vous enregistrez dans « Mon entreprise » ne sont utilisés que par '
       + 'vous tant que vous ne choisissez pas de les afficher : vos frais de déplacement, votre '
@@ -1512,7 +1557,22 @@ export const CONFIDENTIALITE = [
        d'autre ne change : un motif n'est pas une décision automatique (il
        dit à l'artisan ce qui manque à son propre devis), et aucun texte ne
        promet quoi que ce soit sur l'urgence ou l'attestation — rien ne sort
-       avant le lot 2c. */
+       avant le lot 2c.
+
+       LE PRIX DU DEVIS LUI-MÊME, étape 2b-4 (17/11/2026, annexe A.6 du
+       cahier 2b-4 ; réponses du propriétaire du 16/11) : s'ils sont gratuits
+       ou payants, et ce que coûte un devis payant (`devis.cout_devis_centimes`
+       : vide, 0 ou un montant TTC). Inséré, comme les réponses de 2b-2 et
+       2b-3, AVANT « leurs lignes », juste après la durée de validité.
+       « Ce que coûte un devis payant » plutôt que « leur prix » : « leurs
+       prix et leurs totaux », plus loin dans la même phrase, désigne les
+       prix des LIGNES, et les deux se seraient lus l'un pour l'autre. Le
+       cahier v1 hésitait entre deux tournures (« et leur prix », « et ce que
+       coûte un devis payant ») : il n'en existe qu'UNE, et `verifier-legal`
+       la compare mot pour mot, ENTIÈRE. Rien d'autre ne change : le point
+       « Dites si le devis lui-même est gratuit ou payant » est un motif, pas
+       une décision automatique, et aucun texte ne promet la mention imprimée
+       — rien ne sort avant le lot 2c. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -1561,7 +1621,8 @@ export const CONFIDENTIALITE = [
       + 'réclamation, et vos tarifs (frais de déplacement, taux horaire et son décompte, '
       + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
-      + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel '
+      + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont '
+      + 'gratuits ou payants, et ce que coûte un devis payant, à quel '
       + 'titre le client commande, si les travaux portent sur un bâtiment neuf ou une '
       + 'transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font '
       + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent '

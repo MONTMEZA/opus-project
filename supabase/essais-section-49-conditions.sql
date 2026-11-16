@@ -611,6 +611,9 @@ with attendu(tab, col, ins, upd) as (values
   -- l'artisan, aucune date.
   ('devis','engage_decennale',true,true), ('devis','acompte_a_la_signature',true,true),
   ('devis_lignes','urgence',true,true),
+  -- 2b-4 (49.4 quinquies) : le prix du devis lui-même — une réponse de
+  -- l'artisan, aucune date ; rien pour un visiteur.
+  ('devis','cout_devis_centimes',true,true),
   ('devis_lignes','id',true,false), ('devis_lignes','devis_id',true,false),
   ('devis_lignes','ordre',true,true), ('devis_lignes','type',true,true), ('devis_lignes','designation',true,true),
   ('devis_lignes','quantite_milliemes',true,true), ('devis_lignes','unite',true,true),
@@ -636,7 +639,7 @@ select count(*) = 0 as droits_sans_ecart_attendu_t,
     or r.upd is distinct from coalesce(a.upd, false)
     or r.anon;
 \echo '--- et chaque colonne attendue existe (une faute de frappe ici ne passerait pas)'
-select count(*) as colonnes_attendues_trouvees, count(*) = 42 as colonnes_trouvees_attendu_t
+select count(*) as colonnes_attendues_trouvees, count(*) = 43 as colonnes_trouvees_attendu_t
   from information_schema.columns c
  where c.table_schema = 'public' and c.table_name in ('devis', 'devis_lignes')
    and (c.table_name, c.column_name) in (
@@ -648,12 +651,13 @@ select count(*) as colonnes_attendues_trouvees, count(*) = 42 as colonnes_trouve
      ('devis','pour_qui'),('devis','pour_qui_client'),('devis','chantier_neuf_conso'),('devis','chantier_neuf_tva'),
      ('devis','chantier_neuf_conso_le'),
      ('devis','engage_decennale'),('devis','acompte_a_la_signature'),('devis_lignes','urgence'),
+     ('devis','cout_devis_centimes'),
      ('devis_lignes','id'),('devis_lignes','devis_id'),('devis_lignes','ordre'),('devis_lignes','type'),
      ('devis_lignes','designation'),('devis_lignes','quantite_milliemes'),('devis_lignes','unite'),
      ('devis_lignes','prix_unitaire_centimes'),('devis_lignes','taux_tva_centiemes'),('devis_lignes','offert'),
      ('devis_lignes','main_oeuvre'),('devis_lignes','fourniture_non_comprise'),
      ('devis_lignes','surface_sol_milliemes'),('devis_lignes','surface_murs_milliemes'),('devis_lignes','generation'));
-\echo '    attendu : 42 (34 jusqu’à 2b-1, les cinq colonnes de 49.4 ter, et les trois de 2b-3) ; colonnes_trouvees_attendu_t t'
+\echo '    attendu : 43 (34 jusqu’à 2b-1, les cinq colonnes de 49.4 ter, les trois de 2b-3, et la colonne de 2b-4) ; colonnes_trouvees_attendu_t t'
 select has_table_privilege('authenticated', 'public.devis', 'INSERT') as table_devis_insert,
        has_table_privilege('authenticated', 'public.devis', 'UPDATE') as table_devis_update,
        has_table_privilege('authenticated', 'public.devis', 'SELECT') as table_devis_select,

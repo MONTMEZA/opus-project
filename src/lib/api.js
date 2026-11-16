@@ -3000,6 +3000,10 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
      client paie (« Conditions ») — deux réponses de 49.4 quater, sans date. */
   poser('engage_decennale', 'engageDecennale');
   poser('acompte_a_la_signature', 'acompteALaSignature');
+  /* 2b-4 : le prix du devis LUI-MÊME (49.4 quinquies), en centimes TTC —
+     `null` (pas dit), 0 (gratuit), un montant (payant). Hors des totaux : la
+     base ne le recalcule pas, elle le range. */
+  poser('cout_devis_centimes', 'coutDevisCentimes');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3568,6 +3572,14 @@ function regimeEtSaDate(f) {
     declareLe: e ? (e.regime_tva_declare_le ?? null) : null,
   };
 }
+/* LES ASSURANCES de la même fiche (2b-4, T9, T20) : une LISTE (les lignes
+   d'`emetteur_assurances`, aux noms de la base), ou `null` quand la fiche ne
+   les porte pas. Une fonction PURE, à part de `regimeEtSaDate` (qui garde sa
+   forme : `monRegime` et `verifier-postes` la lisent) — l'avis de
+   l'attestation qui arrive à sa fin (`avisDuDevis`, `devis.js`) les lit. */
+function assurancesDe(f) {
+  return f && Array.isArray(f.assurances) ? f.assurances : null;
+}
 async function monRegimeSupabase() {
   return regimeEtSaDate(await monEmetteurSupabase()).regime;
 }
@@ -3577,9 +3589,19 @@ async function monRegimeDemo() {
 export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
 
 /**
- * MON RÉGIME ET LA DATE DE SA DÉCLARATION — `{ regime, declareLe }` (lot P,
- * section 50 ; la date est `regime_tva_declare_le`, posée par la BASE au
- * changement de régime, section 46).
+ * MON RÉGIME, LA DATE DE SA DÉCLARATION, ET MES ASSURANCES —
+ * `{ regime, declareLe, assurances }` (lot P, section 50 ; la date est
+ * `regime_tva_declare_le`, posée par la BASE au changement de régime,
+ * section 46 ; les assurances depuis 2b-4).
+ *
+ * POURQUOI LES ASSURANCES ICI (2b-4, T9, T20) : l'avis « votre attestation
+ * décennale est valable jusqu'au … » a besoin de leurs dates de fin, et
+ * cette fonction lit DÉJÀ toute la fiche (`monEmetteur…`, qui lit les
+ * assurances avec le reste). Aucune lecture nouvelle : la MÊME réponse rend
+ * les trois, et la saisie les relit à la fermeture de « Mon entreprise »,
+ * là où l'artisan change la date de fin de son attestation. Le NOM est
+ * gardé — `lireRegime` (OpusApp) l'appelle, et `verifier-postes` le tient ;
+ * `regimeEtSaDate` aussi, et `monRegime` ne lit toujours que le régime.
  *
  * POURQUOI LA DATE : un prix de référence est dans la convention de la
  * LIGNE — hors taxes au régime réel, sans TVA en franchise. Fixé AVANT le
@@ -3592,10 +3614,12 @@ export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
  * n'est jamais « non déclaré »).
  */
 async function monRegimeEtSaDateSupabase() {
-  return regimeEtSaDate(await monEmetteurSupabase());
+  const f = await monEmetteurSupabase();
+  return { ...regimeEtSaDate(f), assurances: assurancesDe(f) };
 }
 async function monRegimeEtSaDateDemo() {
-  return regimeEtSaDate(await monEmetteurDemo());
+  const f = await monEmetteurDemo();
+  return { ...regimeEtSaDate(f), assurances: assurancesDe(f) };
 }
 export const monRegimeEtSaDate = hasSupabase ? monRegimeEtSaDateSupabase : monRegimeEtSaDateDemo;
 

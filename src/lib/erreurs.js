@@ -214,6 +214,13 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
      retard (ou en avance) de l'application. */
   devis_pour_qui_check: 'cette réponse à « À quel titre ? » n’est pas connue d’Opus : rien n’a été enregistré. '
     + 'Mettez l’application à jour, puis réessayez.',
+  /* 2b-4 : le prix du devis LUI-MÊME (49.4 quinquies), de 0 à 1 000 € TTC —
+     les mots de `tarif_devis_check` (le prix des devis dans « Mes tarifs »,
+     même borne), plus « lui-même » : sans lui, « le prix du devis » se
+     lirait comme le total des travaux (critique ÉCRAN-22). La carte refuse
+     « 0 » tapé et le dépassement AVANT d'envoyer (`versCoutDeDevis`) : cette
+     phrase est le repli d'une version en retard. */
+  devis_cout_check: 'le prix du devis lui-même s’écrit comme un montant entre 0 et 1 000 € TTC.',
   /* LE PLAFOND — LA PHRASE DE REPLI, vraie quel que soit le chemin. Trois
      écritures y mènent, et chacune a SA phrase (`PHRASES_DU_PLAFOND`, plus
      bas, que l'écran demande par `messageDEcritureDuDevis`) : une LIGNE, une

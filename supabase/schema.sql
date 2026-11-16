@@ -13272,8 +13272,56 @@ comment on column public.devis.acompte_a_la_signature is
   'Vrai hors des cas qu''Opus permet : un motif de refus de la remise (rang 10). 49.4 quater.';
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — trente-trois ici, toutes en `_check`, et une
---       trente-quatrième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
+--  49.4 quinquies LE PRIX DU DEVIS LUI-MÊME (lot 2b, étape 2b-4, 16/11/2026)
+--
+--  Ajouté ICI pour la même raison que 49.4 bis à quater : les droits
+--  d'écriture vivent en 49.7. Une réponse de l'artisan, dans « Conditions » :
+--  le devis LUI-MÊME (le fait de l'établir, pas les travaux) est-il gratuit
+--  ou payant ? TROIS ÉTATS DANS UNE SEULE COLONNE, sur le modèle de
+--  `tarifs_pro.prix_devis_centimes` (lot T), lu partout de la même façon :
+--    VIDE    pas dit : un motif de refus de la remise (rang 12,
+--            `devis_cout`, 49.9), une PRUDENCE (réponse Q2 du propriétaire,
+--            16/11) — la loi demande « gratuit » ou « payant » sur le devis
+--            AU MOINS pour un dépannage, une réparation ou un entretien
+--            signé dans les locaux de l'artisan (arrêté du 24/01/2017,
+--            art. 4-I), et Opus ne sait pas si ce devis en est un ;
+--    0       gratuit. L'ÉCRAN ne l'écrit que par la pastille « Gratuit » (un
+--            « 0 » tapé y est refusé, et « Payant » n'écrit jamais 0) ; la
+--            base, elle, l'accepte d'où qu'il vienne — elle ne sait pas quel
+--            geste a écrit 0, et le commentaire de la colonne ne promet rien
+--            de plus (relecture BASE-12) ;
+--    1 à 100 000  payant, en centimes TTC — ce que paie le client, et la
+--            convention des tarifs : la proposition de « Mes tarifs » se
+--            recopie sans conversion. La borne est celle de
+--            `tarif_devis_check` (1 000,00 €).
+--  NULLABLE, SANS DÉFAUT : un fait de 2b naît vide. PostgreSQL n'écrit alors
+--  AUCUNE ligne existante (aucun rattrapage, aucune `modifie_le` qui bouge).
+--
+--  HORS DES TOTAUX ET DE `devis_tva` : c'est le prix d'un AUTRE contrat que
+--  les travaux. `recalcule_devis()` ne le lit pas ; son imputation sur les
+--  travaux (« déduit si vous acceptez ») et son taux de TVA sont des
+--  questions de 2c et du juriste.
+--
+--  CE QUE LA BASE NE LIT JAMAIS POUR CE FAIT : `tarifs_pro`. La proposition
+--  « Dans vos tarifs : … » vit à l'ÉCRAN, depuis les tarifs que la saisie
+--  reçoit déjà ; la liste des motifs ne dépend que de ce que le devis porte
+--  (la porte étroite de `motifs_refus_remise`, cas 14 c de l'essai
+--  49-remise). AUCUNE CONTRAINTE NE LIE ce prix à autre chose (le client, la
+--  réponse « à quel titre ») : la saisie serait refusée à mi-chemin (49.5).
+--  Pas de date : aucune n'aurait de lecteur. Le nom n'est pas
+--  `prix_devis_centimes`, qu'un contrôle des tarifs réserve à « Mes tarifs ».
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists cout_devis_centimes bigint;
+
+comment on column public.devis.cout_devis_centimes is
+  'Le prix du devis lui-même, en centimes TTC (pas celui des travaux). Vide = pas dit : un '
+  'motif de refus de la remise (rang 12, par prudence). 0 = gratuit (l’écran ne l’écrit que par '
+  'la pastille « Gratuit » ; la base l’accepte d’où qu’il vienne). De 1 à 100 000 = payant. Hors '
+  'des totaux. 49.4 quinquies.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — trente-quatre ici, toutes en `_check`, et une
+--       trente-cinquième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
 --       rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
@@ -13405,6 +13453,18 @@ alter table public.devis drop constraint if exists devis_pour_qui_check;
 alter table public.devis add constraint devis_pour_qui_check
   check (pour_qui is null or pour_qui in
          ('consommateur', 'professionnel', 'professionnel_hors_activite', 'non_professionnel'));
+/* Le prix du devis lui-même (lot 2b, étape 2b-4, 49.4 quinquies) : vide (pas
+   dit), 0 (gratuit) ou un montant TTC jusqu'à 1 000,00 € — la borne de
+   `tarif_devis_check`. La SEULE contrainte de l'étape, et elle ne regarde
+   que sa colonne : « 0 seulement par la pastille Gratuit » est tenu par
+   l'écran, la base ne sait pas quel geste a écrit 0. Dans l'ordre
+   alphabétique, elle vient entre `devis_calculs_check` et
+   `devis_delai_check` : une ligne qui viole aussi la validité est nommée
+   `devis_cout_check`, une qui viole aussi l'acompte `devis_acompte_check`
+   (mesuré). */
+alter table public.devis drop constraint if exists devis_cout_check;
+alter table public.devis add constraint devis_cout_check
+  check (cout_devis_centimes is null or cout_devis_centimes between 0 and 100000);
 
 alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
 alter table public.devis_lignes add constraint devis_ligne_designation_check
@@ -14639,6 +14699,8 @@ create policy "ventilation de mes devis" on public.devis_tva
      garantie décennale (`engage_decennale`) et sur le moment où l'acompte
      est payé (`acompte_a_la_signature`, 49.4 quater) — trois réponses de
      l'artisan, aucune date.
+     Depuis 2b-4, un devis naît et se modifie AUSSI sur le prix du devis
+     lui-même (`cout_devis_centimes`, 49.4 quinquies).
    Une colonne que l'application enverrait sans que la liste la rende ferait
    refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
    compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
@@ -14650,14 +14712,14 @@ grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, o
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
-              engage_decennale, acompte_a_la_signature, generation)
+              engage_decennale, acompte_a_la_signature, cout_devis_centimes, generation)
   on public.devis to authenticated;
 grant update (client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
-              engage_decennale, acompte_a_la_signature, generation)
+              engage_decennale, acompte_a_la_signature, cout_devis_centimes, generation)
   on public.devis to authenticated;
 grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
@@ -14688,7 +14750,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 
 -- --------------------------------------------------------------------------
 --  49.9 CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b, étape 2b-1,
---       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11) — `motifs_refus_remise(p_devis)`
+--       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11 ; 2b-4, 16/11) —
+--       `motifs_refus_remise(p_devis)`
 --
 --  CE QU'ELLE FAIT. Elle dit, pour UN devis, tout ce qui manque pour qu'il
 --  puisse être remis au client : ce qui manque au devis lui-même, puis ce
@@ -14758,7 +14821,9 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                qu'on doit à un particulier, et 2c imprimerait le
 --                formulaire de rétractation même pour un autre artisan qui
 --                sous-traite. SEPT RÈGLES D'OPUS en tout — 2b-3 n'en ajoute
---                aucune (ses quatre motifs sont une prudence ou la loi). Et la TVA à 10 %
+--                aucune (ses quatre motifs sont une prudence ou la loi), 2b-4
+--                non plus (son motif est une prudence, réponse Q2 du 16/11).
+--                Et la TVA à 10 %
 --                ou 5,5 % : « tout permettre » ; c'est 2c qui imprimera la
 --                certification que le client signe. UNE SEULE EXCEPTION
 --                (2b-2) : l'artisan dit lui-même, dans « Le chantier », que
@@ -14877,8 +14942,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  `filter`, même `order by l.ordre, l.id`, unique) : ils s'alignent indice
 --  par indice, et la boucle les parcourt ensemble, dans l'ordre `ordre,
 --  id`. La borne de la liste — 500 lignes au rang 3, plus les rangs 1, 2
---  et 4 à 11 : 510 motifs du devis depuis 2b-3 (le rang 11 n'en sort
---  qu'un) — garde trois chiffres. Elle se lit dans
+--  et 4 à 12 : 511 motifs du devis depuis 2b-4 (le rang 11 n'en sort
+--  qu'un, le rang 12 aussi) — garde trois chiffres. Elle se lit dans
 --  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
 --  l'entreprise, `regime_tva`, le dit déjà.
@@ -14955,6 +15020,21 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  cette fonction depuis une fonction `security definer`, ce filtre sera la
 --  SEULE barrière — l'essai le prouve par une enveloppe `security definer`.
 --  La MÊME règle est écrite côté téléphone (`etatDeLAttestation`).
+--
+--  LE PRIX DU DEVIS LUI-MÊME (2b-4, rang 12, `devis_cout`, une PRUDENCE —
+--  réponse Q2 du propriétaire, 16/11). L'arrêté du 24/01/2017 (art. 4-I)
+--  demande d'écrire sur le devis s'il est gratuit ou payant pour un
+--  dépannage, une réparation ou un entretien ; hors établissement,
+--  l'administration l'attend aussi (question au juriste, J3). Opus ne sait
+--  pas où ce devis sera signé (décision du 09/11) : il compte le cas le plus
+--  protecteur, d'où « au moins » dans la phrase. Le motif sort quand la
+--  colonne est VIDE (`cout_devis_centimes is null`) ; 0 (gratuit) et un
+--  montant (payant) le taisent pareil. Il ne lit ni la réponse « à quel
+--  titre », ni l'origine du devis, ni `tarifs_pro` : la proposition depuis
+--  « Mes tarifs » vit à l'écran, jamais ici (la porte étroite, cas 14 c de
+--  l'essai 49-remise). PAS une huitième règle d'Opus : une prudence, que le
+--  propriétaire a préférée le 16/11. La MÊME règle est écrite côté téléphone
+--  (`motifsDeRemise`).
 --
 --  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
 --  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
@@ -15036,6 +15116,7 @@ declare
   v_neuf_tva       boolean;
   v_decennale      boolean;
   v_signature      boolean;
+  v_cout           bigint;
   v_valable        text;
   v_regime         text;
   v_un_poste       boolean;
@@ -15056,12 +15137,12 @@ begin
          d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
          d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes,
          d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva,
-         d.engage_decennale, d.acompte_a_la_signature
+         d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
          v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
          v_pour_qui, v_pour_qui_cl, v_neuf_tva,
-         v_decennale, v_signature
+         v_decennale, v_signature, v_cout
     from public.devis d
    where d.id = p_devis
      and public.est_mon_entreprise(d.pro_id);
@@ -15230,6 +15311,16 @@ begin
       return next;
     end if;
   end if;
+  -- Le prix du devis lui-même (49.4 quinquies) : pas encore dit. Une
+  -- PRUDENCE (réponse Q2) : la loi demande « gratuit » ou « payant » sur
+  -- le devis au moins pour un dépannage, une réparation ou un entretien
+  -- signé dans les locaux de l'artisan, et Opus ne sait pas si ce devis en
+  -- est un. 0 (gratuit) et un montant (payant) le taisent pareil.
+  if v_cout is null then
+    rang := 12; cle := 'devis_cout'; nature := 'prudence';
+    phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.';
+    return next;
+  end if;
 
   -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
   --    Le rang garde sa position d'origine (100 + position) : un motif
@@ -15273,7 +15364,8 @@ grant execute on function public.motifs_refus_remise(uuid) to authenticated;
 comment on function public.motifs_refus_remise(uuid) is
   'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
   'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
-  'à 11 : l''acompte à la signature et l''attestation décennale depuis 2b-3) puis ceux de '
+  'à 12 : l''acompte à la signature et l''attestation décennale depuis 2b-3, le prix du devis '
+  'lui-même depuis 2b-4) puis ceux de '
   'l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
   'réponse valable à « À quel titre ? », 2b-2). Aucune ligne = rien '
   'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '

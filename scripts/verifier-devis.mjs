@@ -208,6 +208,73 @@ if (process.argv[2] === '--fuseau') {
   process.exit(0);
 }
 
+/* A-9 bis (2b-4) : L'AVIS DE L'ATTESTATION QUI ARRIVE À SA FIN, DANS UN
+   FUSEAU. Le jour qui juge est celui du TÉLÉPHONE (`jourDuTelephone`), et
+   l'horizon se compte par `joursEntre` (formats.js, `Date.UTC`, sans
+   fuseau) : au jour de sa fin, l'attestation fait encore parler l'avis ;
+   la veille, plus du tout (le rang 11 parle) ; à « validité − 1 » jours il
+   parle, à « validité » il se tait ; et avec le délai par défaut, à
+   « validité + 30 − 1 » il parle, à « validité + 30 » il se tait. De part et
+   d'autre de minuit UTC, comme le reste des dates de ce contrôle (section 9). */
+if (process.argv[2] === '--fuseau-2b4') {
+  const D = await import('../src/lib/devis.js');
+  const FMT = await import('../src/lib/formats.js');
+  const tz = process.env.TZ;
+  const INSTANTS = {
+    'Europe/Paris': ['2026-07-15T22:30:00Z', '2026-12-19T23:30:00Z', '2026-10-24T22:30:00Z', '2026-03-28T23:30:00Z'],
+    'America/Martinique': ['2026-10-21T03:30:00Z', '2026-03-01T03:59:00Z'],
+    'Pacific/Kiritimati': ['2026-10-19T10:30:00Z', '2026-12-31T09:59:00Z'],
+  };
+  const plus = (j, n) => {
+    const [a, m, d] = j.split('-').map(Number);
+    const t = new Date(Date.UTC(a, m - 1, d + n));
+    return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+  };
+  const dec = (fin) => [{ nature: 'decennale', attestation_chemin: 'p/attestation.pdf', valide_jusquau: fin }];
+  const devis = (autre = {}) => ({ id: 'd', engageDecennale: null, validiteJours: 30, delaiExecution: 'x', ...autre });
+  const parle = (fin, j, autre = {}) => D.avisDuDevis({ devis: devis(autre), assurances: dec(fin), jour: j })
+    .some((a) => a.cle === 'avis_attestation_echeance');
+  const faux = [];
+  let cas = 0;
+  /* `joursEntre` lui-même, à travers les deux changements d'heure de 2026
+     et la fin d'année : un jour est un jour, dans tout fuseau. */
+  [['2026-10-24', '2026-10-26', 2], ['2026-03-28', '2026-03-30', 2], ['2026-12-31', '2027-01-01', 1], ['2026-11-16', '2026-11-16', 0]]
+    .forEach(([a, b, n]) => { cas += 1; if (FMT.joursEntre(a, b) !== n) faux.push(`joursEntre(${a}, ${b}) → ${FMT.joursEntre(a, b)}, attendu ${n}`); });
+  for (const iso of INSTANTS[tz] || []) {
+    const j = D.jourDuTelephone(new Date(Date.parse(iso)));
+    const attendus = [
+      ['au jour de sa fin', j, {}, true],
+      ['la veille', plus(j, -1), {}, false],
+      ['validité − 1', plus(j, 29), {}, true],
+      ['validité', plus(j, 30), {}, false],
+      ['délai par défaut, validité + 30 − 1', plus(j, 59), { delaiExecution: D.DELAI_PAR_DEFAUT.texte }, true],
+      ['délai par défaut, validité + 30', plus(j, 60), { delaiExecution: D.DELAI_PAR_DEFAUT.texte }, false],
+      ['un délai voisin du défaut ne compte pas 30 jours', plus(j, 45), { delaiExecution: 'Dans les 30 jours' }, false],
+    ];
+    for (const [quoi, fin, autre, voulu] of attendus) {
+      cas += 1;
+      if (parle(fin, j, autre) !== voulu) faux.push(`${iso} (jour ${j}), ${quoi} (fin ${fin}) : ${voulu ? 'se tait' : 'parle'}`);
+    }
+    /* La date de l'avis : celle de la fin, écrite par `dateFrancaise`. */
+    cas += 1;
+    const a = D.avisDuDevis({ devis: devis(), assurances: dec(plus(j, 10)), jour: j }).find((x) => x.cle === 'avis_attestation_echeance');
+    const [an, mo, jo] = plus(j, 10).split('-');
+    if (!a || !a.phrase.startsWith(`Votre attestation décennale est valable jusqu’au ${jo}/${mo}/${an}. `)) {
+      faux.push(`${iso} : la date de l'avis — ${a ? a.phrase.slice(0, 70) : 'aucun avis'}`);
+    }
+  }
+  /* Sans `jour`, l'avis juge au jour du téléphone (son défaut). */
+  const auj = D.jourDuTelephone();
+  for (const fin of [auj, plus(auj, -1), plus(auj, 29), plus(auj, 30)]) {
+    cas += 1;
+    const sans = JSON.stringify(D.avisDuDevis({ devis: devis(), assurances: dec(fin) }));
+    const avec = JSON.stringify(D.avisDuDevis({ devis: devis(), assurances: dec(fin), jour: auj }));
+    if (sans !== avec) faux.push(`avisDuDevis sans jour ≠ avec jourDuTelephone() (fin ${fin})`);
+  }
+  process.stdout.write(JSON.stringify({ tz, cas, faux }));
+  process.exit(0);
+}
+
 /* A-11 : L'IDENTIFIANT, avec et SANS générateur. Le processus retire
    `crypto` lui-même : l'appareil qui n'a ni `crypto.randomUUID` ni
    `expo.uuidv4` doit recevoir `null`, jamais un identifiant bricolé. */
@@ -1393,20 +1460,27 @@ console.log('\n  8. une seule écriture des montants');
   const imps = importsDe(srcDevis);
   /* Un TROISIÈME import depuis le lot P : `./rapprochement.js`, la clé de
      rapprochement — un fichier qui n'importe RIEN (`verifier-postes` A le
-     tient), donc `node` sait toujours faire tourner `devis.js`. */
-  verifier('`devis.js` importe EXACTEMENT `./centimes.js` (`centimesLisibles`, `versCentimes` — lot 2a), `./entreprise.js` (`dateFrancaise`, `isoLisible`) '
-    + 'et `./rapprochement.js` (`aPlat`, `cleDeRapprochement` — lot P) — trois instructions, aucune autre forme (ni import nu, ni '
-    + 'réexportation, ni `import()`)',
-  imps.length === 3 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles', 'versCentimes'] })
+     tient), donc `node` sait toujours faire tourner `devis.js`.
+     Un QUATRIÈME depuis 2b-4 (T8, DÉCIDÉ) : `./formats.js`, pour `joursEntre`
+     SEUL — l'avis de l'attestation qui arrive à sa fin compte des jours, et
+     l'arithmétique des jours (par `Date.UTC`, sans fuseau) n'est écrite qu'à
+     UN endroit du projet. `formats.js` n'importe RIEN (vérifié juste en
+     dessous) : `node` fait toujours tourner `devis.js`. Un autre nom tiré de
+     `formats.js`, ou un cinquième fichier, rougit. */
+  verifier('`devis.js` importe EXACTEMENT `./centimes.js` (`centimesLisibles`, `versCentimes` — lot 2a), `./entreprise.js` (`dateFrancaise`, `isoLisible`), '
+    + '`./rapprochement.js` (`aPlat`, `cleDeRapprochement` — lot P) et `./formats.js` (`joursEntre` — 2b-4) — quatre instructions, aucune '
+    + 'autre forme (ni import nu, ni réexportation, ni `import()`)',
+  imps.length === 4 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles', 'versCentimes'] })
     && json(imps.find((x) => x.de === './entreprise.js')) === json({ de: './entreprise.js', noms: ['dateFrancaise', 'isoLisible'] })
     && json(imps.find((x) => x.de === './rapprochement.js')) === json({ de: './rapprochement.js', noms: ['aPlat', 'cleDeRapprochement'] })
-    && json(modulesDe(srcDevis).sort()) === json(['./centimes.js', './entreprise.js', './rapprochement.js'])
-    && instructionsDImport(srcDevis) === 3
+    && json(imps.find((x) => x.de === './formats.js')) === json({ de: './formats.js', noms: ['joursEntre'] })
+    && json(modulesDe(srcDevis).sort()) === json(['./centimes.js', './entreprise.js', './formats.js', './rapprochement.js'])
+    && instructionsDImport(srcDevis) === 4
     && !/\brequire\s*\(|\bimport\s*\(/.test(srcDevis), `${json(imps)} ; modules ${json(modulesDe(srcDevis))} ; `
     + `${instructionsDImport(srcDevis)} instruction(s)`);
-  const purs = ['src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js']
+  const purs = ['src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js', 'src/lib/formats.js']
     .filter((f) => chargeQuelqueChose(sansCommentairesJs(lire(f))));
-  verifier('`centimes.js`, `file-ecriture.js` et `identifiant.js` n’importent RIEN — sous aucune forme, import nu compris',
+  verifier('`centimes.js`, `file-ecriture.js`, `identifiant.js` et `formats.js` (2b-4) n’importent RIEN — sous aucune forme, import nu compris',
     purs.length === 0, purs.join(', '));
   /* `entreprise.js` n'importe que des fichiers purs : c'est ce qui permet à
      `devis.js` de l'importer sans charger React Native. */
@@ -2940,8 +3014,13 @@ const QUI_ET_CHANTIER_2B2 = ['pour_qui', 'pour_qui_client', 'chantier_neuf_conso
    payé (« Conditions », P2) —, et une sur la ligne (la réparation urgente,
    49.3 bis). Aucune date : personne ne la lirait. */
 const DECENNALE_ET_SIGNATURE_2B3 = ['engage_decennale', 'acompte_a_la_signature'];
+/* 2b-4 (49.4 quinquies, 49.7) : le prix du devis LUI-MÊME, écrit par
+   l'artisan (« Conditions »), juste avant `generation` dans les deux `grant`.
+   Aucune date : personne ne la lirait. DÉCIDÉ (cahier 2b-4 §2.3). */
+const COUT_2B4 = ['cout_devis_centimes'];
 const ENTETE_DEVIS = ['client_id', 'quote_request_id', 'sos_request_id', 'objet', 'lieu_adresse', 'lieu_code_postal', 'lieu_ville',
-  'delai_execution', 'retenue_garantie_centiemes', ...CONDITIONS_2A, ...QUI_ET_CHANTIER_2B2, ...DECENNALE_ET_SIGNATURE_2B3];
+  'delai_execution', 'retenue_garantie_centiemes', ...CONDITIONS_2A, ...QUI_ET_CHANTIER_2B2, ...DECENNALE_ET_SIGNATURE_2B3,
+  ...COUT_2B4];
 const COLONNES_LIGNE = ['ordre', 'type', 'designation', 'quantite_milliemes', 'unite', 'prix_unitaire_centimes', 'taux_tva_centiemes',
   'offert', 'main_oeuvre', 'fourniture_non_comprise', 'surface_sol_milliemes', 'surface_murs_milliemes', 'urgence'];
 const DROITS_DE_COLONNE = {
@@ -3040,7 +3119,15 @@ const AJOUTS_2B3 = [
   'devis: add column if not exists engage_decennale boolean',
   'devis: add column if not exists acompte_a_la_signature boolean',
 ];
-const AJOUTS_PERMIS = [...AJOUTS_2A, ...AJOUTS_2B2, ...AJOUTS_2B3];
+/* …ET LA COLONNE DE 2b-4 (16/11/2026, 49.4 quinquies) : le prix du devis
+   lui-même, nullable SANS défaut — le vide est le motif du rang 12 (réponse
+   Q2 : « Point par prudence ») ; une valeur par défaut le tairait sur chaque
+   devis existant (le sabotage SDEF de la construction de la base). DÉCIDÉ,
+   dans la forme des autres listes (critique BASE-6). */
+const AJOUTS_2B4 = [
+  'devis: add column if not exists cout_devis_centimes bigint',
+];
+const AJOUTS_PERMIS = [...AJOUTS_2A, ...AJOUTS_2B2, ...AJOUTS_2B3, ...AJOUTS_2B4];
 
 console.log('\n  12. les colonnes — une liste FERMÉE');
 {
@@ -3068,7 +3155,10 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
       /* 2b-3 (49.4 quater) : la décennale (rang 11 de la liste) et le moment
          de l'acompte (rang 10) — deux réponses de l'artisan, nullables, sans
          défaut ni date. */
-      'engage_decennale boolean', 'acompte_a_la_signature boolean'],
+      'engage_decennale boolean', 'acompte_a_la_signature boolean',
+      /* 2b-4 (49.4 quinquies) : le prix du devis lui-même — nullable, sans
+         défaut (vide = pas dit, le motif du rang 12), hors des totaux. */
+      'cout_devis_centimes bigint'],
     devis_lignes: ['id uuid +', 'devis_id uuid +', 'ordre integer +', 'type text +', 'designation text', 'quantite_milliemes bigint',
       'unite text', 'prix_unitaire_centimes bigint', 'taux_tva_centiemes integer', 'total_centimes bigint', 'offert boolean +',
       'main_oeuvre boolean +', 'fourniture_non_comprise boolean +', 'surface_sol_milliemes bigint', 'surface_murs_milliemes bigint',
@@ -3105,8 +3195,8 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
   const horsListe = ajouts.filter((a) => !AJOUTS_PERMIS.includes(a));
   const malComptes = AJOUTS_PERMIS.filter((a) => ajouts.filter((x) => x === a).length !== 1 || !ajoutsS49.includes(a));
   verifier('…et rien ne s’y ajoute plus bas : sur ces tables, le seul `add` est `add constraint <nom> check` (ni `add column`, ni '
-    + '`add if not exists`, ni une contrainte anonyme) — sauf les dix colonnes des conditions (lot 2a), les cinq de 2b-2 (49.4 ter) '
-    + 'et les trois de 2b-3 (49.3 bis, 49.4 quater), chacune une fois, dans la section 49', horsListe.length === 0 && malComptes.length === 0 && ajouts.length === AJOUTS_PERMIS.length,
+    + '`add if not exists`, ni une contrainte anonyme) — sauf les dix colonnes des conditions (lot 2a), les cinq de 2b-2 (49.4 ter), '
+    + 'les trois de 2b-3 (49.3 bis, 49.4 quater) et celle de 2b-4 (49.4 quinquies), chacune une fois, dans la section 49', horsListe.length === 0 && malComptes.length === 0 && ajouts.length === AJOUTS_PERMIS.length,
   `hors liste : ${horsListe.join(' | ') || '—'} ; manquants ou en double : ${malComptes.join(' | ') || '—'}`);
 }
 
@@ -3185,13 +3275,17 @@ console.log('\n  12 bis. aucune table du devis ne change de FORME après sa cré
     return d && ad && !(d.index < ad.index && alters49.includes(d.brut) && alters49.includes(ad.brut));
   });
   verifier(`sur les trois tables, chaque \`alter table\` du fichier (${alters.length} lus) est l’une des formes PERMISES : la RLS, une `
-    + 'contrainte refaite (`drop constraint if exists` puis `add constraint … check`), ou une des dix-huit colonnes du lot 2a, de 2b-2 et de 2b-3 — ni '
+    + 'contrainte refaite (`drop constraint if exists` puis `add constraint … check`), ou une des dix-neuf colonnes du lot 2a, de 2b-2, '
+    + 'de 2b-3 et de 2b-4 — ni '
     + '`alter column` (un défaut, un type, un `drop not null`), ni `drop column`, ni `rename`, ni `owner to`, ni `disable`, ni '
     + '`not valid`',
   alters.length >= 74 && horsListe.length === 0, horsListe.join(' | ') || `${alters.length} lus — le lecteur a perdu sa cible`);
   verifier(`…chaque table voit sa RLS posée une fois, et chacune des ${tousLesNoms.length} contraintes est retirée UNE fois puis `
     + 'reposée UNE fois, dans cet ordre et dans la section 49 — aucune n’est refaite plus bas, sous le même nom, avec une autre règle',
-  tousLesNoms.length === 34 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
+  /* 35 depuis 2b-4 (`devis_cout_check`, le prix du devis lui-même, que
+     `CONTRAINTES_DEVIS` porte avec le calcul) : 19 sur les devis, 11 sur
+     les lignes, 5 sur la ventilation. DÉCIDÉ. */
+  tousLesNoms.length === 35 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
 }
 
 /* LA FIN D'UN ORDRE SQL, en sautant ses chaînes (`'…'`, `E'…'` et ses
@@ -3517,7 +3611,7 @@ console.log('\n  14. D4 — rien n’est obligatoire hors l’entreprise, et auc
     mauvais.length === 0, mauvais.join(' | '));
 }
 
-console.log('\n  15. les contraintes — trente-quatre, toutes nommées en `_check`');
+console.log('\n  15. les contraintes — trente-cinq, toutes nommées en `_check`');
 {
   const noms = CHECKS49.map((c) => c.nom);
   const tables = [...new Set(CHECKS49.map((c) => c.table))].sort();
@@ -3525,13 +3619,15 @@ console.log('\n  15. les contraintes — trente-quatre, toutes nommées en `_che
      (six pour les conditions, `devis_calculs_check` posée APRÈS son
      rattrapage en 49.6 ter, et deux sur la ventilation — la part de
      réduction, et « un taux disparu est à zéro en entier »), une en 2b-2
-     (`devis_pour_qui_check`) et une en 2b-3 (`devis_ligne_urgence_check` :
+     (`devis_pour_qui_check`), une en 2b-3 (`devis_ligne_urgence_check` :
      la réparation urgente, sur un POSTE seulement — À PART de
-     `devis_ligne_forme_check`, qui ne change pas). Un nombre seul laissait
-     passer une contrainte remplacée par une autre. */
+     `devis_ligne_forme_check`, qui ne change pas) et une en 2b-4
+     (`devis_cout_check` : le prix du devis lui-même, de 0 à 100 000
+     centimes, ou vide). Un nombre seul laissait passer une contrainte
+     remplacée par une autre. */
   const ATTENDUES = {
     devis: ['devis_acompte_check', 'devis_acompte_nature_check', 'devis_acompte_une_forme_check', 'devis_calculs_check',
-      'devis_delai_check', 'devis_lieu_adresse_check', 'devis_lieu_code_postal_check', 'devis_lieu_ville_check', 'devis_objet_check',
+      'devis_cout_check', 'devis_delai_check', 'devis_lieu_adresse_check', 'devis_lieu_code_postal_check', 'devis_lieu_ville_check', 'devis_objet_check',
       'devis_plafond_check', 'devis_pour_qui_check', 'devis_remise_check', 'devis_remise_une_forme_check', 'devis_retenue_check',
       'devis_source_check',
       'devis_statut_check', 'devis_totaux_check', 'devis_validite_check'],
@@ -3542,9 +3638,9 @@ console.log('\n  15. les contraintes — trente-quatre, toutes nommées en `_che
       'devis_tva_vide_check'],
   };
   const parTable = Object.fromEntries(TABLES49.map((t) => [t, CHECKS49.filter((c) => c.table === t).map((c) => c.nom).sort()]));
-  verifier(`la section pose ${noms.length} contraintes \`check\` sur les trois tables — il en faut 34, NOMMÉES (18 sur les devis, `
+  verifier(`la section pose ${noms.length} contraintes \`check\` sur les trois tables — il en faut 35, NOMMÉES (19 sur les devis, `
     + '11 sur les lignes, 5 sur la ventilation)',
-  noms.length === 34 && json(tables) === json([...TABLES49].sort())
+  noms.length === 35 && json(tables) === json([...TABLES49].sort())
     && TABLES49.every((t) => egalListes(parTable[t], [...ATTENDUES[t]].sort())), json(parTable));
   /* LES RÈGLES DU LOT 2a, ENTIÈRES (espaces réduits) : un nom juste
      portant une règle relâchée — `>= -1`, un `or` à la place d'un `and`,
@@ -3572,13 +3668,18 @@ console.log('\n  15. les contraintes — trente-quatre, toutes nommées en `_che
        nom passe AVANT dans l'ordre alphabétique : une zone urgente ET
        chiffrée est nommée par elle (essai 49-remise, cas 19 f). */
     devis_ligne_urgence_check: "type = 'poste' or not urgence",
+    /* 2b-4 (49.5) : le prix du devis lui-même — vide, ou de 0 (gratuit) à
+       100 000 centimes (1 000,00 € TTC, la borne de `tarif_devis_check`).
+       La garde en `node` du sabotage S29 (la borne relâchée), que seul
+       l'essai tenait (critique BASE-6). */
+    devis_cout_check: 'cout_devis_centimes is null or cout_devis_centimes between 0 and 100000',
     devis_tva_remise_check: 'remise_centimes >= 0',
     devis_tva_vide_check: 'nb_lignes > 0 or (base_centimes = 0 and tva_centimes = 0 and remise_centimes = 0)',
   };
   const formesFausses = Object.entries(FORMES_2A).filter(([nom, forme]) => sansEspaces(regleDe(nom)) !== forme)
     .map(([nom]) => `${nom} : « ${sansEspaces(regleDe(nom))} »`);
-  verifier('…et les dix règles du lot 2a (conditions, plafond, calculs, ventilation), celle de 2b-2 (`pour_qui`) et celle de 2b-3 '
-    + '(`urgence`) sont celles ATTENDUES, entières',
+  verifier('…et les dix règles du lot 2a (conditions, plafond, calculs, ventilation), celle de 2b-2 (`pour_qui`), celle de 2b-3 '
+    + '(`urgence`) et celle de 2b-4 (`cout`) sont celles ATTENDUES, entières',
     formesFausses.length === 0, formesFausses.join(' | '));
   verifier('…toutes finissent par `_check`, aucune en `_check<chiffres>`, aucune en double',
     noms.every((n) => /_check$/.test(n) && !/_check\d+$/.test(n)) && new Set(noms).size === noms.length);
@@ -3617,12 +3718,12 @@ console.log('\n  16. l’ordre des contraintes de ligne — celui de PostgreSQL'
   verifier('`CONTRAINTES_LIGNE` : onze noms `devis_ligne_…_check` (dix au lot 1, une à 2b-3), TRIÉS par ordre alphabétique '
     + '(octet par octet, comme PostgreSQL les applique)', noms.length === 11 && noms.every((n) => /^devis_ligne_[a-z_]+_check$/.test(n))
     && egalListes(noms, [...noms].sort()) && noms[10] === 'devis_ligne_urgence_check', json(noms));
-  verifier('`CONTRAINTES_DEVIS` : dix-huit noms `devis_…_check` (dix au lot 1, sept au lot 2a, une à 2b-2), triés de même',
-    D.CONTRAINTES_DEVIS.length === 18 && D.CONTRAINTES_DEVIS.every((n) => /^devis_[a-z_]+_check$/.test(n) && !/^devis_ligne_/.test(n))
+  verifier('`CONTRAINTES_DEVIS` : dix-neuf noms `devis_…_check` (dix au lot 1, sept au lot 2a, une à 2b-2, une à 2b-4), triés de même',
+    D.CONTRAINTES_DEVIS.length === 19 && D.CONTRAINTES_DEVIS.every((n) => /^devis_[a-z_]+_check$/.test(n) && !/^devis_ligne_/.test(n))
     && egalListes([...D.CONTRAINTES_DEVIS], [...D.CONTRAINTES_DEVIS].sort()));
   const schemaLigne = CHECKS49.filter((c) => c.table === 'devis_lignes').map((c) => c.nom).sort();
   const schemaDevis = CHECKS49.filter((c) => c.table === 'devis').map((c) => c.nom).sort();
-  verifier('…et ce sont EXACTEMENT les dix de `devis_lignes` et les dix-huit de `devis` que le schéma pose',
+  verifier('…et ce sont EXACTEMENT les onze de `devis_lignes` et les dix-neuf de `devis` que le schéma pose',
     egalListes(schemaLigne, noms) && egalListes(schemaDevis, [...D.CONTRAINTES_DEVIS]),
     `schéma (lignes) ${json(schemaLigne)} ; schéma (devis) ${json(schemaDevis)}`);
 }
@@ -4746,6 +4847,11 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
        2b-3) et le cas 23 (dix-neuf défauts, dont les trois de 2b-3) — quatre
        ordres changés (les n° 333-334 et 353-354), aucun ajouté ni retiré ;
        rejoué sur une base neuve : 27 ERROR, 43 valeurs justes, 0 écart. */
+    /* 2b-4 (16/11/2026) : le cas 18 (43 colonnes nommées, dont celle de
+       2b-4, `cout_devis_centimes`, dans `attendu` ET dans la liste des
+       colonnes trouvées) — deux ordres changés (n° 333-334), aucun ajouté ni
+       retiré ; rejoué sur une base neuve par le rôle « base » : 27 ERROR,
+       43 valeurs justes, 0 écart. Le rattrapage n'a pas bougé. */
     'supabase/essais-section-49-conditions.sql': `
       ea204fd0 a42b5839 e6d39479 11f916d2 9ae9ffe7 539ea4c9 fe7a39a2 bf46f024 58364e28 9e84eb77 819a22c5 9535a418
       085b0ee8 3877bf7f 5cd053aa 03edac1b edd65695 8808baf6 364647c8 350fa2c4 16ef89c9 388cebd2 edd65695 19ccc5ce
@@ -4774,7 +4880,7 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
       19ccc5ce 95c8eec7 8e18d6e4 45d1cebf 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 06c1e1c4 1a2a6843 edd65695
       19ccc5ce 95c8eec7 8e18d6e4 77b8828c 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b9e79b8f 1a2a6843 edd65695
       19ccc5ce 95c8eec7 8e18d6e4 78f8158f 67bfd527 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 12f16112
-      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 2c451b25 1db2a08a 0ac89d76 4b439408
+      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 984801ef 328be717 0ac89d76 4b439408
       4d880d4c 13912acb 1441f239 3771726b edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c43faebb a59edfec a54b0e4f
       bd2af069 95c8eec7 0b57b066 1a2a6843 990f1204 85348a3a`,
     'supabase/essais-section-49-rattrapage.sql': `
@@ -6218,13 +6324,26 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
      deux rangées voisines qui se contredisaient. Sans validité, elle MANQUE
      — et le résumé le dit, comme il le disait déjà quand une autre condition
      était posée. */
-  verifier('`resumeDesConditions` : rien → « Validité à choisir » (jamais plus « Aucune condition ») ; ce qui MANQUE d’abord (la nature, '
-    + 'la validité), puis ce qui est posé',
-    D.resumeDesConditions({}) === 'Validité à choisir' && D.resumeDesConditions(null) === 'Validité à choisir'
-    && D.resumeDesConditions({ acompteCentiemes: 3000 }) === 'Acompte ou arrhes ? à choisir · Validité à choisir · Acompte ou arrhes 30 %'
-    && D.resumeDesConditions(dv) === 'Validité à choisir · Réduction 10 % · Arrhes 30 % · Retenue 5 %'
-    && D.resumeDesConditions({ validiteJours: 1 }) === 'Valable 1 jour'
-    && D.resumeDesConditions({ validiteJours: 30, remiseCentimes: 5000 }) === `Réduction ${D.montantDevis(5000)} · Valable 30 jours`,
+  /* 2b-4 (T15, critique ÉCRAN-15, DÉCIDÉ) : LE PRIX DU DEVIS LUI-MÊME.
+     Tant qu'il n'est pas dit, il MANQUE — « Devis lui-même : gratuit ou
+     payant ? à choisir », en tête, après la validité ; dit, il vient EN FIN :
+     « Devis lui-même gratuit » (0) ou « Devis lui-même payant 30,00 € ».
+     Les attendus d'avant gagnent ce manque ; ceux qui le DISENT gagnent sa
+     fin. */
+  const MANQUE_COUT = 'Devis lui-même : gratuit ou payant ? à choisir';
+  verifier('`resumeDesConditions` : rien → « Validité à choisir · Devis lui-même : gratuit ou payant ? à choisir » (jamais plus '
+    + '« Aucune condition ») ; ce qui MANQUE d’abord (la nature, la validité, le prix du devis lui-même — 2b-4), puis ce qui est posé, '
+    + 'le prix du devis lui-même EN DERNIER (« gratuit », ou « payant » et son montant)',
+    D.resumeDesConditions({}) === `Validité à choisir · ${MANQUE_COUT}` && D.resumeDesConditions(null) === `Validité à choisir · ${MANQUE_COUT}`
+    && D.resumeDesConditions({ acompteCentiemes: 3000 })
+      === `Acompte ou arrhes ? à choisir · Validité à choisir · ${MANQUE_COUT} · Acompte ou arrhes 30 %`
+    && D.resumeDesConditions(dv) === `Validité à choisir · ${MANQUE_COUT} · Réduction 10 % · Arrhes 30 % · Retenue 5 %`
+    && D.resumeDesConditions({ validiteJours: 1 }) === `${MANQUE_COUT} · Valable 1 jour`
+    && D.resumeDesConditions({ validiteJours: 1, coutDevisCentimes: 0 }) === 'Valable 1 jour · Devis lui-même gratuit'
+    && D.resumeDesConditions({ validiteJours: 30, remiseCentimes: 5000, coutDevisCentimes: 0 })
+      === `Réduction ${D.montantDevis(5000)} · Valable 30 jours · Devis lui-même gratuit`
+    && D.resumeDesConditions({ ...dv, validiteJours: 30, coutDevisCentimes: 3000 })
+      === `Réduction 10 % · Arrhes 30 % · Valable 30 jours · Retenue 5 % · Devis lui-même payant ${D.montantDevis(3000)}`,
   D.resumeDesConditions(dv));
   const eR = D.effetDeLaReduction({ ht: 0, ttc: 0, reduction: 0, brut: 0, demande: D.demandeDuDevis({ remiseCentimes: 5000 }) },
     { remiseCentimes: 5000 }, 'reel');
@@ -6236,8 +6355,10 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && !/TTC|HT/.test(eAf.aDire) && D.effetDeLaReduction(tEcran, {}, 'reel') === null && D.effetDeLAcompte(tEcran, {}, 'reel') === null,
   json([eR, eA, eAf]));
   /* Une phrase d'échec par contrainte que l'APPLICATION peut violer : les
-     dix-huit moins les QUATRE que la base pose seule (la réponse « à quel
-     titre » depuis 2b-2). `devis_plafond_check`
+     dix-neuf moins les QUATRE que la base pose seule — quinze depuis 2b-4
+     (le prix du devis lui-même, `devis_cout_check`, « Le prix du devis
+     lui-même n'a pas pu être enregistré. ») ; la réponse « à quel titre »
+     depuis 2b-2. `devis_plafond_check`
      n'en est plus (relecture BASE-4 du lot 2a, mesuré) : retirer ou baisser
      la réduction d'un devis près du plafond la viole depuis l'en-tête, et sa
      phrase dit « La réduction n'a pas pu être changée. » (section 36, d). */
@@ -6246,13 +6367,16 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
   const sansPhrase = D.CONTRAINTES_DEVIS.filter((n) => !parLaBase.includes(n))
     .filter((n) => D.phraseEchecDuDevis({ enBase: true, erreur: { message: `violates check constraint "${n}"` } }) === generique);
   verifier('`phraseEchecDuDevis` : avant la base, « le brouillon » ; après, le CHAMP que nomme la contrainte — pour chacune des '
-    + 'quatorze que l’application peut violer (le plafond et la réponse « à quel titre » compris) ; sinon la phrase générale',
+    + 'quinze que l’application peut violer (le plafond, la réponse « à quel titre » et le prix du devis lui-même compris) ; sinon la '
+    + 'phrase générale',
   D.phraseEchecDuDevis({ enBase: false }) === 'Le brouillon n’a pas pu être enregistré.' && /les conditions/.test(generique)
     && sansPhrase.length === 0
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_validite_check"' } }) === 'La validité de l’offre n’a pas pu être enregistrée.'
-    && parLaBase.length === 4 && D.CONTRAINTES_DEVIS.length - parLaBase.length === 14
+    && parLaBase.length === 4 && D.CONTRAINTES_DEVIS.length - parLaBase.length === 15
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_pour_qui_check"' } })
-      === 'La réponse à « À quel titre ? » n’a pas pu être enregistrée.',
+      === 'La réponse à « À quel titre ? » n’a pas pu être enregistrée.'
+    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_cout_check"' } })
+      === 'Le prix du devis lui-même n’a pas pu être enregistré.',
   sansPhrase.join(', '));
   /* Les mots qui portent la règle — et, depuis la relecture du lot 2a, ceux
      qui manquaient (CONTROLES-8 : « recevoir », pas « encaisser » ; le
@@ -6388,11 +6512,21 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     DEPUIS_UNE_URGENCE: 'Ce devis vient d’une demande d’urgence : ne marquez une ligne que si elle remplit les conditions '
       + 'ci-dessous, et seulement le strict nécessaire.',
     DETAIL_URGENCE: 'réparation urgente',
+    /* 2b-4 (annexe A.2, DÉCIDÉ) : l'aide FIXE du bloc « Le devis lui-même :
+       gratuit ou payant ? » — la première phrase vient de l'arrêté du
+       24/01/2017 (art. 2) et de L. 111-1 2° ; la deuxième dit le calcul
+       d'Opus (hors des totaux, T5) ; la troisième, de l'arrêté du
+       17/03/2015 (art. 6), est TOUT ce qu'Opus dit des services à la
+       personne (réponse Q3). Aucun chiffre, aucun « € ». */
+    AIDE_COUT_DEVIS: 'Un particulier doit savoir, avant de s’engager, si le devis lui-même est gratuit ou payant, et ce qu’il '
+      + 'coûte. Ce prix ne s’ajoute pas au total des travaux. Pour des services à la personne chez un particulier (petit '
+      + 'jardinage, petit bricolage), le devis est toujours gratuit.',
   });
   const ecartsAides = Object.entries(AIDES_DE_DROIT_ATTENDUES).filter(([k, v]) => D[k] !== v).map(([k]) => k);
   verifier('les aides de la carte « Conditions » sont ÉCRITES MOT POUR MOT : la nature de l’acompte, le 8e jour, '
     + 'la validité, la retenue de garantie (sa phrase et l’aide de son interrupteur) — et la réduction, l’acompte, et leurs '
-    + 'deux aides « en euros » ; 2b-3 : l’échéance de l’urgence, la nature d’une association, et les cinq textes de la ligne urgente',
+    + 'deux aides « en euros » ; 2b-3 : l’échéance de l’urgence, la nature d’une association, et les cinq textes de la ligne urgente ; '
+    + '2b-4 : l’aide du prix du devis lui-même',
   ecartsAides.length === 0,
   ecartsAides.map((k) => `${k} : « ${D[k]} »`).join(' | '));
   {
@@ -6579,7 +6713,15 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     verifier('CONTROLES-2 : `etatInitialConditions` — sur un devis VIERGE, ni nature, ni validité, ni « Autre », ni retenue ; '
       + 'et la carte part d’ELLE (`useState(() => etatInitialConditions(devis, textes))`), sans autre défaut écrit à la main',
     json(vide) === json({ uniteReduction: 'pourcent', uniteAcompte: 'pourcent', nature: null, validite: null, validiteAutre: false, retenue: false,
-      echeance: null })
+      echeance: null, cout: null })
+      /* 2b-4 (DÉCIDÉ) : le prix du devis lui-même, relu tel que la base le
+         garde — 0 → « Gratuit », un montant → « Payant », vide (ou illisible)
+         → rien de choisi. JAMAIS d'après les tarifs : `etatInitialConditions`
+         ne les reçoit même pas. */
+      && D.etatInitialConditions({ coutDevisCentimes: 0 }).cout === 'gratuit'
+      && D.etatInitialConditions({ coutDevisCentimes: 3000 }).cout === 'payant'
+      && D.etatInitialConditions({ coutDevisCentimes: null }).cout === null
+      && D.etatInitialConditions({ coutDevisCentimes: '0' }).cout === null
       /* 2b-3 : l'échéance relue telle que la base la garde — `true`, `false`,
          et `null` pour tout le reste (jamais « À la signature » par défaut). */
       && D.etatInitialConditions({ acompteALaSignature: true }).echeance === true
@@ -6882,6 +7024,10 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     ['aideReductionMontant (AIDE_REDUCTION_HT)', String.raw`<Text style=\{s\.aide\}\s*>\{\s*noms\.aideReductionMontant\s*\}</Text>`, ['!!noms.aideReductionMontant &&']],
     ['aideAcompteMontant (AIDE_ACOMPTE_TTC)', String.raw`<Text style=\{s\.aide\}\s*>\{\s*noms\.aideAcompteMontant\s*\}</Text>`, ['!!noms.aideAcompteMontant &&']],
     ['l’aide de « Retenue de garantie »', String.raw`<Interrupteur\b`, []],
+    /* 2b-4 (cahier §5.5 point 1, DÉCIDÉ) : l'aide FIXE du bloc « Le devis
+       lui-même : gratuit ou payant ? », toujours montrée — « Gratuit »,
+       « Payant » ou rien de choisi. */
+    ['AIDE_COUT_DEVIS', String.raw`<Text style=\{s\.aide\}\s*>\{\s*AIDE_COUT_DEVIS\s*\}</Text>`, []],
   ];
   /* CE CONTRÔLE EXIGE UNE FORME (contre-vérification finale du lot 2a,
      N2) : `<Text style={s.aide}>{AIDE_…}</Text>`, un seul import, un titre
@@ -6963,8 +7109,9 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
        carte, mais ce que rend `aidesDeLAcompte` — importée sous son nom, et
        appelée UNE fois, sur la réponse de l'écran et le chantier neuf
        (vérifié juste après). */
+    /* 2b-4 (DÉCIDÉ) : l'aide du prix du devis lui-même, `AIDE_COUT_DEVIS`. */
     const AIDES_DE_DROIT = ['AIDE_REDUCTION', 'AIDE_ACOMPTE', 'aidesDeLAcompte', 'AIDE_VALIDITE',
-      'AIDE_RETENUE', 'PHRASE_RETENUE'];
+      'AIDE_RETENUE', 'PHRASE_RETENUE', 'AIDE_COUT_DEVIS'];
     /* 1. L'import, et les deux seules apparitions de chaque nom. */
     const importsDe = [...carteSrc.matchAll(/\bimport\s+([\s\S]*?)\s+from\s+'([^']+)'/g)].map((m) => ({ quoi: m[1], de: m[2] }));
     const deDevis = importsDe.filter((i) => i.de === '../lib/devis');
@@ -7009,7 +7156,11 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     const ouvreScroll = iScroll >= 0 ? baliseOuvrante(plat, iScroll) : '';
     const debutContenu = iScroll >= 0 ? iScroll + ouvreScroll.length : -1;
     const finContenu = plat.indexOf('</ScrollView>', debutContenu);
-    const TITRES = ['Réduction', '{noms.acompte}', 'Validité de l’offre', 'Retenue de garantie'];
+    /* 2b-4 (cahier T17, DÉCIDÉ) : un CINQUIÈME titre, le DERNIER — « Le
+       devis lui-même : gratuit ou payant ? », après « Retenue de garantie »
+       et avant le récapitulatif ; ses mots viennent de `devis.js`
+       (`LE_COUT_DU_DEVIS.titre`, comparé en toutes lettres en 43 m). */
+    const TITRES = ['Réduction', '{noms.acompte}', 'Validité de l’offre', 'Retenue de garantie', '{LE_COUT_DU_DEVIS.titre}'];
     const titres = [];
     const reTitre = /<Text style=\{s\.titre\}[^>]*>([\s\S]*?)<\/Text>/g;
     let mt;
@@ -7023,6 +7174,7 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
       ['AIDE_ACOMPTE', 1], ['noms.aideAcompteMontant', 1], ['aides.nature', 1], ['aides.echeance', 1],
       ['AIDE_VALIDITE', 2],
       ['AIDE_RETENUE', 3], ['PHRASE_RETENUE', 3],
+      ['AIDE_COUT_DEVIS', 4],
     ];
     const ouEst = (nom) => {
       if (nom === 'AIDE_RETENUE') {
@@ -7037,9 +7189,10 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     const places = AIDES_PAR_TITRE.map(([nom, k]) => ({ nom, k, i: ouEst(nom) }));
     const malPlacees = places.filter(({ k, i }) => !(i > bornes[k] && i < bornes[k + 1])).map(({ nom }) => nom);
     const dansLOrdre = places.every((p, j) => j === 0 || p.i > places[j - 1].i);
-    verifier('TC-2 : les quatre titres de la carte sont là, une fois chacun et dans l’ordre (Réduction, l’acompte, Validité de '
-      + 'l’offre, Retenue de garantie), aucun autre titre ; et chaque aide s’affiche sous LE SIEN, dans l’ordre attendu',
-    debutContenu > 0 && finContenu > debutContenu && json(titres.map((t) => t.texte)) === json(TITRES) && entetes === 4
+    verifier('TC-2 : les cinq titres de la carte sont là, une fois chacun et dans l’ordre (Réduction, l’acompte, Validité de '
+      + 'l’offre, Retenue de garantie, et — 2b-4 — le devis lui-même : gratuit ou payant ?), aucun autre titre ; et chaque aide '
+      + 's’affiche sous LE SIEN, dans l’ordre attendu',
+    debutContenu > 0 && finContenu > debutContenu && json(titres.map((t) => t.texte)) === json(TITRES) && entetes === 5
       && malPlacees.length === 0 && dansLOrdre,
     `titres ${json(titres.map((t) => t.texte))}, ${entetes} en-tête(s) ; mal placées : ${malPlacees.join(', ') || '—'} ; `
       + `ordre ${dansLOrdre ? 'juste' : 'faux'}`);
@@ -7137,6 +7290,10 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     /* 2b-3 : « Non » à la décennale (FAUX, pas vide : il se relit faux) et
        l'acompte « à la signature ». */
     engage_decennale: false, acompte_a_la_signature: true,
+    /* 2b-4 : le prix du devis lui-même, en CHAÎNE (un `bigint` que PostgREST
+       rendrait ainsi), un montant différent de tous les autres : relu 3001,
+       en nombre, à SON nom. */
+    cout_devis_centimes: '3001',
     client: { nom: 'Mme Essai', type: 'entreprise', siret: '12345678900012' },
     demande: { created_at: '2026-10-29T08:00:00Z', budget: '500-1000', description: 'Refaire la salle de bains' },
     urgence: { created_at: '2026-10-30T07:00:00Z', probleme_label: 'Fuite', details: 'Sous l’évier' },
@@ -7151,6 +7308,7 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     pourQui: 'non_professionnel', pourQuiClient: 'c-1', chantierNeufConso: true,
     chantierNeufConsoLe: '2026-11-02T14:00:00+00:00', chantierNeufTva: false,
     engageDecennale: false, acompteALaSignature: true,
+    coutDevisCentimes: 3001,
     client: { nom: 'Mme Essai', type: 'entreprise', siret: '12345678900012' },
     demande: { createdAt: '2026-10-29T08:00:00Z', budget: '500-1000', texte: 'Refaire la salle de bains' },
     urgence: { createdAt: '2026-10-30T07:00:00Z', texte: 'Fuite — Sous l’évier' },
@@ -7193,7 +7351,12 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     /* S42 (2b-2) : un type de fiche ABSENT reste absent — jamais
        « particulier » par défaut, qui ferait PROPOSER « à titre privé ». */
     && D.rowToDevis({ ...ligneDevis, client: { nom: 'X' } }).client.type === null
-    && D.rowToDevis({ ...ligneDevis, client: { nom: 'X' } }).client.siret === null,
+    && D.rowToDevis({ ...ligneDevis, client: { nom: 'X' } }).client.siret === null
+    /* 2b-4 : le 0 du prix du devis lui-même (« gratuit ») n'est PAS un vide,
+       et un prix absent se relit `null` (« pas dit ») — jamais 0. */
+    && D.rowToDevis({ ...ligneDevis, cout_devis_centimes: 0 }).coutDevisCentimes === 0
+    && D.rowToDevis({ ...ligneDevis, cout_devis_centimes: null }).coutDevisCentimes === null
+    && D.rowToDevis({ id: 'd' }).coutDevisCentimes === null,
   `reçu ${json(luDevis)}`);
   verifier('`totauxDepuisBase` (devis.js), FAIT TOURNER : l’acompte EFFECTIF (pas le total toutes options comprises), la réduction, le '
     + 'brut = HT + réduction, la demande relue (une nature inconnue ne passe pas), la ventilation sans les taux à zéro, du plus fort '
@@ -7282,7 +7445,7 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
         plafond est refusé par `devis_plafond_check` — la bande proposait
         « Réessayer », qui échouait à l'identique. Fait tourner par la VRAIE
         file et la base de démonstration, puis sous la forme de PostgREST pour
-        chacune des dix-huit contraintes du devis ; une coupure, un délai, un
+        chacune des dix-neuf contraintes du devis ; une coupure, un délai, un
         interblocage et une écriture dépassée, eux, se réessaient. */
   const baseP = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
   const IDP = (k) => `de0000ee-0000-4000-8000-0000000036${String(k).padStart(2, '0')}`;
@@ -7306,11 +7469,12 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
   const reessayables = [{ message: 'Network request failed' }, { code: '57014' }, { code: '40P01' }, { code: 'OP015' }, { code: 'PGRST116' }, null]
     .filter((e) => ERR.estUnRefusDefinitif(e));
   verifier('retirer la réduction d’un devis près du plafond : refus 23514 `devis_plafond_check` par la vraie file, et ce refus est '
-    + 'DÉFINITIF (« Réessayer » échouerait à l’identique — vérifié) ; les dix-huit contraintes du devis, sous la forme de PostgREST, '
+    + 'DÉFINITIF (« Réessayer » échouerait à l’identique — vérifié) ; les dix-neuf contraintes du devis (2b-4 : le prix du devis '
+    + 'lui-même compris), sous la forme de PostgREST, '
     + 'aussi ; une coupure, un délai, un interblocage, une écriture dépassée restent réessayables',
   fileP.etatDe('devis') === 'echec' && !!refusP && refusP.code === '23514' && /"devis_plafond_check"/.test(refusP.message || '')
     && ERR.estUnRefusDefinitif(refusP) === true && !!encoreP && encoreP.code === '23514'
-    && D.CONTRAINTES_DEVIS.length === 18 && pasDefinitifs.length === 0 && reessayables.length === 0,
+    && D.CONTRAINTES_DEVIS.length === 19 && pasDefinitifs.length === 0 && reessayables.length === 0,
   `refus ${refusP && refusP.code} ; non définitifs : ${pasDefinitifs.join(', ') || '—'} ; réessayables pris pour définitifs : ${reessayables.length}`);
   /* …la PHRASE de ce refus, ENTIÈRE, des deux côtés : l'en-tête nomme la
      réduction (seul chemin de l'en-tête vers ce plafond, BASE-4), la phrase
@@ -7789,21 +7953,30 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
   /* 2b-3 (E-B1) : un SEPTIÈME choix gardé, l'échéance — « À la signature »
      gardé sur un devis qui dit « Dès le 8e jour », et l'inverse ; et `null`
      gardé (rien de choisi) l'emporte aussi. */
+  /* 2b-4 (DÉCIDÉ) : un HUITIÈME choix gardé, le prix du devis lui-même —
+     « Payant » gardé sur un devis qui dit « gratuit », et `null` gardé sur
+     un devis payant ; une valeur inconnue n'est pas reprise ; un prix TAPÉ et
+     refusé (« 0 ») rouvre « Payant », avec son champ, comme la retenue. */
   const garde1 = { uniteReduction: 'montant', uniteAcompte: 'montant', nature: 'arrhes', validite: 60, validiteAutre: false, retenue: true,
-    echeance: true };
+    echeance: true, cout: 'payant' };
   const r1 = D.etatInitialConditions({ remiseCentiemes: 700, acompteCentiemes: 3000, acompteNature: 'acompte', validiteJours: 30,
-    acompteALaSignature: false }, { reduction: '12', acompte: '150', choix: garde1 });
+    acompteALaSignature: false, coutDevisCentimes: 0 }, { reduction: '12', acompte: '150', choix: garde1 });
   const garde2 = { uniteReduction: 'pourcent', uniteAcompte: 'pourcent', nature: null, validite: null, validiteAutre: false, retenue: false,
-    echeance: false };
+    echeance: false, cout: null };
   const r2 = D.etatInitialConditions({ remiseCentimes: 5000, acompteCentimes: 15000, acompteNature: 'arrhes', validiteJours: 60,
-    retenueGarantieCentiemes: 500, acompteALaSignature: true }, { reduction: '5', acompte: '10', choix: garde2 });
+    retenueGarantieCentiemes: 500, acompteALaSignature: true, coutDevisCentimes: 3000 }, { reduction: '5', acompte: '10', choix: garde2 });
   const r3 = D.etatInitialConditions({ acompteALaSignature: true }, { choix: { echeance: null } });
   const r4 = D.etatInitialConditions({ acompteALaSignature: true }, { choix: { echeance: 'oui' } });
-  verifier('`etatInitialConditions`, FAIT TOURNER : « Corriger » rouvre la carte sur les SEPT choix gardés — l’unité de la réduction, '
-    + 'CELLE DE L’ACOMPTE, la nature, la validité, « Autre », la retenue, et l’échéance (2b-3) — même quand le devis enregistré dit le '
-    + 'contraire, dans les deux sens ; une échéance gardée VIDE l’emporte, une valeur inconnue non',
-  json(r1) === json(garde1) && json(r2) === json(garde2) && r3.echeance === null && r4.echeance === true,
-  `${json(r1)} | ${json(r2)} | ${json(r3)} | ${json(r4)}`);
+  const r5 = D.etatInitialConditions({ coutDevisCentimes: 0 }, { choix: { cout: 'cher' } });
+  const r6 = D.etatInitialConditions({ coutDevisCentimes: 0 }, { cout: '0', choix: { cout: 'payant' } });
+  const r7 = D.etatInitialConditions({}, { cout: '2000' });
+  verifier('`etatInitialConditions`, FAIT TOURNER : « Corriger » rouvre la carte sur les HUIT choix gardés — l’unité de la réduction, '
+    + 'CELLE DE L’ACOMPTE, la nature, la validité, « Autre », la retenue, l’échéance (2b-3) et le prix du devis lui-même (2b-4) — même '
+    + 'quand le devis enregistré dit le contraire, dans les deux sens ; une échéance ou un prix gardés VIDES l’emportent, une valeur '
+    + 'inconnue non ; un prix TAPÉ et refusé rouvre « Payant »',
+  json(r1) === json(garde1) && json(r2) === json(garde2) && r3.echeance === null && r4.echeance === true
+    && r5.cout === 'gratuit' && r6.cout === 'payant' && r7.cout === 'payant',
+  `${json(r1)} | ${json(r2)} | ${json(r3)} | ${json(r4)} | ${json([r5.cout, r6.cout, r7.cout])}`);
 
   /* c. LES PHRASES D'EFFET, LES CAS QUE LES DIX DE 36 a NE COUVRAIENT PAS
         (N26) : l'acompte EN EUROS au régime réel (il perdait « TTC » sans
@@ -8600,7 +8773,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      `devis_attestation` loi). Écarts VOULUS à l'esquisse du cahier :
      `v_att_valable is not true` et `elsif v_dec_sans_date is true` — jamais
      `not x` sur une valeur qui peut manquer (la leçon du lot 0a). */
-  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
+  /* 2b-4 (cahier 2b-4, §2.5 et annexe A.1, réponse Q2 du 16/11 : « Point par
+     prudence ») — DÉCIDÉ, recopié de la fonction écrite par le rôle « base »
+     et relu ligne à ligne contre la forme de 2b-3 : TROIS changements et
+     rien d'autre — `v_cout bigint` après `v_signature` ; `d.cout_devis_centimes`
+     et `v_cout` en FIN des deux listes de la lecture du devis ; et, entre la
+     fin du rang 11 et les motifs de l'entreprise, la branche du rang 12
+     (`devis_cout`, prudence) quand `v_cout is null` — `is null`, jamais
+     `= 0` (le sabotage S4 : 0 veut dire « gratuit »). Même signature, mêmes
+     attributs ; ni `tarifs_pro`, ni `clients`, ni `professional_profiles` ne
+     sont lus (la porte étroite, T6 ; le cas 14 c de l'essai le tient). */
+  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_cout bigint; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature, v_cout from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; if v_cout is null then rang := 12; cle := 'devis_cout'; nature := 'prudence'; phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
   const defsMRR = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
   const vuMRR = defsMRR.length === 1 ? `${sansEspaces(defsMRR[0].attributs)} $$ ${sansEspaces(defsMRR[0].corps)} $$` : `(${defsMRR.length} définition(s) dans le fichier)`;
   verifier('a. `motifs_refus_remise` a EXACTEMENT la forme du contrat, relue et éprouvée par l’essai et `cas-remise.json` — une seule '
@@ -8643,29 +8826,36 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      `devis_decennale` (prudence : la question laissée vide vaut « Oui »),
      `devis_attestation_date` (prudence : une attestation jointe sans date de
      fin) et `devis_attestation` (LA LOI, L. 243-2 : aucune attestation
-     valable, ou la réponse « Oui »). */
+     valable, ou la réponse « Oui »).
+     DIX-SEPT CLÉS SUR DOUZE RANGS depuis 2b-4 (cahier 2b-4, §2.5 et annexe
+     A.1, réponse Q2 du 16/11 : « Point par prudence ») : `devis_cout` (rang
+     12, PRUDENCE — pas une huitième règle d'Opus : la loi demande « gratuit »
+     ou « payant » sur le devis au moins pour un dépannage, une réparation ou
+     un entretien signé dans les locaux de l'artisan, et Opus ne sait pas où
+     il le sera). DÉCIDÉ. */
   const CONTRAT_B2 = [
     ['devis_client', 1, 'regle_opus'], ['devis_pour_qui', 1, 'regle_opus'], ['devis_lignes', 2, 'regle_opus'],
     ['devis_taux_franchise', 3, 'loi'], ['devis_taux_sans_tva', 3, 'prudence'], ['devis_taux_reduit_neuf', 3, 'prudence'],
     ['devis_lieu', 4, 'prudence'], ['devis_delai', 5, 'regle_opus'], ['devis_validite', 6, 'prudence'],
     ['devis_acompte_nature', 7, 'prudence'], ['devis_acompte_ramene', 8, 'prudence'], ['devis_reduction_ramenee', 9, 'prudence'],
     ['devis_acompte_signature', 10, 'prudence'], ['devis_decennale', 11, 'prudence'], ['devis_attestation_date', 11, 'prudence'],
-    ['devis_attestation', 11, 'loi'],
+    ['devis_attestation', 11, 'loi'], ['devis_cout', 12, 'prudence'],
   ];
   const motifsSql = [...sansEspaces(corpsMRRbrut).matchAll(/rang := (\d+); cle := '(\w+)'; nature := '(\w+)';(?: ligne_id := v_ligne;)? phrase := '((?:[^']|'')*)';/g)]
     .map((m) => ({ cle: m[2], rang: Number(m[1]), nature: m[3], phrase: m[4].replace(/''/g, "'") }));
   const motifsJs = Object.entries(D.MOTIFS_DEVIS || {}).map(([cle, m]) => ({ cle, rang: m.rang, nature: m.nature, phrase: m.phrase }))
     .sort((a, b) => a.rang - b.rang);
-  verifier('b. les SEIZE motifs du devis (onze rangs) : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans `MOTIFS_DEVIS` '
-    + '(devis.js) — octet pour octet, dans l’ordre des rangs', motifsSql.length === 16 && egal(motifsSql, motifsJs),
-  motifsSql.length !== 16 ? `${motifsSql.length} motif(s) lus dans la fonction`
+  verifier('b. les DIX-SEPT motifs du devis (douze rangs) : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans `MOTIFS_DEVIS` '
+    + '(devis.js) — octet pour octet, dans l’ordre des rangs', motifsSql.length === 17 && egal(motifsSql, motifsJs),
+  motifsSql.length !== 17 ? `${motifsSql.length} motif(s) lus dans la fonction`
     : motifsSql.filter((m, i) => !egal(m, motifsJs[i])).map((m) => `${m.cle} : SQL ${json(m)} ≠ JS ${json(motifsJs.find((j) => j.cle === m.cle))}`).join(' | '));
   verifier('…et ce sont les clés, rangs et natures du CONTRAT (annexe B.2) : `devis_delai`, `devis_client` et `devis_lignes` sont des '
     + 'RÈGLES D’OPUS (réponses du 05/11), `devis_pour_qui` aussi (rang 1, avec `devis_client`, 2b-2), le rang 3 a trois clés (la franchise, '
     + 'la loi ; le réel sans TVA, une prudence ; le taux réduit d’un chantier neuf, une prudence — 2b-2), `devis_lieu`, '
     + '`devis_validite`, la nature et les « ramenés » des PRUDENCES, aucun `devis_taux_reduit` tout court (réponse 3 : tout permettre) ni '
     + '`devis_taux_regime` (coupé en deux) ; depuis 2b-3, le rang 10 (`devis_acompte_signature`, une prudence) et le rang 11 '
-    + '(`devis_decennale` et `devis_attestation_date`, des prudences ; `devis_attestation`, la loi)',
+    + '(`devis_decennale` et `devis_attestation_date`, des prudences ; `devis_attestation`, la loi) ; depuis 2b-4, le rang 12 '
+    + '(`devis_cout`, une prudence)',
   egal(motifsSql.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2) && egal(motifsJs.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2)
     && !('devis_taux_reduit' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_reduit(?!_neuf\b)/.test(SQL)
     && !('devis_taux_regime' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_regime/.test(SQL), json(motifsSql.map((m) => [m.cle, m.rang, m.nature])));
@@ -8715,7 +8905,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const fauteDeForme = motifsJs.filter((m) => /\d|€|'|[\u00a0\u202f]|\\/.test(sansLe8e(m)) || !/[.]$/.test(m.phrase) || !/’/.test(m.phrase + '’'));
   verifier('…aucune phrase ne porte de chiffre (sauf « Dès le 8e jour », le nom d’une pastille, dans `devis_acompte_signature`), d’euro, '
     + 'd’apostrophe DROITE, d’espace insécable ni de barre oblique : la base ne met pas '
-    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 16
+    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 17
     && fauteDeForme.length === 0, fauteDeForme.map((m) => m.cle).join(', '));
   /* Les natures de l'ENTREPRISE (annexe B.3) : `regle_opus` pour les trois
      règles d'Opus gardées le 05/11, `prudence` pour la profession
@@ -8748,8 +8938,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     /rang := 100 \+ v_position;/.test(sansEspaces(corpsMRRbrut)) && D.RANG_DE_L_ENTREPRISE === 100
     && /cle := split_part\(v_motif, ': ', 1\);/.test(sansEspaces(corpsMRRbrut))
     /* `engageDecennale: false` (2b-3) : « Non » ne lit rien, le rang 11 se
-       tait — seuls les motifs de l'entreprise restent. */
-    && egal(D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', delaiExecution: 'x', lieuVille: 'v', validiteJours: 30, engageDecennale: false }, lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise',
+       tait — seuls les motifs de l'entreprise restent. `coutDevisCentimes: 0`
+       (2b-4) : « gratuit », sinon `devis_cout` s'ajoute (critique BASE-1). */
+    && egal(D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', delaiExecution: 'x', lieuVille: 'v', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0 }, lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise',
       motifsEmetteur: ['conso_mediateur: Pour un devis : le médiateur.', 'frais_deplacement: Vos frais : à dire.'] })
       .map((m) => [m.rang, m.cle, m.phrase, m.nature]),
     [[101, 'conso_mediateur', 'Pour un devis : le médiateur.', 'loi'], [102, 'frais_deplacement', 'Vos frais : à dire.', 'regle_opus']]));
@@ -8789,8 +8980,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        taux réduit. 2b-3 (annexe A.6) : « la garantie décennale » sort (le
        rang 11 la lit), « l'urgence » devient « si une ligne marquée
        « réparation urgente » l'est vraiment », et la COUVERTURE de
-       l'attestation entre. */
-    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira).',
+       l'attestation entre. 2b-4 (annexe A.4, DÉCIDÉ) : « si le devis
+       lui-même est payant » SORT (le point `devis_cout` le demande), « si
+       ce devis relève des services à la personne » ENTRE (réponse Q3). La
+       même phrase que `devis.js` et `mesure-devis` : les trois changent
+       ensemble (S22). */
+    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, si ce devis relève des services à la personne, les déchets de chantier, le label RGE pour des travaux d’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira).',
     RIEN_NE_MANQUE_POUR_CE_DEVIS: 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.',
     LISTE_AVANT_LA_PREMIERE_LIGNE: 'Écrivez une première ligne : la liste se calculera ensuite.',
     LISTE_EN_ROUTE: 'Des changements partent : la liste sera à jour juste après.',
@@ -8835,7 +9030,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('…et ses QUATRE insécables sont écrites `\\u00a0` dans le source de la constante — aucune n’y est collée en caractère invisible',
     sourceAide.length > 200 && (sourceAide.match(/\\u00a0/g) || []).length === 4 && !/[\u00a0\u202f]/.test(sourceAide),
   `${(sourceAide.match(/\\u00a0/g) || []).length} séquence(s), ${(sourceAide.match(/[\u00a0\u202f]/g) || []).length} caractère(s) invisible(s)`);
-  verifier('…les étiquettes de nature disent « La loi », « Par prudence », « Règle d’Opus » — et les avis (B.7) leurs deux phrases',
+  verifier('…les étiquettes de nature disent « La loi », « Par prudence », « Règle d’Opus » — et les avis (B.7) leurs phrases, '
+    + 'les SIX de 2b-4 comprises, mot pour mot',
     egal(D.ETIQUETTE_DE_NATURE, { loi: 'La loi', prudence: 'Par prudence', regle_opus: 'Règle d’Opus' })
     && egal(Object.fromEntries(Object.entries(D.AVIS_DU_DEVIS || {}).map(([k, v]) => [k, net(v)])), {
       avis_objet: 'Ce devis n’a pas de titre : le document dira seulement « Devis ».',
@@ -8844,6 +9040,47 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       avis_siret_client: 'Ce client commande pour son entreprise : ajoutez son SIRET à sa fiche, il vous servira pour la facture.',
       avis_fiche_particulier: 'Ce client commande pour son entreprise, mais votre carnet le range parmi les particuliers : passez '
         + 'sa fiche en « Entreprise » pour y écrire son SIRET.',
+      /* 2b-4 (annexe A.3 du cahier 2b-4, DÉCIDÉ) : SIX avis, mot pour mot —
+         le devis lui-même payant (DROIT-1 : « quatorze jours », « ne vous
+         devra rien » ; DROIT-3 : le téléphone et les messages), payant face
+         aux tarifs affichés « gratuit » (DROIT-11), dit gratuit avec des
+         frais de déplacement, l'attestation qui arrive à sa fin (`{fin}`, les
+         trois façons dont un chantier est déjà ouvert, DROIT-8), et le
+         franchisé au-delà du plafond (`{montant}`, jamais « HT », DROIT-2,
+         ÉCRAN-6) — ses deux phrases composées de la MÊME suite, les deux
+         plafonds lus dans `PLAFONDS_FRANCHISE` (insécables ramenées à des
+         espaces par `net`). Les MODÈLES sont comparés : les trous se
+         remplissent dans `avisDuDevis` (section 43). */
+      avis_devis_payant: 'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être un '
+        + 'contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez '
+        + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez '
+        + 'lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le formulaire de '
+        + 'rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare pas encore ce '
+        + 'contrat : faites-le relire avant de faire payer un devis.',
+      avis_devis_payant_tarifs_gratuits: 'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : un client '
+        + 'peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis '
+        + 'gratuitement.',
+      avis_devis_gratuit_deplacement: 'Le devis lui-même est dit gratuit, mais vos tarifs comptent des frais de déplacement : si vous les '
+        + 'faites payer pour venir établir ce devis, ne le présentez pas comme gratuit — la loi peut y voir une '
+        + 'pratique trompeuse.',
+      avis_attestation_echeance: 'Votre attestation décennale est valable jusqu’au {fin}. Si elle vaut pour l’ensemble de vos chantiers, '
+        + 'elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
+        + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui '
+        + 'comptera, sauf si ce chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de '
+        + 'service donné, ou d’autres entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la '
+        + 'donner à votre client.',
+      avis_franchise_plafond: 'Ce devis atteint à lui seul {montant}. En franchise de TVA, les travaux comptent en principe comme des '
+        + 'prestations de services : au-delà de 41 250,00 € sur une même année civile, la franchise cesse à partir '
+        + 'du jour du dépassement ; au-delà de 37 500,00 €, vous n’y avez plus droit à partir du 1er janvier '
+        + 'suivant. D’autres plafonds peuvent s’appliquer selon les matériaux que vous fournissez, ou si votre '
+        + 'entreprise a été créée cette année. Opus ne connaît pas votre chiffre d’affaires : vérifiez avec votre '
+        + 'comptable avant de remettre ce devis.',
+      avis_franchise_plafond_options: 'Avec ses options, ce devis atteint {montant}. En franchise de TVA, les travaux comptent en principe '
+        + 'comme des prestations de services : au-delà de 41 250,00 € sur une même année civile, la franchise cesse '
+        + 'à partir du jour du dépassement ; au-delà de 37 500,00 €, vous n’y avez plus droit à partir du 1er '
+        + 'janvier suivant. D’autres plafonds peuvent s’appliquer selon les matériaux que vous fournissez, ou si '
+        + 'votre entreprise a été créée cette année. Opus ne connaît pas votre chiffre d’affaires : vérifiez avec '
+        + 'votre comptable avant de remettre ce devis.',
     }) && egal(D.NATURES_DE_MOTIF, ['loi', 'prudence', 'regle_opus']));
   /* « PAS ENCORE VÉRIFIÉ » NE PROMET RIEN (critique E-11) : aucune date,
      aucun « prochain lot », aucun « bientôt » — on dit ce qui manque, pas
@@ -8853,15 +9090,21 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      est payant » à la place du « prix du devis », qui se lisait comme le
      total. */
   const pev = net(D.PAS_ENCORE_VERIFIE);
+  /* 2b-4 (annexe A.4, réponse Q3, DÉCIDÉ) : « si le devis lui-même est
+     payant » SORT — le point `devis_cout` (rang 12) le demande désormais, et
+     le garder promettrait une vérification qui a lieu —, « si ce devis
+     relève des services à la personne » ENTRE (aucune question, aucune case,
+     aucun motif : Opus ne le vérifie pas). Toujours SEPT faits (S22). */
   verifier('…« Pas encore vérifié » nomme les SEPT faits qu’Opus ne vérifie pas encore (2b-2 : « pour qui » et l’immeuble neuf sont '
     + 'DEMANDÉS, les conditions du taux réduit restent — l’ancienneté du logement, la certification du client ; 2b-3 : la décennale est '
-    + 'LUE, sauf ce que couvre l’attestation, et l’urgence reste — si une ligne marquée l’est vraiment), jamais « le prix du '
-    + 'devis », et n’annonce ni date ni lot (S13)',
-  ['le moment de la signature', 'si une ligne marquée « réparation urgente » l’est vraiment', 'si le devis lui-même est payant',
+    + 'LUE, sauf ce que couvre l’attestation, et l’urgence reste — si une ligne marquée l’est vraiment ; 2b-4 : le prix du devis '
+    + 'lui-même est DEMANDÉ, les services à la personne entrent), jamais « le prix du devis », et n’annonce ni date ni lot (S13)',
+  ['le moment de la signature', 'si une ligne marquée « réparation urgente » l’est vraiment',
+    'si ce devis relève des services à la personne',
     'les déchets de chantier', 'le label RGE pour des travaux d’énergie',
     'les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client)',
     'si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira)']
-    .every((x) => pev.includes(x)) && !/le prix du devis/.test(pev)
+    .every((x) => pev.includes(x)) && !/le prix du devis/.test(pev) && !/si le devis lui-même est payant/.test(pev)
     && !/pour qui le client commande|immeuble neuf|la garantie décennale|, l’urgence,/.test(pev)
     && !/bient[oô]t|prochain|lot\b|\b20\d\d\b|\d{1,2}\/\d{1,2}|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre/i.test(pev), pev);
 
@@ -8989,8 +9232,11 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   /* 2b-3 : « complet » répond aussi « Non » à la décennale — « Non » ne lit
      rien, le rang 11 se tait (une réponse vide compterait « Oui », et
      `devis_decennale` s'ajouterait à chaque bord). */
+  /* 2b-4 : « complet » dit aussi « gratuit » (`coutDevisCentimes: 0`) — sans
+     lui, `devis_cout` (rang 12) s'ajoute à chaque bord (critique BASE-1,
+     mesuré : six vérifications rougissaient pour cette seule raison). */
   const complet = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'Brest', delaiExecution: '2 semaines', validiteJours: 30,
-    engageDecennale: false };
+    engageDecennale: false, coutDevisCentimes: 0 };
   const poste20 = { id: 'p', type: 'poste', tauxTvaCentiemes: 2000, ordre: 1000 };
   verifier('le miroir, FAIT TOURNER sur les bords : des BLANCS ne sont pas un délai ni un lieu (insécable, espace sans chasse compris) ; un '
     + 'acompte en % n’est jamais « ramené » ; une réduction ÉGALE ne l’est pas ; un effectif absent ne se compare pas',
@@ -9174,14 +9420,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      2b-3 : six de plus, le cas 19 (`devis_ligne_urgence_check` sur une
      option, une zone, une pièce, une réserve, un poste changé en option ; et
      une zone urgente ET chiffrée, nommée par `devis_ligne_forme_check` :
-     l'ordre alphabétique) —, soit DIX-NEUF. */
-  const errs = (essE.match(/\\set\s+e1[2589]\w+_err\s+:ERROR\b/g) || []).length;
-  const juges = (essE.match(/:'e1[2589]\w+_err'\s*=\s*'true'/g) || []).length;
-  verifier('d. l’essai `essais-section-49-remise.sql` annonce EXACTEMENT ses 19 erreurs et JUGE chacune en SQL (`:ERROR`, '
+     l'ordre alphabétique) —, soit DIX-NEUF.
+     2b-4 : deux de plus, le cas 25 h (`devis_cout_check` : −1 et 100 001,
+     jugés EN SQL — critique BASE-5), soit VINGT ET UN. L'expression voit
+     désormais les variables `e25…` (DÉCIDÉ). */
+  const errs = (essE.match(/\\set\s+e(?:1[2589]|25)\w+_err\s+:ERROR\b/g) || []).length;
+  const juges = (essE.match(/:'e(?:1[2589]|25)\w+_err'\s*=\s*'true'/g) || []).length;
+  verifier('d. l’essai `essais-section-49-remise.sql` annonce EXACTEMENT ses 21 erreurs et JUGE chacune en SQL (`:ERROR`, '
     + '`LAST_ERROR_SQLSTATE`, `LAST_ERROR_MESSAGE`) ; aucun bloc `do` n’y change de rôle ni de jeton ; OP027 y est éprouvé avec un jeton, '
     + 'depuis une fonction `security definer` et par `service_role`, et un visiteur y est refusé',
-  brutE.length > 20000 && /EXACTEMENT 19 lignes/.test(brutE) && errs === 19 && juges === 19
-    && (essE.match(/LAST_ERROR_SQLSTATE/g) || []).length >= 19
+  brutE.length > 20000 && /EXACTEMENT 21 lignes/.test(brutE) && errs === 21 && juges === 21
+    && (essE.match(/LAST_ERROR_SQLSTATE/g) || []).length >= 21
     && blocsDo.every((b) => !/\brole\b|request\.jwt|set_config/i.test(b))
     && /set\s+local\s+role\s+service_role\s*;/i.test(essE) && /security\s+definer/i.test(essE) && /set\s+local\s+role\s+anon\s*;/i.test(essE)
     && (essE.match(/motifs_refus_remise\s*\(/g) || []).length >= 30,
@@ -9202,18 +9451,24 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   /* `pg_temp.v(` moins sa définition : les valeurs ENVELOPPÉES. */
   const enveloppes = (essE.match(/pg_temp\.v\(/g) || []).length - (essE.match(/create function pg_temp\.v\(/g) || []).length;
   const declarees = ['e12a', 'e12b', 'e12c', 'e12d', 'e12e', 'e12f1', 'e12f2', 'e12g1', 'e12g2', 'e12g3', 'e12h', 'e15g', 'e18b',
-    'e19a', 'e19b', 'e19c', 'e19d', 'e19e', 'e19f']
+    'e19a', 'e19b', 'e19c', 'e19d', 'e19e', 'e19f', 'e25h1', 'e25h2']
     .every((v) => ['err', 'code', 'msg'].every((x) => {
       const i = essE.indexOf(`\\set ${v}_${x} 'jamais relevé'`);
       const j = essE.indexOf(`\\set ${v}_${x} :`);
       return i >= 0 && j > i;
     }));
   const valeursAnnoncees = Number((/\\set\s+VALEURS_ANNONCEES\s+(\d+)/.exec(essE) || [])[1]);
-  verifier('…il ANNONCE ses 267 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, et les cas 19 à 24 de 2b-3), les '
-    + 'COMPTE (chaque valeur passe par '
-    + '`pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre compte ; les 57 variables des '
+  /* 2b-4 (DÉCIDÉ) : 288 valeurs — les 267 de 2b-3, et les VINGT ET UNE du
+     cas 25 (le prix du devis lui-même : vide, 0, 3 000, l'ordre des rangs
+     6 et 12, puis 11 et 12, un client « professionnel », l'artisan B, et les
+     deux refus de 25 h jugés en SQL), comptées par le rôle « base » ; le
+     compte est désormais le cas 26, la 289e colonne. Les 63 variables des
+     refus (57 et les six de 25 h) déclarées d'avance. */
+  verifier('…il ANNONCE ses 288 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
+    + 'et le cas 25 de 2b-4), les COMPTE (chaque valeur passe par '
+    + '`pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre compte ; les 63 variables des '
     + 'refus sont déclarées d’avance (un cas retiré laisse un `f`, pas une autre erreur)',
-  valeursAnnoncees === 267 && /JUGE EXACTEMENT 267 VALEURS/.test(brutE)
+  valeursAnnoncees === 288 && /JUGE EXACTEMENT 288 VALEURS/.test(brutE)
     && /create temporary sequence essai_valeurs;/.test(essE)
     && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
     && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
@@ -10366,8 +10621,14 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && (saE.match(/const ouvrirPourRemettre = /g) || []).length === 1,
   ouvrirListe.slice(0, 200));
   const opus = sansEspaces(sansCommentairesJs(lire('src/OpusApp.js')));
-  verifier('…« Mon entreprise » le signale à sa FERMETURE (`setRetourEntreprise`), et la saisie le reçoit',
-    /onFermer=\{\(\) => \{ setEntrepriseOuverte\(false\); setRetourEntreprise\(\(n\) => n \+ 1\); \}\}/.test(opus)
+  /* 2b-4 (cahier §3.4, critique ÉCRAN-19, DÉCIDÉ) : la fermeture RELIT aussi
+     le régime ET les assurances (`lireRegime`, discrète quand le régime est
+     déjà connu) — c'est dans « Mon entreprise » que l'artisan change la date
+     de fin de son attestation, et l'avis qui la lit (`mesAssurances`) ne
+     doit pas garder l'ancienne. */
+  verifier('…« Mon entreprise » le signale à sa FERMETURE (`setRetourEntreprise`), et la saisie le reçoit ; 2b-4 : la fermeture relit '
+    + 'le régime et les assurances (`lireRegime`, discrète comme les trois autres appels)',
+    /onFermer=\{\(\) => \{ setEntrepriseOuverte\(false\); setRetourEntreprise\(\(n\) => n \+ 1\); lireRegime\(\{ discret: typeof monRegime === 'string' \}\); \}\}/.test(opus)
     && /retourEntreprise=\{retourEntreprise\}/.test(opus));
   verifier('la carte se pose par `carte === CARTE_POUR_REMETTRE` (une valeur de PLUS de l’unique état de carte), reçoit `etatDeLaListe`, '
     + 'la liste rangée avec la table des sections d’« Mon entreprise », et les avis À PART — jamais dans la ligne',
@@ -10393,7 +10654,11 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        refus, et rien ne rougissait). */
     /* 2b-2 : les avis de la fiche (SIRET, « particulier ») lisent la fiche
        jointe et la réponse que la BASE a vue avec la liste. */
-    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, \}\);/.test(saE)
+    /* 2b-4 (T7, cahier §3.5, DÉCIDÉ) : trois entrées de plus — `regime`,
+       `assurances` et `tarifs`, telles que l'ÉCRAN les tient (sans elles, les
+       six avis de 2b-4 se tairaient tous, au vert : `undefined` veut dire
+       « pas transmis »). */
+    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, \}\);/.test(saE)
     && saE.indexOf('const avis = avisDuDevis(') > saE.indexOf('const pasCompte = ceQueLaListeNeComptePas(')
     && !/useMemo\(\(\) => avisDuDevis/.test(saE)
     && (saE.match(/const listeReessayable = !!liste\.erreur && !estUnRefusDefinitif\(liste\.erreur\);/g) || []).length === 1
@@ -10740,8 +11005,9 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
   const ENT = ['identite: a', 'conso_adresse_etablissement: b', 'conso_mediateur: c', 'conso_adresse_siege: d',
     'frais_deplacement: e', 'conso_tva_intra: f', 'consomme_x: g'];
   /* 2b-3 : « Non » à la décennale — le rang 11 se tait, ces cas ne parlent
-     que du rang 1 et de l'entreprise. */
-  const DEV = { clientId: 'c', lieuVille: 'Brest', delaiExecution: 'x', validiteJours: 30, engageDecennale: false };
+     que du rang 1 et de l'entreprise. 2b-4 : « gratuit » — le rang 12 se
+     tait aussi. */
+  const DEV = { clientId: 'c', lieuVille: 'Brest', delaiExecution: 'x', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0 };
   const POSTE = { id: 'p', type: 'poste', tauxTvaCentiemes: 2000, ordre: 1000 };
   const avec = (pq, autre = {}) => D.motifsDeRemise({ devis: { ...DEV, pourQui: pq, pourQuiClient: pq ? 'c' : null, ...autre },
     lignes: [POSTE], regime: 'reel', motifsEmetteur: ENT }).map((m) => [m.rang, m.cle, m.nature]);
@@ -11191,9 +11457,9 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   }).map(([k]) => k);
   verifier('a. les quatre motifs de 2b-3 : `devis_acompte_signature` au rang 10 (prudence), et au rang 11 `devis_decennale` (prudence), '
     + '`devis_attestation_date` (prudence), `devis_attestation` (la loi) — chacun en 200 caractères au plus, d’une seule phrase ; '
-    + 'seize clés sur onze rangs en tout',
-  fauxA.length === 0 && Object.keys(D.MOTIFS_DEVIS).length === 16
-    && new Set(Object.values(D.MOTIFS_DEVIS).map((m) => m.rang)).size === 11, fauxA.join(', '));
+    + 'dix-sept clés sur douze rangs en tout (le rang 12 de 2b-4 compris : `devis_cout`)',
+  fauxA.length === 0 && Object.keys(D.MOTIFS_DEVIS).length === 17
+    && new Set(Object.values(D.MOTIFS_DEVIS).map((m) => m.rang)).size === 12, fauxA.join(', '));
 
   /* b. LA RÈGLE DE « À LA SIGNATURE », UNE SEULE FOIS : sur TOUTES les
         combinaisons (réponse valable, chantier neuf, lignes), l'aide dit
@@ -11333,8 +11599,10 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   /* e. LE RANG 10, FAIT TOURNER sur ses bords : sans acompte, rien ; un
         acompte en euros compte ; « Dès le 8e jour » (faux) et une chaîne
         « true » ne font rien ; rangé AVANT le rang 11. */
+  /* 2b-4 : `coutDevisCentimes: 0` (« gratuit ») — sans lui, `devis_cout`
+     (rang 12) s'ajoute à la fin de chaque liste (critique BASE-1). */
   const sig = (plus, lignes = [P0('a')]) => D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c',
-    lieuVille: 'v', delaiExecution: 'x', validiteJours: 30, engageDecennale: true, ...plus }, lignes, regime: 'franchise', assurances: [],
+    lieuVille: 'v', delaiExecution: 'x', validiteJours: 30, engageDecennale: true, coutDevisCentimes: 0, ...plus }, lignes, regime: 'franchise', assurances: [],
   jour: '2026-11-12' }).map((m) => m.cle).join();
   verifier('e. le rang 10, FAIT TOURNER : « à la signature » sans acompte → rien ; un acompte en euros → le motif ; « Dès le 8e jour » '
     + '(faux) ou « true » en chaîne → rien ; tout marqué à titre privé → rien ; et le rang 10 sort AVANT le rang 11',
@@ -11367,9 +11635,14 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     && egal(D.pastillesDeLEcheance(false), ['Dès le 8e jour', 'À la signature'])
     && egal(D.pastillesDeLEcheance(true), ['Dès le 8e jour', 'À la signature'])
     && D.ECHEANCE_DE_L_ACOMPTE.etiquette === 'Quand le client paie-t-il cette somme ?'
-    && net(D.resumeDesConditions(devisSig)) === 'Acompte 30 % à la signature · Valable 30 jours'
-    && net(D.resumeDesConditions({ ...devisSig, acompteALaSignature: false })) === 'Acompte 30 % · Valable 30 jours'
-    && net(D.resumeDesConditions({ validiteJours: 30, acompteALaSignature: true })) === 'Valable 30 jours',
+    /* 2b-4 : le prix du devis lui-même DIT (« gratuit ») — sans lui, le
+       résumé commencerait par ce qui manque (section 25). */
+    && net(D.resumeDesConditions({ ...devisSig, coutDevisCentimes: 0 }))
+      === 'Acompte 30 % à la signature · Valable 30 jours · Devis lui-même gratuit'
+    && net(D.resumeDesConditions({ ...devisSig, acompteALaSignature: false, coutDevisCentimes: 0 }))
+      === 'Acompte 30 % · Valable 30 jours · Devis lui-même gratuit'
+    && net(D.resumeDesConditions({ validiteJours: 30, acompteALaSignature: true, coutDevisCentimes: 0 }))
+      === 'Valable 30 jours · Devis lui-même gratuit',
   json([fermee.changements, videe.changements, D.resumeDesConditions(devisSig)]));
 
   /* g. LES ENDROITS ET LES ACTIONS (cahier §3.1) : « Conditions » SUR
@@ -11626,6 +11899,565 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
     + 'la cause, elle ne propose jamais le geste',
   !marquer.test(CDj) && !marquer.test(PRj),
   `${(CDj.match(/.{0,40}marqu.{0,40}/i) || [''])[0]} | ${(PRj.match(/.{0,40}marqu.{0,40}/i) || [''])[0]}`);
+}
+
+console.log('');
+console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les plafonds de la franchise, FAITS TOURNER');
+{
+  const egal = (a, b) => json(a) === json(b);
+  const NB = String.fromCharCode(0xa0);
+  const NNB = String.fromCharCode(0x202f);
+  const net = (t) => String(t == null ? '' : t).split(NB).join(' ').split(NNB).join(' ');
+
+  /* a. LE MOTIF `devis_cout` (annexe A.1, décision Q2 du propriétaire) : le
+        rang 12, « Par prudence », 200 caractères au plus, la consigne
+        d'abord (« Dites si le devis lui-même est gratuit ou payant. »), « le
+        devis lui-même » — jamais « le devis » seul, qui se lirait « les
+        travaux » — et « au moins » : la loi ne le demande pas pour TOUS les
+        devis, Opus si. Son endroit est la carte « Conditions », champ `cout`,
+        et son bouton dit le geste en 33 caractères. */
+  const MC = D.MOTIFS_DEVIS.devis_cout || {};
+  /* La phrase EN TOUTES LETTRES (annexe A.1), comparée au miroir ET au corps
+     de `motifs_refus_remise()` : un sabotage qui changerait la fonction, le
+     miroir et `CONTRAT_B2` ensemble passerait sinon (la leçon de
+     `PHRASES_DU_05_11`, section 40 b). */
+  const PHRASE_COUT = 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une '
+    + 'réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.';
+  const defsCout = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
+  const corpsMRR = defsCout.length === 1 ? defsCout[0].corps : '';
+  const pointCout = D.endroitDuMotif({ cle: 'devis_cout' });
+  const boutonCout = D.actionDuPoint({ cle: 'devis_cout', endroit: pointCout });
+  verifier('a. `devis_cout` : rang 12, « Par prudence », sa phrase EN TOUTES LETTRES (197 caractères) des deux côtés, la consigne d’abord, « le devis lui-même » et '
+    + '« au moins » ; son endroit est « Conditions » (champ `cout`), son bouton « Choisir : devis gratuit ou payant » (33 caractères)',
+  MC.rang === 12 && MC.nature === 'prudence' && MC.phrase === PHRASE_COUT && PHRASE_COUT.length === 197
+    && corpsMRR.includes(`phrase := '${PHRASE_COUT}'`) && typeof MC.phrase === 'string' && MC.phrase.length <= 200
+    && MC.phrase.startsWith('Dites si le devis lui-même est gratuit ou payant. ')
+    && MC.phrase.includes(' au moins ') && D.premierePhrase(MC.phrase).suite === false
+    && egal(pointCout, { endroit: 'conditions', champ: 'cout' })
+    && boutonCout && boutonCout.libelle === 'Choisir : devis gratuit ou payant' && boutonCout.libelle.length === 33
+    && boutonCout.aDire === boutonCout.libelle,
+  `${json(MC).slice(0, 160)} | ${json(pointCout)} | ${json(boutonCout)} | corps : ${corpsMRR.includes(PHRASE_COUT)}`);
+
+  /* a bis. LE MIROIR, À SES BORDS : vide → le motif (dernier de la liste
+        du devis, rang 12) ; 0 et 3000 → rien ; la réponse « à quel titre »,
+        la décennale, les tarifs n'y changent RIEN (la base ne les lit pas
+        pour ce rang) ; et il suit les autres motifs dans l'ordre des rangs. */
+  const COMPLET = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x', validiteJours: 30,
+    engageDecennale: false, coutDevisCentimes: 0 };
+  const POSTE = [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }];
+  const cles = (devis, plus = {}) => D.motifsDeRemise({ devis, lignes: POSTE, regime: 'franchise', ...plus }).map((m) => m.cle);
+  const bordsMiroir = [
+    ['vide', cles({ ...COMPLET, coutDevisCentimes: null }), ['devis_cout']],
+    ['absent (`undefined`)', cles((({ coutDevisCentimes, ...r }) => r)(COMPLET)), ['devis_cout']],
+    ['0 (gratuit)', cles(COMPLET), []],
+    ['3000 (payant)', cles({ ...COMPLET, coutDevisCentimes: 3000 }), []],
+    ['vide, « professionnel »', cles({ ...COMPLET, pourQui: 'professionnel', coutDevisCentimes: null }), ['devis_cout']],
+    ['vide, validité vide', cles({ ...COMPLET, validiteJours: null, coutDevisCentimes: null }), ['devis_validite', 'devis_cout']],
+    ['vide, décennale sans réponse ni attestation', cles({ ...COMPLET, engageDecennale: null, coutDevisCentimes: null }),
+      ['devis_decennale', 'devis_cout']],
+  ];
+  const fauxMiroir = bordsMiroir.filter(([, vu, voulu]) => !egal(vu, voulu)).map(([quoi, vu]) => `${quoi} → ${json(vu)}`);
+  verifier('a bis. le miroir, à ses bords : vide ou absent → `devis_cout`, après les rangs 1 à 11 ; 0 et 3000 → rien ; la réponse '
+    + '« professionnel » ne le tait pas (la loi ne le demande pas toujours, Opus si, décision Q2)',
+  fauxMiroir.length === 0, fauxMiroir.join(' ; '));
+
+  /* b. CE QUE LA CARTE ÉCRIT (`lireConditions`, T3, T18, critiques ÉCRAN-1
+        et ÉCRAN-2) : « Gratuit » écrit 0 ; rien de choisi écrit `null` ;
+        « Payant » champ MONTÉ lit le texte (vide → `null` SANS erreur ;
+        « 0 » → une erreur qui renvoie à « Gratuit », RIEN d'écrit ; au-delà
+        de 1 000,00 € → une erreur) ; « Payant » champ PAS ENCORE MONTÉ reprend
+        le prix enregistré s'il est payant, sinon celui des tarifs, sinon
+        `null` ; un `choix` d'avant 2b-4 (sans `cout`) n'écrit RIEN. */
+  const choix = (cout) => ({ ...D.etatInitialConditions({}), cout });
+  const lit = (cout, tapes = {}, devis = {}, coutPropose = null) => D.lireConditions({ choix: choix(cout), tapes, devis, coutPropose });
+  const cas = [
+    ['« Gratuit »', lit('gratuit'), 0, false],
+    ['rien de choisi', lit(null), null, false],
+    ['« Payant », champ monté vide', lit('payant', { cout: '' }), null, false],
+    ['« Payant », « 30 »', lit('payant', { cout: '30' }), 3000, false],
+    ['« Payant », « ,50 » (la virgule d’abord, C7)', lit('payant', { cout: ',50' }), 50, false],
+    ['« Payant », « 1000 » (la borne)', lit('payant', { cout: '1000' }), 100000, false],
+    ['« Payant », « 1000,01 »', lit('payant', { cout: '1000,01' }), undefined, true],
+    ['« Payant », « 0 »', lit('payant', { cout: '0' }), undefined, true],
+    ['« Payant », « 0,00 »', lit('payant', { cout: '0,00' }), undefined, true],
+    ['« Payant », « douze »', lit('payant', { cout: 'douze' }), undefined, true],
+    ['« Payant » à peine touché, rien d’enregistré ni de proposé', lit('payant'), null, false],
+    ['« Payant » à peine touché, proposé 4500', lit('payant', {}, {}, 4500), 4500, false],
+    ['« Payant » à peine touché, enregistré 3000, proposé 4500', lit('payant', {}, { coutDevisCentimes: 3000 }, 4500), 3000, false],
+    ['« Payant » à peine touché, enregistré 0 (« Gratuit »), proposé 0', lit('payant', {}, { coutDevisCentimes: 0 }, 0), null, false],
+  ];
+  const fauxB = cas.filter(([, r, voulu, erreur]) => r.changements.coutDevisCentimes !== voulu
+    || Boolean(r.erreurs.coutDevisCentimes) !== erreur).map(([quoi, r]) => `${quoi} → ${json(r.changements.coutDevisCentimes)} / ${r.erreurs.coutDevisCentimes || '—'}`);
+  const avant2b4 = D.lireConditions({ choix: (({ cout, ...r }) => r)(choix('gratuit')), tapes: {}, devis: {} });
+  const zeroRefuse = lit('payant', { cout: '0' });
+  verifier('b. `lireConditions` : « Gratuit » → 0, rien de choisi → `null`, « Payant » : le texte (vide → `null` SANS erreur ; « 0 » → '
+    + 'une erreur qui renvoie à « Gratuit », RIEN d’écrit ; au-delà de 1 000,00 € → une erreur), à peine touché : l’enregistré payant, '
+    + 'sinon le proposé, sinon `null` ; un `choix` sans `cout` n’écrit rien',
+  fauxB.length === 0 && !('coutDevisCentimes' in avant2b4.changements)
+    && zeroRefuse.erreurs.coutDevisCentimes === 'Pour dire que ce devis est gratuit, touchez « Gratuit ».'
+    && lit('payant', {}, {}, 4500).textes.cout === '45' && lit('payant').textes.cout === '',
+  fauxB.join(' ; ') || json(avant2b4.changements));
+
+  /* b bis. « PAYANT » N'ÉCRIT JAMAIS 0 (critique ÉCRAN-2, la garde jumelle
+        de 43 k) : sur TOUTES les combinaisons d'un prix enregistré, d'un
+        prix proposé et d'un texte tapé — même un 0 qui vient des tarifs,
+        même un « 0 » tapé —, `coutDevisCentimes` n'y vaut jamais 0. */
+  const ENREGISTRES = [null, undefined, 0, 3000, -5, 'x', 100001];
+  const PROPOSES = [null, undefined, 0, 4500, 100001, -1, '4500', 4500.5];
+  const TAPES = [undefined, null, '', ' ', '0', '0,00', ' 0 ', '00', '30', ',50', 'x'];
+  let combinaisons = 0;
+  const zeros = [];
+  for (const e of ENREGISTRES) {
+    for (const p of PROPOSES) {
+      for (const t of TAPES) {
+        combinaisons += 1;
+        const r = lit('payant', t === undefined ? {} : { cout: t }, { coutDevisCentimes: e }, p);
+        if (r.changements.coutDevisCentimes === 0) zeros.push(`${json(e)}/${json(p)}/${json(t)}`);
+      }
+    }
+  }
+  verifier(`b bis. « Payant » n’écrit JAMAIS 0 : ${combinaisons} combinaisons (prix enregistré × prix proposé × texte tapé), aucune ne `
+    + 'rend 0 — et `coutQuePayantEcrit` ne rend un prix proposé que de 1 centime à 1 000,00 €',
+  combinaisons === ENREGISTRES.length * PROPOSES.length * TAPES.length && zeros.length === 0
+    && D.coutQuePayantEcrit({ coutPropose: 100001 }).centimes === null && D.coutQuePayantEcrit({ coutPropose: 100000 }).centimes === 100000
+    && D.coutQuePayantEcrit({ coutPropose: 4500 }).depuisLesTarifs === true
+    && D.coutQuePayantEcrit({ devis: { coutDevisCentimes: 3000 }, coutPropose: 4500 }).depuisLesTarifs === false,
+  zeros.slice(0, 6).join(' ; '));
+
+  /* c. L'ÉTAT À L'OUVERTURE (`etatInitialConditions`) suit le devis, JAMAIS
+        les tarifs (« Opus propose, l'artisan confirme ») : 0 → « Gratuit »,
+        3000 → « Payant », vide → rien ; un prix tapé et refusé rouvre
+        « Payant » ; un choix gardé l'emporte. */
+  const ouv = (devis, textes = null) => D.etatInitialConditions(devis, textes).cout;
+  const fauxC = [
+    [ouv({}), null], [ouv({ coutDevisCentimes: null }), null], [ouv({ coutDevisCentimes: 0 }), 'gratuit'],
+    [ouv({ coutDevisCentimes: 3000 }), 'payant'], [ouv({ coutDevisCentimes: -3 }), null], [ouv({ coutDevisCentimes: '3000' }), null],
+    [ouv({}, { cout: '0' }), 'payant'], [ouv({ coutDevisCentimes: 0 }, { cout: '2000' }), 'payant'],
+    [ouv({ coutDevisCentimes: 0 }, { choix: { cout: 'payant' } }), 'payant'], [ouv({ coutDevisCentimes: 3000 }, { choix: { cout: null } }), null],
+    [ouv({}, { choix: { cout: 'cher' } }), null],
+  ].map(([vu, voulu], i) => (vu === voulu ? null : `cas ${i} → ${json(vu)}, voulu ${json(voulu)}`)).filter(Boolean);
+  verifier('c. `etatInitialConditions` : le choix suit le DEVIS (0 → « Gratuit », 3000 → « Payant », vide → rien), jamais les tarifs ; '
+    + 'un prix tapé et refusé rouvre « Payant » ; un choix gardé l’emporte, un choix inconnu est ignoré',
+  fauxC.length === 0, fauxC.join(' ; '));
+
+  /* d. CE QUE DISENT LES TARIFS (`coutDuDevisPropose`, `coutAProposer`,
+        `phraseDuCoutPropose`) : gratuits, payants, rien de déclaré, aucune
+        ligne, en lecture, en échec — et jamais « rien » pour un échec. Le
+        prix proposé n'existe QUE pour des tarifs payants ; « TTC » partout
+        sauf en franchise. */
+  const T = (l) => D.coutDuDevisPropose(l);
+  const ETATS_T = [
+    ['gratuits', T({ prix_devis_centimes: 0 }), 'gratuit', null, 'Dans vos tarifs : vos devis sont gratuits.'],
+    ['payants', T({ prix_devis_centimes: 4500 }), 'payant', 4500, `Dans vos tarifs : ${C.centimesLisibles(4500)} TTC.`],
+    ['rien de déclaré', T({ prix_devis_centimes: null }), 'rien', null, 'Vos tarifs ne disent pas encore le prix de vos devis.'],
+    ['aucune ligne', T(null), 'rien', null, 'Vos tarifs ne disent pas encore le prix de vos devis.'],
+    ['en lecture', T({ chargement: true }), null, null, null],
+    ['pas transmis', T(undefined), null, null, null],
+    ['en échec', T({ echec: 'réseau' }), 'illisible', null, 'Vos tarifs n’ont pas pu être lus.'],
+    ['un prix négatif', T({ prix_devis_centimes: -1 }), 'rien', null, 'Vos tarifs ne disent pas encore le prix de vos devis.'],
+  ];
+  const fauxD = ETATS_T.filter(([, p, etat, prix, phrase]) => p.etat !== etat || D.coutAProposer(p) !== prix
+    || D.phraseDuCoutPropose(p, 'reel') !== phrase).map(([quoi, p]) => `${quoi} → ${json(p)} / ${json(D.coutAProposer(p))}`);
+  const enFranchise = D.phraseDuCoutPropose(T({ prix_devis_centimes: 4500 }), 'franchise');
+  verifier('d. les tarifs : gratuits → « gratuit » et AUCUN prix proposé ; payants → leur prix ; rien de déclaré ou aucune ligne → '
+    + '« rien » ; en lecture ou pas transmis → on se tait ; un échec → « illisible », jamais « rien » ; « TTC » sauf en franchise',
+  fauxD.length === 0 && enFranchise === `Dans vos tarifs : ${C.centimesLisibles(4500)}.` && !enFranchise.includes('TTC')
+    && D.annonceDuCoutPropose(4500) === `Prix du devis : ${C.centimesLisibles(4500)}, d’après vos tarifs.`,
+  fauxD.join(' ; ') || enFranchise);
+
+  /* e. LES SIX AVIS (annexe A.3), CHACUN ALLUMÉ PUIS ÉTEINT, condition par
+        condition. Un avis ne bloque rien : il n'est jamais dans la base. */
+  const SUR = { etat: 'liste', pasCompte: 0 };
+  const avis = (x) => D.avisDuDevis({ ...SUR, ...x }).map((a) => a.cle);
+  const a = (cle, x) => avis(x).includes(cle);
+  const PAYANT = { id: 'd', objet: 'Toit', coutDevisCentimes: 3000 };
+  const GRATUIT = { id: 'd', objet: 'Toit', coutDevisCentimes: 0 };
+
+  /* e1. le devis payant : il parle pour tout client SAUF celui qui commande
+         pour son entreprise, dans son activité principale (« professionnel ») ;
+         il attend une liste SÛRE (lue, tout compté) ; il se tait pour 0 et
+         pour vide. Sa phrase dit les quatorze jours et « ne vous devra
+         rien ». */
+  const e1 = [
+    ['à titre privé', a('avis_devis_payant', { devis: PAYANT, reponseVue: 'consommateur' }), true],
+    ['une association', a('avis_devis_payant', { devis: PAYANT, reponseVue: 'non_professionnel' }), true],
+    ['hors de son activité', a('avis_devis_payant', { devis: PAYANT, reponseVue: 'professionnel_hors_activite' }), true],
+    ['pas de réponse', a('avis_devis_payant', { devis: PAYANT, reponseVue: null }), true],
+    ['« professionnel »', a('avis_devis_payant', { devis: PAYANT, reponseVue: 'professionnel' }), false],
+    ['liste en lecture', D.avisDuDevis({ devis: PAYANT, etat: 'chargement' }).some((x) => x.cle === 'avis_devis_payant'), false],
+    ['quelque chose pas compté', D.avisDuDevis({ devis: PAYANT, etat: 'liste', pasCompte: 1 }).some((x) => x.cle === 'avis_devis_payant'), false],
+    ['gratuit', a('avis_devis_payant', { devis: GRATUIT }), false],
+    ['vide', a('avis_devis_payant', { devis: { ...PAYANT, coutDevisCentimes: null } }), false],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([q]) => q);
+  const P1 = D.AVIS_DU_DEVIS.avis_devis_payant;
+  verifier('e1. « Le devis lui-même est payant » : parle pour tout client sauf « professionnel », sur une liste SÛRE, pour un prix plus '
+    + 'grand que 0 ; dit « quatorze jours » et « ne vous devra rien »',
+  e1.length === 0 && P1.includes('quatorze jours') && P1.includes('ne vous devra rien') && P1.startsWith('Le devis lui-même est payant'),
+  e1.join(', '));
+
+  /* e2. payant, mais des tarifs AFFICHÉS qui disent « gratuit » : il parle ;
+         il se tait si les tarifs ne sont pas affichés, s'ils disent un prix,
+         rien, ou s'ils ne sont pas lus — et pour un devis gratuit. Il ne
+         dépend pas de la liste (les tarifs sont lus à part). */
+  const e2 = [
+    ['affichés, gratuits', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: { affiche: true, prix_devis_centimes: 0 } }), true],
+    ['même liste en lecture', D.avisDuDevis({ devis: PAYANT, etat: 'chargement', tarifs: { affiche: true, prix_devis_centimes: 0 } })
+      .some((x) => x.cle === 'avis_devis_payant_tarifs_gratuits'), true],
+    ['pas affichés', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: { affiche: false, prix_devis_centimes: 0 } }), false],
+    ['affichés, payants', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: { affiche: true, prix_devis_centimes: 4500 } }), false],
+    ['affichés, rien', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: { affiche: true, prix_devis_centimes: null } }), false],
+    ['pas transmis', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT }), false],
+    ['en échec', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: { echec: 'x' } }), false],
+    ['aucune ligne', a('avis_devis_payant_tarifs_gratuits', { devis: PAYANT, tarifs: null }), false],
+    ['devis gratuit', a('avis_devis_payant_tarifs_gratuits', { devis: GRATUIT, tarifs: { affiche: true, prix_devis_centimes: 0 } }), false],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([q]) => q);
+  verifier('e2. « …mais vos tarifs affichés disent que vos devis sont gratuits » : seulement des tarifs AFFICHÉS à 0 sous un devis '
+    + 'payant ; muet pour des tarifs non affichés, payants, vides, non lus, en échec, absents, et pour un devis gratuit',
+  e2.length === 0, e2.join(', '));
+
+  /* e3. gratuit, et des frais de déplacement dans les tarifs : il parle ; il
+         se tait pour des frais à 0 (« Déplacement offert »), vides, des
+         tarifs non lus, et pour un devis payant ou vide. */
+  const e3 = [
+    ['frais 45 €', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { frais_deplacement_centimes: 4500 } }), true],
+    ['frais offerts', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { frais_deplacement_centimes: 0 } }), false],
+    ['frais vides', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { frais_deplacement_centimes: null } }), false],
+    ['en lecture', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { chargement: true } }), false],
+    ['pas transmis', a('avis_devis_gratuit_deplacement', { devis: GRATUIT }), false],
+    ['devis payant', a('avis_devis_gratuit_deplacement', { devis: PAYANT, tarifs: { frais_deplacement_centimes: 4500 } }), false],
+    ['devis vide', a('avis_devis_gratuit_deplacement', { devis: { ...GRATUIT, coutDevisCentimes: null },
+      tarifs: { frais_deplacement_centimes: 4500 } }), false],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([q]) => q);
+  verifier('e3. « …dit gratuit, mais vos tarifs comptent des frais de déplacement » : un devis à 0 et des frais plus grands que 0 ; muet '
+    + 'pour des frais offerts ou vides, des tarifs non lus, un devis payant ou vide',
+  e3.length === 0, e3.join(', '));
+
+  /* e4. l'attestation qui arrive à sa fin, à ses bords (le jour est FIXÉ :
+         la section 43 f refait les mêmes bords dans trois fuseaux). */
+  const J = '2026-11-16';
+  const plusJ = (n) => { const t = new Date(Date.UTC(2026, 10, 16 + n));
+    return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`; };
+  const DEC = (fin, plus = {}) => ({ nature: 'decennale', attestation_chemin: 'p/attestation.pdf', valide_jusquau: fin, ...plus });
+  const DV = { id: 'd', objet: 'Toit', validiteJours: 30, delaiExecution: 'Fin janvier', engageDecennale: null, coutDevisCentimes: 0 };
+  const fin = (assurances, devis = DV) => D.finDeLAttestation({ devis, assurances, jour: J });
+  const e4 = [
+    ['au jour de sa fin', fin([DEC(J)]), J],
+    ['la veille (le rang 11 parle)', fin([DEC(plusJ(-1))]), null],
+    ['à J + 29, validité 30', fin([DEC(plusJ(29))]), plusJ(29)],
+    ['à J + 30, validité 30', fin([DEC(plusJ(30))]), null],
+    ['délai par défaut, J + 59', fin([DEC(plusJ(59))], { ...DV, delaiExecution: D.DELAI_PAR_DEFAUT.texte }), plusJ(59)],
+    ['délai par défaut, J + 60', fin([DEC(plusJ(60))], { ...DV, delaiExecution: D.DELAI_PAR_DEFAUT.texte }), null],
+    ['délai par défaut, entouré de blancs', fin([DEC(plusJ(45))], { ...DV, delaiExecution: `  ${D.DELAI_PAR_DEFAUT.texte} ` }), plusJ(45)],
+    ['un délai VOISIN du défaut', fin([DEC(plusJ(45))], { ...DV, delaiExecution: 'Dans les 30 jours' }), null],
+    ['décennale « Non »', fin([DEC(J)], { ...DV, engageDecennale: false }), null],
+    ['décennale « Oui »', fin([DEC(J)], { ...DV, engageDecennale: true }), J],
+    ['assurances pas lues', fin(undefined), null],
+    ['assurances en échec (`null`)', fin(null), null],
+    ['validité vide', fin([DEC(J)], { ...DV, validiteJours: null }), null],
+    ['la plus TARDIVE de deux', fin([DEC(plusJ(5)), DEC(plusJ(200))]), null],
+    ['…dans l’autre ordre', fin([DEC(plusJ(200)), DEC(plusJ(5))]), null],
+    ['deux proches : la plus tardive', fin([DEC(plusJ(5)), DEC(plusJ(10))]), plusJ(10)],
+    ['sans fichier', fin([DEC(J, { attestation_chemin: null })]), null],
+    ['un chemin de blancs', fin([DEC(J, { attestation_chemin: '  ' })]), null],
+    ['une RC pro', fin([DEC(J, { nature: 'rc_pro' })]), null],
+    ['celle d’un autre artisan', fin([DEC(J, { pro_id: 'b' })], { ...DV, proId: 'a' }), null],
+    ['sans date', fin([DEC(null)]), null],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([q, vu]) => `${q} → ${json(vu)}`);
+  const phraseE4 = D.avisDuDevis({ devis: DV, assurances: [DEC(plusJ(10))], jour: J }).find((x) => x.cle === 'avis_attestation_echeance');
+  verifier('e4. « Votre attestation décennale est valable jusqu’au … » : au jour de sa fin oui, la veille non ; à validité − 1 oui, à '
+    + 'validité non ; avec le délai par défaut, 30 jours de plus ; un délai voisin ne compte pas ; « Non », pas lues, en échec, sans '
+    + 'validité, sans fichier, une RC pro, celle d’un autre : muet ; la plus TARDIVE décide ; la date écrite par `dateFrancaise`',
+  e4.length === 0 && phraseE4 && phraseE4.phrase.startsWith(`Votre attestation décennale est valable jusqu’au ${ENT.dateFrancaise(plusJ(10))}. `)
+    && !phraseE4.phrase.includes('{fin}') && D.JOURS_DU_DELAI_PAR_DEFAUT === 30,
+  e4.join(' ; ') || json(phraseE4));
+
+  /* e5. le franchisé au-delà du plafond : 37 500,00 € (le seuil de l'année
+         précédente) parle au centime d'après, pas avant ; jamais au régime
+         réel, ni sur une liste pas SÛRE, ni quand une ligne contredit la
+         franchise ; le total toutes options ne parle QUE s'il y a une option ;
+         le HT d'abord. La phrase ne dit jamais « HT », et ne garde aucune
+         accolade. */
+  const LF = (prix, plus = {}) => ({ id: 'a', type: 'poste', designation: 'Mur', unite: 'forfait', quantiteMilliemes: 1000,
+    prixUnitaireCentimes: prix, tauxTvaCentiemes: 0, ordre: 1, ...plus });
+  const OPT = { id: 'o', type: 'option', designation: 'Opt', unite: 'forfait', quantiteMilliemes: 1000, prixUnitaireCentimes: 200,
+    tauxTvaCentiemes: 0, ordre: 2 };
+  const franchise = (lignes, totaux, plus = {}) => {
+    const x = D.avisDeLaFranchise({ lignes, totaux, regime: 'franchise', sure: true, ...plus });
+    return x ? x.cle : null;
+  };
+  const tot = (lignes) => D.totauxDevis(lignes);
+  const tot2 = (lignes, conditions) => D.totauxDevis(lignes, conditions);
+  const e5 = [
+    ['37 500,00 €', franchise([LF(3750000)], tot([LF(3750000)])), null],
+    ['37 500,01 €', franchise([LF(3750001)], tot([LF(3750001)])), 'avis_franchise_plafond'],
+    ['37 500,01 €, au régime réel', franchise([LF(3750001)], tot([LF(3750001)]), { regime: 'reel' }), null],
+    ['37 500,01 €, régime pas transmis', franchise([LF(3750001)], tot([LF(3750001)]), { regime: undefined }), null],
+    ['37 500,01 €, liste pas sûre', franchise([LF(3750001)], tot([LF(3750001)]), { sure: false }), null],
+    ['une ligne à 20 % (contredit la franchise)', franchise([LF(3750001, { tauxTvaCentiemes: 2000 })], { ht: 3750001, ttcOptions: 4500001 }), null],
+    ['37 499,00 € + une option de 2,00 €', franchise([LF(3749900), OPT], tot([LF(3749900), OPT])), 'avis_franchise_plafond_options'],
+    ['37 499,00 € + une option de 1,00 €', franchise([LF(3749900), { ...OPT, prixUnitaireCentimes: 100 }],
+      tot([LF(3749900), { ...OPT, prixUnitaireCentimes: 100 }])), null],
+    ['un total toutes options SANS option', franchise([LF(3749900)], { ht: 3749900, ttcOptions: 9999999 }), null],
+    ['au-delà ET une option : le HT d’abord', franchise([LF(3750001), OPT], tot([LF(3750001), OPT])), 'avis_franchise_plafond'],
+    ['sans totaux', franchise([LF(3750001)], null), null],
+    ['régime lu vide (`null`)', franchise([LF(3750001)], tot([LF(3750001)]), { regime: null }), null],
+    /* Le cas MESURÉ par la critique droit (DROIT-2) : 35 000 € HT à 20 %, sans
+       option — 42 000 € TTC, au-delà du seuil — en franchise : aucun avis (la
+       ligne contredit la franchise ; et le TTC ne compte jamais). */
+    ['35 000 € HT à 20 %, sans option', franchise([LF(3500000, { tauxTvaCentiemes: 2000 })],
+      tot([LF(3500000, { tauxTvaCentiemes: 2000 })])), null],
+    /* Le NET hors options compte, pas le brut ni le TTC (S17 du cahier) :
+       37 600,00 € de postes moins 200,00 € de réduction = 37 400,00 € — muet,
+       même si le brut et un TTC fabriqué dépassent. */
+    ['net sous le seuil, brut au-dessus', franchise([LF(3760000)], { ht: 3740000, brut: 3760000, ttc: 3760000, ttcOptions: 3740000 }), null],
+    ['…le même, calculé par `totauxDevis`', franchise([LF(3760000)], tot2([LF(3760000)], { remiseCentimes: 20000 })), null],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([q, vu]) => `${q} → ${json(vu)}`);
+  const pF = D.avisDeLaFranchise({ lignes: [LF(3750001)], totaux: tot([LF(3750001)]), regime: 'franchise', sure: true });
+  const pO = D.avisDeLaFranchise({ lignes: [LF(3749900), OPT], totaux: tot([LF(3749900), OPT]), regime: 'franchise', sure: true });
+  const viaAvis = D.avisDuDevis({ ...SUR, devis: GRATUIT, lignes: [LF(3750001)], totaux: tot([LF(3750001)]), regime: 'franchise' })
+    .filter((x) => x.cle.startsWith('avis_franchise'));
+  verifier('e5. le franchisé au-delà du plafond : 37 500,00 € muet, 37 500,01 € parle ; jamais au réel, sans régime, sur une liste pas '
+    + 'sûre, ni quand une ligne contredit la franchise ; le total toutes options ne parle qu’avec une option ; le HT d’abord ; la phrase '
+    + 'porte le montant par `centimesLisibles`, jamais « HT », aucune accolade',
+  e5.length === 0 && pF && pF.phrase.startsWith(`Ce devis atteint à lui seul ${C.centimesLisibles(3750001)}. `)
+    && pO && pO.phrase.startsWith(`Avec ses options, ce devis atteint ${C.centimesLisibles(3750100)}. `)
+    && ![pF.phrase, pO.phrase].some((p) => p.includes(' HT') || p.includes('{') || p.includes('}')) && viaAvis.length === 1 && egal(viaAvis[0], pF),
+  e5.join(' ; ') || json([pF, pO]).slice(0, 300));
+
+  /* e6. les avis du lot 2b-1/2b-2 n'ont pas bougé : sans aucune des
+         nouvelles entrées (`regime`, `assurances`, `tarifs` absents), un
+         devis payant à titre privé ne fait parler QUE l'avis du devis
+         payant — rien des tarifs, de l'attestation, de la franchise. */
+  const seuls = avis({ devis: PAYANT, reponseVue: 'consommateur' });
+  verifier('e6. sans `regime`, `assurances` ni `tarifs` transmis, seul « le devis lui-même est payant » parle — aucun avis ne devine '
+    + 'ce qu’on ne lui a pas donné',
+  egal(seuls, ['avis_devis_payant']), json(seuls));
+
+  /* f. LES DATES DE L'ATTESTATION, DANS TROIS FUSEAUX (A-9 bis) : `joursEntre`
+        à travers les deux changements d'heure, et chaque bord de e4 au jour
+        du TÉLÉPHONE, de part et d'autre de minuit UTC. */
+  for (const tz of ['Europe/Paris', 'America/Martinique', 'Pacific/Kiritimati']) {
+    const r = spawnSync(process.execPath, [ICI, '--fuseau-2b4'], { encoding: 'utf8', env: { ...process.env, TZ: tz } });
+    let res;
+    try { res = JSON.parse(r.stdout); } catch (e) { res = { tz, plante: `${r.stderr || r.stdout}`.slice(0, 400) }; }
+    verifier(`f. ${tz} : ` + '`joursEntre` à travers les changements d’heure, l’avis de l’attestation à ses bords au jour du téléphone, '
+      + `et sa date (${res.cas || 0} cas)`,
+    !res.plante && res.cas >= 20 && res.faux.length === 0, res.plante || (res.faux || []).join(' ; '));
+  }
+
+  /* g. LES PLAFONDS DE LA FRANCHISE, écrits UNE fois (`PLAFONDS_FRANCHISE`),
+        avec leur source et la date où ils ont été relus ; la suite des deux
+        avis les écrit par `centimesLisibles`, jamais en dur. */
+  const PF = D.PLAFONDS_FRANCHISE;
+  const DJ = sansCommentairesJs(lire('src/lib/devis.js'));
+  verifier('g. `PLAFONDS_FRANCHISE` : 41 250,00 € et 37 500,00 € (services), relus le 16/11/2026, l’article du CGI et du CIBS ; la suite '
+    + 'des avis les écrit par `centimesLisibles` — aucun « 37 500 » ni « 41 250 » écrit en dur dans le code',
+  PF.servicesAnneeEnCours === 4125000 && PF.servicesAnneePrecedente === 3750000 && PF.reluLe === '2026-11-16'
+    && net(PF.source).includes('293 B') && net(PF.source).includes('L. 233-9') && Object.isFrozen(PF)
+    && D.SUITE_AVIS_FRANCHISE.includes(C.centimesLisibles(4125000)) && D.SUITE_AVIS_FRANCHISE.includes(C.centimesLisibles(3750000))
+    && D.AVIS_DU_DEVIS.avis_franchise_plafond.endsWith(D.SUITE_AVIS_FRANCHISE)
+    && D.AVIS_DU_DEVIS.avis_franchise_plafond_options.endsWith(D.SUITE_AVIS_FRANCHISE)
+    && !['37 500', '41 250'].some((m) => net(DJ).includes(m)),
+  json(PF));
+
+  /* i. LA BASE ET LE TÉLÉPHONE REFUSENT PAREIL (`validerDevis`,
+        `devis_cout_check`) : −1 et 100 001 refusés, 0, 1, 100 000 et vide
+        acceptés ; un nombre à virgule refusé ; et quand deux contraintes
+        tombent ensemble, c'est la première dans l'ordre ALPHABÉTIQUE qui
+        parle (`devis_cout_check` avant `devis_validite_check`). */
+  const v = (x) => D.validerDevis({ ...x }).contrainte;
+  const fauxI = [
+    [v({ coutDevisCentimes: -1 }), 'devis_cout_check'], [v({ coutDevisCentimes: 100001 }), 'devis_cout_check'],
+    [v({ coutDevisCentimes: 1.5 }), 'devis_cout_check'], [v({ coutDevisCentimes: 0 }), null], [v({ coutDevisCentimes: 1 }), null],
+    [v({ coutDevisCentimes: 100000 }), null], [v({ coutDevisCentimes: null }), null], [v({}), null],
+    [v({ coutDevisCentimes: -1, validiteJours: 999 }), 'devis_cout_check'],
+  ].map(([vu, voulu], i) => (vu === voulu ? null : `cas ${i} → ${vu}`)).filter(Boolean);
+  const iCout = D.CONTRAINTES_DEVIS.indexOf('devis_cout_check');
+  verifier('i. `validerDevis` refuse −1, 100 001 et 1,5 (`devis_cout_check`), accepte 0, 1, 100 000 et vide ; la contrainte est rangée '
+    + 'entre `devis_calculs_check` et `devis_delai_check`, comme PostgreSQL les nomme ; `COUT_DEVIS_MAX` vaut 100 000',
+  fauxI.length === 0 && D.COUT_DEVIS_MAX === 100000 && iCout > 0
+    && D.CONTRAINTES_DEVIS[iCout - 1] === 'devis_calculs_check' && D.CONTRAINTES_DEVIS[iCout + 1] === 'devis_delai_check'
+    && egal([...D.CONTRAINTES_DEVIS].sort(), [...D.CONTRAINTES_DEVIS]),
+  fauxI.join(' ; '));
+
+  /* j. LE GESTE QUI VISE LE PRIX VIBRE pour sa faute (critique ÉCRAN-11) :
+        quitter le champ du prix sur une faute ancienne du prix vibre ; un
+        autre geste sur la même faute ancienne, non. */
+  verifier('j. `vibrerPourLaCarte` : quitter le prix vibre pour une faute du prix ; un autre geste, non (faute ancienne)',
+    D.vibrerPourLaCarte('cout', ['coutDevisCentimes'], ['coutDevisCentimes']) === true
+    && D.vibrerPourLaCarte('validite', ['coutDevisCentimes'], ['coutDevisCentimes']) === false
+    && D.vibrerPourLaCarte('validite', ['coutDevisCentimes'], []) === true);
+
+  /* k. LA SEULE PORTE DU 0 (T3) : dans tout `src/` (le jeu de démonstration
+        mis à part : il POSE des devis déjà dits gratuits), `coutDevisCentimes`
+        ne reçoit un 0 écrit en toutes lettres qu'à UN endroit — la branche
+        « Gratuit » de `lireConditions`. Commentaires retirés. */
+  const lsSrc = spawnSync('git', ['ls-files', 'src'], { cwd: RACINE, encoding: 'utf8' });
+  const fichiersSrc = String(lsSrc.stdout || '').split(String.fromCharCode(10)).filter((f) => f.endsWith('.js') && f !== 'src/data/devis-demo.js');
+  const CHIFFRE_SUIVANT = new Set('0123456789.,xXbBoOeE_n'.split(''));
+  const zerosEcrits = [];
+  for (const f of fichiersSrc) {
+    const s = sansEspaces(sansCommentairesJs(lire(f)));
+    s.split('coutDevisCentimes').slice(1).forEach((reste) => {
+      const r = reste.trimStart();
+      const op = r[0];
+      if (op !== ':' && op !== '=') return;
+      if (op === '=' && (r[1] === '=' || r[1] === '>')) return;
+      const val = r.slice(1).trimStart();
+      if (val[0] === '0' && !CHIFFRE_SUIVANT.has(val[1])) zerosEcrits.push(f);
+    });
+  }
+  verifier('k. un 0 écrit dans `coutDevisCentimes`, dans tout `src/` hors la démonstration : UNE fois, dans `devis.js`, la branche '
+    + '« Gratuit » de `lireConditions`',
+  fichiersSrc.length > 50 && egal(zerosEcrits, ['src/lib/devis.js'])
+    && sansEspaces(DJ).includes("if (c.cout === 'gratuit') { changements.coutDevisCentimes = 0; }"),
+  `${fichiersSrc.length} fichiers ; ${json(zerosEcrits)}`);
+
+  /* l. LES MOTS DE LA CARTE ET DU CHAMP : « TTC » partout sauf en franchise
+        (le prix se déclare TTC dans « Mon entreprise ») ; `versCoutDeDevis`
+        à ses bords ; la phrase de la base (`erreurs.js`) ; et
+        `versMontantDeDevis`, la réduction et l'acompte, n'a PAS bougé. */
+  const Lr = D.libellesDesConditions('reel');
+  const Lf = D.libellesDesConditions('franchise');
+  const Ln = D.libellesDesConditions(null);
+  const vc = (t) => D.versCoutDeDevis(t);
+  const fauxL = [
+    [vc(''), true, null], [vc('   '), true, null], [vc('0'), false, null], [vc('0,00'), false, null], [vc('1000'), true, 100000],
+    [vc('1000,01'), false, null], [vc(',50'), true, 50], [vc('12,5'), true, 1250], [vc('douze'), false, null],
+  ].map(([r, ok, c], i) => (r.ok === ok && r.centimes === c ? null : `vc ${i} → ${json(r)}`)).filter(Boolean);
+  const vm = (t) => D.versMontantDeDevis(t);
+  const montantStable = vm('').ok === true && vm('').centimes === null && vm('0').ok === false && vm('12').centimes === 1200;
+  verifier('l. « Prix du devis TTC » (et parlé « Prix du devis lui-même TTC, en euros ») sauf en franchise ; `versCoutDeDevis` : vide → '
+    + '`null` sans erreur, « 0 » refusé (« Gratuit »), la borne à 1 000,00 €, « ,50 » lu ; `versMontantDeDevis` inchangé ; la phrase '
+    + 'de `devis_cout_check` dans `erreurs.js`',
+  fauxL.length === 0 && montantStable
+    && Lr.cout === 'Prix du devis TTC' && Ln.cout === 'Prix du devis TTC' && Lf.cout === 'Prix du devis'
+    && Lr.coutParle === 'Prix du devis lui-même TTC, en euros' && Lf.coutParle === 'Prix du devis lui-même, en euros'
+    && vc('1000,01').message === `Le prix d’un devis s’écrit jusqu’à ${C.centimesLisibles(100000)}.`
+    && ERR.MESSAGES_CONTRAINTE && ERR.MESSAGES_CONTRAINTE.devis_cout_check
+      === 'le prix du devis lui-même s’écrit comme un montant entre 0 et 1 000 € TTC.'
+    && D.LE_COUT_DU_DEVIS.gratuit === 'Gratuit' && D.LE_COUT_DU_DEVIS.payant === 'Payant',
+  fauxL.join(' ; ') || json([Lr.cout, Lf.cout]));
+
+  /* m. L'ÉCRAN DU BLOC (cahier §3.4 à §3.6, T17, T18, critiques ÉCRAN-1 à
+        ÉCRAN-4, ÉCRAN-14, ÉCRAN-18, ÉCRAN-19). Ce que `node` ne peut pas
+        faire tourner — un composant React — se lit sur le code, sans ses
+        commentaires ; ce qui se MESURE (rien ne bouge sous le doigt, la
+        proposition à 320 points) est dans `mesure-devis`. On tient :
+          1. le titre porte l'ancre `ancre('cout')` et il est un enfant
+             DIRECT du contenu défilant : aucun élément ouvert entre
+             `<ScrollView …>` et lui (l'ancre lit une position relative au
+             PARENT : dans une vue intermédiaire, le point « Pour le
+             remettre » ouvrirait la carte au mauvais endroit) ;
+          2. le bloc est le DERNIER : après « Retenue de garantie », son aide
+             avant le récapitulatif (`rangees.length > 0`) ;
+          3. deux pastilles, rien de pré-choisi, qui passent par
+             `choisirCout` — dont la PREMIÈRE instruction ne fait rien quand
+             le choix ne change pas (ÉCRAN-4) ; « Payant » annonce le prix
+             repris des tarifs, et seulement lui (ÉCRAN-14 point 3) ;
+          4. la proposition : `coutAProposer(coutDuDevisPropose(tarifs))`,
+             passée à `lireConditions` — jamais `propose.centimes` tout nu
+             (ÉCRAN-2) ; le champ lu par `lu(refCout)` ;
+          5. le champ n'existe que sous « Payant », avec les mots de
+             `libellesDesConditions` et de `LE_COUT_DU_DEVIS`, et sa faute
+             dessous ;
+          6. les mots de `LE_COUT_DU_DEVIS`, en toutes lettres (annexe A.2) ;
+          7. la saisie : `tarifs` passés à la carte, le nom de la bande de la
+             garde (« Prix du devis lui-même »), le champ parmi ceux de la
+             carte, et « Corriger » qui rouvre la carte SUR le bloc — sans
+             renvoyer à la liste « Pour le remettre » ;
+          8. `OpusApp` : `mesAssurances`, `undefined` au départ, posées par la
+             MÊME lecture que le régime, OUBLIÉES sur un échec (ÉCRAN-19),
+             jamais touchées par `recevoirEmetteur`, et passées à la saisie. */
+  {
+    const CDb = sansCommentairesJs(lireSiExiste('src/components/ConditionsDevis.js') || '');
+    const videM = (t) => t.replace(/`(?:[^`\\]|\\.)*`/g, (x) => '`' + ' '.repeat(x.length - 2) + '`')
+      .replace(/'(?:[^'\\\n]|\\.)*'/g, (x) => "'" + ' '.repeat(x.length - 2) + "'")
+      .replace(/"(?:[^"\\\n]|\\.)*"/g, (x) => '"' + ' '.repeat(x.length - 2) + '"');
+    const platM = videM(CDb);
+    const iTitre = CDb.indexOf("onLayout={ancre('cout')}");
+    const debutTitre = iTitre >= 0 ? CDb.lastIndexOf('<Text', iTitre) : -1;
+    const iScrollM = platM.indexOf('<ScrollView');
+    const finOuvreScroll = iScrollM >= 0 ? iScrollM + baliseOuvrante(platM, iScrollM).length : -1;
+    /* Les éléments OUVERTS entre le début du contenu et le titre. */
+    const pileM = [];
+    for (let i = finOuvreScroll; i >= 0 && i < debutTitre; i += 1) {
+      if (platM[i] !== '<') continue;
+      const suite = platM[i + 1];
+      if (suite === '/') {
+        const f = platM.indexOf('>', i);
+        const nom = platM.slice(i + 2, f).trim();
+        const k = pileM.lastIndexOf(nom);
+        if (k >= 0) pileM.splice(k);
+        i = f;
+      } else if (suite === '>' || /[A-Za-z]/.test(suite || '')) {
+        const b = baliseOuvrante(platM, i);
+        const nom = suite === '>' ? '' : (/^<([A-Za-z.]+)/.exec(b) || ['', ''])[1];
+        if (!/\/>$/.test(b)) pileM.push(nom);
+        i += b.length - 1;
+      }
+    }
+    const balTitre = debutTitre >= 0 ? sansEspaces(baliseOuvrante(CDb, debutTitre)) : '';
+    const titreEntier = debutTitre >= 0 ? sansEspaces(CDb.slice(debutTitre, CDb.indexOf('</Text>', debutTitre) + 7)) : '';
+    const iRetenue = CDb.indexOf('>Retenue de garantie</Text>');
+    const iAide = CDb.indexOf('<Text style={s.aide}>{AIDE_COUT_DEVIS}</Text>');
+    const iRecap = CDb.indexOf('{rangees.length > 0 && (');
+    const iFinScroll = CDb.indexOf('</ScrollView>');
+    const lu1 = finOuvreScroll > 0 && debutTitre > finOuvreScroll && pileM.length === 0
+      && titreEntier === '<Text style={s.titre} onLayout={ancre(\'cout\')} accessibilityRole="header">{LE_COUT_DU_DEVIS.titre}</Text>'
+      && (CDb.match(/ancre\('cout'\)/g) || []).length === 1 && /^<Text style=\{s\.titre\}/.test(balTitre);
+    const lu2 = iRetenue > 0 && debutTitre > iRetenue && iAide > debutTitre && iRecap > iAide && iFinScroll > iRecap
+      && (CDb.match(/\{AIDE_COUT_DEVIS\}/g) || []).length === 1;
+    const CDm = sansEspaces(CDb);
+    const corpsChoisir = sansEspaces(corpsFleche(CDb, 'const choisirCout = (cout) =>'));
+    const lu3 = CDm.includes("<Pastille label={LE_COUT_DU_DEVIS.gratuit} nom={LE_COUT_DU_DEVIS.nomGratuit} choisie={c.cout === 'gratuit'} onPress={() => choisirCout('gratuit')} />")
+      && CDm.includes("<Pastille label={LE_COUT_DU_DEVIS.payant} nom={LE_COUT_DU_DEVIS.nomPayant} choisie={c.cout === 'payant'} onPress={() => choisirCout('payant')} />")
+      && corpsChoisir === "=> { if (choix.current.cout === cout) return; const repris = cout === 'payant' ? coutQuePayantEcrit({ devis, coutPropose }) : null; "
+        + "choisir({ cout }, 'cout'); if (repris && repris.depuisLesTarifs) retour.annoncer(annonceDuCoutPropose(repris.centimes)); }"
+      && (CDm.match(/choisirCout\(/g) || []).length === 2
+      && !/cout: (?:'gratuit'|'payant'|null)\b/.test(CDm.replace("choisir({ cout }, 'cout')", ''));
+    const lu4 = CDm.includes('const propose = coutDuDevisPropose(tarifs); const coutPropose = coutAProposer(propose);')
+      && CDm.includes('cout: lu(refCout), }, devis, coutPropose, });')
+      /* trois fois : sa déclaration, `lireConditions`, et ce que « Payant » reprend. */
+      && (CDm.match(/coutPropose/g) || []).length === 3
+      && !/propose\.centimes/.test(CDm) && /\btarifs = null,/.test(CDm);
+    const iPayant = CDm.indexOf("{c.cout === 'payant' && ( <> <Text style={s.etiquette}>{noms.cout}</Text> <ChampMontant ref={refCout}");
+    const blocPayant = iPayant >= 0 ? CDm.slice(iPayant, CDm.indexOf('</> )}', iPayant) + 6) : '';
+    const lu5 = iPayant >= 0 && (CDm.match(/ref=\{refCout\}/g) || []).length === 1
+      && blocPayant.includes('placeholder={LE_COUT_DU_DEVIS.placeholder}') && blocPayant.includes('accessibilityLabel={noms.coutParle}')
+      && blocPayant.includes("onBlur={() => enregistrer('cout')}") && blocPayant.includes("{sous('coutDevisCentimes')}")
+      && CDm.includes('{!!phraseDuCoutPropose(propose, regime) && ( <Text style={s.aide}>{phraseDuCoutPropose(propose, regime)}</Text> )}');
+    const L = D.LE_COUT_DU_DEVIS;
+    const lu6 = L.titre === 'Le devis lui-même : gratuit ou payant ?' && L.nomGratuit === 'Le devis lui-même est gratuit'
+      && L.nomPayant === 'Le devis lui-même est payant' && L.placeholder === 'Montant'
+      && D.annonceDuCoutPropose(3000) === `Prix du devis : ${C.centimesLisibles(3000)}, d’après vos tarifs.`;
+    const SAm = sansEspaces(ECR.saisie);
+    const balCond = balises(ECR.saisie, 'ConditionsDevis')[0] || '';
+    const corrigerM = sansEspaces(corpsFleche(ECR.saisie, 'const corrigerEntete = () =>'));
+    const lu7 = /\btarifs=\{tarifs\}/.test(balCond)
+      && /coutDevisCentimes: 'Prix du devis lui-même',/.test(SAm)
+      && /const CHAMPS_CONDITIONS = Object\.freeze\(\[[^\]]*'coutDevisCentimes',?\s*\]\);/.test(SAm)
+      && corrigerM.includes("if (champ === 'coutDevisCentimes') { ouvrirConditions(); setChampConditions('cout'); return; }")
+      && corrigerM.indexOf("champ === 'coutDevisCentimes'") < corrigerM.indexOf('CHAMPS_CONDITIONS.includes(champ)')
+      && !/ouvrirConditionsSur\('cout'\)/.test(corrigerM)
+      && /\bassurances,/.test(SAm.slice(0, SAm.indexOf('}) {', SAm.indexOf('export default function SaisieDevisScreen('))));
+    const OPm = sansEspaces(sansCommentairesJs(lire('src/OpusApp.js')));
+    const recevoirM = sansEspaces(sansCommentairesJs(lire('src/OpusApp.js'))).slice(OPm.indexOf('const recevoirEmetteur = useCallback('),
+      OPm.indexOf('}, []);', OPm.indexOf('const recevoirEmetteur = useCallback(')));
+    const lu8 = OPm.includes('const [mesAssurances, setMesAssurances] = useState(undefined);')
+      && OPm.includes('setMesAssurances(r && Array.isArray(r.assurances) ? r.assurances : null);')
+      && OPm.includes('if (generationRegime.current !== g) return; setMonRegime({ echec: true }); setMesAssurances(undefined);')
+      && (OPm.match(/setMesAssurances\(/g) || []).length === 2
+      && recevoirM.length > 20 && !/MesAssurances/.test(recevoirM)
+      && balises(sansCommentairesJs(lire('src/OpusApp.js')), 'SaisieDevisScreen').some((b) => /assurances=\{mesAssurances\}/.test(b));
+    verifier('m. l’écran du bloc : le titre, enfant DIRECT du défilement, porte `ancre(\'cout\')` ; le bloc est le DERNIER (après la '
+      + 'retenue, son aide avant le récapitulatif) ; deux pastilles par `choisirCout`, qui ne fait RIEN quand le choix ne change pas, et '
+      + 'n’annonce que le prix repris des tarifs ; la proposition par `coutAProposer`, passée à `lireConditions` ; le champ sous « Payant » '
+      + 'seulement ; les mots de l’annexe A.2 ; la saisie (les tarifs, la garde, « Corriger » SUR le bloc) et `OpusApp` (les assurances '
+      + 'de la lecture du régime, oubliées sur un échec)',
+    lu1 && lu2 && lu3 && lu4 && lu5 && lu6 && lu7 && lu8,
+    json({ lu1, lu2, lu3, lu4, lu5, lu6, lu7, lu8, pile: pileM, corpsChoisir: corpsChoisir.slice(0, 120) }));
+  }
 }
 
 console.log('');

@@ -62,6 +62,34 @@
  * bouton qui proposerait de marquer des lignes « urgentes » : une marque
  * fausse, c'est la nullité et le pénal. L'aide de l'échéance ne bouge pas :
  * elle reste juste après.
+ *
+ * LE PRIX DU DEVIS LUI-MÊME (étape 2b-4, réponses du 16/11, cahier §3.6,
+ * annexe A.2) : « Le devis lui-même : gratuit ou payant ? », le DERNIER
+ * bloc de la carte — après « Retenue de garantie », avant le récapitulatif
+ * (T17, critique ÉCRAN-3). Une zone réservée n'aurait pas tenu (le champ
+ * n'existe qu'avec « Payant », et la carte n'a le droit de cacher aucun
+ * élément) : en dernier, toucher « Gratuit » ou « Payant » ne déplace que le
+ * récapitulatif, qui n'est pas une cible. Son titre est un enfant DIRECT du
+ * contenu défilant : `ancre('cout')` lit une position relative au parent, et
+ * c'est là que le point « Dites si le devis lui-même est gratuit ou payant »
+ * ouvre la carte.
+ *   - DEUX PASTILLES, rien de pré-choisi (« Opus propose, l'artisan
+ *     confirme ») ; une pastille DÉJÀ choisie, touchée de nouveau, ne fait
+ *     rien (T18, critique ÉCRAN-4) — on la touche souvent « pour valider ».
+ *   - « Gratuit » est la SEULE porte du 0 (T3) ; un « 0 » tapé est refusé
+ *     avec sa phrase, qui renvoie à « Gratuit ».
+ *   - « Payant » SANS prix = rien de dit, SANS erreur (T18, critique
+ *     ÉCRAN-1) : c'est le point de « Pour le remettre » qui dit ce qui
+ *     manque. Une erreur serait devenue un refus d'en-tête, et la garde
+ *     aurait dit « ce que vous avez écrit n'est pas enregistré » à quelqu'un
+ *     qui n'avait rien écrit.
+ *   - LA PROPOSITION DE « MES TARIFS » est une PHRASE sous les pastilles, et,
+ *     SEULEMENT quand les tarifs disent PAYANT, le prix que « Payant » écrit
+ *     dans le champ (`coutAProposer`) — annoncé à VoiceOver. Des tarifs qui
+ *     disent « gratuit » ne font JAMAIS écrire 0 sous « Payant » (critique
+ *     ÉCRAN-2 : c'est la configuration réelle du propriétaire).
+ *   - Tout passe par la VOIE UNIQUE (`etatInitialConditions` → `choisir` →
+ *     `lireConditions`) ; tous les mots viennent de `devis.js`.
  */
 import React, {
   forwardRef, useEffect, useImperativeHandle, useRef, useState,
@@ -85,6 +113,10 @@ import {
   centiemesEnSaisie, rangeesDesTotaux, effetDeLaReduction, effetDeLAcompte, libelleAcompte,
   etatInitialConditions, lireConditions, texteEnregistreDans, phraseUniteEnAttente, libellesDesConditions,
   ligneDEtatDeLaCarte,
+  /* 2b-4 : le prix du devis lui-même — les mots, l'aide, la proposition des
+     tarifs et ce que « Payant » reprend. */
+  LE_COUT_DU_DEVIS, AIDE_COUT_DEVIS, coutDuDevisPropose, coutAProposer, coutQuePayantEcrit,
+  phraseDuCoutPropose, annonceDuCoutPropose, centimesEnSaisie,
 } from '../lib/devis';
 
 const present = (v) => v !== null && v !== undefined;
@@ -110,11 +142,16 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
      les lignes de la BASE : l'écart est transitoire, et « Non enregistrée »
      se voit sur la ligne. */
   toutUrgent = false, lignes = [],
+  /* 2b-4 : les tarifs de « Mon entreprise », tels que l'écran les tient
+     (`mesTarifs` : la ligne, `null`, `{ chargement }` ou `{ echec }`) — pour
+     la phrase de la proposition et le prix que « Payant » peut reprendre. */
+  tarifs = null,
 }, ref) {
   const refReduction = useRef(null);
   const refAcompte = useRef(null);
   const refValidite = useRef(null);
   const refRetenue = useRef(null);
+  const refCout = useRef(null);
   /* LE CHAMP SUR LEQUEL LA CARTE S'OUVRE (lot 2b-1) : le défilement, et la
      place de chaque titre dans le contenu, relevée à sa mise en page. Le
      défilement se pose UNE fois — après, c'est l'artisan qui défile. */
@@ -143,14 +180,24 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
      naîtra avec la valeur enregistrée, et c'est elle qui part. Les choix
      sont ceux DU MOMENT, pas ceux du dernier rendu : un appui pose son choix
      PUIS enregistre, dans la même boucle. */
+  /* 2b-4 : ce que disent les tarifs du prix des devis, et le prix que
+     « Payant » peut REPRENDRE — des centimes plus grands que 0, et seulement
+     quand ils disent payant (`coutAProposer`, écrit UNE fois dans
+     `devis.js`) : des tarifs « gratuit » rendent `null`. */
+  const propose = coutDuDevisPropose(tarifs);
+  const coutPropose = coutAProposer(propose);
+
   const lire = () => {
     const lu = (r) => (r.current ? r.current.lire() : undefined);
     return lireConditions({
       choix: choix.current,
       tapes: {
         reduction: lu(refReduction), acompte: lu(refAcompte), validite: lu(refValidite), retenue: lu(refRetenue),
+        /* 2b-4 : `undefined` tant que « Payant » n'a pas monté son champ. */
+        cout: lu(refCout),
       },
       devis,
+      coutPropose,
     });
   };
 
@@ -166,6 +213,20 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
 
   /* Un APPUI change un choix, PUIS la carte s'enregistre entière. */
   const choisir = (x, geste) => { poser(x); enregistrer(geste); };
+
+  /* 2b-4 — « GRATUIT » OU « PAYANT » : seulement si le choix CHANGE (T18,
+     critique ÉCRAN-4) — une pastille déjà choisie, retouchée « pour
+     valider », ne défait rien et n'écrit rien. Lu dans la RÉFÉRENCE : deux
+     appuis dans la même boucle voient le même choix. Quand « Payant » reprend
+     le prix des TARIFS (son champ n'existe pas encore : il naîtra avec ce
+     prix), il le DIT à VoiceOver, sur le modèle de « Ramenée à … » —
+     un champ qui se remplit tout seul doit s'annoncer (ÉCRAN-14, point 3). */
+  const choisirCout = (cout) => {
+    if (choix.current.cout === cout) return;
+    const repris = cout === 'payant' ? coutQuePayantEcrit({ devis, coutPropose }) : null;
+    choisir({ cout }, 'cout');
+    if (repris && repris.depuisLesTarifs) retour.annoncer(annonceDuCoutPropose(repris.centimes));
+  };
 
   /* UNE PASTILLE D'UNITÉ N'ÉCRIT RIEN DE CE QUI EST TAPÉ (ÉCRAN-9) : le champ
      prend la valeur enregistrée DANS CETTE UNITÉ, ou se vide ; un champ vide
@@ -428,6 +489,38 @@ const ConditionsDevis = forwardRef(function ConditionsDevis({
             <Text style={s.aide}>{PHRASE_RETENUE}</Text>
           </>
         )}
+
+        {/* LE PRIX DU DEVIS LUI-MÊME (2b-4) — le DERNIER bloc (T17) : rien
+            sous le doigt ne bouge quand le champ naît sous « Payant », seul le
+            récapitulatif descend. Le titre, enfant DIRECT du défilement, porte
+            l'ancre du point « Pour le remettre ». */}
+        <Text style={s.titre} onLayout={ancre('cout')} accessibilityRole="header">{LE_COUT_DU_DEVIS.titre}</Text>
+        <View style={s.pastilles}>
+          <Pastille label={LE_COUT_DU_DEVIS.gratuit} nom={LE_COUT_DU_DEVIS.nomGratuit} choisie={c.cout === 'gratuit'}
+            onPress={() => choisirCout('gratuit')} />
+          <Pastille label={LE_COUT_DU_DEVIS.payant} nom={LE_COUT_DU_DEVIS.nomPayant} choisie={c.cout === 'payant'}
+            onPress={() => choisirCout('payant')} />
+        </View>
+        {/* Ce que disent les tarifs — une PHRASE, jamais un choix fait à la
+            place de l'artisan ; rien tant qu'ils sont en lecture. */}
+        {!!phraseDuCoutPropose(propose, regime) && (
+          <Text style={s.aide}>{phraseDuCoutPropose(propose, regime)}</Text>
+        )}
+        {c.cout === 'payant' && (
+          <>
+            <Text style={s.etiquette}>{noms.cout}</Text>
+            <ChampMontant
+              ref={refCout}
+              defaut={texteDe(textes, 'cout', present(devis.coutDevisCentimes) && devis.coutDevisCentimes > 0
+                ? centimesEnSaisie(devis.coutDevisCentimes) : '')}
+              placeholder={LE_COUT_DU_DEVIS.placeholder}
+              accessibilityLabel={noms.coutParle}
+              onBlur={() => enregistrer('cout')}
+            />
+            {sous('coutDevisCentimes')}
+          </>
+        )}
+        <Text style={s.aide}>{AIDE_COUT_DEVIS}</Text>
 
         {/* CE QUE LE DEVIS DIRA — les rangées de la BASE, dites comme la
             ventilation du bas : la réduction se lit en montant POSITIF. */}

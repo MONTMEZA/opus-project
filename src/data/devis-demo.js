@@ -77,7 +77,14 @@
  *      « Terrasse en bois », à qui il ne manque que la validité et la nature
  *      de l'acompte. Sans eux, ces deux états ne se verraient nulle part sans
  *      `.env` (critique E-14). « Mes devis » montre donc QUATRE brouillons :
- *      les contrôles qui en comptaient deux changent avec cette raison.
+ *      les contrôles qui en comptaient deux changent avec cette raison ;
+ *   6. depuis 2b-4, le prix du devis LUI-MÊME : « Muret » est GRATUIT (il
+ *      reste à « rien ne manque » et sans avis), « Terrasse » est PAYANT
+ *      (30,00 € TTC : ses deux points ne bougent pas, et l'avis du devis
+ *      payant se voit), et les deux premiers n'en disent rien (`null`
+ *      ÉCRIT) — le point « Dites si le devis lui-même est gratuit ou
+ *      payant » se voit sur eux. Un brouillon NEUF naît sans prix
+ *      (`videDevis`), donc avec ce point.
  *
  * L'artisan est la fiche `1` — un NOMBRE ici, une CHAÎNE ailleurs
  * (`Object.keys()`) : toute comparaison passe par `String()`, le piège des
@@ -175,6 +182,11 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       objet: 'Rénovation salle de bains',
       delaiExecution: DELAI_PAR_DEFAUT.texte,
       retenueGarantieCentiemes: 500,
+      /* 2b-4 (cahier T13) : le prix du devis LUI-MÊME n'est pas dit — `null`
+         ÉCRIT, jamais une clé absente (A-7) : c'est ici que le point
+         « Dites si le devis lui-même est gratuit ou payant » se voit sans
+         `.env`. */
+      coutDevisCentimes: null,
       generation: num(3 * JOUR),
       createdAt: il(5 * JOUR),
       modifieLe: il(3 * JOUR),
@@ -202,6 +214,8 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          démonstration (`emetteur-demo.js`) est jointe et valable : le rang 11
          se tait, et la réponse se voit dans la rangée « Le chantier ». */
       engageDecennale: true,
+      /* 2b-4 (T13) : le prix du devis lui-même n'est pas dit, ÉCRIT `null`. */
+      coutDevisCentimes: null,
       generation: num(2 * HEURE),
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
@@ -240,6 +254,10 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          complet (`devis_pour_qui`). */
       pourQui: 'consommateur',
       pourQuiClient: martin.id,
+      /* 2b-4 (T13) : le devis lui-même est GRATUIT — dit d'un appui sur
+         « Gratuit » (0). Sans lui, « Ce devis » ne serait plus complet
+         (`devis_cout`, rang 12), et « aucun avis » non plus. */
+      coutDevisCentimes: 0,
       generation: num(8 * JOUR),
       createdAt: il(9 * JOUR),
       modifieLe: il(8 * JOUR),
@@ -259,6 +277,11 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       acompteNature: null,
       pourQui: 'consommateur',
       pourQuiClient: martin.id,
+      /* 2b-4 (T13) : le devis lui-même est PAYANT, 30,00 € TTC — « Terrasse »
+         garde ses DEUX points (validité, nature de l'acompte), et l'avis du
+         devis payant se voit sous « À vérifier » (Mme Martin commande à
+         titre privé). */
+      coutDevisCentimes: 3000,
       generation: num(6 * JOUR),
       createdAt: il(7 * JOUR),
       modifieLe: il(6 * JOUR),

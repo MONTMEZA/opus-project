@@ -159,10 +159,16 @@ const ENTREPRISES = {
 // 2b-2 : le devis « complet » répond à « À quel titre ? » POUR son client
 // (`pour_qui_client` = `client_id`) — sans quoi la base demanderait
 // `devis_pour_qui` à chaque situation.
+// 2b-4 : « complet » dit aussi que le devis lui-même est GRATUIT
+// (`cout_devis_centimes` = 0) — sans quoi `devis_cout` (rang 12, une
+// prudence) s'ajouterait à chaque situation, et les 125 cas d'avant
+// changeraient de sens. `VIDE` NE LE REÇOIT PAS : les situations qui en
+// partent gardent le 0 de `COMPLET` (elles sont « neuves, sauf gratuit ») ;
+// celles qui veulent le prix VIDE l'écrivent (`cout_devis_centimes: null`).
 const COMPLET = {
   client_id: C1, lieu_adresse: '4 rue de l’Essai', lieu_code_postal: '13410', lieu_ville: 'Lambesc',
   delai_execution: 'Dans les 30 jours suivant la signature', validite_jours: 30,
-  pour_qui: 'consommateur', pour_qui_client: C1,
+  pour_qui: 'consommateur', pour_qui_client: C1, cout_devis_centimes: 0,
 };
 const VIDE = {
   client_id: null, lieu_adresse: null, lieu_code_postal: null, lieu_ville: null,
@@ -277,10 +283,10 @@ const SITUATIONS = [
   { nom: 'réduction de 1 000,00 € sur deux taux (brut 600,00 €) : ramenée', e: 'reel',
     devis: { remise_centimes: 100000 }, lignes: [poste(30000, 2000), poste(30000, 1000)] },
   // --- combinaisons
-  { nom: 'un devis NEUF (rien de dit) : client, lignes, lieu, délai, validité', e: 'franchise', devis: VIDE, lignes: [] },
+  { nom: 'un devis NEUF (rien de dit, sauf « gratuit ») : client, lignes, lieu, délai, validité', e: 'franchise', devis: VIDE, lignes: [] },
   { nom: 'les neuf rangs du devis à la fois (le rang 3 en franchise)', e: 'franchise',
     devis: { ...VIDE, acompte_centimes: 5000, remise_centimes: 100 }, lignes: [option(10000, 2000)] },
-  { nom: 'un devis neuf et AUCUNE fiche : les motifs du devis puis ceux de l’entreprise', e: 'vide', devis: VIDE, lignes: [] },
+  { nom: 'un devis neuf (rien de dit, sauf « gratuit ») et AUCUNE fiche : les motifs du devis puis ceux de l’entreprise', e: 'vide', devis: VIDE, lignes: [] },
   // --- les motifs de l'entreprise
   { nom: 'entreprise sans frais déclarés : frais_deplacement (règle d’Opus)', e: 'sans_frais', lignes: UN_POSTE_0 },
   { nom: 'entreprise à peine remplie (téléphone, franchise)', e: 'partielle', lignes: UN_POSTE_0 },
@@ -313,9 +319,9 @@ const SITUATIONS = [
   // PAR-6 : D4-c sur un devis NEUF VIDE (aucun client, lieu, délai, validité,
   // aucun poste) : chacun des motifs du devis est alors éprouvé contre chaque
   // origine — le cas « un devis NEUF » plus haut est celui ouvert à la main.
-  { nom: 'D4-c : devis NEUF VIDE venu d’une urgence', e: 'franchise',
+  { nom: 'D4-c : devis NEUF VIDE (rien de dit, sauf « gratuit ») venu d’une urgence', e: 'franchise',
     devis: { ...VIDE, sos_request_id: SA, source: 'urgence' }, lignes: [] },
-  { nom: 'D4-c : devis NEUF VIDE venu d’une demande ET d’une urgence', e: 'franchise',
+  { nom: 'D4-c : devis NEUF VIDE (rien de dit, sauf « gratuit ») venu d’une demande ET d’une urgence', e: 'franchise',
     devis: { ...VIDE, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
   // --- 2b-2, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
   //     « À quel titre ? » : la réponse ne vaut que pour le client à qui elle
@@ -452,7 +458,7 @@ const SITUATIONS = [
     devis: { engage_decennale: true }, lignes: UN_POSTE_0 },
   { nom: 'le rang 10 ET le rang 11 dans le même devis, dans l’ordre des rangs', e: 'franchise',
     devis: { ...SIGNATURE, engage_decennale: true }, assur: [assurance('decennale', true, PASSEE)], lignes: UN_POSTE_0 },
-  { nom: 'un devis NEUF (rien de dit) et aucune assurance : client, lignes, lieu, délai, validité, puis devis_decennale',
+  { nom: 'un devis NEUF (rien de dit, sauf « gratuit ») et aucune assurance : client, lignes, lieu, délai, validité, puis devis_decennale',
     e: 'franchise', devis: VIDE, assur: [], lignes: [] },
   // --- La décision du 13/11 (R1), À LA FIN pour que les numéros des cas déjà
   //     là ne bougent pas : le bâtiment neuf ne permet plus « à la
@@ -465,6 +471,46 @@ const SITUATIONS = [
     devis: { ...SIGNATURE, pour_qui: 'professionnel', chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
   { nom: 'à la signature, association, copropriété ou société civile, bâtiment neuf, rien de marqué : le rang 10', e: 'franchise',
     devis: { ...SIGNATURE, pour_qui: 'non_professionnel', chantier_neuf_conso: true }, lignes: UN_POSTE_0 },
+  // --- 2b-4, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
+  //     Le rang 12 : le prix du devis lui-même pas encore dit
+  //     (`cout_devis_centimes` vide), une PRUDENCE (réponse Q2 du 16/11). 0
+  //     (gratuit) et un montant (payant) le taisent pareil ; il ne lit ni la
+  //     réponse « à quel titre », ni l'origine. Le PREMIER cas est sur une
+  //     fiche complète EN FRANCHISE : au régime réel, `conso_tva_intra`
+  //     s'ajouterait, et la couverture de `verifier-devis` (un motif SEUL de
+  //     toute la liste) ne le compterait pas.
+  { nom: 'prix du devis lui-même vide, devis complet en franchise : devis_cout seul (une prudence)', e: 'franchise',
+    devis: { cout_devis_centimes: null }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même à 0 (gratuit) : rien ne manque', e: 'franchise',
+    devis: { cout_devis_centimes: 0 }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même à 3 000 centimes (payant) : rien ne manque', e: 'franchise',
+    devis: { cout_devis_centimes: 3000 }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide ET validité vide : le rang 6 puis le rang 12', e: 'franchise',
+    devis: { cout_devis_centimes: null, validite_jours: null }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide ET décennale sans réponse, aucune assurance : le rang 11 puis le rang 12', e: 'franchise',
+    devis: { cout_devis_centimes: null }, assur: [], lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide, au régime réel sans n° de TVA : devis_cout puis conso_tva_intra', e: 'reel',
+    devis: { cout_devis_centimes: null }, lignes: UN_POSTE_20 },
+  { nom: 'prix du devis lui-même vide, à titre privé (consommateur) : devis_cout', e: 'franchise',
+    devis: { cout_devis_centimes: null, pour_qui: 'consommateur' }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide, pour son entreprise dans son activité principale : devis_cout (la réponse ne le lève pas)',
+    e: 'franchise', devis: { cout_devis_centimes: null, pour_qui: 'professionnel' }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide, petite entreprise hors de son activité principale : devis_cout', e: 'franchise',
+    devis: { cout_devis_centimes: null, pour_qui: 'professionnel_hors_activite' }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide, association, copropriété ou société civile : devis_cout', e: 'franchise',
+    devis: { cout_devis_centimes: null, pour_qui: 'non_professionnel' }, lignes: UN_POSTE_0 },
+  { nom: 'prix du devis lui-même vide, sans client : le rang 1 puis le rang 12', e: 'franchise',
+    devis: { cout_devis_centimes: null, client_id: null }, lignes: UN_POSTE_0 },
+  //     D4-c sur un devis NEUF VIDE SANS PRIX : le motif de 2b-4 éprouvé
+  //     contre chaque origine (ouvert à la main ; venu d'une urgence ; venu
+  //     d'une demande ET d'une urgence) — les trois doivent rendre la MÊME
+  //     liste, `devis_cout` compris.
+  { nom: 'D4-c : devis NEUF VIDE SANS PRIX ouvert à la main', e: 'franchise',
+    devis: { ...VIDE, cout_devis_centimes: null, source: 'manuelle' }, lignes: [] },
+  { nom: 'D4-c : devis NEUF VIDE SANS PRIX venu d’une urgence', e: 'franchise',
+    devis: { ...VIDE, cout_devis_centimes: null, sos_request_id: SA, source: 'urgence' }, lignes: [] },
+  { nom: 'D4-c : devis NEUF VIDE SANS PRIX venu d’une demande ET d’une urgence', e: 'franchise',
+    devis: { ...VIDE, cout_devis_centimes: null, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -632,7 +678,8 @@ const cas = SITUATIONS.map((s, k) => {
    génération, pas au premier défaut. */
 const CLES_DU_DEVIS = ['devis_client', 'devis_pour_qui', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva',
   'devis_taux_reduit_neuf', 'devis_lieu', 'devis_delai', 'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene',
-  'devis_reduction_ramenee', 'devis_acompte_signature', 'devis_decennale', 'devis_attestation_date', 'devis_attestation'];
+  'devis_reduction_ramenee', 'devis_acompte_signature', 'devis_decennale', 'devis_attestation_date', 'devis_attestation',
+  'devis_cout'];
 for (const cle of CLES_DU_DEVIS) {
   if (!cas.some((c) => c.attendu.length > 0 && c.attendu.filter((m) => m.rang < 100).every((m) => m.cle === cle)
     && c.attendu.some((m) => m.cle === cle))) {
@@ -711,7 +758,24 @@ if (!cas.some((c) => c.attendu.some((m) => m.rang === 10) && c.attendu.some((m) 
   throw new Error('aucun cas où les rangs 10 et 11 sortent ensemble');
 }
 if (cas.some((c) => c.attendu.filter((m) => m.rang === 11).length > 1)) throw new Error('le rang 11 a rendu plus d’une clé');
-if (cas.length < 85 || cas.slice(0, 85).some((c, i) => c.n !== i + 1)) throw new Error('les 85 cas d’avant ont bougé');
+/* 2b-4 : les 125 cas d'avant gardent leur numéro (rien n'est inséré avant
+   eux) — ET AUCUN NE PORTE `devis_cout`. Sans la seconde garde, `COMPLET`
+   oublié faisait gagner le motif à tous les cas, et la garde de numérotation
+   restait verte (sabotage S5 du cahier 2b-4). Le motif ne vit que dans les
+   situations ajoutées à la fin, qui écrivent le prix vide elles-mêmes. */
+if (cas.length < 125 || cas.slice(0, 125).some((c, i) => c.n !== i + 1)) throw new Error('les 125 cas d’avant ont bougé');
+if (cas.slice(0, 125).some((c) => c.attendu.some((m) => m.cle === 'devis_cout'))) {
+  throw new Error('un des 125 cas d’avant porte devis_cout : le décor « complet » ne dit plus « gratuit »');
+}
+/* 2b-4 : la preuve D4-c du motif nouveau — les trois devis neufs sans prix,
+   d'origines différentes, rendent la MÊME liste, `devis_cout` compris. */
+{
+  const sansPrix = cas.filter((c) => /^D4-c : devis NEUF VIDE SANS PRIX /.test(c.nom));
+  const listes = new Set(sansPrix.map((c) => JSON.stringify(c.attendu)));
+  if (sansPrix.length !== 3 || listes.size !== 1 || !sansPrix[0].attendu.some((m) => m.cle === 'devis_cout')) {
+    throw new Error('les trois devis neufs sans prix, d’origines différentes, ne rendent pas la même liste avec devis_cout');
+  }
+}
 
 const LISEZ_MOI = 'Engendré par scripts/generer-cas-remise.mjs : ce que motifs_refus_remise() (schema.sql, section 49.9) '
   + 'rend pour chaque situation, jouée par la VRAIE base (le devis et ses lignes écrits par le chemin d’un client, la '

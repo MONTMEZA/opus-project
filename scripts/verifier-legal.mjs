@@ -2239,9 +2239,14 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
        Étape 2b-3 (13/11/2026, annexe A.7 du cahier 2b-3, VERSION
        2026-11-13) : si les travaux peuvent engager la garantie décennale,
        quand l'acompte ou les arrhes sont payés, et, pour chaque ligne, si
-       c'est une réparation urgente expressément demandée par le client. */
+       c'est une réparation urgente expressément demandée par le client.
+       Étape 2b-4 (17/11/2026, annexe A.6 du cahier 2b-4, VERSION
+       2026-11-17) : s'ils sont gratuits ou payants, et ce que coûte un
+       devis payant (`devis.cout_devis_centimes`), insérés après « leur durée
+       de validité » ; RIEN d'autre dans la section (empreinte d'avant :
+       58d1524f…, celle de 2b-3). */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      '58d1524f49baf5fd661487d309d1224189af8c50a4aa0a2dc00abd2f0ec10bc4'],
+      '3d67dfe0f930f0630a84802cc0a7636cd580e091fe51cbd7c91a9e80a46fa192'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2720,6 +2725,13 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
        (`devis_lignes.urgence`) : la phrase la dit avec les lignes. */
     engage_decennale: 'si leurs travaux peuvent engager votre garantie décennale',
     acompte_a_la_signature: 'quand l’acompte ou les arrhes sont payés',
+    /* 2b-4 (annexe A.6 du cahier 2b-4) : le prix du devis lui-même — vide
+       (rien de dit), 0 (gratuit) ou un montant (payant). « s’ils sont
+       gratuits ou payants » le nomme ; « et ce que coûte un devis payant »
+       suit, dans la phrase que la section « Étape 2b-4 », plus bas, garde
+       ENTIÈRE. Sans cette ligne, la colonne née en 49.4 quinquies fait
+       rougir le contrôle ci-dessous (mesuré, cahier BASE-9 / ÉCRAN-7). */
+    cout_devis_centimes: 's’ils sont gratuits ou payants',
     total_ht_centimes: 'leurs totaux',
     total_tva_centimes: 'leurs totaux',
     total_ttc_centimes: 'leurs totaux',
@@ -2800,14 +2812,17 @@ console.log('\nÉtape 2b-3 — la réparation urgente, la décennale, le moment 
     && /LA MÊME LIMITE/.test(histoire2b3) && /ré-accepter/.test(histoire2b3) && /2019\/1150/.test(histoire2b3),
     histoire2b3 ? histoire2b3.slice(0, 160) : 'bloc introuvable (« LA RÉPARATION URGENTE, LA GARANTIE DÉCENNALE ET LE MOMENT OÙ »)');
 
-  /* LA PHRASE DES DEVIS, ENTIÈRE (annexe A.7 avec 2a et 2b-2). */
-  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
-  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase de l’annexe A.7 de 2b-3',
-    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(380, 560)}… »`);
+  /* LA PHRASE DES DEVIS, ENTIÈRE, a quitté cette section à l'étape 2b-4
+     (17/11/2026), comme celle de 2b-2 avait quitté la sienne à 2b-3 : elle
+     s'est allongée (« s’ils sont gratuits ou payants, et ce que coûte un
+     devis payant »), et elle est gardée mot pour mot, ENTIÈRE, par la
+     section « Étape 2b-4 » plus bas — avec les réponses de 2b-3, qui en font
+     toujours partie. L'ORDRE de 2b-3, lui, reste vérifié ici : l'insertion
+     de 2b-4 vient avant « leurs lignes », elle ne le dérange pas. */
   const iDevis3 = collecte.indexOf('devis en préparation');
   const iPostes3 = collecte.indexOf('base de postes', iDevis3);
   const iLignes3 = collecte.indexOf('leurs lignes', iDevis3);
-  verifier('…dans l’ORDRE : les deux réponses du devis avant « leurs lignes », la réparation urgente dans « leurs lignes », la base de postes après',
+  verifier('« Ce que nous collectons (devis) » garde l’ORDRE de 2b-3 : les deux réponses du devis avant « leurs lignes », la réparation urgente dans « leurs lignes », la base de postes après',
     iDevis3 >= 0 && iLignes3 > iDevis3 && iPostes3 > iLignes3
     && collecte.indexOf('garantie décennale', iDevis3) < iLignes3
     && collecte.indexOf('quand l’acompte ou les arrhes sont payés', iDevis3) < iLignes3
@@ -2892,6 +2907,150 @@ console.log('\nÉtape 2b-3 — la réparation urgente, la décennale, le moment 
   if (/rénovation n.est pas concernée/i.test(tousTextes2b3.join(' '))) fautes.push('« la rénovation n’est pas concernée »');
   verifier('le vocabulaire : jamais une attestation « vérifiée », jamais « la loi l’exige », jamais « la rénovation n’est pas concernée »',
     fautes.length === 0, fautes.join(' · '));
+}
+
+/* ==================================================================
+   ÉTAPE 2b-4 DU DEVIS (17/11/2026) — le prix du devis lui-même : gratuit
+   ou payant, et ce que coûte un devis payant (cahier 2b-4, §4 et annexe
+   A.6 ; section 49 de `schema.sql`, colonne `devis.cout_devis_centimes`,
+   49.4 quinquies ; réponses du propriétaire du 16/11 : Q1 = trois étapes,
+   Q2 = un point « par prudence », Q3 = pas pour l'instant).
+
+   Une seule phrase change, et elle est gardée MOT POUR MOT, ENTIÈRE —
+   avec ce que 2a, 2b-2 et 2b-3 y avaient mis : une donnée collectée qui
+   n'est pas nommée n'est pas annoncée. Il n'en existe qu'UNE écriture (le
+   cahier v1 en laissait deux possibles, « et leur prix » et « et ce que
+   coûte un devis payant » : critiques BASE-9 et ÉCRAN-7). Et ce qui la
+   tient :
+     - la colonne est NOMMÉE (`NOMMEES_DEVIS`, section 2b-2 plus haut, qui
+       lit les colonnes de `devis` DANS LE SCHÉMA) ; et ici, le schéma la
+       range bien : sans cette vérification, une colonne retirée du schéma
+       disparaîtrait de `NOMMEES_DEVIS` sans bruit, et le texte annoncerait
+       une donnée que la base ne range pas ;
+     - l'ORDRE : après « leur durée de validité », avant « à quel titre le
+       client commande », donc avant « leurs lignes » ; « ce que coûte un
+       devis payant » ne se lit jamais comme le prix des lignes, que
+       « leurs prix et leurs totaux » nomme plus loin ;
+     - « Vos tarifs et vos prix » ne change pas d'UN mot (son empreinte) :
+       sa promesse sur « le prix de vos devis » devient vraie par l'ÉCRAN,
+       jamais par la base. `coutDuDevisPropose` (devis.js) lit ce prix dans
+       les tarifs que la saisie reçoit déjà, et il est FAIT TOURNER ici. Que
+       `motifs_refus_remise` ne lise toujours pas `tarifs_pro`, c'est la
+       liste fermée « tarifs » de la section des tarifs (plus haut) et la
+       porte étroite de `verifier-emetteur` qui le tiennent — aucune des
+       deux ne change à 2b-4 ;
+     - RIEN D'AUTRE (cahier §4) : « Une décision automatique » ne parle pas
+       du prix du devis — le point « Dites si le devis lui-même est gratuit
+       ou payant » est un motif, pas une décision ; aucun texte ne promet la
+       mention « gratuit » ou « payant » imprimée (rien ne sort avant 2c) ;
+       aucun ne parle de services à la personne (réponse Q3) ni de déchets
+       (2b-5), et le label RGE ne se lit que là où il se lisait avant (le
+       RGE du devis est l'étape 2b-6).
+   ================================================================== */
+console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui les tient');
+{
+  const { createHash } = await import('node:crypto');
+  const plat = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const collecte = bloc(CONFIDENTIALITE, 'Ce que nous collectons');
+  const decision = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+  const engagement = bloc(CGU, 'Vos tarifs et vos prix');
+
+  /* UNE VERSION NOUVELLE : plus récente que celle de 2b-3, plutôt que « au
+     moins la date de 2b-4 » — la propriété, c'est qu'une donnée collectée
+     de plus ne se range jamais sous la version d'avant, quel que soit le
+     jour du commit (« pas plus loin que le lendemain » est tenu plus haut). */
+  verifier('VERSION est plus récente que celle de 2b-3 (13/11/2026) : une donnée nouvelle collectée pour les devis, sous une version nouvelle',
+    VERSION > '2026-11-13', `VERSION = ${VERSION}`);
+
+  /* LE BLOC D'HISTOIRE DE 2b-4, cherché par son TITRE (si le commit se fait
+     un autre jour, la date change avec `VERSION`), et la version d'avant
+     juste après lui : un bloc posé ailleurs ne dirait plus de quelle
+     version il raconte le changement. */
+  const sourceLegal2b4 = readFileSync('src/data/legal.js', 'utf8');
+  const iHist4 = sourceLegal2b4.indexOf('LE PRIX DU DEVIS LUI-MÊME (étape 2b-4');
+  const finHist4 = iHist4 < 0 ? -1 : sourceLegal2b4.indexOf('*/', iHist4);
+  const histoire2b4 = finHist4 < 0 ? '' : plat(sourceLegal2b4.slice(iHist4, finHist4));
+  const ATTENDUS_HISTOIRE = ["s'ils sont gratuits ou payants", 'ce que coûte un devis payant', "RIEN D'AUTRE",
+    "« Vos tarifs et vos prix » ne change pas d'un mot", 'LA MÊME LIMITE', 'ré-accepter', '2019/1150'];
+  verifier('le bloc d’historique de 2b-4 nomme le fait (gratuits ou payants, ce que coûte un devis payant), « RIEN D’AUTRE » (« Vos tarifs et vos prix » compris) et la limite connue',
+    ATTENDUS_HISTOIRE.every((x) => histoire2b4.includes(x)),
+    histoire2b4 ? ATTENDUS_HISTOIRE.filter((x) => !histoire2b4.includes(x)).map((x) => `« ${x} » manque`).join(' · ')
+      : 'bloc introuvable (« LE PRIX DU DEVIS LUI-MÊME (étape 2b-4 »)');
+  verifier('…et il est suivi de la version précédente, celle de 2b-3',
+    finHist4 > 0 && sourceLegal2b4.slice(finHist4 + 2).trimStart().startsWith("/* VERSION PRÉCÉDENTE : '2026-11-13'. */"));
+
+  /* LA PHRASE DES DEVIS, ENTIÈRE (annexe A.6, avec 2a, 2b-2 et 2b-3). */
+  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase de l’annexe A.6 de 2b-4 (avec 2a, 2b-2 et 2b-3)',
+    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(140, 300)}… »`);
+  const iDevis4 = collecte.indexOf('devis en préparation');
+  const REPERES = ['leur durée de validité', 's’ils sont gratuits ou payants', 'et ce que coûte un devis payant',
+    'à quel titre le client commande', 'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
+  const positions = REPERES.map((x) => collecte.indexOf(x, Math.max(0, iDevis4)));
+  verifier('…dans l’ORDRE : après « leur durée de validité », avant « à quel titre le client commande » et « leurs lignes » — « ce que coûte un devis payant » ne se lit pas comme le prix des lignes',
+    iDevis4 >= 0 && positions.every((p, k) => p > (k === 0 ? iDevis4 : positions[k - 1])),
+    REPERES.map((x, k) => `${x} : ${positions[k]}`).join(' · '));
+
+  /* LE SCHÉMA RANGE CE QUE LA PHRASE ANNONCE : `NOMMEES_DEVIS` (plus haut)
+     ne juge une colonne que si le schéma la porte ; sans ceci, retirer la
+     colonne du schéma laisserait la phrase annoncer une donnée qui n'existe
+     pas, et tout resterait vert. */
+  const schema2b4 = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const colonne2b4 = [...schema2b4.matchAll(/alter table (?:only )?public\.devis\b([^;]*);/g)]
+    .some((m) => /add column (?:if not exists )?cout_devis_centimes bigint\b/.test(m[1]));
+  verifier('…et le schéma range bien ce qu’elle annonce : `devis.cout_devis_centimes bigint` (49.4 quinquies)',
+    colonne2b4 && collecte.includes('s’ils sont gratuits ou payants'),
+    colonne2b4 ? 'la phrase ne nomme pas le prix du devis' : 'la colonne est absente du schéma : la phrase annoncerait une donnée que la base ne range pas');
+
+  /* « PAYANT » NE SE LIT QUE LÀ : deux fois, dans cette phrase de la
+     collecte (« gratuits ou payants », « un devis payant »). Un « payant »
+     de plus ailleurs serait une promesse que le cahier n'a pas décidée. */
+  const tous2b4 = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
+  const nbPayant = tous2b4.join(' ').split('payant').length - 1;
+  verifier('« payant » ne se lit que dans la phrase des devis de la collecte, deux fois (« gratuits ou payants », « un devis payant »)',
+    nbPayant === 2 && PHRASE_DEVIS.split('payant').length - 1 === 2, `${nbPayant} occurrence(s) dans les textes légaux`);
+
+  /* « VOS TARIFS ET VOS PRIX » NE CHANGE PAS D'UN MOT (cahier §4) : son
+     empreinte est celle de 2b-3, et la promesse du prix des devis y est. */
+  const EMPREINTE_ENGAGEMENT = 'ce663c1785dd70a7fc1adea0745cd1b68730f339c92c034c4d8341e3f13069e4';
+  const eEngagement = createHash('sha256').update(plat(engagement)).digest('hex');
+  verifier('« Vos tarifs et vos prix » ne change pas d’UN mot à 2b-4 (empreinte de 2b-3) : sa promesse devient vraie par l’écran, pas par le texte',
+    engagement.length > 0 && eEngagement === EMPREINTE_ENGAGEMENT
+    && engagement.includes('et le prix de vos devis serviront à préparer vos devis'),
+    `empreinte ${eEngagement} — si le changement est voulu : VERSION, historique, puis cette empreinte`);
+  /* …ET LA PROMESSE EST TENUE PAR LE CODE : la carte « Conditions » propose
+     le prix lu dans les tarifs (`coutDuDevisPropose`), et « Payant » ne
+     reprend qu'un prix PAYANT (`coutAProposer` : jamais 0, critique
+     ÉCRAN-2). Fait tourner, pas lu. */
+  const { coutDuDevisPropose, coutAProposer } = await import('../src/lib/devis.js');
+  const proposes = typeof coutDuDevisPropose === 'function' ? {
+    payant: coutDuDevisPropose({ prix_devis_centimes: 3000 }),
+    gratuit: coutDuDevisPropose({ prix_devis_centimes: 0 }),
+    rien: coutDuDevisPropose(null),
+  } : null;
+  verifier('…et « le prix de vos devis serviront à préparer vos devis » est TENU : `coutDuDevisPropose` lit le prix dans les tarifs (30,00 € → payant, 0 → gratuit, aucune ligne → rien), et « Payant » ne reprend qu’un prix payant',
+    proposes !== null && typeof coutAProposer === 'function'
+    && proposes.payant.etat === 'payant' && proposes.payant.centimes === 3000
+    && proposes.gratuit.etat === 'gratuit' && proposes.rien.etat === 'rien'
+    && coutAProposer(proposes.payant) === 3000 && coutAProposer(proposes.gratuit) === null,
+    JSON.stringify(proposes));
+
+  /* RIEN D'AUTRE (cahier §4). */
+  verifier('« Une décision automatique » ne parle pas du prix du devis : le point « gratuit ou payant » est un motif, pas une décision',
+    decision.length > 0 && !/gratuit|payant|prix du devis|devis lui-même|coûte/i.test(decision));
+  const propositionsDuPrix = tous2b4.flatMap((t) => t.split(/[.;:!?]\s+|\s+—\s+/))
+    .filter((p) => /payant|gratuits ou/i.test(p));
+  verifier('aucun texte ne promet la mention « gratuit » ou « payant » imprimée (rien ne sort avant 2c)',
+    propositionsDuPrix.length > 0 && propositionsDuPrix.every((p) => !/imprim|mention|figur/i.test(p)),
+    propositionsDuPrix.filter((p) => /imprim|mention|figur/i.test(p)).join(' | ') || 'aucune proposition ne nomme le prix du devis');
+  verifier('aucun texte ne parle de services à la personne (réponse Q3 : pas pour l’instant) ni de déchets (étape 2b-5)',
+    !tous2b4.some((t) => /services? à la personne|déchet/i.test(t)));
+  const avecRge = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /\bRGE\b/.test(b.texte)).map((b) => b.titre);
+  verifier('…et le label RGE ne se lit que là où il se lisait avant 2b-4 (« Ce que les autres voient de vous », le numéro déclaré sur la fiche) : le RGE du devis est l’étape 2b-6',
+    avecRge.length === 1 && avecRge[0] === 'Ce que les autres voient de vous', avecRge.join(' · ') || 'aucun');
 }
 
 console.log('');

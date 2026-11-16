@@ -31,16 +31,21 @@
  *     la somme des lignes de ce taux (3 × 33,33 € à 10 % : 10,00 € de TVA,
  *     et non 9,99 € ligne par ligne).
  *
- * CE FICHIER N'IMPORTE QUE TROIS FICHIERS PURS
- * --------------------------------------------
+ * CE FICHIER N'IMPORTE QUE QUATRE FICHIERS PURS
+ * ---------------------------------------------
  * `./centimes.js` (l'écriture d'un montant, la seule du projet),
  * `./entreprise.js` (pour `dateFrancaise()` et `isoLisible()` : une date
  * d'horodatage se lit à l'heure du téléphone, jamais par ses dix premiers
- * caractères — la leçon de la nuit du lot T) et, depuis le lot P,
+ * caractères — la leçon de la nuit du lot T), depuis le lot P,
  * `./rapprochement.js` (la clé de rapprochement : « Seuil » et « seuils »
- * sont la même phrase, sans `normalize`, sans table Unicode). Aucun des
- * trois ne charge React Native : `node` fait tourner ce fichier, et un
- * contrôle qui plante ne vérifie rien. `verifier-devis` tient cette liste.
+ * sont la même phrase, sans `normalize`, sans table Unicode) et, depuis
+ * 2b-4, `./formats.js` (pour `joursEntre()` seulement : l'avis de
+ * l'attestation qui arrive à sa fin compte des jours, et l'arithmétique des
+ * jours, par `Date.UTC` et sans fuseau, n'est écrite qu'à UN endroit du
+ * projet — une seconde copie ici serait la faute que le projet traque ;
+ * `formats.js` n'importe RIEN). Aucun des quatre ne charge React Native :
+ * `node` fait tourner ce fichier, et un contrôle qui plante ne vérifie rien.
+ * `verifier-devis` tient cette liste.
  *
  * LES NOMS
  * --------
@@ -51,6 +56,7 @@
 import { centimesLisibles, versCentimes } from './centimes.js';
 import { dateFrancaise, isoLisible } from './entreprise.js';
 import { cleDeRapprochement, aPlat } from './rapprochement.js';
+import { joursEntre } from './formats.js';
 
 /* ================================================================== */
 /*  LES CONSTANTES — chacune a son miroir dans la base                  */
@@ -108,6 +114,14 @@ export const SURFACE_MAX = 99_999_999;
 
 /** La retenue de garantie : au plus 5 % (loi n° 71-584, art. 1er). */
 export const RETENUE_MAX = 500;
+
+/** LE PRIX DU DEVIS LUI-MÊME (2b-4, section 49.4 quinquies,
+ *  `devis_cout_check`) : en centimes TTC, de 0 (gratuit) à 100 000
+ *  (1 000,00 €) — la borne de `tarif_devis_check` des tarifs (lot T), parce
+ *  que la proposition se recopie depuis « Mes tarifs » sans conversion. Vide
+ *  = pas encore dit : le motif `devis_cout` (rang 12, par prudence). La même
+ *  borne que la base, écrite UNE fois ici. */
+export const COUT_DEVIS_MAX = 100000;
 
 /** LES CONDITIONS DU DEVIS (lot 2a, section 49.4 bis). Un pourcentage de
  *  réduction ou d'acompte, en centièmes de point : de 0,01 % à 100 %
@@ -172,16 +186,20 @@ export const CONTRAINTES_LIGNE = Object.freeze([
   'devis_ligne_urgence_check',
 ]);
 
-/** Les dix-huit contraintes de `devis`, triées de même (dix au lot 1, sept
- *  au lot 2a, une à 2b-2 : la réponse « à quel titre »). `validerDevis()`
- *  teste celles qui portent sur ce que l'artisan écrit ; `devis_plafond_check`
- *  est tenu par `totauxDevis()` ; `devis_totaux_check` et
- *  `devis_calculs_check` par la base seule. */
+/** Les dix-neuf contraintes de `devis`, triées de même (dix au lot 1, sept
+ *  au lot 2a, une à 2b-2 : la réponse « à quel titre » ; une à 2b-4 : le
+ *  prix du devis lui-même, `devis_cout_check`, rangée entre `calculs` et
+ *  `delai` — PostgreSQL nomme la première dans cet ordre, et une ligne à
+ *  « −1 » ET une validité fausse est nommée `devis_cout_check` des deux
+ *  côtés). `validerDevis()` teste celles qui portent sur ce que l'artisan
+ *  écrit ; `devis_plafond_check` est tenu par `totauxDevis()` ;
+ *  `devis_totaux_check` et `devis_calculs_check` par la base seule. */
 export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_acompte_check',
   'devis_acompte_nature_check',
   'devis_acompte_une_forme_check',
   'devis_calculs_check',
+  'devis_cout_check',
   'devis_delai_check',
   'devis_lieu_adresse_check',
   'devis_lieu_code_postal_check',
@@ -317,6 +335,11 @@ export const CHAMPS_DEVIS = Object.freeze([
      « Quand le client paie-t-il cette somme ? » (« Conditions », vide ou
      faux = dès le 8e jour). Aucune date : personne ne la lirait. */
   'engageDecennale', 'acompteALaSignature',
+  /* 2b-4 : le prix du devis LUI-MÊME (« Conditions », en dernier), en
+     centimes TTC — vide = pas encore dit (le motif du rang 12), 0 = gratuit
+     (écrit par la seule pastille « Gratuit »), un montant = payant. HORS de
+     toute paire : il ne viole aucune contrainte seul, et ne lie rien. */
+  'coutDevisCentimes',
 ]);
 /** LES PAIRES qui s'écrivent ENSEMBLE, en une écriture (relecture BASE-2) :
  *  la réduction (pourcentage OU montant), l'acompte (pourcentage OU montant,
@@ -951,6 +974,13 @@ const REGLES_DEVIS = {
     ? 'remiseCentimes' : null),
   devis_validite_check: (d) => (!present(d.validiteJours)
     || (entier(d.validiteJours) && d.validiteJours >= 1 && d.validiteJours <= VALIDITE_MAX) ? null : 'validiteJours'),
+  /* 2b-4 : le prix du devis lui-même, de 0 à `COUT_DEVIS_MAX`, ou vide. Sans
+     cette règle, `validerDevis` laisserait passer −1 en silence (`regle ?
+     regle(x) : null`), et la démonstration accepterait ce que la base refuse
+     (critique BASE-7, mesuré). */
+  devis_cout_check: (d) => (!present(d.coutDevisCentimes)
+    || (entier(d.coutDevisCentimes) && d.coutDevisCentimes >= 0 && d.coutDevisCentimes <= COUT_DEVIS_MAX)
+    ? null : 'coutDevisCentimes'),
   devis_delai_check: (d) => (!present(d.delaiExecution) || longueur(d.delaiExecution) <= LONGUEURS.delaiExecution
     ? null : 'delaiExecution'),
   devis_lieu_adresse_check: (d) => (!present(d.lieuAdresse) || longueur(d.lieuAdresse) <= LONGUEURS.lieuAdresse
@@ -1836,6 +1866,10 @@ export function rowToDevis(d) {
        jour). Relues telles que la base les garde, `null` compris. */
     engageDecennale: d.engage_decennale ?? null,
     acompteALaSignature: d.acompte_a_la_signature ?? null,
+    /* 2b-4 (49.4 quinquies) : le prix du devis lui-même, en centimes TTC —
+       `null` (pas dit), 0 (gratuit) ou un montant (payant). Un `bigint`
+       arrive en nombre ; `nombreOuNul` garde le 0, qui n'est PAS un vide. */
+    coutDevisCentimes: nombreOuNul(d.cout_devis_centimes),
     generation: nombreOuNul(d.generation),
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
@@ -2421,6 +2455,7 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
   devis_acompte_check: 'L’acompte n’a pas pu être enregistré.',
   devis_acompte_nature_check: 'La nature de l’acompte n’a pas pu être enregistrée.',
   devis_acompte_une_forme_check: 'L’acompte n’a pas pu être enregistré.',
+  devis_cout_check: 'Le prix du devis lui-même n’a pas pu être enregistré.',
   devis_delai_check: 'Le délai d’exécution n’a pas pu être enregistré.',
   devis_lieu_adresse_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_lieu_code_postal_check: 'Le lieu des travaux n’a pas pu être enregistré.',
@@ -2896,6 +2931,15 @@ function valeurDeCondition(pourcent, montant) {
  * 2b-3 (M6 écran) : « Acompte 30 % à la signature » quand l'artisan a
  * choisi « À la signature » (`acompteALaSignature === true`) et qu'un
  * acompte est posé — sinon ce choix ne se verrait qu'en ouvrant la carte.
+ *
+ * 2b-4 (T15, critique ÉCRAN-15) : LE PRIX DU DEVIS LUI-MÊME. Tant qu'il n'est
+ * pas dit, il MANQUE, et le résumé le dit en tête, après la validité —
+ * « Devis lui-même : gratuit ou payant ? à choisir » — sinon la rangée ferait
+ * croire les conditions complètes sous un point « Pour le remettre » qui dit
+ * le contraire (la décision E-12, encore). Dit, il vient EN FIN, à la place
+ * où le bloc vit dans la carte : « Devis lui-même gratuit » ou « Devis
+ * lui-même payant 30,00 € ». « lui-même » partout : « devis gratuit » se
+ * lirait comme le TOTAL (T19).
  */
 export function resumeDesConditions(d) {
   const x = d || {};
@@ -2905,11 +2949,14 @@ export function resumeDesConditions(d) {
   const manque = [];
   if (acompte && !present(x.acompteNature)) manque.push('Acompte ou arrhes ? à choisir');
   if (!present(x.validiteJours)) manque.push('Validité à choisir');
+  if (!present(x.coutDevisCentimes)) manque.push('Devis lui-même : gratuit ou payant ? à choisir');
   const pose = [];
   if (reduction) pose.push(`Réduction ${reduction}`);
   if (acompte) pose.push(`${libelleAcompte(x.acompteNature)} ${acompte}${x.acompteALaSignature === true ? ' à la signature' : ''}`);
   if (present(x.validiteJours)) pose.push(`Valable ${x.validiteJours} jour${x.validiteJours > 1 ? 's' : ''}`);
   if (retenue) pose.push(`Retenue ${retenue}`);
+  if (x.coutDevisCentimes === 0) pose.push('Devis lui-même gratuit');
+  else if (present(x.coutDevisCentimes)) pose.push(`Devis lui-même payant ${centimesLisibles(x.coutDevisCentimes)}`);
   return [...manque, ...pose].join(' · ');
 }
 
@@ -3148,6 +3195,169 @@ export function libelleAcompte(nature) {
 }
 
 /* ================================================================== */
+/*  LE PRIX DU DEVIS LUI-MÊME (étape 2b-4, 16/11/2026)                  */
+/* ================================================================== */
+/*
+ * CE QUE C'EST : le prix de l'ÉTABLISSEMENT du devis, pas celui des travaux
+ * (`devis.cout_devis_centimes`, section 49.4 quinquies). L'arrêté du
+ * 24/01/2017 (art. 4-I) demande de dire sur le devis s'il est gratuit ou
+ * payant, au moins pour un dépannage, une réparation ou un entretien signé
+ * dans les locaux de l'artisan ; Opus ne sait pas où le devis sera signé, et
+ * compte donc le vide comme un point « Par prudence » (rang 12, réponse Q2
+ * du 16/11). TROIS ÉTATS dans une seule colonne, comme
+ * `tarifs_pro.prix_devis_centimes` (lot T) : vide (pas dit), 0 (gratuit), un
+ * montant (payant, en centimes TTC, jusqu'à `COUT_DEVIS_MAX`).
+ *
+ * HORS DES TOTAUX (T5) : c'est le prix d'un AUTRE contrat que les travaux ;
+ * son imputation sur les travaux (« déduit si vous acceptez ») et son taux
+ * de TVA sont des questions de 2c et du juriste (J13, J50). L'aide le dit.
+ *
+ * OPUS PROPOSE, L'ARTISAN CONFIRME (T3, T6, ÉCRAN-2) : la proposition vient
+ * de « Mes tarifs », À L'ÉCRAN — jamais de la base, dont la fonction ne lit
+ * pas `tarifs_pro` (la porte étroite). Elle est une PHRASE (« Dans vos
+ * tarifs : … ») et, seulement quand les tarifs disent PAYANT, un champ
+ * pré-rempli APRÈS un appui sur « Payant ». Rien n'est écrit sans appui ; le
+ * 0 ne s'écrit que par « Gratuit ».
+ */
+
+/** Les deux choix de la carte, dans l'ordre des pastilles. */
+const CHOIX_DU_COUT = Object.freeze(['gratuit', 'payant']);
+
+/* Le choix qu'un prix ENREGISTRÉ représente : 0 → « Gratuit », un montant →
+   « Payant », vide (ou illisible) → rien de choisi. */
+function choixDuCout(v) {
+  if (v === 0) return 'gratuit';
+  if (entier(v) && v > 0) return 'payant';
+  return null;
+}
+
+/** LES MOTS DU BLOC, dans la carte « Conditions » (cahier 2b-4, annexe A.2)
+ *  — tous ici : `ConditionsDevis.js` les importe, jamais ne les recopie.
+ *  « Le devis lui-même » partout (T19, critique ÉCRAN-5) : « ce devis est
+ *  gratuit » se lirait comme le TOTAL des travaux, et `avis_gratuit` (le
+ *  TOTAL à 0) peut sortir à côté. Le `placeholder` est un MOT, jamais un
+ *  nombre : un texte d'exemple qui ressemble à une donnée est lu comme une
+ *  donnée. */
+export const LE_COUT_DU_DEVIS = Object.freeze({
+  titre: 'Le devis lui-même : gratuit ou payant ?',
+  gratuit: 'Gratuit',
+  payant: 'Payant',
+  nomGratuit: 'Le devis lui-même est gratuit',
+  nomPayant: 'Le devis lui-même est payant',
+  placeholder: 'Montant',
+});
+
+/** L'AIDE FIXE du bloc, sous les pastilles (annexe A.2). La première phrase
+ *  vient de l'arrêté du 24/01/2017 (art. 2) et de L. 111-1 2° ; la deuxième
+ *  dit le calcul d'Opus (T5 : le bloc est juste au-dessus du récapitulatif
+ *  des totaux) ; la troisième vient de l'arrêté du 17/03/2015 (art. 6) — la
+ *  seule chose qu'Opus dit des services à la personne (réponse Q3 du 16/11 :
+ *  aucune question, aucune case, aucun motif). */
+export const AIDE_COUT_DEVIS = 'Un particulier doit savoir, avant de s’engager, si le devis lui-même est gratuit ou '
+  + 'payant, et ce qu’il coûte. Ce prix ne s’ajoute pas au total des travaux. Pour des services à la personne chez un '
+  + 'particulier (petit jardinage, petit bricolage), le devis est toujours gratuit.';
+
+/**
+ * UN PRIX DE DEVIS TAPÉ dans le champ de « Payant » : `versCentimes`, puis
+ * les bornes de `devis_cout_check`.
+ *   - VIDE → `null`, SANS ERREUR (T18, critique ÉCRAN-1) : rien de dit ;
+ *   - « 0 » → une erreur qui renvoie à « Gratuit » (T3 : le 0 ne s'écrit que
+ *     par la pastille) ;
+ *   - au-delà de `COUT_DEVIS_MAX` → une erreur, le plafond écrit par
+ *     `centimesLisibles` (jamais « € » écrit dans ce fichier) ;
+ *   - illisible → le message de `versCentimes`.
+ * À ne pas confondre avec `versMontantDeDevis` (la réduction et l'acompte en
+ * euros), dont le 0 se refuse avec une autre phrase et la borne est le
+ * plafond d'un devis.
+ */
+export function versCoutDeDevis(texte) {
+  const r = versCentimes(texte);
+  if (!r.ok) return r;
+  if (r.centimes === null) return { ok: true, centimes: null, message: null };
+  if (r.centimes === 0) {
+    return { ok: false, centimes: null, message: 'Pour dire que ce devis est gratuit, touchez « Gratuit ».' };
+  }
+  if (r.centimes > COUT_DEVIS_MAX) {
+    return { ok: false, centimes: null, message: `Le prix d’un devis s’écrit jusqu’à ${centimesLisibles(COUT_DEVIS_MAX)}.` };
+  }
+  return r;
+}
+
+/**
+ * CE QUE « PAYANT » ÉCRIT quand son champ n'est pas encore monté (on vient
+ * de toucher la pastille) : le prix déjà ENREGISTRÉ s'il est payant, sinon
+ * le prix PROPOSÉ par les tarifs (`coutPropose`, des centimes plus grands
+ * que 0 — `coutAProposer` le tire), sinon `null`. JAMAIS 0 (critique
+ * ÉCRAN-2), quoi qu'on lui passe : un 0 enregistré (« Gratuit ») ou proposé
+ * n'est pas un prix payant. `depuisLesTarifs` dit si c'est la proposition
+ * qui part — l'écran l'annonce alors (`annonceDuCoutPropose`).
+ */
+export function coutQuePayantEcrit({ devis = {}, coutPropose = null } = {}) {
+  const enregistre = (devis || {}).coutDevisCentimes;
+  if (entier(enregistre) && enregistre > 0) return { centimes: enregistre, depuisLesTarifs: false };
+  if (entier(coutPropose) && coutPropose > 0 && coutPropose <= COUT_DEVIS_MAX) {
+    return { centimes: coutPropose, depuisLesTarifs: true };
+  }
+  return { centimes: null, depuisLesTarifs: false };
+}
+
+/**
+ * CE QUE DISENT LES TARIFS du prix des devis (`tarifs_pro.prix_devis_centimes`,
+ * déclaré dans « Mon entreprise ») : `{ etat, centimes }`, `etat` parmi
+ * `'gratuit'`, `'payant'`, `'rien'` (lus, rien de déclaré — ou aucune
+ * ligne), `'illisible'` (la lecture a échoué) et `null` (en lecture, ou pas
+ * transmis : on se tait). Jamais « rien » pour un échec : la règle de
+ * `tauxHorairePropose`.
+ */
+export function coutDuDevisPropose(etatTarifs) {
+  const t = tarifsConnus(etatTarifs);
+  if (!t) {
+    return etatTarifs && typeof etatTarifs === 'object' && etatTarifs.echec
+      ? { etat: 'illisible', centimes: null } : { etat: null, centimes: null };
+  }
+  const v = t.ligne ? t.ligne.prix_devis_centimes : null;
+  if (v === 0) return { etat: 'gratuit', centimes: 0 };
+  if (entier(v) && v > 0) return { etat: 'payant', centimes: v };
+  return { etat: 'rien', centimes: null };
+}
+
+/** LE PRIX QUE « PAYANT » PEUT REPRENDRE, écrit UNE fois (critique ÉCRAN-2) :
+ *  seulement quand les tarifs disent PAYANT. Des tarifs « gratuit » rendent
+ *  `null` — un appui sur « Payant » n'écrit pas 0 —, comme « rien »,
+ *  « illisible » et la lecture. */
+export function coutAProposer(propose) {
+  return propose && propose.etat === 'payant' && entier(propose.centimes) && propose.centimes > 0
+    ? propose.centimes : null;
+}
+
+/**
+ * LA PHRASE DE LA PROPOSITION, sous les pastilles (annexe A.2). « TTC »
+ * partout SAUF en franchise : les tarifs se déclarent TTC dans « Mon
+ * entreprise » quel que soit le régime (`FicheEmetteur.js`), et en franchise
+ * l'écran ne nomme pas la taxe (`libellesDesTotaux`). La même règle que le
+ * libellé du champ (`libellesDesConditions`). `null` quand les tarifs sont
+ * en lecture : on se tait.
+ */
+export function phraseDuCoutPropose(propose, etatRegime) {
+  const etat = propose ? propose.etat : null;
+  if (etat === 'gratuit') return 'Dans vos tarifs : vos devis sont gratuits.';
+  if (etat === 'payant') {
+    const franchise = regimeConnu(etatRegime) === 'franchise';
+    return `Dans vos tarifs : ${centimesLisibles(propose.centimes)}${franchise ? '' : ' TTC'}.`;
+  }
+  if (etat === 'rien') return 'Vos tarifs ne disent pas encore le prix de vos devis.';
+  if (etat === 'illisible') return 'Vos tarifs n’ont pas pu être lus.';
+  return null;
+}
+
+/** CE QUE VOICEOVER ENTEND quand « Payant » vient d'écrire le prix des
+ *  tarifs (critique ÉCRAN-14, point 3) : un champ qui se remplit tout seul
+ *  doit le dire, sur le modèle de « Ramenée à … ». */
+export function annonceDuCoutPropose(centimes) {
+  return `Prix du devis : ${centimesLisibles(centimes)}, d’après vos tarifs.`;
+}
+
+/* ================================================================== */
 /*  LA CARTE « CONDITIONS » : SON ÉTAT, SA LECTURE (relecture du lot 2a) */
 /* ================================================================== */
 /* Tout ce que la carte DÉCIDE vit ici, en fonctions pures, pour que
@@ -3199,6 +3409,15 @@ export function texteEnregistreDans(devis, prefixe, unite) {
  *   (« À la signature ») si `acompteALaSignature === true`, `false` (« Dès
  *   le 8e jour ») s'il vaut `false`, `null` (rien de choisi : le 8e jour par
  *   défaut) sinon. « Corriger » le rouvre comme on l'a laissé.
+ * - 2b-4 : `cout`, le prix du devis LUI-MÊME — `'gratuit'` si
+ *   `coutDevisCentimes` vaut 0, `'payant'` s'il est plus grand, `null` s'il
+ *   est vide. JAMAIS d'après les tarifs (« Opus propose, l'artisan
+ *   confirme ») : des tarifs qui disent « gratuit » ne choisissent pas la
+ *   pastille « Gratuit » à sa place. Conséquence assumée (T18) : une carte
+ *   rouverte sur un « Payant » resté SANS prix ne montre aucune pastille
+ *   choisie — rien n'est dit, et le point de « Pour le remettre » le dit.
+ *   Un prix tapé et refusé (« 0 », « 2000 ») rouvre « Payant » avec son
+ *   champ, comme la retenue.
  */
 export function etatInitialConditions(devis, textes = null) {
   const x = devis || {};
@@ -3212,6 +3431,7 @@ export function etatInitialConditions(devis, textes = null) {
     validiteAutre: present(x.validiteJours) && !proposee,
     retenue: present(x.retenueGarantieCentiemes),
     echeance: x.acompteALaSignature === true ? true : (x.acompteALaSignature === false ? false : null),
+    cout: choixDuCout(x.coutDevisCentimes),
   };
   const garde = t && t.choix && typeof t.choix === 'object' ? t.choix : null;
   if (garde) {
@@ -3222,9 +3442,11 @@ export function etatInitialConditions(devis, textes = null) {
     if (typeof garde.validiteAutre === 'boolean') etat.validiteAutre = garde.validiteAutre;
     if (typeof garde.retenue === 'boolean') etat.retenue = garde.retenue;
     if (garde.echeance === null || typeof garde.echeance === 'boolean') etat.echeance = garde.echeance;
+    if (garde.cout === null || CHOIX_DU_COUT.includes(garde.cout)) etat.cout = garde.cout;
   }
   if (t && !estVide(t.validite)) { etat.validiteAutre = true; etat.validite = null; }
   if (t && !estVide(t.retenue)) etat.retenue = true;
+  if (t && !estVide(t.cout)) etat.cout = 'payant';
   return etat;
 }
 
@@ -3268,8 +3490,29 @@ export function versRetenueDeDevis(texte) {
  *     encore monté au moment de l'appui ; il naît avec la valeur
  *     enregistrée, et c'est elle qui part — comme la retenue rallumée ;
  *   - LA RETENUE SE BORNE ICI (ÉCRAN-5, `versRetenueDeDevis`).
+ *
+ * 2b-4 — LE PRIX DU DEVIS LUI-MÊME (`c.cout`, T3, T18, critiques ÉCRAN-1,
+ * ÉCRAN-2, ÉCRAN-4). `coutPropose` : le prix que les tarifs PROPOSENT, des
+ * centimes plus grands que 0, ou `null` (`coutAProposer`, qui rend `null`
+ * quand les tarifs disent « gratuit »). Selon le choix :
+ *   - `undefined` (un `choix` d'avant 2b-4) : RIEN, aucune clé — comme
+ *     l'échéance ;
+ *   - « Gratuit » : 0 — la SEULE porte du 0 dans tout le devis ;
+ *   - rien de choisi (`null`) : `null` (la saisie n'envoie que ce qui
+ *     DIFFÈRE de l'en-tête : rien ne part) ;
+ *   - « Payant », champ MONTÉ : le texte, par `versCoutDeDevis` — VIDE =
+ *     `null`, SANS erreur (ÉCRAN-1 : une erreur deviendrait un refus
+ *     d'en-tête, et la garde dirait « ce que vous avez écrit n'est pas
+ *     enregistré » à quelqu'un qui n'a rien écrit ; c'est le point de
+ *     « Pour le remettre » qui dit ce qui manque) ; « 0 » tapé, une erreur
+ *     qui renvoie à « Gratuit » ; au-delà de la borne, une erreur ;
+ *   - « Payant », champ PAS ENCORE MONTÉ (on vient de toucher la pastille) :
+ *     `coutQuePayantEcrit` — le prix déjà enregistré s'il est payant, sinon
+ *     le prix proposé, sinon `null`. JAMAIS 0 (ÉCRAN-2 : chez le
+ *     propriétaire, dont les tarifs disent « gratuit », un 0 écrit sous
+ *     « Payant » aurait dit « gratuit » sous la pastille « Payant »).
  */
-export function lireConditions({ choix = null, tapes = {}, devis = {} } = {}) {
+export function lireConditions({ choix = null, tapes = {}, devis = {}, coutPropose = null } = {}) {
   const x = devis || {};
   const c = choix || etatInitialConditions(x);
   const changements = {};
@@ -3333,6 +3576,26 @@ export function lireConditions({ choix = null, tapes = {}, devis = {} } = {}) {
   } else {
     changements.retenueGarantieCentiemes = null;
   }
+
+  /* 2b-4 : le prix du devis lui-même (voir l'en-tête). */
+  if (c.cout === 'gratuit') {
+    changements.coutDevisCentimes = 0;
+  } else if (c.cout === null) {
+    changements.coutDevisCentimes = null;
+  } else if (c.cout === 'payant') {
+    if (tapes.cout == null) {
+      /* La pastille vient d'être touchée : le champ n'est pas encore monté.
+         Il naîtra avec ce qui part ici, et c'est ce texte qu'on lui donne. */
+      const { centimes } = coutQuePayantEcrit({ devis: x, coutPropose });
+      changements.coutDevisCentimes = centimes;
+      textes.cout = present(centimes) ? centimesEnSaisie(centimes) : '';
+    } else {
+      textes.cout = String(tapes.cout);
+      const r = versCoutDeDevis(textes.cout);
+      if (r.ok) changements.coutDevisCentimes = r.centimes;
+      else erreurs.coutDevisCentimes = r.message;
+    }
+  }
   return { changements, erreurs, textes };
 }
 
@@ -3384,6 +3647,7 @@ export const AIDE_ACOMPTE_TTC = 'En euros, la somme est toutes taxes comprises :
  */
 export function libellesDesConditions(etatRegime, nature = null) {
   const reel = libellesDesTotaux(etatRegime).taxe;
+  const sansTaxeNommee = regimeConnu(etatRegime) === 'franchise';
   const nom = libelleAcompte(nature);
   return {
     reductionPourcent: 'Réduction, en pour cent',
@@ -3397,6 +3661,13 @@ export function libellesDesConditions(etatRegime, nature = null) {
     acompteEnEuros: `${nom} en euros`,
     aideReductionMontant: reel ? AIDE_REDUCTION_HT : null,
     aideAcompteMontant: reel ? AIDE_ACOMPTE_TTC : null,
+    /* 2b-4 : le prix du devis lui-même. « TTC » partout SAUF en franchise —
+       une règle À PART de celle des deux champs du dessus (qui ne nomment la
+       taxe qu'au réel) : un prix de devis se déclare TTC dans « Mon
+       entreprise » quel que soit le régime, et c'est lui que le champ
+       reprend (critique ÉCRAN-14, points 1 et 4). */
+    cout: sansTaxeNommee ? 'Prix du devis' : 'Prix du devis TTC',
+    coutParle: sansTaxeNommee ? 'Prix du devis lui-même, en euros' : 'Prix du devis lui-même TTC, en euros',
   };
 }
 
@@ -3428,6 +3699,9 @@ const CLES_DU_GESTE = Object.freeze({
   nature: Object.freeze(['acompteCentiemes', 'acompteCentimes', 'acompteNature']),
   validite: Object.freeze(['validiteJours']),
   retenue: Object.freeze(['retenueGarantieCentiemes']),
+  /* 2b-4 : le prix du devis lui-même — sans cette clé, une faute ancienne
+     du prix ne vibrait pas au geste qui la vise (critique ÉCRAN-11, mesuré). */
+  cout: Object.freeze(['coutDevisCentimes']),
 });
 
 /**
@@ -3767,6 +4041,22 @@ export const MOTIFS_DEVIS = Object.freeze({
     nature: 'loi',
     phrase: 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la '
       + 'joindre à ce devis, puisque ses travaux peuvent engager cette garantie.',
+  }),
+  /* 2b-4 (réponse Q2 du 16/11 : « Point par prudence ») — le prix du devis
+     LUI-MÊME n'est pas encore dit (`cout_devis_centimes` vide). Une PRUDENCE,
+     pas une huitième règle d'Opus : l'arrêté du 24/01/2017 demande « gratuit »
+     ou « payant » sur le devis AU MOINS pour un dépannage, une réparation ou
+     un entretien signé dans les locaux de l'artisan (et l'administration
+     l'attend ailleurs aussi, à confirmer par le juriste, J3), et Opus ne sait
+     pas où ce devis sera signé. 0 (gratuit) et un montant (payant) le taisent
+     pareil. « Le devis lui-même », jamais « ce devis » (T19) ; « au moins »,
+     jamais « pour » seul, qui se lirait « seulement pour » (DROIT-12). 197
+     caractères : ne rien y ajouter. Octet pour octet celle de la base. */
+  devis_cout: Object.freeze({
+    rang: 12,
+    nature: 'prudence',
+    phrase: 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une '
+      + 'réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.',
   }),
 });
 
@@ -4175,6 +4465,11 @@ export function motifsDeRemise({
       else motif('devis_attestation');
     }
   }
+  /* 2b-4, rang 12 : le prix du devis lui-même pas encore dit — vide, comme
+     `v_cout is null` dans la base. 0 (gratuit) et un montant le taisent
+     pareil ; le motif ne lit ni la réponse « à quel titre », ni les tarifs
+     (la porte étroite, T6). */
+  if (!present(d.coutDevisCentimes)) motif('devis_cout');
 
   /* Les motifs de l'entreprise : le rang garde sa position d'ORIGINE
      (`100 + position`), PUIS le filtre de la réponse valable — un trou,
@@ -4263,6 +4558,9 @@ export const ENDROIT_DU_MOTIF = Object.freeze({
   devis_decennale: Object.freeze({ endroit: 'entreprise', section: 'assurances', aussi: 'chantier' }),
   devis_attestation_date: Object.freeze({ endroit: 'entreprise', section: 'assurances' }),
   devis_attestation: Object.freeze({ endroit: 'entreprise', section: 'assurances' }),
+  /* 2b-4 : la carte « Conditions », SUR le bloc « Le devis lui-même :
+     gratuit ou payant ? » (le champ `cout`, le DERNIER de la carte). */
+  devis_cout: Object.freeze({ endroit: 'conditions', champ: 'cout' }),
 });
 
 /**
@@ -4372,9 +4670,73 @@ export function lireMotifsDeRemise(liste, { sections = null } = {}) {
 /*  LES AVIS — jamais bloquants (annexe B.7)                            */
 /* ------------------------------------------------------------------ */
 
-/** Les avis : ils s'affichent SOUS la liste, à part. Deux depuis 2b-1, deux
- *  de plus à 2b-2 (annexe A.3) — quand le client commande pour son
- *  entreprise, ce qu'il manque à SA fiche pour la facture. */
+/**
+ * LES PLAFONDS DE LA FRANCHISE EN BASE DE TVA pour des PRESTATIONS DE
+ * SERVICES (2b-4, l'avis au franchisé ; T10) — écrits UNE fois, en
+ * centimes, avec leur source et la date de leur relecture : la loi les a
+ * changés trois fois en 2025, et ils se recopieraient faux ailleurs.
+ *   - `servicesAnneeEnCours` : au-delà sur l'année civile en cours, la
+ *     franchise cesse à partir du jour du dépassement ;
+ *   - `servicesAnneePrecedente` : au-delà sur l'année précédente, plus de
+ *     franchise à partir du 1er janvier suivant. C'est le SEUIL de l'avis :
+ *     un seul niveau, une phrase qui dit les deux plafonds (critique K2 —
+ *     le plus haut seul ne dit pas le cas du 1er janvier).
+ * Relu dans CGI, art. 293 B, I (version en vigueur au 16/11/2026), repris
+ * au CIBS, art. L. 233-9, le 01/01/2027. Le plafond réduit de la première
+ * année (CGI 293 D III) n'est pas suivi : Opus ne connaît pas la date de
+ * création (DROIT-18, rangé).
+ */
+export const PLAFONDS_FRANCHISE = Object.freeze({
+  servicesAnneeEnCours: 4125000,
+  servicesAnneePrecedente: 3750000,
+  reluLe: '2026-11-16',
+  source: 'CGI, art. 293 B, I ; repris au CIBS, art. L. 233-9, le 01/01/2027',
+});
+
+/** LA SUITE DES DEUX AVIS AU FRANCHISÉ, écrite UNE fois (critique ÉCRAN-17) :
+ *  « En franchise de TVA, … ». Les deux plafonds viennent de
+ *  `PLAFONDS_FRANCHISE`, par `centimesLisibles` (ce fichier n'écrit jamais
+ *  « € » lui-même). Jamais « HT » : en franchise, l'écran ne nomme pas la
+ *  taxe (`libellesDesTotaux`), et le montant de l'avis n'est un chiffre
+ *  d'affaires que quand aucune ligne ne porte de taux (T11). */
+export const SUITE_AVIS_FRANCHISE = 'En franchise de TVA, les travaux comptent en principe comme des prestations de '
+  + 'services : au-delà de '
+  + `${centimesLisibles(PLAFONDS_FRANCHISE.servicesAnneeEnCours)} sur une même année civile, la franchise `
+  + 'cesse à partir du jour du dépassement ; au-delà de '
+  + `${centimesLisibles(PLAFONDS_FRANCHISE.servicesAnneePrecedente)}, vous n’y avez plus droit à partir `
+  + 'du 1er janvier suivant. D’autres plafonds peuvent s’appliquer selon les matériaux que vous '
+  + 'fournissez, ou si votre entreprise a été créée cette année. Opus ne connaît pas votre chiffre '
+  + 'd’affaires : vérifiez avec votre comptable avant de remettre ce devis.';
+
+/** Le délai par défaut, compté en jours : « Dans les 30 jours suivant la
+ *  signature du devis » (`DELAI_PAR_DEFAUT.texte`). L'avis de l'attestation
+ *  (2b-4) ajoute ces jours à la validité quand le délai écrit est
+ *  EXACTEMENT celui-là — jamais en cherchant « 30 » dans un texte (M7) :
+ *  un autre délai, Opus ne sait pas le compter. */
+export const JOURS_DU_DELAI_PAR_DEFAUT = 30;
+
+/**
+ * Les avis : ils s'affichent SOUS la liste, à part. Deux depuis 2b-1, deux
+ * de plus à 2b-2 (annexe A.3) — quand le client commande pour son
+ * entreprise, ce qu'il manque à SA fiche pour la facture.
+ *
+ * SIX DE PLUS À 2b-4 (annexe A.3 du cahier 2b-4), et aucun ne bloque rien :
+ *   - le prix du devis LUI-MÊME : payant (DROIT-1, DROIT-3 : il nomme les
+ *     quatorze jours, le cas où le client « ne vous devra rien », l'écrit ou
+ *     le support durable, « pas même un chèque », le téléphone et les
+ *     messages) ; payant alors que les tarifs AFFICHÉS disent gratuit
+ *     (DROIT-11) ; dit gratuit alors que les tarifs comptent des frais de
+ *     déplacement (L. 121-4 19°) ;
+ *   - l'attestation décennale qui finit avant que le devis puisse être
+ *     accepté et les travaux commencer (`{fin}`, une date) ;
+ *   - le franchisé au-delà du plafond, sur le total net (`{montant}`) ou
+ *     avec ses options — deux MODÈLES à trous, composés d'une SUITE écrite
+ *     une fois.
+ * Les modèles à trous (`{fin}`, `{montant}`) se remplissent dans
+ * `avisDuDevis` ; ce que `verifier-devis` compare mot pour mot, ce sont ces
+ * modèles. « Le devis lui-même » dans les trois premiers (T19) :
+ * `avis_gratuit` parle du TOTAL à 0, et les deux peuvent sortir ensemble.
+ */
 export const AVIS_DU_DEVIS = Object.freeze({
   avis_objet: 'Ce devis n’a pas de titre : le document dira seulement « Devis ».',
   avis_gratuit: 'Ce devis ne coûte rien au client : vérifiez que c’est voulu.',
@@ -4382,6 +4744,30 @@ export const AVIS_DU_DEVIS = Object.freeze({
     + 'facture.',
   avis_fiche_particulier: 'Ce client commande pour son entreprise, mais votre carnet le range parmi les particuliers : '
     + 'passez sa fiche en « Entreprise » pour y écrire son SIRET.',
+  avis_devis_payant:
+    'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être un '
+    + 'contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez '
+    + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez '
+    + 'lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le formulaire de '
+    + 'rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare pas encore ce '
+    + 'contrat : faites-le relire avant de faire payer un devis.',
+  avis_devis_payant_tarifs_gratuits:
+    'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : un client '
+    + 'peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis '
+    + 'gratuitement.',
+  avis_devis_gratuit_deplacement:
+    'Le devis lui-même est dit gratuit, mais vos tarifs comptent des frais de déplacement : si vous les '
+    + 'faites payer pour venir établir ce devis, ne le présentez pas comme gratuit — la loi peut y voir une '
+    + 'pratique trompeuse.',
+  avis_attestation_echeance:
+    'Votre attestation décennale est valable jusqu’au {fin}. Si elle vaut pour l’ensemble de vos chantiers, '
+    + 'elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
+    + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui '
+    + 'comptera, sauf si ce chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de '
+    + 'service donné, ou d’autres entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la '
+    + 'donner à votre client.',
+  avis_franchise_plafond: `Ce devis atteint à lui seul {montant}. ${SUITE_AVIS_FRANCHISE}`,
+  avis_franchise_plafond_options: `Avec ses options, ce devis atteint {montant}. ${SUITE_AVIS_FRANCHISE}`,
 });
 
 /**
@@ -4415,9 +4801,51 @@ export const AVIS_DU_DEVIS = Object.freeze({
  * n'avertit pas sur une fiche qu'on n'a pas lue.
  *   - `avis_siret_client` : une fiche « entreprise » sans SIRET ;
  *   - `avis_fiche_particulier` : une fiche « particulier ».
+ *
+ * LES SIX AVIS DE 2b-4, et TROIS ENTRÉES DE PLUS (T7) : `regime`,
+ * `assurances` et `tarifs`, `undefined` PAR DÉFAUT — « pas transmis » : on se
+ * tait. Pas `null` : `null` veut déjà dire « non déclaré » pour le régime et
+ * « lus, aucune ligne » pour les tarifs (`tarifsConnus(null)`), le piège que
+ * `client = undefined` évite déjà (critique ÉCRAN-16). Et `jour`, celui du
+ * TÉLÉPHONE par défaut (deux jours, deux horloges : la base juge au jour de
+ * Paris). Ceux qui dépendent de la BASE attendent la liste SÛRE ; ceux qui
+ * ne dépendent que de l'artisan suivent l'écran, comme `avis_objet` (T16) :
+ *   - `avis_devis_payant` (liste sûre) : le prix du devis lui-même est
+ *     PAYANT, et la réponse que la base a vue n'est pas « pour son
+ *     entreprise, dans son activité principale » — un consommateur, une
+ *     association, une copropriété ou une société civile (prudence, DROIT-3),
+ *     une petite entreprise hors de son activité, ou pas de réponse ;
+ *   - `avis_devis_payant_tarifs_gratuits` (suit l'écran) : les tarifs LUS,
+ *     AFFICHÉS (`affiche === true`), disent un prix de devis à 0, et ce devis
+ *     est payant (DROIT-11) ;
+ *   - `avis_devis_gratuit_deplacement` (suit l'écran) : ce devis est dit
+ *     gratuit, et les tarifs LUS comptent des frais de déplacement > 0 ;
+ *   - `avis_attestation_echeance` (suit l'écran) : la décennale n'est pas
+ *     « Non » ; les assurances sont LUES (une liste) ; la validité est dite ;
+ *     parmi les décennales jointes (chemin écrit, la règle
+ *     d'`etatDeLAttestation`) et valables au `jour`, la fin la PLUS TARDIVE
+ *     (une entreprise qui a renouvelé en a deux) ; l'horizon est la validité,
+ *     plus `JOURS_DU_DELAI_PAR_DEFAUT` quand le délai écrit est EXACTEMENT le
+ *     délai par défaut (M7) ; l'avis parle si la fin tombe AVANT l'horizon
+ *     (`joursEntre`, par `Date.UTC`, sans fuseau). Aucune attestation
+ *     valable : on se tait, le rang 11 parle déjà. L'avis SOUS-ESTIME : la
+ *     validité court de la date de REMISE (2c le recalculera, S8) ;
+ *   - `avis_franchise_plafond` et `…_options` (liste sûre, T11) : le régime
+ *     est « franchise » (une chaîne : en lecture ou en échec, on se tait),
+ *     AUCUNE ligne ne contredit la franchise (`coherenceRegime` se tait —
+ *     sinon la bande de cohérence dit déjà quoi corriger, et un total qui
+ *     porte de la TVA ne se lit pas comme un chiffre d'affaires ; mesuré par
+ *     la critique droit : 35 000 € à 20 % SANS option faisaient dire « Avec
+ *     ses options, ce devis atteint 42 000,00 € HT ») ; puis le total NET hors
+ *     options de la BASE (`totaux.ht`) au-delà du seuil → le premier ; sinon,
+ *     AU MOINS UNE OPTION et le total toutes options (`totaux.ttcOptions`)
+ *     au-delà → le second. Dans ce seul cas (aucun taux non nul),
+ *     `ttcOptions` vaut le net plus les options, sans taxe (`tvaDe(base,
+ *     null)` rend `null`, compté zéro). Jamais « HT » (DROIT-2, ÉCRAN-6).
  */
 export function avisDuDevis({
   devis = null, lignes = [], totaux = null, etat = null, pasCompte = null, client = undefined, reponseVue = null,
+  regime = undefined, assurances = undefined, tarifs = undefined, jour = jourDuTelephone(),
 } = {}) {
   if (!devis) return [];
   const avis = [];
@@ -4436,7 +4864,86 @@ export function avisDuDevis({
       avis.push({ cle: 'avis_fiche_particulier', phrase: AVIS_DU_DEVIS.avis_fiche_particulier });
     }
   }
+
+  /* 2b-4 — le prix du devis LUI-MÊME. */
+  const cout = devis.coutDevisCentimes;
+  const payant = entier(cout) && cout > 0;
+  if (sure && payant && reponseVue !== 'professionnel') {
+    avis.push({ cle: 'avis_devis_payant', phrase: AVIS_DU_DEVIS.avis_devis_payant });
+  }
+  const t = tarifsConnus(tarifs);
+  const ligneTarifs = t && t.ligne && typeof t.ligne === 'object' ? t.ligne : null;
+  if (payant && ligneTarifs && ligneTarifs.affiche === true && ligneTarifs.prix_devis_centimes === 0) {
+    avis.push({ cle: 'avis_devis_payant_tarifs_gratuits', phrase: AVIS_DU_DEVIS.avis_devis_payant_tarifs_gratuits });
+  }
+  if (cout === 0 && ligneTarifs && entier(ligneTarifs.frais_deplacement_centimes) && ligneTarifs.frais_deplacement_centimes > 0) {
+    avis.push({ cle: 'avis_devis_gratuit_deplacement', phrase: AVIS_DU_DEVIS.avis_devis_gratuit_deplacement });
+  }
+
+  /* 2b-4 — l'attestation décennale qui arrive à sa fin. */
+  const fin = finDeLAttestation({ devis, assurances, jour });
+  if (fin) {
+    avis.push({ cle: 'avis_attestation_echeance', phrase: AVIS_DU_DEVIS.avis_attestation_echeance.replace('{fin}', dateFrancaise(fin)) });
+  }
+
+  /* 2b-4 — le franchisé au-delà du plafond. */
+  const franchise = avisDeLaFranchise({ lignes, totaux, regime, sure });
+  if (franchise) avis.push(franchise);
   return avis;
+}
+
+/**
+ * LA FIN D'ATTESTATION QUI FAIT PARLER L'AVIS `avis_attestation_echeance`
+ * (2b-4), « AAAA-MM-JJ », ou `null` quand l'avis se tait — écrite à part pour
+ * que `verifier-devis` en fasse tourner chaque bord (voir `avisDuDevis`).
+ * `assurances` : les lignes d'`emetteur_assurances`, aux noms de la base ;
+ * tout ce qui n'est pas une LISTE (`undefined`, pas lues ; `null`) se tait.
+ */
+export function finDeLAttestation({ devis = null, assurances = undefined, jour = jourDuTelephone() } = {}) {
+  const d = devis || {};
+  if (d.engageDecennale === false) return null;
+  if (!Array.isArray(assurances)) return null;
+  if (!entier(d.validiteJours) || d.validiteJours < 1) return null;
+  const auJour = jourEcrit(jour) || jourDuTelephone();
+  const proId = d.proId ?? null;
+  let fin = null;
+  assurances.forEach((a) => {
+    if (!a || a.nature !== 'decennale' || !cheminEcrit(a.attestation_chemin)) return;
+    if (proId != null && a.pro_id != null && String(a.pro_id) !== String(proId)) return;
+    const f = jourEcrit(a.valide_jusquau);
+    if (f !== null && f >= auJour && (fin === null || f > fin)) fin = f;
+  });
+  if (fin === null) return null;
+  const parDefaut = texteNet(d.delaiExecution) === DELAI_PAR_DEFAUT.texte;
+  const horizon = d.validiteJours + (parDefaut ? JOURS_DU_DELAI_PAR_DEFAUT : 0);
+  const reste = joursEntre(auJour, fin);
+  return reste !== null && reste < horizon ? fin : null;
+}
+
+/**
+ * L'AVIS AU FRANCHISÉ (2b-4, T11) — `{ cle, phrase }`, ou `null`. Écrit à
+ * part pour que `verifier-devis` en fasse tourner chaque bord ; la règle est
+ * dite dans l'en-tête d'`avisDuDevis`. `sure` : la liste est-elle sûre
+ * (`etat === 'liste'` et rien de pas compté) ?
+ */
+export function avisDeLaFranchise({ lignes = [], totaux = null, regime = undefined, sure = false } = {}) {
+  if (regime !== 'franchise' || !sure || !totaux) return null;
+  if (coherenceRegime(lignes, regime) !== null) return null;
+  const seuil = PLAFONDS_FRANCHISE.servicesAnneePrecedente;
+  if (entier(totaux.ht) && totaux.ht > seuil) {
+    return {
+      cle: 'avis_franchise_plafond',
+      phrase: AVIS_DU_DEVIS.avis_franchise_plafond.replace('{montant}', centimesLisibles(totaux.ht)),
+    };
+  }
+  const aUneOption = (Array.isArray(lignes) ? lignes : []).some((l) => typeDe(l) === 'option');
+  if (aUneOption && entier(totaux.ttcOptions) && totaux.ttcOptions > seuil) {
+    return {
+      cle: 'avis_franchise_plafond_options',
+      phrase: AVIS_DU_DEVIS.avis_franchise_plafond_options.replace('{montant}', centimesLisibles(totaux.ttcOptions)),
+    };
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -4502,11 +5009,21 @@ export function phraseDesMentionsParticulier(reponseVue) {
  * travaux (ses activités, la date où le chantier s'ouvrira). « L'urgence »
  * reste, sous la forme « si une ligne marquée « réparation urgente » l'est
  * vraiment » (D9) : Opus ne vérifie aucune de ses conditions.
+ *
+ * 2b-4 (annexe A.4) : « si le devis lui-même est payant » SORT — le point
+ * `devis_cout` (rang 12) demande désormais s'il est gratuit ou payant. « Si
+ * ce devis relève des services à la personne » ENTRE (réponse Q3 du 16/11 :
+ * aucune question, aucune case, aucun motif ; pour eux, le devis est
+ * toujours gratuit, et l'aide du bloc le dit). Les déchets et le label RGE
+ * restent : ce sont les étapes 2b-5 et 2b-6. Ni chiffre, ni date, ni
+ * « lot », ni « le prix du devis ». Copiée en toutes lettres dans
+ * `verifier-devis` (B8) et `mesure-devis` : les trois changent ensemble.
  */
-export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation '
-  + 'urgente » l’est vraiment, si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux '
-  + 'd’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre '
-  + 'attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira).';
+export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
+  + 'vraiment, si ce devis relève des services à la personne, les déchets de chantier, le label RGE pour des '
+  + 'travaux d’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du '
+  + 'client), et si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier '
+  + 's’ouvrira).';
 
 /** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
 export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
@@ -4738,8 +5255,10 @@ export const CHIFFRE_LE_PLUS_LARGE = '4';
 
 /* Combien de chiffres au plus, sur la ligne :
      - les lignes non enregistrées et les points du devis : TROIS — un devis
-       porte 500 lignes au plus (`OP014`), et ses points sont huit motifs plus
-       un par ligne fautive (508 au plus). Mille lignes non enregistrées
+       porte 500 lignes au plus (`OP014`), et ses points sont onze motifs plus
+       un par ligne fautive (511 au plus depuis 2b-4 : un motif pour chacun
+       des rangs 1, 2, 4 à 12 ; ce commentaire disait « huit … 508 », faux
+       depuis 2b-3, critique ÉCRAN-12). Mille lignes non enregistrées
        demanderaient d'en avoir tapé mille à la main ;
      - les points de l'entreprise (mentions dues à un particulier comprises) :
        DEUX — `emetteur_incomplet()` en rend 21 au plus. */
@@ -5177,6 +5696,9 @@ export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = (
       if (e.champ === 'acompte') return seul('Corriger l’acompte');
       if (e.champ === 'reduction') return seul('Corriger la réduction');
       if (e.champ === 'echeance') return seul('Choisir le moment du paiement');
+      /* 2b-4 : « le devis lui-même » est dans le POINT ; le bouton dit le
+         geste, en 33 caractères (annexe A.1). */
+      if (e.champ === 'cout') return seul('Choisir : devis gratuit ou payant');
       return seul('Corriger dans les conditions');
     case 'entreprise': {
       if (!e.section) return null;

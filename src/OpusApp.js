@@ -4072,6 +4072,16 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      (`monRegimeEtSaDate`) : une référence fixée avant ne se compare plus au
      prix d'une ligne, elle se vérifie. */
   const [regimeDeclareLe, setRegimeDeclareLe] = useState(null);
+  /* MES ASSURANCES (2b-4, cahier T9 et §3.4), lues par la MÊME lecture que le
+     régime (`monRegimeEtSaDate`) — aucune requête de plus. `undefined` : pas
+     encore lues, et l'avis « votre attestation décennale est valable
+     jusqu'au … » se TAIT (`avisDuDevis`). GARDÉES pendant une relecture,
+     REMPLACÉES à la réponse, et REMISES à `undefined` sur un échec : un avis
+     d'échéance calculé sur des assurances qu'on n'a pas pu relire ne doit pas
+     rester (critique ÉCRAN-19). `recevoirEmetteur` n'y touche PAS : la
+     fermeture de « Mon entreprise » relit (`lireRegime`), et cette lecture
+     est la dernière — aucun `surEmetteur` ne vient après la fermeture. */
+  const [mesAssurances, setMesAssurances] = useState(undefined);
 
   /* ================================================================== */
   /*  LA BASE DE POSTES — lot P du module devis (24/10/2026)             */
@@ -4201,9 +4211,17 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       if (generationRegime.current !== g) return;
       setMonRegime(r && r.regime != null ? r.regime : null);
       setRegimeDeclareLe(r && r.declareLe ? r.declareLe : null);
+      /* 2b-4 : les assurances de la MÊME réponse — une liste, ou `null`
+         quand la fiche ne les porte pas (l'avis se tait aussi). */
+      setMesAssurances(r && Array.isArray(r.assurances) ? r.assurances : null);
     }).catch(() => {});
     avecDelai(lecture, 8000, 'La lecture de votre régime de TVA')
-      .catch(() => { if (generationRegime.current === g) setMonRegime({ echec: true }); });
+      .catch(() => {
+        if (generationRegime.current !== g) return;
+        setMonRegime({ echec: true });
+        /* Un échec OUBLIE les assurances (ÉCRAN-19) : l'avis se tait. */
+        setMesAssurances(undefined);
+      });
   }, []);
 
   /* CE QUE « MON ENTREPRISE » VIENT DE LIRE OU D'ÉCRIRE — `surEmetteur`, sur
@@ -5321,6 +5339,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             ouverture={devisOuvert}
             regime={monRegime}
             tarifs={mesTarifs}
+            /* 2b-4 : les assurances, pour l'avis de l'attestation qui arrive
+               à sa fin — `undefined` tant qu'elles ne sont pas lues. */
+            assurances={mesAssurances}
             clients={clients}
             clientsEtat={clientsEtat}
             onGarde={inscrireGarde}
@@ -5534,7 +5555,16 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         <MonEntreprise
           key={`mon-entreprise-${ouvertureEntreprise.cle}`}
           sectionInitiale={ouvertureEntreprise.section}
-          onFermer={() => { setEntrepriseOuverte(false); setRetourEntreprise((n) => n + 1); }}
+          onFermer={() => {
+            setEntrepriseOuverte(false);
+            setRetourEntreprise((n) => n + 1);
+            /* 2b-4 (critique ÉCRAN-19) : c'est dans « Mon entreprise » que
+               l'artisan change la date de fin de son attestation décennale —
+               les assurances se RELISENT à la fermeture, avec le régime, par
+               la même lecture. Discrète quand le régime est déjà connu, comme
+               les trois autres appels. */
+            lireRegime({ discret: typeof monRegime === 'string' });
+          }}
           entreprise={monEntreprise}
           entrepriseRetiree={entrepriseRetiree}
           badge={!!(pros[myProId] && pros[myProId].verifie)}

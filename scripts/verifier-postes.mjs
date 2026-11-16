@@ -1931,18 +1931,58 @@ const extraire = (nom, injecte = {}) => {
   feuilles && existsSync(path.join(RACINE, FP)) && json(ajout) === json([FA]) && appelsAjout === 1
     && json([...modif].sort()) === json([FA, FP].sort()) && json(retrait) === json([FP]), json({ ajout, modif, retrait }));
 
-  /* -- LE RÉGIME ET SA DATE ------------------------------------------------ */
+  /* -- LE RÉGIME, SA DATE, ET LES ASSURANCES (2b-4, T9/T20) ----------------
+     DÉCIDÉ en faisant TOURNER les fonctions d'`api.js`, plus en lisant leur
+     texte : on leur injecte une fausse lecture (`monEmetteur…`) qui COMPTE
+     ses appels, et on regarde ce qu'elles rendent. Depuis 2b-4,
+     `monRegimeEtSaDate` rend aussi les ASSURANCES (`assurancesDe`, pure) —
+     l'avis de l'attestation qui arrive à sa fin les lit — par la MÊME
+     lecture : UN appel, jamais deux (deux lectures pourraient se
+     contredire). `monRegime`, lui, rend toujours le régime SEUL. Et rien
+     n'avale une erreur : une lecture qui échoue fait échouer l'appel. */
   const rs = extraire('regimeEtSaDate');
-  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe }` (la date posée par la base au changement de régime), lus par la MÊME '
-    + 'lecture que `monRegime` (`monEmetteur…`) — qui rend toujours le régime SEUL, une chaîne ou `null` ; rien n’avale une erreur',
-  Boolean(rs) && json(rs({ emetteur: { regime_tva: 'reel', regime_tva_declare_le: '2026-10-03T12:00:00Z' } }))
-      === json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z' })
-    && json(rs({ emetteur: null })) === json({ regime: null, declareLe: null }) && json(rs(null)) === json({ regime: null, declareLe: null })
-    && /return\s+regimeEtSaDate\(\s*await\s+monEmetteurSupabase\(\)\s*\)\.regime\s*;/.test(corpsApi('monRegimeSupabase'))
-    && /return\s+regimeEtSaDate\(\s*await\s+monEmetteurDemo\(\)\s*\)\.regime\s*;/.test(corpsApi('monRegimeDemo'))
-    && /return\s+regimeEtSaDate\(\s*await\s+monEmetteurSupabase\(\)\s*\)\s*;/.test(corpsApi('monRegimeEtSaDateSupabase'))
-    && /return\s+regimeEtSaDate\(\s*await\s+monEmetteurDemo\(\)\s*\)\s*;/.test(corpsApi('monRegimeEtSaDateDemo'))
-    && !/catch\s*\(/.test(corpsApi('monRegimeEtSaDateSupabase') + corpsApi('regimeEtSaDate')));
+  const as = extraire('assurancesDe');
+  const FICHE = { emetteur: { regime_tva: 'reel', regime_tva_declare_le: '2026-10-03T12:00:00Z' },
+    assurances: [{ nature: 'decennale', valide_jusquau: '2027-03-12', attestation_chemin: 'p/a.pdf' }] };
+  const ASSURANCES = FICHE.assurances;
+  const tourne = async (nom, lecteur, fiche) => {
+    let appels = 0;
+    const lire1 = async () => { appels += 1; if (fiche instanceof Error) throw fiche; return fiche; };
+    const f = extraire(nom, { [lecteur]: lire1, regimeEtSaDate: rs, assurancesDe: as });
+    if (typeof f !== 'function') return { plante: 'introuvable' };
+    try { return { rendu: await f(), appels }; } catch (e) { return { erreur: e, appels }; }
+  };
+  const fauxRegime = [];
+  if (!rs || !as) fauxRegime.push('`regimeEtSaDate` ou `assurancesDe` introuvable');
+  else {
+    if (json(rs(FICHE)) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z' })) fauxRegime.push('regimeEtSaDate(fiche)');
+    if (json(rs({ emetteur: null })) !== json({ regime: null, declareLe: null }) || json(rs(null)) !== json({ regime: null, declareLe: null })) {
+      fauxRegime.push('regimeEtSaDate(vide)');
+    }
+    [[FICHE, ASSURANCES], [{ assurances: [] }, []], [{ assurances: null }, null], [{}, null], [null, null], [{ assurances: 'x' }, null],
+      [{ assurances: { 0: 'x' } }, null]].forEach(([f, voulu], i) => { if (json(as(f)) !== json(voulu)) fauxRegime.push(`assurancesDe cas ${i}`); });
+    for (const [nom, lecteur] of [['monRegimeEtSaDateSupabase', 'monEmetteurSupabase'], ['monRegimeEtSaDateDemo', 'monEmetteurDemo']]) {
+      const r = await tourne(nom, lecteur, FICHE);
+      if (r.plante || r.erreur || r.appels !== 1
+        || json(r.rendu) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z', assurances: ASSURANCES })) {
+        fauxRegime.push(`${nom} → ${json(r.rendu)} en ${r.appels} lecture(s)${r.plante ? ` (${r.plante})` : ''}${r.erreur ? ` (${r.erreur.message})` : ''}`);
+      }
+      const vide = await tourne(nom, lecteur, { emetteur: null, assurances: null });
+      if (json(vide.rendu) !== json({ regime: null, declareLe: null, assurances: null })) fauxRegime.push(`${nom}(vide) → ${json(vide.rendu)}`);
+      const panne = await tourne(nom, lecteur, new Error('réseau'));
+      if (!panne.erreur || panne.erreur.message !== 'réseau') fauxRegime.push(`${nom} avale une erreur → ${json(panne.rendu)}`);
+    }
+    for (const [nom, lecteur] of [['monRegimeSupabase', 'monEmetteurSupabase'], ['monRegimeDemo', 'monEmetteurDemo']]) {
+      const r = await tourne(nom, lecteur, FICHE);
+      if (r.rendu !== 'reel' || r.appels !== 1) fauxRegime.push(`${nom} → ${json(r.rendu)} en ${r.appels} lecture(s)`);
+      const panne = await tourne(nom, lecteur, new Error('réseau'));
+      if (!panne.erreur) fauxRegime.push(`${nom} avale une erreur`);
+    }
+  }
+  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe, assurances }` (la date posée par la base au changement de régime ; les '
+    + 'assurances depuis 2b-4, par `assurancesDe`, une LISTE ou `null`), en UNE lecture (`monEmetteur…`), FAIT TOURNER des deux côtés '
+    + '(Supabase et démonstration) — `monRegime` rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel',
+  fauxRegime.length === 0, fauxRegime.join(' ; '));
 
   /* -- LA CLÉ DE RAPPROCHEMENT, NULLE PART DANS L'APPLICATION ------------ */
   const nommentLaCle = fichiers.filter((f) => f.startsWith('src/') && /cle_rapprochement/.test(f === 'src/lib/api.js' ? API : sansCommentairesJs(lire(f))));
@@ -3088,10 +3128,13 @@ try {
      le miroir de la liste passe le `proId` du DEVIS à la lecture de
      l'attestation décennale, qui ne garde que les assurances de CETTE
      entreprise — une appartenance d'ASSURANCE, pas celle d'un poste. */
-  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation'].reduce((s, nom) => {
-    const f = fonctionJs(s, nom);
-    return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
-  }, t);
+  /* `finDeLAttestation` (2b-4) lit `proId` du DEVIS (`devis.pro_id`, par
+     `rowToDevis`), comme `etatDeLAttestation` : pas celui d'un poste. */
+  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation', 'finDeLAttestation']
+    .reduce((s, nom) => {
+      const f = fonctionJs(s, nom);
+      return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
+    }, t);
   const LECTEURS = ['src/lib/postes.js', 'src/lib/devis.js', ...['carte', 'designation', 'ajout', 'poste', 'page'].map((k) => ECRANS_BASE[k])]
     .map((f) => (existsSync(path.join(RACINE, f)) ? sansCommentairesJs(lire(f)) : ''))
     .map((t, i) => (i === 1 ? sansLecturesDuDevis(t) : t)).join('\n');

@@ -317,8 +317,11 @@ const DALLE = posteDemo('Dalle béton').designation;
 const RAGREAGE = posteDemo('Ragréage').designation;
 
 /* ======================================================================== */
+/* `CHROME` : le navigateur d'un autre conteneur (le chemin par défaut est
+   celui des sessions d'avant ; `captures-carte.mjs` et ses voisins font
+   déjà ainsi). */
 const n = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   args: ['--no-sandbox'],
 });
 const ctx = await n.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -1771,6 +1774,12 @@ await section('Les aides de droit de la carte « Conditions » : chacune lisible
       + '(banque, établissement financier habilité ou société de caution mutuelle). La somme retenue vous revient (ou la '
       + 'caution est libérée) un an après la réception des travaux, sauf si le client a notifié au consignataire (ou à la '
       + 'caution), par lettre recommandée, une opposition motivée par l’inexécution de vos obligations.' },
+    /* 2b-4 (cahier §5.5 point 1, annexe A.2) : l'aide FIXE du dernier bloc,
+       « Le devis lui-même : gratuit ou payant ? », écrite ici en toutes
+       lettres. */
+    { titre: 'Le devis lui-même : gratuit ou payant ?', aide: 'Un particulier doit savoir, avant de s’engager, si le devis '
+      + 'lui-même est gratuit ou payant, et ce qu’il coûte. Ce prix ne s’ajoute pas au total des travaux. Pour des services à '
+      + 'la personne chez un particulier (petit jardinage, petit bricolage), le devis est toujours gratuit.' },
   ];
   await toucher(page.getByLabel(/^Conditions : /).first());
   const allumee = await page.getByRole('switch', { name: /^Retenue de garantie/ }).getAttribute('aria-checked');
@@ -1821,7 +1830,10 @@ await section('Les aides de droit de la carte « Conditions » : chacune lisible
       };
     }, { attendue: ATTENDUES[k].aide, rang: k }));
   }
-  const titreAttendu = (t) => (t === 'Acompte' ? /^(Acompte ou arrhes|Acompte|Arrhes)$/ : new RegExp(`^${t}$`));
+  /* 2b-4 : un titre se compare ENTIER, comme une chaîne — « Le devis lui-même :
+     gratuit ou payant ? » porte un « ? », qu'une expression régulière lirait
+     comme « le caractère d'avant est facultatif ». */
+  const titreAttendu = (t) => (t === 'Acompte' ? /^(Acompte ou arrhes|Acompte|Arrhes)$/ : { test: (x) => x === t });
   ATTENDUES.forEach(({ titre, aide }, k) => {
     const m = mesures[k];
     const nom = `« ${aide.slice(0, 48)}… »`;
@@ -1837,7 +1849,8 @@ await section('Les aides de droit de la carte « Conditions » : chacune lisible
   /* Sur l'ÉCRAN, chaque aide tombe entre son titre et le suivant. */
   const titresY = (lues[0] && lues[0].titresY) || [];
   const yDuTitre = (t) => (titresY.find((x) => titreAttendu(t).test(x.t)) || {}).y;
-  const ordreTitres = ['Réduction', 'Acompte', 'Validité de l’offre', 'Retenue de garantie'];
+  /* 2b-4 (T17) : le CINQUIÈME titre, le dernier. */
+  const ordreTitres = ['Réduction', 'Acompte', 'Validité de l’offre', 'Retenue de garantie', 'Le devis lui-même : gratuit ou payant ?'];
   const entreSesTitres = ATTENDUES.every(({ titre }, k) => {
     const m = mesures[k];
     const j = ordreTitres.indexOf(titre);
@@ -1845,7 +1858,7 @@ await section('Les aides de droit de la carte « Conditions » : chacune lisible
     const bas = j + 1 < ordreTitres.length ? yDuTitre(ordreTitres[j + 1]) : Infinity;
     return m && m.trouvees === 1 && haut != null && m.y > haut && m.y < bas;
   });
-  verifier(`les neuf aides sont dans l’ORDRE, dans le document comme sur l’écran, et chacune entre son titre et le suivant `
+  verifier(`les dix aides sont dans l’ORDRE, dans le document comme sur l’écran, et chacune entre son titre et le suivant `
     + `(${titresY.map((x) => x.t).join(' → ')})`,
   lues.length === ATTENDUES.length && croissant(lues.map((m) => m.ordreDoc)) && croissant(lues.map((m) => m.y))
     && croissant(ordreTitres.map(yDuTitre).map((v) => (v == null ? -1 : v))) && entreSesTitres,
@@ -4949,6 +4962,62 @@ await section('Le plafond : une ligne et une option refusées, la réduction ret
 });
 
 
+/* ======================================================================== */
+/*  LE PRIX DU DEVIS LUI-MÊME, ET LES AVIS DE 2b-4 (cahier 2b-4, §5.5)      */
+/* ======================================================================== */
+/* Les textes que les sections 2b-4 attendent, écrits EN TOUTES LETTRES
+   (annexes A.1 à A.4 du cahier) : une mesure qui les importerait du code ne
+   verrait pas un mot changé des deux côtés à la fois. Déclarés ICI, avant
+   les sections du lot 2b-1 qui en lisent deux (« Muret », « Terrasse » et le
+   brouillon neuf) : une `const` lue avant sa déclaration lève. Les montants
+   y sont écrits avec des espaces ORDINAIRES : `net()` ramène les insécables
+   de l'écran à des espaces avant toute comparaison. */
+const TITRE_COUT_2B4 = 'Le devis lui-même : gratuit ou payant ?';
+const AIDE_COUT_2B4 = 'Un particulier doit savoir, avant de s’engager, si le devis lui-même est gratuit ou payant, et ce '
+  + 'qu’il coûte. Ce prix ne s’ajoute pas au total des travaux. Pour des services à la personne chez un particulier (petit '
+  + 'jardinage, petit bricolage), le devis est toujours gratuit.';
+const POINT_COUT_2B4 = 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une '
+  + 'réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.';
+const BOUTON_COUT_2B4 = 'Choisir : devis gratuit ou payant';
+const GRATUIT_2B4 = 'Le devis lui-même est gratuit';
+const PAYANT_2B4 = 'Le devis lui-même est payant';
+const CHAMP_COUT_2B4 = 'Prix du devis lui-même TTC, en euros';
+const PROPOSITION_RIEN_2B4 = 'Vos tarifs ne disent pas encore le prix de vos devis.';
+const PROPOSITION_GRATUITE_2B4 = 'Dans vos tarifs : vos devis sont gratuits.';
+const PROPOSITION_30_2B4 = 'Dans vos tarifs : 30,00 € TTC.';
+const ANNONCE_30_2B4 = 'Prix du devis : 30,00 €, d’après vos tarifs.';
+const ZERO_TAPE_2B4 = 'Pour dire que ce devis est gratuit, touchez « Gratuit ».';
+const RESUME_MANQUE_2B4 = 'Devis lui-même : gratuit ou payant ? à choisir';
+const AVIS_PAYANT_2B4 = 'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être '
+  + 'un contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez le devis avant, '
+  + 'sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez lui, il faut aussi un écrit '
+  + 'signé (ou un support durable qu’il accepte) avec le formulaire de rétractation, et rien ne se reçoit avant le 8e jour, '
+  + 'pas même un chèque. Opus ne prépare pas encore ce contrat : faites-le relire avant de faire payer un devis.';
+const AVIS_TARIFS_GRATUITS_2B4 = 'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : '
+  + 'un client peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis gratuitement.';
+const AVIS_GRATUIT_DEPLACEMENT_2B4 = 'Le devis lui-même est dit gratuit, mais vos tarifs comptent des frais de déplacement : si '
+  + 'vous les faites payer pour venir établir ce devis, ne le présentez pas comme gratuit — la loi peut y voir une pratique '
+  + 'trompeuse.';
+const AVIS_ATTESTATION_2B4 = (fin) => `Votre attestation décennale est valable jusqu’au ${fin}. Si elle vaut pour l’ensemble `
+  + 'de vos chantiers, elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
+  + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui comptera, sauf si ce '
+  + 'chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de service donné, ou d’autres '
+  + 'entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la donner à votre client.';
+const SUITE_FRANCHISE_2B4 = 'En franchise de TVA, les travaux comptent en principe comme des prestations de services : au-delà '
+  + 'de 41 250,00 € sur une même année civile, la franchise cesse à partir du jour du dépassement ; au-delà de 37 500,00 €, '
+  + 'vous n’y avez plus droit à partir du 1er janvier suivant. D’autres plafonds peuvent s’appliquer selon les matériaux que '
+  + 'vous fournissez, ou si votre entreprise a été créée cette année. Opus ne connaît pas votre chiffre d’affaires : vérifiez '
+  + 'avec votre comptable avant de remettre ce devis.';
+const AVIS_FRANCHISE_2B4 = `Ce devis atteint à lui seul 40 000,00 €. ${SUITE_FRANCHISE_2B4}`;
+const AVIS_FRANCHISE_OPTIONS_2B4 = `Avec ses options, ce devis atteint 40 000,00 €. ${SUITE_FRANCHISE_2B4}`;
+/* « Pas encore vérifié » (annexe A.4) : « si le devis lui-même est payant »
+   sort, « si ce devis relève des services à la personne » entre. */
+const PAS_ENCORE_2B4 = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
+  + 'vraiment, si ce devis relève des services à la personne, les déchets de chantier, le label RGE pour des travaux '
+  + 'd’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre '
+  + 'attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira).';
+
+
 await section('« Pour le remettre » sur « Muret de clôture » : la ligne du haut, la carte, « Mon entreprise » qui relit (lot 2b-1)', async () => {
   await ecouterLaListe(true);
   await allerAMesDevis();
@@ -5012,11 +5081,11 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
     t.includes('Ce devis — aucun point') && t.includes('Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.'));
   verifier('…et JUSTE SOUS elle, « Pas encore vérifié : … » (sans elle, « rien ne manque » mentirait)',
     /* 2b-3 (annexe A.6) : « la garantie décennale » sort, la réparation
-       urgente et la couverture de l'attestation entrent. */
-    t.includes('Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, '
-      + 'si le devis lui-même est payant, les déchets de chantier, le label RGE pour des travaux d’énergie, les conditions du '
-      + 'taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre attestation décennale couvre '
-      + 'ces travaux (ses activités, la date où le chantier s’ouvrira).')
+       urgente et la couverture de l'attestation entrent. 2b-4 (annexe A.4,
+       cahier §5.5 point 11) : « si le devis lui-même est payant » SORT (le
+       point du rang 12 le demande), « si ce devis relève des services à la
+       personne » ENTRE. */
+    t.includes(PAS_ENCORE_2B4)
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
   /* 2b-2 (cahier §3.6, annexe A.3) : le Muret est commandé « à titre privé »
      — la démonstration porte la réponse POUR Mme Martin, et la base l'a vue
@@ -5110,6 +5179,11 @@ await section('« Terrasse en bois » : compléter un point depuis la liste, le 
   verifier('la carte : la validité et la nature de l’acompte, « Par prudence » toutes deux, et pas « rien ne manque »',
     t.includes('Choisissez la durée de validité du devis.') && t.includes('Dites si la somme demandée d’avance est un acompte ou des arrhes')
     && (t.match(/Par prudence/g) || []).length >= 2 && !t.includes('rien ne manque') && t.includes('Ce devis — 2 points'));
+  /* 2b-4 (T13, cahier §5.5 point 9) : « Terrasse » est PAYANTE (30,00 €) et
+     Mme Martin commande à titre privé — l'avis du devis payant se lit sous
+     « À vérifier », entier, et ses deux points ne bougent pas. */
+  verifier('2b-4 : l’avis du devis payant, ENTIER, sous « À vérifier » (après la liste)',
+    t.includes(AVIS_PAYANT_2B4) && t.indexOf(AVIS_PAYANT_2B4) > t.indexOf('À vérifier') && t.indexOf('À vérifier') > t.indexOf('Ce devis — 2 points'));
   await jugerLaCarte('la carte de « Terrasse »');
   await capture('44-remettre-terrasse-carte');
 
@@ -5197,14 +5271,18 @@ await section('Un brouillon NEUF : aucune lecture avant qu’il soit en base, pu
   await toucher(page.getByRole('button', { name: 'Dans les 30 jours suivant la signature du devis', exact: true }).first());
   await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
   const l2 = await libelleLigne();
-  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité — « ce devis — 4 points »',
-    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '4 points' && (await lectures()) - avant >= 1, l2);
+  /* 2b-4 (cahier §5.5 point 10, critique ÉCRAN-9) : un brouillon NEUF naît
+     sans prix du devis lui-même — CINQ points, celui du rang 12 compris. */
+  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité, prix du devis lui-même — « ce devis — 5 points »',
+    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '5 points' && (await lectures()) - avant >= 1, l2);
   await toucher(ligneHaut());
   const t = await texte();
-  verifier('la carte : les quatre points, puis l’AVIS « pas de titre », À PART, après la liste — et jamais compté',
+  verifier('la carte : les cinq points (2b-4 : « Dites si le devis lui-même est gratuit ou payant… », « Par prudence »), puis l’AVIS '
+    + '« pas de titre », À PART, après la liste — et jamais compté',
     t.includes('Ce devis ne s’adresse encore à personne') && t.includes('Ce devis ne chiffre encore aucun travail')
     && t.includes('Écrivez le lieu des travaux.') && t.includes('Choisissez la durée de validité')
-    && t.includes('Ce devis — 4 points') && t.includes('À vérifier')
+    && t.includes(POINT_COUT_2B4) && t.slice(Math.max(0, t.indexOf(POINT_COUT_2B4) - 40), t.indexOf(POINT_COUT_2B4)).includes('Par prudence')
+    && t.includes('Ce devis — 5 points') && t.includes('À vérifier')
     && t.includes('Ce devis n’a pas de titre : le document dira seulement « Devis ».')
     && t.indexOf('À vérifier') > t.indexOf('Mentions dues à un particulier'));
   await jugerLaCarte('la carte du brouillon neuf');
@@ -7460,6 +7538,593 @@ await section('CONTRA2 RELIRE6-2 : le refus partiel de l’en-tête par le plafo
   for (const largeur of [393, 320]) await refusPartielUneLigneDerriere(largeur);
   await page.setViewportSize(tailleAvant);
   await attendre(400);
+});
+
+/* ======================================================================== */
+/*  2b-4 — LE PRIX DU DEVIS LUI-MÊME, ET LES AVIS (cahier 2b-4, §5.5)        */
+/* ======================================================================== */
+/* POURQUOI ICI, APRÈS TOUTES LES AUTRES SECTIONS DU COMPTE PRO (§5.5 point
+   12, critique ÉCRAN-21) : celles qui CHANGENT la fiche de démonstration —
+   la date de l'attestation, le régime de TVA, les tarifs — vivent en
+   dernier, et rendent la fiche à l'identique (comparée à la fin). Une
+   franchise laissée rendrait incohérentes les lignes à 20 % des quatre
+   brouillons ; des frais de déplacement laissés éteindraient le point
+   `frais_deplacement` et feraient naître un avis sur « Muret » (la section
+   2b-1 exige « aucun avis »). Les sections qui suivent celles-ci quittent ce
+   compte (« Un particulier n'a pas « Mes devis » », puis une autre
+   entreprise).
+     - le bloc « Le devis lui-même : gratuit ou payant ? » de « Conditions »,
+       sur « Rénovation salle de bains » : le point de la liste et son bouton
+       (la carte s'ouvre SUR le bloc), le bloc EN DERNIER, rien de choisi, la
+       phrase des tarifs, « Gratuit », « Payant », un « 0 » refusé SANS
+       écriture, « Payant » vidé SANS faute — et, à 393 puis à 320, le titre
+       et les deux pastilles qui ne bougent pas d'un pixel dans le contenu
+       (seuls ce qui est DESSOUS descend) ; « Corriger » de la garde, qui
+       rouvre la carte SUR le bloc ; « Payant » 30,00 € (le point s'éteint,
+       le résumé de la rangée, la carte rouverte) ; la pastille retouchée
+       qui n'écrit rien ; « Payant » vidé, la carte fermée : aucune bande,
+       aucune faute, le point revient (points 1 à 7) ;
+     - « Mon entreprise » → « Vos tarifs » → « Mes devis sont gratuits » :
+       la phrase, et « Payant » qui n'écrit RIEN ; puis un prix de devis
+       payant : « Payant » le reprend, l'écrit, l'annonce (point 8) ;
+     - les avis de 2b-4 : l'attestation qui arrive à sa fin (la fermeture de
+       « Mon entreprise » relit les assurances ; « Non » à la décennale la
+       tait), le franchisé au-delà du plafond (muet tant qu'une ligne porte
+       un taux, puis les deux phrases, sans « HT »), le gratuit avec des
+       frais de déplacement, le payant face à des tarifs affichés gratuits
+       (point 12) ;
+     - la fiche rendue à l'identique, et aucun brouillon laissé (13).
+   CE QUI EST POSÉ PAR L'API, ET LE DIT : la date de fin de l'attestation
+   (`api.enregistrerAssurance`, la fonction que la fiche appelle — le
+   calendrier n'est pas ce qu'on mesure ici), comme en 2b-3. Le régime et
+   les tarifs passent par l'écran de « Mon entreprise ». */
+const BROUILLONS_AVANT_2B4 = { liste: null };
+const FICHE_AVANT_2B4 = { fiche: null };
+/** La fiche de démonstration, LUE par la porte de l'application. */
+const ficheDemo2b4 = () => page.evaluate(async () => {
+  const f = await window.__opusModule('src/lib/api.js').monEmetteur();
+  return JSON.parse(JSON.stringify(f));
+});
+/** Le prix du devis lui-même rangé dans la base de démonstration, pour le devis d'objet `objet`. */
+const coutEnBase = (objet) => page.evaluate(async (o) => {
+  const api = window.__opusModule('src/lib/api.js');
+  const l = await api.mesDevis();
+  const dv = (l.devis || []).find((x) => x.objet === o);
+  if (!dv) return 'introuvable';
+  const r = await api.unDevis(dv.id);
+  return r.devis.coutDevisCentimes === undefined ? 'absent' : r.devis.coutDevisCentimes;
+}, objet);
+/** Les places, DANS LE CONTENU qui défile (le défilement retiré), du bloc et
+ *  de ses voisins : un geste qui déplacerait le titre ou les pastilles se
+ *  verrait ici, quel que soit le défilement. `null` pour ce qui n'est pas là. */
+const placesDuBloc = () => page.evaluate(({ titre, aide, gratuit, payant, champ }) => {
+  const plat = (x) => (x || '').replace(/\s+/g, ' ').trim();
+  const yContenu = (e) => {
+    if (!e) return null;
+    let d = e.parentElement;
+    while (d && !/(auto|scroll)/.test(getComputedStyle(d).overflowY)) d = d.parentElement;
+    const r = e.getBoundingClientRect();
+    return d ? Math.round((r.top - d.getBoundingClientRect().top + d.scrollTop) * 10) / 10 : null;
+  };
+  const titres = [...document.querySelectorAll('[role="heading"]')].filter((x) => !x.closest('[aria-hidden="true"]'));
+  const tT = titres.find((x) => plat(x.innerText) === titre) || null;
+  const tR = titres.find((x) => plat(x.innerText) === 'Retenue de garantie') || null;
+  const feuilles = [...document.querySelectorAll('div, span')].filter((x) => x.children.length === 0 && !x.closest('[aria-hidden="true"]'));
+  const a = feuilles.filter((x) => plat(x.innerText) === plat(aide));
+  const pg = document.querySelector(`[role="button"][aria-label="${gratuit}"]`);
+  const pp = document.querySelector(`[role="button"][aria-label="${payant}"]`);
+  const ch = document.querySelector(`[aria-label="${champ}"]`);
+  const boite = (e) => (e ? (() => { const b = e.getBoundingClientRect(); return { l: Math.round(b.width), h: Math.round(b.height), y: Math.round(b.y) }; })() : null);
+  return {
+    titre: yContenu(tT), retenue: yContenu(tR), aide: a.length === 1 ? yContenu(a[0]) : null, aides: a.length,
+    gratuit: yContenu(pg), payant: yContenu(pp), champ: yContenu(ch),
+    selGratuit: pg ? pg.getAttribute('aria-selected') : null, selPayant: pp ? pp.getAttribute('aria-selected') : null,
+    bGratuit: boite(pg), bPayant: boite(pp), bTitre: boite(tT), fenetre: window.innerHeight,
+    dernierTitre: titres.length ? plat(titres[titres.length - 1].innerText) : null,
+  };
+}, { titre: TITRE_COUT_2B4, aide: AIDE_COUT_2B4, gratuit: GRATUIT_2B4, payant: PAYANT_2B4, champ: CHAMP_COUT_2B4 });
+/** Amener au milieu de l'écran le texte (une FEUILLE, hors gabarits cachés)
+ *  qui commence par `debut` — pour qu'une capture montre ce qu'elle nomme :
+ *  un avis vit en bas de la liste, sous les points. */
+const amenerAuTexte = (debut) => page.evaluate((d) => {
+  const plat = (x) => (x || '').replace(/\s+/g, ' ').trim();
+  const e = [...document.querySelectorAll('div, span')].find((x) => x.children.length === 0
+    && plat(x.innerText).startsWith(plat(d)) && !x.closest('[aria-hidden="true"]'));
+  if (e) e.scrollIntoView({ block: 'center' });
+  return !!e;
+}, debut).then(async (v) => { await attendre(300); return v; });
+const pastilleCout = (nom) => page.locator(`[role="button"][aria-label="${nom}"]`).first();
+const champCout = () => page.getByLabel(CHAMP_COUT_2B4, { exact: true }).first();
+const RETOUR_CONDITIONS_DEVIS = 'Enregistrer les conditions et revenir au devis';
+const fermerConditionsDevis = async () => {
+  await toucher(parLibelle(RETOUR_CONDITIONS_DEVIS));
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+};
+const ouvrirConditionsDuDevis = async () => {
+  await toucher(page.getByLabel(/^Conditions : /).first());
+  await page.getByText(TITRE_COUT_2B4, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(500);
+};
+/** Quitter la saisie par la flèche, et attendre d'en être sorti. */
+const quitterLaSaisie = async () => {
+  await toucher(parLibelle('Revenir en arrière'));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+};
+/** « Mon entreprise », depuis le profil, en ÉDITION ; `geste` y fait ce qu'il faut, puis « Enregistrer », puis on ferme. */
+const dansMonEntreprise = async (geste) => {
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+  await attendre(600);
+  await geste();
+  await toucher(bouton('Enregistrer mes informations de devis'));
+  await jusqua(async () => (await bouton(/^(Compléter|Modifier) mes informations de devis$/).count()) > 0, 6000);
+  verifier('…« Mon entreprise » : enregistré (la fiche revient en lecture)', (await bouton(/^(Compléter|Modifier) mes informations de devis$/).count()) > 0,
+    (await texteLu()).slice(0, 300));
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await attendre(600);
+};
+const interrupteur = (re) => page.getByRole('switch', { name: re }).first();
+const allume = async (re, voulu) => {
+  const s = interrupteur(re);
+  await s.scrollIntoViewIfNeeded();
+  if (((await s.getAttribute('aria-checked')) === 'true') !== voulu) await toucher(s);
+  await attendre(300);
+};
+/** La date du jour du TÉLÉPHONE (le navigateur), décalée de `n` jours : `{ iso, fr }`. */
+const jourDuNavigateur = (n) => page.evaluate((k) => {
+  const d = new Date();
+  d.setDate(d.getDate() + k);
+  const p = (x) => String(x).padStart(2, '0');
+  return { iso: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, fr: `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}` };
+}, n);
+
+await section('2b-4 : le compte des brouillons et la fiche de démonstration AVANT les sections 2b-4 (§5.5, 12 d et 13)', async () => {
+  BROUILLONS_AVANT_2B4.liste = await brouillonsDeMesDevis();
+  FICHE_AVANT_2B4.fiche = await ficheDemo2b4();
+  noter('les brouillons avant les sections 2b-4', JSON.stringify(BROUILLONS_AVANT_2B4.liste));
+  verifier(`des brouillons à compter (${BROUILLONS_AVANT_2B4.liste.length}), et la fiche lue`,
+    BROUILLONS_AVANT_2B4.liste.length >= 4 && !!FICHE_AVANT_2B4.fiche && !!FICHE_AVANT_2B4.fiche.emetteur);
+});
+
+await section('2b-4 : « Conditions » — le prix du devis lui-même : le point et son bouton, le bloc EN DERNIER, rien de choisi, rien sous le doigt ne bouge (393 et 320), « 0 » refusé sans écriture, « Corriger », « Payant » 30 €, la pastille retouchée, « Payant » vidé sans faute (§5.5, 1 à 7)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  exiger((await coutEnBase('Rénovation salle de bains')) === null, '« Rénovation » ne dit rien du prix du devis lui-même (null ÉCRIT, T13)');
+  /* LE RÉSUMÉ DE LA RANGÉE (T15) : ce qui manque en tête. */
+  const resume0 = net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'));
+  verifier(`le résumé de « Conditions » dit « ${RESUME_MANQUE_2B4} », après « Validité à choisir » (« ${resume0} »)`,
+    resume0.includes(`Validité à choisir · ${RESUME_MANQUE_2B4}`));
+  /* LE POINT, ET SON BOUTON (point 7). */
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iP = tL.indexOf(POINT_COUT_2B4);
+  verifier('la liste : « Dites si le devis lui-même est gratuit ou payant… », ENTIÈRE, « Par prudence », et son bouton « Choisir : devis gratuit ou payant »',
+    iP >= 0 && tL.slice(Math.max(0, iP - 40), iP).includes('Par prudence')
+    && (await page.getByRole('button', { name: BOUTON_COUT_2B4, exact: true }).count()) === 1, tL.slice(Math.max(0, iP - 60), iP + 60));
+  await jugerLaCarte('la liste de « Rénovation »');
+  await amenerAuTexte(POINT_COUT_2B4.slice(0, 50));
+  await capture('2b4-point-liste');
+  await toucher(bouton(BOUTON_COUT_2B4));
+  await page.getByText(TITRE_COUT_2B4, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(600);
+  const tb = await boiteDuTexte(TITRE_COUT_2B4);
+  verifier(`« ${BOUTON_COUT_2B4} » ouvre « Conditions » SUR le bloc (titre à y = ${tb && Math.round(tb.y)}, fenêtre ${tb && tb.fenetre}), et son retour dit « ‹ Liste »`,
+    !!tb && tb.y >= 0 && tb.bas <= tb.fenetre && (await parLibelle(RETOUR_LISTE_CONDITIONS).count()) === 1);
+  /* LE BLOC (point 1) : le DERNIER titre, sous la retenue ; rien de choisi ;
+     la phrase des tarifs (ceux de la démonstration ne sont pas déclarés) ;
+     l'aide, une fois ; pas de champ. */
+  const p0 = await placesDuBloc();
+  verifier(`le bloc est le DERNIER de la carte (« ${p0.dernierTitre} »), sous « Retenue de garantie » (${p0.retenue} < ${p0.titre}), son aide une fois dessous`,
+    p0.dernierTitre === TITRE_COUT_2B4 && p0.retenue !== null && p0.titre > p0.retenue && p0.aides === 1 && p0.aide > p0.payant,
+    JSON.stringify(p0));
+  verifier(`deux pastilles, RIEN de choisi, de 44 points au moins (${JSON.stringify([p0.bGratuit, p0.bPayant])}), et pas de champ`,
+    p0.selGratuit === 'false' && p0.selPayant === 'false' && !!p0.bGratuit && !!p0.bPayant
+    && Math.min(p0.bGratuit.l, p0.bGratuit.h, p0.bPayant.l, p0.bPayant.h) >= TOUCHE - 0.5 && p0.champ === null);
+  verifier(`la phrase des tarifs : « ${PROPOSITION_RIEN_2B4} »`, (await texteLu()).includes(PROPOSITION_RIEN_2B4));
+  await capture('2b4-bloc-rien');
+  /* RIEN SOUS LE DOIGT NE BOUGE (T17, point 2), à 393 puis à 320 : le titre,
+     les pastilles et « Retenue de garantie » gardent leur place DANS LE
+     CONTENU ; seul ce qui est dessous (l'aide, le récapitulatif) descend. */
+  for (const largeur of [393, 320]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(500);
+    const e0 = await ecrituresDemo();
+    const a = await placesDuBloc();
+    await toucher(pastilleCout(GRATUIT_2B4));
+    await attendre(PAUSE_DEMO + 400);
+    const b = await placesDuBloc();
+    const e1 = await ecrituresDemo();
+    if (largeur === 393) await capture('2b4-bloc-gratuit');
+    await toucher(pastilleCout(PAYANT_2B4));
+    await attendre(PAUSE_DEMO + 400);
+    const c = await placesDuBloc();
+    const e2 = await ecrituresDemo();
+    verifier(`${largeur} : « Payant » sans prix proposé : le champ s’ouvre VIDE, et c’est « rien de dit » (${await coutEnBase('Rénovation salle de bains')})`,
+      c.champ !== null && (await champCout().inputValue()) === '' && (await coutEnBase('Rénovation salle de bains')) === null);
+    if (largeur === 393) await capture('2b4-bloc-payant-vide');
+    /* « 0 » TAPÉ (point 4) : la phrase, AUCUNE écriture. */
+    await viderEtTaper(champCout(), '0');
+    await champCout().evaluate((x) => x.blur());
+    await attendre(PAUSE_DEMO + 400);
+    const d = await placesDuBloc();
+    const e3 = await ecrituresDemo();
+    const tZ = await texteLu();
+    verifier(`${largeur} : « 0 » tapé — « ${ZERO_TAPE_2B4} », et AUCUNE écriture (${e3 - e2})`, tZ.includes(ZERO_TAPE_2B4) && e3 === e2);
+    if (largeur === 393) await capture('2b4-bloc-zero');
+    const memes = (k) => [a, b, c, d].every((x) => x[k] !== null && x[k] === a[k]);
+    verifier(`${largeur} : le titre (${a.titre}), « Gratuit » (${a.gratuit}), « Payant » (${a.payant}) et « Retenue de garantie » (${a.retenue}) NE BOUGENT PAS `
+      + `— rien, « Gratuit », « Payant », la faute ; l’aide, dessous, descend quand le champ naît (${b.aide} → ${c.aide})`,
+    memes('titre') && memes('gratuit') && memes('payant') && memes('retenue') && c.aide > b.aide,
+    JSON.stringify([a, b, c, d].map((x) => [x.titre, x.gratuit, x.payant, x.retenue, x.aide, x.champ])));
+    verifier(`${largeur} : « Gratuit » a écrit UNE fois (${e1 - e0}), « Payant » a choisi et rendu le vide (${e2 - e1} écriture ; 0 si rien n’avait changé)`,
+      e1 - e0 <= 1 && e2 - e1 <= 1 && b.selGratuit === 'true' && c.selPayant === 'true' && c.selGratuit === 'false');
+    noter(`${largeur} : les pastilles, à l’écran`, JSON.stringify([d.bGratuit, d.bPayant]));
+    /* « Payant » VIDÉ (point 5) : la faute s'en va, rien ne part. */
+    await viderEtTaper(champCout(), '');
+    await champCout().evaluate((x) => x.blur());
+    await attendre(PAUSE_DEMO + 400);
+    verifier(`${largeur} : « Payant » vidé — la faute s’en va, sans en mettre une autre ni rien écrire`,
+      !(await texteLu()).includes(ZERO_TAPE_2B4) && (await ecrituresDemo()) === e3);
+  }
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  /* « CORRIGER » (critique ÉCRAN-18) : un « 0 » refusé, la carte fermée, la
+     barre du bas — la garde NOMME « Prix du devis lui-même », et « Corriger »
+     rouvre la carte SUR le bloc, avec « ‹ Devis » (on vient de la garde). */
+  await viderEtTaper(champCout(), '0');
+  await champCout().evaluate((x) => x.blur());
+  await attendre(400);
+  await toucher(parLibelle(RETOUR_LISTE_CONDITIONS));
+  await jusqua(enCarte, 4000);
+  await fermerLaListe();
+  verifier('…la rangée « Conditions » dit la faute', (await texteLu()).includes('Une condition n’est pas enregistrée'));
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  const bande = await jusqua(async () => (await texteLu()).includes('« Prix du devis lui-même » : ce que vous avez écrit n’est pas enregistré.'), DELAI_ECRITURE + 3000);
+  verifier('la barre du bas : la garde NOMME « Prix du devis lui-même », et l’écran ne part pas', !!bande && await dansLaSaisie());
+  await capture('2b4-garde-prix');
+  await toucher(bouton('Corriger'));
+  await page.getByText(TITRE_COUT_2B4, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(600);
+  const tc = await boiteDuTexte(TITRE_COUT_2B4);
+  verifier(`« Corriger » rouvre « Conditions » SUR le bloc (titre à y = ${tc && Math.round(tc.y)}), « Payant » et le « 0 » refusé encore là, retour « ‹ Devis »`,
+    !!tc && tc.y >= 0 && tc.bas <= tc.fenetre && (await placesDuBloc()).selPayant === 'true' && (await champCout().inputValue()) === '0'
+    && (await parLibelle(RETOUR_CONDITIONS_DEVIS).count()) === 1);
+  /* « PAYANT » 30 € (point 3) : il s'écrit, le point s'éteint, le résumé le
+     dit, la carte rouverte le montre. */
+  const e4 = await ecrituresDemo();
+  await viderEtTaper(champCout(), '30');
+  await champCout().evaluate((x) => x.blur());
+  await attendre(PAUSE_DEMO + 400);
+  verifier(`« 30 » : une écriture (${(await ecrituresDemo()) - e4}), et la base dit 3 000 centimes (${await coutEnBase('Rénovation salle de bains')})`,
+    (await ecrituresDemo()) - e4 === 1 && (await coutEnBase('Rénovation salle de bains')) === 3000);
+  await fermerConditionsDevis();
+  const resume1 = net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'));
+  verifier(`le résumé de la rangée finit par « Devis lui-même payant 30,00 € » (« ${resume1} »)`,
+    /Devis lui-même payant 30,00 €\. Ouvrir$/.test(resume1) && !resume1.includes(RESUME_MANQUE_2B4));
+  await ouvrirLaListe();
+  verifier('…le point « Dites si le devis lui-même… » S’ÉTEINT', !(await texteLu()).includes(POINT_COUT_2B4));
+  /* L'avis du devis payant (Mme Martin, sans réponse « à quel titre » ou à
+     titre privé : il parle dans les deux cas). */
+  verifier('…et l’avis du devis payant se lit sous « À vérifier »', (await texteLu()).includes(AVIS_PAYANT_2B4));
+  await amenerAuTexte(AVIS_PAYANT_2B4.slice(0, 60));
+  await capture('2b4-liste-avis-payant');
+  await fermerLaListe();
+  await ouvrirConditionsDuDevis();
+  const p1 = await placesDuBloc();
+  /* Le champ se remplit par `centimesEnSaisie` : « 30 » pour 3 000
+     centimes, « 30,50 » pour 3 050 — la forme de TOUS les montants remis
+     dans un champ du devis (le croquis du cahier, §3.6, écrivait
+     « 30,00 » : c'est le code qui fait foi). */
+  verifier(`rouverte : « Payant » choisi, et le champ dit « 30 » (« ${await champCout().inputValue()} »)`,
+    p1.selPayant === 'true' && p1.selGratuit === 'false' && net(await champCout().inputValue()) === '30');
+  /* LA PASTILLE RETOUCHÉE (point 6, ÉCRAN-4) : rien ne s'écrit, le prix reste. */
+  const e5 = await ecrituresDemo();
+  await toucher(pastilleCout(PAYANT_2B4));
+  await attendre(PAUSE_DEMO + 400);
+  verifier(`« Payant » retouché : AUCUNE écriture (${(await ecrituresDemo()) - e5}), le prix reste (« ${await champCout().inputValue()} », base ${await coutEnBase('Rénovation salle de bains')})`,
+    (await ecrituresDemo()) === e5 && net(await champCout().inputValue()) === '30' && (await coutEnBase('Rénovation salle de bains')) === 3000
+    && (await placesDuBloc()).selPayant === 'true');
+  await capture('2b4-bloc-payant-30');
+  /* « PAYANT » VIDÉ, LA CARTE FERMÉE (point 5, ÉCRAN-1) : rien de dit, sans
+     faute — aucune bande, aucun « Une condition n'est pas enregistrée » ; le
+     point revient, et l'écran part sans garde. */
+  await viderEtTaper(champCout(), '');
+  await champCout().evaluate((x) => x.blur());
+  await fermerConditionsDevis();
+  const tV = await texteLu();
+  verifier(`« Payant » vidé, la carte fermée : la base dit « rien » (${await coutEnBase('Rénovation salle de bains')}), et aucune faute (« Une condition n’est pas enregistrée », « Un champ du devis n’est pas enregistré »)`,
+    (await coutEnBase('Rénovation salle de bains')) === null && !tV.includes('Une condition n’est pas enregistrée')
+    && !tV.includes('Un champ du devis n’est pas enregistré') && !tV.includes('ce que vous avez écrit n’est pas enregistré'));
+  await ouvrirLaListe();
+  verifier('…le point revient', (await texteLu()).includes(POINT_COUT_2B4));
+  await fermerLaListe();
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  await jusqua(async () => !(await dansLaSaisie()), DELAI_ECRITURE + 3000);
+  verifier('…et l’écran part SANS bande de garde', !(await dansLaSaisie()) && !(await texteLu()).includes('ce que vous avez écrit n’est pas enregistré'));
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-4 : « Mon entreprise » → « Mes devis sont gratuits » : la phrase, « Payant » qui n’écrit RIEN ; puis un prix de devis payant : « Payant » le reprend, l’écrit, l’annonce (§5.5, 8)', async () => {
+  await dansMonEntreprise(async () => { await allume(/^Mes devis sont gratuits/, true); });
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ouvrirConditionsDuDevis();
+  verifier(`la phrase : « ${PROPOSITION_GRATUITE_2B4} », et rien de choisi à la place de l’artisan`,
+    (await texteLu()).includes(PROPOSITION_GRATUITE_2B4) && (await placesDuBloc()).selGratuit === 'false');
+  const e0 = await ecrituresDemo();
+  await toucher(pastilleCout(PAYANT_2B4));
+  await attendre(PAUSE_DEMO + 400);
+  verifier(`des tarifs « gratuits » : « Payant » ouvre le champ VIDE, n’écrit RIEN (${(await ecrituresDemo()) - e0}), et rien n’est « gratuit » en base (${await coutEnBase('Rénovation salle de bains')})`,
+    (await champCout().inputValue()) === '' && (await ecrituresDemo()) === e0 && (await coutEnBase('Rénovation salle de bains')) === null);
+  await capture('2b4-tarifs-gratuits-payant-vide');
+  await fermerConditionsDevis();
+  await quitterLaSaisie();
+  await dansMonEntreprise(async () => {
+    await allume(/^Mes devis sont gratuits/, false);
+    await viderEtTaper(parLibelle('Prix du devis, en euros toutes taxes comprises'), '30');
+  });
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ouvrirConditionsDuDevis();
+  verifier(`la phrase : « ${PROPOSITION_30_2B4} »`, (await texteLu()).includes(PROPOSITION_30_2B4));
+  await capture('2b4-tarifs-30');
+  await oublierAnnonces();
+  const e1 = await ecrituresDemo();
+  await toucher(pastilleCout(PAYANT_2B4));
+  await attendre(PAUSE_DEMO + 400);
+  verifier(`« Payant » REPREND le prix des tarifs : le champ dit « 30 », une écriture (${(await ecrituresDemo()) - e1}), 3 000 en base, et l’annonce « ${ANNONCE_30_2B4} » (${JSON.stringify(await annonces())})`,
+    net(await champCout().inputValue()) === '30' && (await ecrituresDemo()) - e1 === 1 && (await coutEnBase('Rénovation salle de bains')) === 3000
+    && (await annonces()).includes(ANNONCE_30_2B4));
+  await capture('2b4-bloc-payant-prerempli');
+  await fermerConditionsDevis();
+  await quitterLaSaisie();
+});
+
+await section('2b-4 : le gratuit avec des frais de déplacement, puis le payant face à des tarifs AFFICHÉS « gratuits » (§5.5, 12 c)', async () => {
+  await dansMonEntreprise(async () => {
+    await viderEtTaper(parLibelle('Frais de déplacement, en euros toutes taxes comprises'), '35');
+  });
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ouvrirConditionsDuDevis();
+  await toucher(pastilleCout(GRATUIT_2B4));
+  await fermerConditionsDevis();
+  await ouvrirLaListe();
+  const tG = await texteLu();
+  verifier('« Gratuit » et des frais de déplacement déclarés : l’avis, ENTIER, sous « À vérifier »',
+    tG.includes(AVIS_GRATUIT_DEPLACEMENT_2B4) && tG.indexOf(AVIS_GRATUIT_DEPLACEMENT_2B4) > tG.indexOf('À vérifier'));
+  await amenerAuTexte(AVIS_GRATUIT_DEPLACEMENT_2B4.slice(0, 60));
+  await capture('2b4-avis-gratuit-deplacement');
+  await fermerLaListe();
+  await quitterLaSaisie();
+  await dansMonEntreprise(async () => {
+    await allume(/^Mes devis sont gratuits/, true);
+    await allume(/^Afficher mes tarifs sur ma fiche/, true);
+  });
+  await allerAMesDevis();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ouvrirConditionsDuDevis();
+  await toucher(pastilleCout(PAYANT_2B4));
+  await viderEtTaper(champCout(), '30');
+  await champCout().evaluate((x) => x.blur());
+  await fermerConditionsDevis();
+  await ouvrirLaListe();
+  const tA = await texteLu();
+  verifier('« Payant » 30 € et des tarifs AFFICHÉS qui disent « gratuit » : l’avis, ENTIER, sous « À vérifier » — et plus celui du gratuit',
+    tA.includes(AVIS_TARIFS_GRATUITS_2B4) && tA.indexOf(AVIS_TARIFS_GRATUITS_2B4) > tA.indexOf('À vérifier')
+    && !tA.includes(AVIS_GRATUIT_DEPLACEMENT_2B4));
+  await amenerAuTexte(AVIS_TARIFS_GRATUITS_2B4.slice(0, 60));
+  await capture('2b4-avis-tarifs-affiches-gratuits');
+  await fermerLaListe();
+  /* « Rénovation » rendu à « rien de dit ». */
+  await ouvrirConditionsDuDevis();
+  await viderEtTaper(champCout(), '');
+  await champCout().evaluate((x) => x.blur());
+  await fermerConditionsDevis();
+  exiger((await coutEnBase('Rénovation salle de bains')) === null, '« Rénovation » ne dit de nouveau rien du prix du devis');
+  await quitterLaSaisie();
+  /* LES TARIFS RENDUS (12 d) : rien d'affiché, rien de déclaré. */
+  await dansMonEntreprise(async () => {
+    await allume(/^Afficher mes tarifs sur ma fiche/, false);
+    await allume(/^Mes devis sont gratuits/, false);
+    await viderEtTaper(parLibelle('Prix du devis, en euros toutes taxes comprises'), '');
+    await viderEtTaper(parLibelle('Frais de déplacement, en euros toutes taxes comprises'), '');
+  });
+});
+
+await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’avis, la fermeture de « Mon entreprise » qui relit les assurances, « Non » à la décennale qui le tait (§5.5, 12 a)', async () => {
+  const avant = await assurancesDemo();
+  exiger(avant.length === 1 && avant[0].id === ASSURANCE_DEMO && !!avant[0].attestation_chemin && !!avant[0].valide_jusquau,
+    'la démonstration porte UNE décennale jointe et datée');
+  const finOrigine = avant[0].valide_jusquau;
+  /* « Muret » d'ABORD, et rien d'écrit avant : les sections du lot 2b-1,
+     plus haut, retouchent ce devis (son délai, sa validité). L'horizon de
+     l'avis est la validité, plus 30 jours quand le délai est celui par
+     défaut (`finDeLAttestation`) : une fin 20 jours AVANT cet horizon (au
+     moins demain) fait parler l'avis, quelle que soit la forme qu'ont
+     laissée les sections d'avant. */
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  const muret = await page.evaluate(async () => {
+    const api = window.__opusModule('src/lib/api.js');
+    const l = await api.mesDevis();
+    const dv = (l.devis || []).find((x) => String(x.objet || '').startsWith('Muret de clôture'));
+    const r = dv ? await api.unDevis(dv.id) : null;
+    return r ? { validite: r.devis.validiteJours, delai: r.devis.delaiExecution, decennale: r.devis.engageDecennale } : null;
+  });
+  noter('« Muret » à l’arrivée', JSON.stringify(muret));
+  exiger(!!muret && Number.isInteger(muret.validite) && muret.validite >= 1 && muret.decennale !== false,
+    '« Muret » a une validité, et la décennale n’y est pas à « Non »');
+  const horizon = muret.validite + (muret.delai === DELAI_PAR_DEFAUT.texte ? 30 : 0);
+  const j40 = await jourDuNavigateur(Math.max(1, horizon - 20));
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
+    { d: j40.iso, id: ASSURANCE_DEMO });
+  /* Le devis était ouvert AVANT la nouvelle date : on le quitte et on le
+     rouvre, comme l'artisan qui revient — la saisie relit à l'ouverture. */
+  await quitterLaSaisie();
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ouvrirLaListe();
+  const tA = await texteLu();
+  verifier(`l’avis de l’attestation, ENTIER, avec sa date (${j40.fr}), sous « À vérifier »`,
+    tA.includes(AVIS_ATTESTATION_2B4(j40.fr)) && tA.indexOf(AVIS_ATTESTATION_2B4(j40.fr)) > tA.indexOf('À vérifier'), tA.slice(tA.indexOf('À vérifier'), tA.indexOf('À vérifier') + 200));
+  await amenerAuTexte('Votre attestation décennale est valable jusqu’au');
+  await capture('2b4-avis-attestation');
+  /* LA FERMETURE DE « MON ENTREPRISE » RELIT LES ASSURANCES (critique
+     ÉCRAN-19, sabotage S30) : la date remise PENDANT qu'elle est ouverte,
+     puis refermée — l'avis se tait, sans rouvrir le devis. */
+  await toucher(page.getByRole('button', { name: /^Compléter dans « Mon entreprise » : / }).first());
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
+    { d: finOrigine, id: ASSURANCE_DEMO });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await attendre(500);
+  if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
+  const tu = await jusqua(async () => (await enCarte()) && !(await texteLu()).includes('Votre attestation décennale est valable jusqu’au'), 6000);
+  verifier('« Mon entreprise » refermée : les assurances RELUES, l’avis se tait — sans rouvrir le devis', !!tu);
+  await fermerLaListe();
+  await quitterLaSaisie();
+  /* « NON » À LA DÉCENNALE : l'avis se tait. */
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
+    { d: j40.iso, id: ASSURANCE_DEMO });
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  await ouvrirLaListe();
+  verifier('…la date de nouveau avant l’horizon, le devis rouvert : l’avis revient', (await texteLu()).includes(AVIS_ATTESTATION_2B4(j40.fr)));
+  await fermerLaListe();
+  await toucher(rangeeChantier());
+  await jusqua(async () => (await texteLu()).includes('Ces questions sont indépendantes'), 4000);
+  await toucher(page.locator('[role="button"][aria-label="Non"]').last());
+  await toucher(parLibelle('Revenir au devis'));
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await ouvrirLaListe();
+  verifier('« Non » à la décennale (« Le chantier ») : l’avis se tait', !(await texteLu()).includes('Votre attestation décennale est valable jusqu’au'));
+  await fermerLaListe();
+  await quitterLaSaisie();
+  await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
+    { d: finOrigine, id: ASSURANCE_DEMO });
+  exiger((await assurancesDemo())[0].valide_jusquau === finOrigine, 'la date de fin de l’attestation est REMISE');
+});
+
+await section('2b-4 : le franchisé au-delà du plafond — muet tant qu’une ligne porte un taux, puis les deux phrases, sans « HT » (§5.5, 12 b)', async () => {
+  const OBJET = 'Franchise (mesure)';
+  /* Au RÉEL d'abord : un poste de 40 000 € à 20 %. */
+  await allerAMesDevis();
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), OBJET);
+  await toucher(parLibelle('Ajouter un premier poste chiffré'));
+  await taper('Gros œuvre (mesure)');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '40000');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await quitterLaSaisie();
+  /* La FRANCHISE, par « Mon entreprise ». */
+  await dansMonEntreprise(async () => { await toucher(page.getByRole('radio', { name: /^Franchise en base de TVA/ })); });
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET);
+  await ouvrirLaListe();
+  const t0 = await texteLu();
+  verifier('en franchise, une ligne qui porte encore un taux : AUCUN avis du plafond (la bande de cohérence dit déjà quoi corriger)',
+    !t0.includes('Ce devis atteint à lui seul') && !t0.includes('Avec ses options, ce devis atteint'));
+  await fermerLaListe();
+  await ouvrirRangee('Gros œuvre (mesure)');
+  await toucher(page.getByText('Retirer la TVA', { exact: true }).first());
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await ouvrirLaListe();
+  const t1 = await texteLu();
+  const i1 = t1.indexOf(AVIS_FRANCHISE_2B4);
+  verifier('la TVA retirée : « Ce devis atteint à lui seul 40 000,00 €. En franchise de TVA… », ENTIER, sous « À vérifier », SANS « HT »',
+    i1 >= 0 && i1 > t1.indexOf('À vérifier') && !AVIS_FRANCHISE_2B4.includes('HT'), t1.slice(t1.indexOf('À vérifier'), t1.indexOf('À vérifier') + 120));
+  await amenerAuTexte('Ce devis atteint à lui seul');
+  await capture('2b4-avis-franchise');
+  await fermerLaListe();
+  /* 30 000 € et une OPTION de 10 000 € : la seconde phrase. */
+  await ouvrirRangee('Gros œuvre (mesure)');
+  await viderEtTaper(parLibelle('Prix unitaire'), '30000');
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await toucher(parLibelle('Ajouter une option'));
+  await taper('Option (mesure)');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire'), '10000');
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  await ouvrirLaListe();
+  const t2 = await texteLu();
+  verifier('30 000 € et une option de 10 000 € : « Avec ses options, ce devis atteint 40 000,00 €. … », ENTIER, et plus la première phrase',
+    t2.includes(AVIS_FRANCHISE_OPTIONS_2B4) && !t2.includes('Ce devis atteint à lui seul'), t2.slice(t2.indexOf('À vérifier'), t2.indexOf('À vérifier') + 120));
+  await amenerAuTexte('Avec ses options, ce devis atteint');
+  await capture('2b4-avis-franchise-options');
+  await fermerLaListe();
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), 6000);
+  verifier(`le brouillon « ${OBJET} » est supprimé`, !(await texte()).includes(OBJET));
+  /* Le RÉEL rendu. */
+  await dansMonEntreprise(async () => { await toucher(page.getByRole('radio', { name: /^Régime réel/ })); });
+});
+
+await section('2b-4 : la fiche de démonstration rendue à l’identique, et aucun brouillon laissé (§5.5, 12 d et 13)', async () => {
+  const apres = await ficheDemo2b4();
+  const avant = FICHE_AVANT_2B4.fiche;
+  /* LES DATES QUE LA BASE POSE ne reviennent pas : changer de régime pose
+     `regime_tva_declare_le` et `modifie_le` (comme `tient_l_emetteur()`), et
+     ces sections passent deux fois par la franchise. Tout le RESTE de la
+     fiche se compare, champ par champ. */
+  /* ET UN ÉTAT QUE LE FORMULAIRE NE SAIT PAS GARDER : la fiche de
+     démonstration naît avec `capital_variable: false` SANS montant. Le
+     formulaire n'y voit ni « variable » ni « un montant » (choix `null`), et
+     tout enregistrement de « Mon entreprise » le réécrit `null` — les
+     sections 2b-1 et 2b-3 le font aussi, plus haut. Les deux disent la même
+     chose (« pas de capital écrit ») : on les ramène l'un à l'autre, et on
+     le DIT, au lieu de laisser l'égalité rougir pour une écriture antérieure
+     au lot 2b-4. */
+  const capitalLu = (e) => (e && e.capital_variable === false && e.capital_centimes == null ? null : (e || {}).capital_variable);
+  const normale = (e) => ({ ...(e || {}), capital_variable: capitalLu(e) });
+  const dates = ['modifie_le', 'regime_tva_declare_le'];
+  const eA = normale(avant && avant.emetteur);
+  const eP = normale(apres && apres.emetteur);
+  noter('capital_variable avant / après (avant normalisation)', JSON.stringify([(avant.emetteur || {}).capital_variable, (apres.emetteur || {}).capital_variable]));
+  const ecartsE = Object.keys({ ...eA, ...eP })
+    .filter((k) => !dates.includes(k) && JSON.stringify(eA[k]) !== JSON.stringify(eP[k]));
+  verifier(`l’émetteur : identique, hors les deux dates que la base pose (${ecartsE.join(', ') || 'aucun écart'})`, !!avant && !!apres && ecartsE.length === 0);
+  verifier('les assurances : identiques (la date de fin de l’attestation remise)', JSON.stringify(avant.assurances) === JSON.stringify(apres.assurances),
+    JSON.stringify([avant.assurances, apres.assurances]));
+  /* LES TARIFS : ils n'existaient pas ; une ligne écrite puis vidée ne
+     disparaît pas (ni la démonstration ni la base ne savent la retirer) —
+     elle doit dire EXACTEMENT « rien de déclaré, rien d'affiché ». Ce que
+     l'égalité stricte verrait (une ligne de `null` au lieu de `null`), on le
+     DIT ici au lieu de le taire. */
+  const t = apres.tarifs;
+  const vides = t === null || Object.entries(t).every(([k, v]) => ['pro_id', 'affiche_le'].includes(k) || v === null || v === false);
+  noter('les tarifs avant / après', JSON.stringify([avant.tarifs, t]));
+  verifier('les tarifs : rien de déclaré, rien d’affiché (avant : aucune ligne ; après : une ligne vide — elle ne se retire pas)',
+    avant.tarifs === null && vides && (t === null || (t.affiche === false && t.affiche_le === null)));
+  const objets = await brouillonsDeMesDevis();
+  noter('les brouillons après les sections 2b-4', JSON.stringify(objets));
+  verifier(`les sections 2b-4 ne laissent aucun brouillon : ${BROUILLONS_AVANT_2B4.liste ? BROUILLONS_AVANT_2B4.liste.length : '?'} avant, ${objets.length} après`,
+    Array.isArray(BROUILLONS_AVANT_2B4.liste) && objets.length === BROUILLONS_AVANT_2B4.liste.length
+    && objets.every((o) => !o.includes('Franchise (mesure)')));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

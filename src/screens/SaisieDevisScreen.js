@@ -175,6 +175,10 @@ const NOMS_ENTETE = Object.freeze({
      client paie (« Conditions »). */
   engageDecennale: 'Le chantier',
   acompteALaSignature: 'Conditions',
+  /* 2b-4 (annexe A.5) : le prix du devis LUI-MÊME. La bande de la garde le
+     nomme HORS du bloc qui le porte : « Prix du devis » seul se lirait comme
+     le TOTAL (T19, critique ÉCRAN-5). */
+  coutDevisCentimes: 'Prix du devis lui-même',
 });
 
 /* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
@@ -187,6 +191,10 @@ const CHAMPS_CONDITIONS = Object.freeze([
      « Conditions », et « Corriger » rouvre la CARTE, pas le haut de la
      liste (`NOMS_ENTETE` le nomme déjà « Conditions »). */
   'acompteALaSignature',
+  /* 2b-4 : le prix du devis lui-même vit dans la carte (son DERNIER bloc) —
+     un refus se dit sur la rangée « Conditions », et « Corriger » rouvre la
+     carte SUR ce bloc (`corrigerEntete`). */
+  'coutDevisCentimes',
 ]);
 
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
@@ -593,6 +601,11 @@ function BasDuDevis({
 
 export default function SaisieDevisScreen({
   ouverture, regime, tarifs = null, clients = [], clientsEtat = 'vide', onGarde = null,
+  /* 2b-4 (cahier §3.5, T9) : les assurances d'« Mon entreprise », lues par
+     la MÊME lecture que le régime (`OpusApp`, `mesAssurances`) — pour l'avis
+     de l'attestation décennale qui arrive à sa fin. SANS valeur par défaut :
+     `undefined` veut dire « pas transmises », et l'avis se tait (T7). */
+  assurances,
   onRelireRegime, onMonEntreprise, onChargerClients, onNouveauClient,
   onCarte, onRanger, onSupprime, onErreur,
   /* LA BASE DE POSTES (lot P) : lue par `OpusApp` — à la première carte
@@ -1911,6 +1924,13 @@ export default function SaisieDevisScreen({
     const g = gardeRef.current;
     const champ = g && g.enteteRefuse ? g.enteteRefuse[0] : null;
     repondreGarde(false);
+    /* 2b-4 (critique ÉCRAN-18, en partie) : le prix du devis lui-même est le
+       DERNIER bloc de la carte — rouverte en haut, l'artisan ne le verrait
+       pas. Elle s'ouvre SUR lui. Mais pas par `ouvrirConditionsSur`, qui
+       renvoie à la liste « Pour le remettre » à la fermeture et dit
+       « ‹ Liste » : on vient de la garde, pas de la liste. La validité et la
+       retenue gardent l'ouverture en haut (un défaut d'avant 2b-4, rangé). */
+    if (champ === 'coutDevisCentimes') { ouvrirConditions(); setChampConditions('cout'); return; }
     if (CHAMPS_CONDITIONS.includes(champ)) { ouvrirConditions(); return; }
     if (!refListe.current) return;
     refListe.current.scrollToOffset({ offset: 0, animated: true });
@@ -2066,8 +2086,14 @@ export default function SaisieDevisScreen({
   /* LES AVIS, calculés ici sur ce que l'écran a, jamais comptés — et
      « ce devis ne coûte rien » se tait tant que la liste n'est pas sûre
      (relecture de 2b-1, PAR-8). */
+  /* 2b-4 (T7) : trois entrées de plus — le régime, les assurances et les
+     tarifs que l'ÉCRAN tient (`undefined` : pas transmis, l'avis se tait ;
+     jamais `null`, qui veut dire « non déclaré » ou « lus, aucune ligne »).
+     Le franchisé au-delà du plafond attend la liste sûre ; l'attestation,
+     le devis payant face aux tarifs affichés et le gratuit avec déplacement
+     suivent l'écran (T16). UN appel, et un seul. */
   const avis = avisDuDevis({
-    devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste.reponseVue,
+    devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste.reponseVue, regime, assurances, tarifs,
   });
   let erreurListe = null;
   if (liste.erreur) {
@@ -2514,6 +2540,11 @@ export default function SaisieDevisScreen({
              lui, lit celles de la BASE. */
           toutUrgent={toutUrgent(lignes)}
           lignes={lignes}
+          /* 2b-4 : les tarifs de « Mon entreprise », pour la PHRASE de la
+             proposition (« Dans vos tarifs : … ») et le prix que « Payant »
+             peut reprendre (`coutAProposer`, seulement quand ils disent
+             PAYANT). La carte ne lit rien elle-même. */
+          tarifs={tarifs}
         />
       )}
 
