@@ -3648,7 +3648,11 @@ détail est au §1.5 du cahier) :
   chaque devis quand le client paie.
 
 **À essayer sur votre iPhone** (le build de développement, après `git pull`
-et `npx expo start -c`) — rien de 2b-3 n'y a encore tourné :
+et `npx expo start -c`) — **fait le 16/11/2026** : « tout fonctionne
+corectement ». Relevé par la forme : sur un de vos brouillons, une ligne
+marquée « réparation urgente », « Oui » à la question décennale, et « Dès
+le 8e jour » pour le moment du paiement ; aucun devis resté « à la
+signature ». La liste reste ci-dessous pour mémoire :
 
 - [ ] La carte d'un poste : « Réparation urgente expressément demandée par le
   client » au pouce ; l'aide se lit ; allumée, le texte du risque apparaît

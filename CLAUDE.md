@@ -11741,13 +11741,35 @@ Comptes supprimés par le chemin de l'application (1 fichier retiré de
 8 fiches pro, aucun fichier des comptes d'essai. Les deux preuves SIRET
 d'essai restent, et expirent d'elles-mêmes.
 
+#### ESSAYÉ SUR L'IPHONE le 16/11/2026
+
+Par le propriétaire, sur son compte principal, dans le build de
+développement : « ok jai tester sur mon iphone tout fonctionne
+corectement ». Sans détailler les questions de `docs/A-FAIRE.md`.
+
+Ce que la base en dit, relevé par la FORME seulement (aucun texte, aucun
+prix lu) : les 3 devis sont toujours les siens, et un seul a été touché, le
+16/11 vers 19 h (heure de Paris). **Une ligne y est marquée « réparation
+urgente »** ; **la question décennale y a reçu « Oui »** (une réponse
+écrite, pas le vide qui vaut « Oui ») ; **le moment du paiement y vaut
+« Dès le 8e jour »**, écrit lui aussi — choisi directement, ou après un
+passage par « À la signature » : la base ne garde pas le chemin. Aucun
+devis n'est resté « à la signature », aucun « Oui » n'est resté sur le
+bâtiment neuf. Les trois colonnes nouvelles sont donc passées par le vrai
+téléphone, la vraie file d'écriture et la vraie base.
+
+Ce que ces lignes ne prouvent PAS : qu'il a vu le refus « pourquoi » sous
+« À la signature », ni le point du rang 11 (sa décennale est jointe et
+valable : il ne pouvait pas s'allumer), ni un devis venu d'une urgence (il
+n'en a aucun).
+
 #### Ce qui n'a PAS été vérifié
 
-- **rien sur l'iPhone** : le propriétaire n'a pas encore essayé 2b-3
-  (l'interrupteur au pouce, le clavier sous la carte d'un poste et sous
-  « Conditions », la question de « Le chantier » atteinte depuis un point,
-  VoiceOver — et la façon dont il lit le « · » de « Attestation non
-  jointe · … », Hermes) ;
+- **le détail du toucher sur l'iPhone** (essayé en bloc le 16/11, ci-dessus) :
+  le clavier sous la carte d'un poste et sous « Conditions », la question de
+  « Le chantier » atteinte depuis un point, VoiceOver — et la façon dont il
+  lit le « · » de « Attestation non jointe · … » —, la hauteur exacte de
+  « Pour le remettre » sous iOS ;
 - **aucun écran sur la vraie base** : l'écran n'a tourné qu'en
   démonstration, et l'essai réel a reproduit les requêtes à la main, pas par
   la file d'écriture ;
