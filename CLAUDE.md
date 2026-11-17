@@ -11026,7 +11026,9 @@ sur l'iPhone : **2b-1** la liste « Ce qu'il manque pour remettre ce devis » ;
 2b-2 pour qui le client commande (« quand c'est signé » a été retiré par la
 décision du 09/11 : aucune question, le cas le plus protecteur vaut pour tous
 les devis) ; 2b-3 les lignes (urgence, décennale) ; 2b-4 ce que coûte le
-devis et ce qu'il laisse (devis payant, déchets, RGE). **Rien n'est remis en
+devis et ce qu'il laisse (devis payant, déchets, RGE) — **redécoupée le 16/11
+(décision Q1)** : 2b-4 le prix du devis lui-même, 2b-5 les déchets, 2b-6 le
+RGE. **Rien n'est remis en
 2b** : la liste renseigne, et
 la remise de 2c refusera tant qu'elle n'est pas vide — la MÊME liste, jamais
 une seconde écriture de la règle. Aucun module natif : `git pull` puis
@@ -11235,7 +11237,8 @@ a servi : `docs/CAHIER-LOT-2B-2.md`. Une seule relecture (« Accélérer ») ;
   `devis_pour_qui` (rang 1, exclusif avec `devis_client`, la **septième
   règle d'Opus**) et `devis_taux_reduit_neuf` (rang 3, une clé par ligne à
   10 % ou 5,5 %, « Par prudence » jusqu'au lot 3). `CONTRAT_B2` : 12 clés sur
-  9 rangs (**16 clés sur 11 rangs depuis 2b-3, le 13/11/2026**). Pour un
+  9 rangs (**16 clés sur 11 rangs depuis 2b-3, le 13/11/2026 ; 17 sur 12
+depuis 2b-4, le 17/11**). Pour un
   client qui commande pour son entreprise, dans son activité principale, les
   mentions `conso_…` ne comptent plus, sauf les deux adresses (R. 123-237
   reste ouvert), et les rangs gardent leurs TROUS ;
@@ -11513,7 +11516,8 @@ servi : `docs/CAHIER-LOT-2B-3.md`. Une seule relecture (« Accélérer ») ;
   | 11 | `devis_decennale` | par prudence | pas de réponse, et aucune décennale valable |
 
   Une clé au plus au rang 11. `CONTRAT_B2` : **16 clés sur 11 rangs** ; 510
-  motifs au plus pour le devis, toujours trois chiffres : les gabarits de
+  motifs au plus pour le devis (17 clés sur 12 rangs et 511 motifs depuis
+  2b-4, le 17/11), toujours trois chiffres : les gabarits de
   « Pour le remettre » ne bougent pas. **Une attestation valable**, c'est une
   assurance `decennale`, un chemin écrit, et une date de fin au moins égale au
   jour de PARIS (la vraie base est en UTC). Une RC pro ne compte jamais.
@@ -11782,6 +11786,384 @@ n'en a aucun).
 
 La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-3 — ce qui reste » ;
 `docs/PLAN-DEVIS.md` 10.21.
+
+### Le prix du devis lui-même, l'attestation qui arrive à échéance, le plafond de la franchise — étape 2b-4 (16-17/11/2026)
+
+Section 49 de `schema.sql` (49.4 quinquies, 49.5, 49.7, 49.9) ;
+`src/lib/devis.js` (`LE_COUT_DU_DEVIS`, `AIDE_COUT_DEVIS`, `versCoutDeDevis`,
+`coutQuePayantEcrit`, `coutDuDevisPropose`, `coutAProposer`, `lireConditions`,
+`avisDuDevis`, `finDeLAttestation`, `avisDeLaFranchise`, `PLAFONDS_FRANCHISE`,
+`SUITE_AVIS_DEVIS_PAYANT_PRUDENCE`, `PAS_ENCORE_VERIFIE`), `src/lib/api.js`
+(`assurancesDe`, `monRegimeEtSaDate`), `ConditionsDevis.js`,
+`SaisieDevisScreen.js`, `OpusApp.js`, `devis-demo.js`. Commits `1444819` et
+`a247766` (deux sauvegardes, le conteneur ayant redémarré deux fois),
+`cc9697c` (la construction finie), `3767443` (la relecture et trois phrases
+de droit) ; le cahier, archivé tel qu'il a servi : `docs/CAHIER-LOT-2B-4.md`.
+Une seule relecture (« Accélérer ») ; **rien n'est remis, imprimé ni
+numéroté** (2c). Aucun module natif.
+
+#### Ce qui est construit
+
+- **« Le devis lui-même : gratuit ou payant ? »**, le DERNIER bloc de
+  « Conditions » (après « Retenue de garantie », juste avant le
+  récapitulatif, aucune place réservée) : deux pastilles « Gratuit » ·
+  « Payant », rien de pré-choisi ; une phrase qui dit ce que disent ses
+  tarifs (« Dans vos tarifs : vos devis sont gratuits. », « Dans vos
+  tarifs : 30,00 € TTC. », « Vos tarifs ne disent pas encore le prix de vos
+  devis. », « Vos tarifs n’ont pas pu être lus. », rien pendant la
+  lecture) ; un champ de prix monté SEULEMENT sous « Payant », pré-rempli du
+  prix des tarifs quand ils disent payant, ce que VoiceOver annonce ; une
+  aide fixe, qui dit aussi qu'un devis de services à la personne chez un
+  particulier est toujours gratuit.
+- **`devis.cout_devis_centimes`** : vide = rien de dit, 0 = gratuit, de 1 à
+  100 000 centimes = payant, TTC, **hors des totaux** et de `devis_tva` (le
+  prix d'un AUTRE contrat que les travaux) ; la contrainte `devis_cout_check` ;
+  la colonne entre dans les deux `grant` de 49.7. Elle ne s'appelle pas
+  `prix_devis_centimes` : `verifier-tarifs` réserve ce nom à la colonne des
+  tarifs.
+- **Un point au rang 12** de `motifs_refus_remise()`, signature inchangée :
+  `devis_cout`, « Par prudence » — « Dites si le devis lui-même est gratuit
+  ou payant. La loi le demande au moins pour un dépannage, une réparation ou
+  un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en
+  est un. » — et son bouton, « Choisir : devis gratuit ou payant », qui ouvre
+  « Conditions » sur le bloc. **Ce n'est pas une huitième règle d'Opus**
+  (Q2). `CONTRAT_B2` : **17 clés sur 12 rangs** ; 511 motifs au plus pour le
+  devis, toujours trois chiffres : les gabarits de « Pour le remettre » ne
+  bougent pas. Son corps ne nomme toujours ni `tarifs_pro`, ni `clients`, ni
+  `professional_profiles` (la porte étroite, cas 14 c ; `emetteur_incomplet()`,
+  qu'elle appelle, lit les deux premiers pour ses propres motifs) : la
+  proposition d'après « Mes tarifs » vit à l'écran.
+- **Le résumé de la rangée « Conditions »** : ce qui manque vient en tête,
+  et « Devis lui-même : gratuit ou payant ? à choisir » en est le DERNIER
+  élément (après la nature de l'acompte et la validité) ; « Devis lui-même
+  gratuit » ou « Devis lui-même payant 30,00 € » à la fin.
+- **Six avis sous « À vérifier »**, calculés au téléphone, qui ne bloquent
+  rien :
+
+  | clé | quand |
+  |---|---|
+  | `avis_devis_payant` | le devis lui-même est payant, la réponse vue par la base n'est pas « pour son entreprise » : la rétractation, « il ne vous devra rien s’il se rétracte », l'écrit, le 8e jour — plus une phrase de prudence pour une association, une copropriété, une société civile |
+  | `avis_devis_payant_tarifs_gratuits` | payant, alors que les tarifs AFFICHÉS disent « gratuit » |
+  | `avis_devis_gratuit_deplacement` | gratuit, alors que les tarifs comptent des frais de déplacement |
+  | `avis_attestation_echeance` | la décennale n'est pas « Non », et l'attestation jointe la plus tardive finit avant aujourd'hui + la validité (+ 30 jours si le délai est EXACTEMENT celui par défaut) |
+  | `avis_franchise_plafond` | en franchise, aucune ligne taxée, le total NET hors options au-delà de 37 500 € |
+  | `avis_franchise_plafond_options` | la même chose, mais seulement options comprises, et au moins une option |
+
+  Les plafonds sont écrits une fois (`PLAFONDS_FRANCHISE`, avec leur source) ;
+  les deux avis de la franchise ne disent jamais « HT ».
+- **Les assurances arrivent à la saisie par la MÊME lecture que le régime**
+  (`monRegimeEtSaDate` rend `{ regime, declareLe, assurances }`), et se
+  relisent à la fermeture de « Mon entreprise ».
+- **Les services à la personne** : la phrase de l'aide, et « Pas encore
+  vérifié : … si ce devis relève des services à la personne … ». Aucune
+  question, aucune case, aucun motif (Q3).
+- `devis.js` importe un quatrième fichier, `joursEntre` de `formats.js`, qui
+  n'importe rien : une seule arithmétique des jours, par `Date.UTC`.
+- **Aucune fonction `security definer`, aucun déclencheur, aucun rattrapage,
+  aucun code `OP`** (`OP028` reste libre) ; une fonction remplacée.
+  `legal.js` : `VERSION = '2026-11-17'`, et « Ce que nous collectons » nomme
+  « s’ils sont gratuits ou payants, et ce que coûte un devis payant ».
+
+#### Les décisions du propriétaire (16/11, au soir)
+
+| question | réponse | ce qu'elle a construit |
+|---|---|---|
+| Q1 — le découpage | « Trois étapes » | 2b-4 = le prix du devis lui-même, l'avis de l'attestation, l'avis au franchisé, une phrase sur les services à la personne ; **2b-5 les déchets, 2b-6 le RGE** |
+| Q2 — tant que rien n'est dit | « Point par prudence » | `devis_cout`, rang 12, « Par prudence » ; pas une huitième règle d'Opus ; **rien n'est rempli à sa place**, pas même depuis « Mes devis sont gratuits » |
+| Q3 — les services à la personne | « Pas pour l'instant » | une phrase dans l'aide et dans « Pas encore vérifié » ; aucune question, aucun motif |
+
+Trois questions restent à poser plus tard (le cahier, §1.3 bis) : la forme
+des déchets avant 2b-5, celle du RGE avant 2b-6, le mot « artisan » sur un
+devis imprimé avant 2c.
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **La fibre qu'un élément du DOM porte peut être l'ANCIENNE version.**
+> React garde deux versions de chaque fibre et les échange à chaque rendu ;
+> sur l'élément, React 19.2.3 ne met à jour que ses props (`commitUpdate`,
+> relu). Une mesure qui remonte `.return` depuis `__reactFiber$` lit donc
+> l'état d'un rendu en retard ; laquelle des deux elle lit dépend, selon
+> cette mécanique, du NOMBRE de rendus, c'est-à-dire de la vitesse du
+> navigateur — c'est DÉDUIT, pas compté rendu par rendu. Mesuré : à +600 ms,
+> +2,1 s et +6,1 s après « Réessayer », l'arbre VALIDÉ disait « reel », la
+> fibre du DOM « en lecture » ; vert avec Chromium 1194 (2b-3), rouge avec
+> 1243, sur le même code, et reproduit à l'identique sur la version d'avant
+> 2b-4. **Une mesure lit l'arbre validé depuis la racine**
+> (`__reactContainer$` → `stateNode.current`, `window.__opusSaisieCourante()`
+> dans `mesure-devis`). Ce n'était pas un défaut d'Opus ; deux sabotages du
+> vrai défaut (« Réessayer » qui ne relit pas, et qui relit aussi la liste)
+> sont refusés.
+
+Et la cause supposée d'abord — des piles asynchrones qui auraient fait lever
+d'autres appels, notée comme une piste dans le rapport de l'écran — a été
+ÉCARTÉE par une mesure (une seule pile retenue) avant d'entrer dans le dépôt.
+**Un rouge reproduit sur la version d'avant
+n'est pas encore expliqué : il se mesure avant d'être attribué.**
+
+> **« Gratuit » est la SEULE porte du 0, et « Payant » n'en écrit jamais.**
+> Un « 0 » tapé est refusé avec sa phrase. « Payant » sans prix tapé n'est
+> PAS une erreur : c'est « rien de dit », et c'est le point qui le dit. Le
+> cahier v1 en faisait une erreur ; sa critique l'a montré : une erreur
+> devenait un refus d'en-tête, et la garde de sortie aurait dit « ce que vous
+> avez écrit n'est pas enregistré » à quelqu'un qui n'avait rien écrit. Et
+> « Payant » ne reprend le prix des tarifs que quand ils disent PAYANT : chez
+> le propriétaire, dont les tarifs disent « gratuit », le câblage du v1 aurait
+> écrit 0 sous la pastille « Payant ». `coutQuePayantEcrit` refuse un 0
+> enregistré ET proposé ; mesuré sur 2 340 combinaisons (prix enregistré,
+> proposition, texte tapé, sept états des tarifs) : aucune écriture de 0 sous
+> « Payant ». Une pastille déjà choisie ne se défait pas au second appui.
+
+> **Une proposition n'est écrite qu'après un appui — et cela se tient sur la
+> CARTE entière, pas sur la fonction qui l'initialise.**
+> `etatInitialConditions` ne lit jamais les tarifs, un brouillon neuf naît
+> vide. Mais une ligne glissée dans `ConditionsDevis.js`, juste après son
+> `useState`, qui posait « Gratuit » d'après les tarifs, choisissait
+> « Gratuit » sans un appui (vu au navigateur), donc écrirait 0 à la
+> fermeture (déduit) — et **tout `npm run verifier` restait vert** (banc,
+> S8b) : seule `mesure-devis`, au navigateur, le voyait. `verifier-devis`
+> refuse désormais toute affectation à un choix hors de `poser`, et exige que
+> `useRef(initial)` suive immédiatement le `useState` (43 m, lu9).
+
+> **Un avis attend la liste SÛRE seulement s'il lit ce que la base a vu.**
+> Le franchisé (les totaux de la base) et le devis payant (la réponse vue par
+> la base) attendent ; l'attestation et les deux avis des tarifs ne lisent
+> que ce que l'artisan a écrit, et suivent l'écran — sinon ils disparaîtraient
+> à chaque écriture. Rien ne tenait le troisième : `sure &&` glissé dans sa
+> condition passait au vert (banc, D11b), d'où un cas « même liste en
+> lecture ». Et `undefined` veut dire « pas transmis » : sans `regime`,
+> `assurances` ou `tarifs`, un avis se tait — `null` veut déjà dire « non
+> déclaré », ou « lus, aucune ligne ». L'appel UNIQUE des avis est vérifié à
+> son nom : figé dans une vérification intitulée « des changements
+> partent », son refus envoyait chercher ailleurs (S21).
+
+> **Un montant se dit dans l'unité où il est calculé.** Le premier avis de la
+> franchise disait « HT » ; en franchise, l'écran ne nomme pas la taxe, et le
+> total relu était TTC. Mesuré par la critique du cahier : 35 000 € à 20 %,
+> sans option, faisaient dire « Avec ses options, ce devis atteint
+> 42 000,00 € HT ». L'avis ne dit plus « HT », se tait dès qu'une ligne porte
+> un taux (`coherenceRegime`), exige une option pour sa seconde phrase, et
+> juge strictement au-delà (37 500,00 € : rien ; 37 500,01 € : l'avis).
+
+> **Une phrase de droit se relit contre le texte — puis sa correction
+> aussi.** La relecture a confronté chaque phrase affichée aux articles :
+> aucune n'expose l'artisan, trois disaient plus que la loi, corrigées
+> (`3767443`) :
+>
+> - « il ne vous devra rien » devient « il ne vous devra rien s’il se
+>   rétracte » : L. 221-25 al. 3 ne libère que le client qui s'est rétracté ;
+> - pour une association, une copropriété, une société civile, l'avis du
+>   devis payant ajoute « … la loi ne prévoit peut-être ni ce délai de
+>   rétractation ni ces règles ; Opus les dit, par prudence. » : L. 221-18 ne
+>   vise que le consommateur (la forme d'`AIDE_NATURE_ACOMPTE_PRUDENCE`, rien
+>   pour les autres réponses) ;
+> - un chantier « déjà ouvert », c'est, « avec un permis de construire, une
+>   déclaration d’ouverture déposée ; sans permis, un premier ordre de service
+>   donné, ou, à défaut, des travaux déjà commencés » (A. 243-1, annexe I) ;
+>   l'avis mettait les trois sur le même plan.
+>
+> Et la correction, relue à son tour, avait perdu les virgules de « ou, à
+> défaut, » : sans elles, « à défaut des travaux déjà commencés » se lit
+> aussi « faute de travaux commencés », l'inverse. Rétablies. Ce que cette
+> relecture n'a PAS corrigé — « avec un permis de construire » face à « des
+> travaux qui NÉCESSITENT un permis de construire » (un permis d'aménager, une
+> maison bâtie avec permis) — attend le juriste, avec J18.
+
+> **La garde md5 protège le TRANSPORT, pas la construction.** Six sabotages
+> du texte (une espace, un caractère, une borne, un ordre retiré, un
+> `default 0`, le md5 attendu faux) sont refusés sans rien appliquer. Mais un
+> `default 0` glissé ET le md5 attendu recalculé — une construction fautive,
+> cohérente avec son empreinte — passe la garde et s'applique (contre-épreuve
+> X). C'est le relevé APRÈS qui le voit : un défaut sur la colonne,
+> `atthasmissing` vrai, aucun des trois brouillons au prix vide. **Le relevé
+> après ne se saute jamais.** Et il ne se joue pas avant (il nomme la
+> colonne) : ses valeurs « inchangées » n'ont de référence que par un relevé
+> complémentaire, joué sur la vraie base AVANT et APRÈS, qui ne nomme pas la
+> colonne — comptes, `max(modifie_le)`, `max(generation)`, ACL, et un md5 des
+> `id:xmin` des trois tables : la preuve qu'aucune ligne n'est réécrite, sans
+> lire aucun contenu.
+
+> **« 0 requête active » ne prouve rien lu par un rôle qui ne voit pas les
+> autres sessions.** Mesuré : la requête d'un autre rôle apparaît
+> `<insufficient privilege>`, son `state` est vide, et `state = 'active'`
+> compte 0. Le relevé lit donc aussi
+> `pg_has_role(current_user, 'pg_read_all_stats', 'member')` et compte les
+> sessions illisibles. Sur la vraie base, le 17/11 : le rôle de lecture
+> voyait toutes les sessions, 0 active, 0 illisible.
+
+Et cinq constats de méthode, plus courts :
+
+- **Un `grant` ou un `revoke` ne verrouille pas la table qu'il vise.** Mesuré
+  sur PostgreSQL 16 par le second regard : la migration passe en 0,04 s
+  pendant qu'une autre session tient un verrou exclusif sur `devis_lignes` ;
+  son seul verrou de table est celui de `devis` (l'ajout de colonne). Le
+  risque d'interblocage qu'annonçaient la construction et la relecture
+  n'existait pas. Non mesuré en PostgreSQL 17.
+- **Une référence « d'avant » se relève juste avant le geste, sur la même
+  chose.** Le seul échec de l'essai réel venait du script : il comparait la
+  liste du devis D1, après l'écriture de B, à la dernière liste relue —
+  celle d'un AUTRE devis. Refait deux fois en relevant D1 juste avant :
+  identique.
+- **`cas-remise.json` porte la forme du miroir** : chaque `devis` y vient de
+  `rowToDevis`. Une colonne posée en base n'y apparaît qu'après que
+  `rowToDevis` l'a apprise, et le fichier se régénère alors ; sans cela, le
+  miroir aurait lu `undefined` sur les 139 cas et ajouté `devis_cout` partout.
+- **Un cahier qui nomme le contrôle qui verra un défaut se vérifie par le
+  banc** : quatre de ses attributions étaient fausses (S8, S25, S33, S34 —
+  refusés, mais par d'autres vérifications), et c'est le banc qui l'a dit.
+- **Une vérification ne calcule pas son libellé en lisant ce qu'elle
+  vérifie.** Celle de `mesure-devis` sur « Payant » retouché lisait la valeur
+  du champ DANS son libellé : le champ disparu, l'appel attendait 30 s et
+  levait, et la section ne disait plus que « la mesure est allée au bout »
+  (banc, S34). Elle lit désormais la valeur avant, sous garde.
+
+Trois pièges d'environnement, enfin : `node_modules` absent du conteneur
+(cinq contrôles rouges sans rapport avec le code : `npm ci`, les versions
+exactes du verrou, avant tout relevé) ; un clone SUPERFICIEL, où l'essai
+`47-rattrapage` ne trouve pas `d0560e8` (`git fetch --deepen=400`) ; et le
+navigateur de `mesure-devis` écrit en dur, passé de Chromium 1194 à 1243 :
+il essaie désormais plusieurs chemins (`CHEMINS_CHROME`), et le dit s'il
+n'en trouve aucun.
+
+#### Vérifié avant la vraie base
+
+`schema.sql` rejoué deux fois sur une base neuve ; les 34 essais, depuis la
+racine du dépôt : seuls les comptes de 49-remise bougent (les sorties de
+49 et de 49-conditions gagnent la colonne, et trois écarts sans effet
+touchent 38, 49-rattrapage et 49-temoin) — 49-remise
+rend 21 erreurs (les deux de plus sont `devis_cout_check`), 289 valeurs
+jugées sans écart et le compte `t` sur 288 ; 49-conditions 27 et 43 ; 49,
+79 erreurs, les mêmes valeurs ; `generer-cas-remise --verifier` : 139 cas ;
+les 56 contrôles (`verifier-devis` 602, `verifier-legal` 253) ; le linter à
+32 ; les paquets iOS et Android lus (avant les corrections de droit, puis
+de nouveau après) ; `mesure-devis` au navigateur, en
+démonstration : **953 mesures, 0 en échec**, 102 sections en 33 min 30 s,
+puis les sections 2b-4 seules après les corrections de droit (67, 0 en
+échec). Le banc : **74 sabotages**, 64 refusés par la vérification visée, 7
+par une autre, 3 verts — deux mutations équivalentes, et D11b, fermé ; puis
+six sabotages des corrections de droit et quatre de leur relecteur, tous
+refusés.
+
+#### La migration
+
+Construite par un script qui PREND chaque morceau dans le `schema.sql` de
+`3767443`, l'imitation de la vraie base étant `ceb7d96` : **17 ordres,
+18 834 octets**, aucun qui commence par `drop`, `delete` ou `truncate`, aucune
+barre oblique inverse, aucun `default`, `set local lock_timeout = '5s'` — la
+colonne **sans défaut** (un `default 0` aurait rendu « gratuits » les trois
+brouillons du propriétaire : le remplissage que Q2 refuse) et son
+commentaire ; la contrainte sous condition (`conname` ET `conrelid`) dans un
+bloc `do` ; le `revoke` de 49.7 et ses SIX `grant` ; la fonction remplacée,
+même signature, avec ses droits et son commentaire ; le balayage de la
+section 43 en dernier. **Aucun rattrapage** : rien n'est recopié de « Mes
+devis sont gratuits ».
+
+Simulée deux fois sur l'imitation avec données : 0 erreur (le second passage
+émet un NOTICE attendu, « already exists, skipping ») ; l'empreinte d'une base
+neuve au schéma de `3767443`, identique (300 lignes pour l'étroite, 1 347
+pour la large, et 1 373 pour celle du second regard, écrite par lui) ; avant
+→ après, trois lignes du catalogue et rien d'autre (la colonne, la
+contrainte, la fonction) ; aucune ligne réécrite (`xmin`, `ctid`,
+`relfilenode`) ; les essais 43, 49, 49-conditions, 49-remise et 50
+identiques ; le délai de verrou coupe à 5,03 s (55P03), rien appliqué.
+
+**Appliquée le 17/11/2026 à 07 h 35 (heure de Paris)** — migration
+`lot_2b_4_prix_du_devis_lui_meme`, version `20261117063524` en UTC —, avec
+l'accord du propriétaire, Opus fermé, 0 requête active, sous forme GARDÉE
+(md5 du texte `32b43a82baeb11800679facd5cdd0fec`, 19 291 octets). Relevé
+AVANT, en lecture seule : 35 colonnes, ni la colonne ni la contrainte, le
+corps de la fonction `523c69bc…`, les droits de colonne de `devis`
+`5bb372b0…`, identiques à l'imitation au « m » de MAINTAIN près. Relevé
+APRÈS : le catalogue identique à l'imitation migrée ; les comptes, les
+`max(…)` et les droits de table comparés au relevé AVANT de la vraie base
+(l'imitation porte ses propres données, et pas le « m ») :
+
+| | relevé |
+|---|---|
+| `devis` | **36 colonnes** ; la nouvelle `bigint`, nullable, sans défaut, `atthasmissing` faux |
+| la contrainte | validée : `CHECK (((cout_devis_centimes IS NULL) OR ((cout_devis_centimes >= 0) AND (cout_devis_centimes <= 100000))))` ; 19 contraintes `check` sur `devis` (18 avant) |
+| `motifs_refus_remise` | corps `d5acbb02c5d3f3869f7806f662ddd603` (`523c69bc…` avant), commentaire `a066ff75…` |
+| droits | `attacl` de `devis` `07307e8f…` (`5bb372b0…` avant) ; `devis_lignes` et `devis_tva` inchangées ; la colonne `{authenticated=aw/postgres}`, rien pour `anon` |
+| déclencheurs | aucune fonction de déclencheur appelable par `anon` ou `authenticated` |
+| données | 3 devis, **tous au prix vide** ; 11 lignes ; `max(modifie_le)` et `max(generation)` inchangés ; l'empreinte `id:xmin` des trois tables identique : aucune ligne réécrite ; `relfilenode` inchangé |
+
+**Ce que le propriétaire verra** : ses trois brouillons gagnent le point
+« Dites si le devis lui-même est gratuit ou payant » ; ses tarifs disent
+« Mes devis sont gratuits » (non affichés), donc la carte lui dira « Dans vos
+tarifs : vos devis sont gratuits. », et un appui sur « Gratuit » éteint le
+point, devis par devis. Son régime est « réel » : l'avis du franchisé ne le
+concerne pas. L'avis de l'attestation peut sortir sur son brouillon valable
+60 jours — au relevé du 12/11, sa décennale finissait dans 31 à 60 jours ;
+la date n'a pas été relue depuis. **Entre la migration et son `git pull`**,
+l'application d'avant montre ce point sans bouton (B2) : rien ne casse, rien
+ne se perd, la réponse attend la nouvelle version.
+
+**Les avertissements des commits `1444819`, `a247766`, `cc9697c` et `3767443`
+(« NE PAS FAIRE `git pull` AVANT LA MIGRATION 2b-4 ») ne valent plus** :
+`git pull`, puis `npx expo start -c`. Et le message de `a247766` surestime :
+il dit ajouter « l'écran de l'étape » ; l'écran était déjà dans `1444819`,
+et `a247766` ne touche que `mesure-devis` et `verifier-devis` (mesuré par
+`git diff --stat 1444819 a247766`). Un message de commit ne se récrit pas ; c'est ici qu'on
+le dit.
+
+#### Essayé sur la vraie base
+
+Le 17/11, de 07 h 47 à 07 h 52 (heure de Paris), par le chemin de
+l'application (curl, la clé publiable et le jeton de chaque compte) : deux
+artisans jetables à Brest, un plaquiste A et un électricien B, inscrits sur
+les deux preuves SIRET d'essai déjà en base (SIRET fictifs), le régime réel
+déclaré avant le premier poste, chaque écriture portant un numéro plus grand
+que le précédent — **105 vérifications justes, 1 en échec par la faute du
+script (refaite, juste), 208 requêtes, aucune reprise** :
+
+| | résultat |
+|---|---|
+| la colonne lue par l'API juste après la migration | 200, `null` : ni PGRST204 ni 42703 |
+| à chaque pas, la liste de la base contre `motifsDeRemise` | 18 comparaisons, identiques au caractère près, motifs de l'entreprise compris |
+| un devis complet de A, le prix vide | seul motif du devis : `devis_cout`, rang 12, « Par prudence », aucune ligne désignée, la phrase exacte |
+| A écrit 0 · 3 000 · vide | 204 ×3 ; le point part, part, revient |
+| les totaux et la ventilation, relus après chaque bascule | identiques : le prix est hors des totaux |
+| A écrit −1 · 100 001 | **400 · 23514 · `devis_cout_check`** ×2 ; prix et horloge inchangés |
+| les bornes 100 000 et 1 | acceptées |
+| A crée un devis à 0 d'emblée · le lit · le supprime | 201 · 200 · 204 |
+| B écrit le prix du devis de A · le supprime | 204, **0 ligne** ×2 ; prix, horloge, totaux et liste de A identiques |
+| B lit le devis de A · demande sa liste | `[]` · **400 OP027**, la phrase d'un devis inventé |
+| B crée un devis au nom de A | **403** |
+| un visiteur | **401 · 42501** ×3 |
+| le prix vide et la validité vide | rangs 6 puis 12 |
+| client « pour son entreprise », prix vide | `devis_cout` reste ; les mentions dues à un particulier tombent, sauf les deux adresses et le n° de TVA |
+| …« petite entreprise hors de son activité », « association, copropriété… » | `devis_cout` reste |
+| la décennale sans réponse, le prix vide | rangs 11 puis 12 |
+| A écrit le prix avec `total_ttc_centimes`, puis avec `statut` | **403 · 42501** ×2 : la requête entière |
+| l'export de A · de B | `cout_devis_centimes` dans ses devis (3 000 ; 500 pour B), rien de l'autre |
+
+Comptes supprimés par le chemin de l'application ; base revenue à
+14 comptes / 8 fiches / 21 publications / 3 devis / 11 lignes, les
+brouillons du propriétaire non touchés (`max(modifie_le)` et
+`max(generation)` identiques). Les deux preuves SIRET d'essai restent : le
+connecteur refuse un `delete`, et elles expirent d'elles-mêmes.
+
+#### Ce qui n'a PAS été vérifié
+
+- **rien sur l'iPhone** : le bloc tout en bas de la carte et le clavier, la
+  virgule du pavé décimal, les pastilles au pouce (60 × 44 et 58 × 44 au
+  navigateur), VoiceOver, la longueur des avis cumulés ;
+- **aucun écran sur la vraie base** : les six avis se calculent au téléphone,
+  et l'essai a reproduit les requêtes à la main, pas par la file d'écriture ;
+  l'écran n'a tourné qu'en démonstration ;
+- **la phrase de prudence d'une association n'a jamais été vue à l'écran** :
+  la démonstration n'a aucun devis payant d'une association ; elle est tenue
+  par `verifier-devis` (e1 bis), qui fait tourner l'avis ;
+- un téléphone hors de l'heure de Paris (la base juge l'attestation au jour
+  de Paris, l'avis au jour du téléphone) ; le régime franchise et un devis
+  venu d'une demande ou d'une urgence sur la vraie base ; le cas « tarifs
+  illisibles » à l'écran ; jusqu'à six avis ensemble ; Hermes ;
+- PostgreSQL 17 pour les verrous (`grant` mesuré sur la 16 seulement) ;
+- **le banc complet n'a pas été rejoué** après les trois phrases de droit
+  (seulement les sabotages de ces corrections) ;
+- la lecture qu'un juriste ferait des phrases de droit.
+
+La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-4 — ce qui reste » ;
+`docs/PLAN-DEVIS.md` 10.22.
 
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 

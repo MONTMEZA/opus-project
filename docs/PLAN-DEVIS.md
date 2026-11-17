@@ -3890,6 +3890,11 @@ qu'il manque pour remettre ce devis — étape 2b-1 » ; ce qui reste :
 | D-A bis (06/11) | **« garder la grande place »** | tant que quelque chose n'est pas compté sur un devis en base, la ligne réserve la hauteur du plus long de ses textes possibles (110 points sur un iPhone 16) |
 | « Accélérer » (08/11) | **une seule relecture par étape** | seul un défaut qui perd des données, affiche quelque chose de faux ou touche à la sécurité relance un tour ; les petits défauts d'affichage rares vont dans A-FAIRE |
 
+> **Six étapes depuis le 16/11 (10.22)** : 2b-4 a gardé le prix du devis
+> lui-même, l'avis de l'attestation qui arrive à échéance, l'avis au
+> franchisé et une phrase sur les services à la personne ; les déchets sont
+> devenus 2b-5, le RGE 2b-6.
+
 Ce que 2b-2 à 2c doivent savoir :
 
 - **`motifs_refus_remise(p_devis)` (section 49.9) est la SEULE règle de la
@@ -3995,8 +4000,10 @@ de l'application : 118 vérifications justes sur 118. Le cahier :
 `docs/CAHIER-LOT-2B-3.md` ; ce qui est construit et vérifié : CLAUDE.md,
 « La réparation urgente, la décennale, le moment du paiement — étape
 2b-3 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape 2b-3 ». **Rien
-n'est remis, imprimé ni numéroté** : c'est 2c. **Pas encore essayée sur
-l'iPhone.**
+n'est remis, imprimé ni numéroté** : c'est 2c. **Essayée sur l'iPhone le
+16/11/2026** par le propriétaire (« tout fonctionne ») : une ligne
+« réparation urgente », « Oui » à la question décennale et « Dès le 8e
+jour » sur un de ses brouillons.
 
 | question | réponse du propriétaire | ce qu'elle change au plan |
 |---|---|---|
@@ -4047,3 +4054,66 @@ l'avis « l'attestation expire avant le début des travaux » ; l'avis du
 franchisé au-delà du seuil ; l'adresse du client pour les services à la
 personne. Puis **2c** (numéro, aperçu au format final, PDF, remise, tri des
 devis remis) ; puis, en lot à part, la signature par le client dans Opus.
+
+> **Redécoupée le 16/11/2026 (Q1, 10.22)** : 2b-4 n'a gardé que le prix du
+> devis lui-même, l'avis de l'attestation et l'avis au franchisé ; les
+> déchets passent en **2b-5**, le RGE en **2b-6** ; le champ de l'arrêté de
+> 2017 n'appelle aucune question ; l'adresse du client pour les services à la
+> personne n'est pas un motif (Q3, « Pas pour l'instant »).
+
+### 10.22 L'étape 2b-4 — FAITE le 17/11/2026 : le prix du devis lui-même, l'attestation qui arrive à échéance, le plafond de la franchise
+
+**Sur la vraie base depuis le 17/11/2026 à 07 h 35** (migration
+`lot_2b_4_prix_du_devis_lui_meme`) ; essai réel par le chemin de
+l'application : 105 vérifications justes, la seule en échec venue du script
+et refaite juste. Le cahier : `docs/CAHIER-LOT-2B-4.md` ; ce qui est
+construit et vérifié : CLAUDE.md, « Le prix du devis lui-même, l'attestation
+qui arrive à échéance, le plafond de la franchise — étape 2b-4 » ; ce qui
+reste : `docs/A-FAIRE.md`, « Après l'étape 2b-4 ». **Rien n'est remis,
+imprimé ni numéroté** : c'est 2c. **Pas encore essayée sur l'iPhone.**
+
+| question (16/11 au soir) | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| Q1 — le découpage | **« Trois étapes »** | 2b-4 ne garde que le prix du devis lui-même, l'avis de l'attestation, l'avis au franchisé et une phrase sur les services à la personne ; **2b-5 les déchets, 2b-6 le RGE** |
+| Q2 — tant que rien n'est dit | **« Point par prudence »** | le motif `devis_cout`, rang 12, « Par prudence » ; **pas une huitième règle d'Opus** ; rien n'est rempli à la place de l'artisan, pas même depuis ses tarifs |
+| Q3 — les services à la personne | **« Pas pour l'instant »** | une phrase dans l'aide et dans « Pas encore vérifié » ; aucune question, aucune case, aucun motif ; l'adresse du client n'est pas un motif |
+
+Ce que 2b-5, 2b-6 et 2c doivent savoir :
+
+- **`motifs_refus_remise()` porte 17 clés sur 12 rangs**, signature
+  inchangée ; au plus une clé au rang 12 ; 511 motifs au plus pour le
+  devis : les gabarits de « Pour le remettre » tiennent. 2b-5 prendra le
+  rang 13, 2b-6 le rang 14. **`OP028` reste libre.**
+- **`devis.cout_devis_centimes`** : vide = rien de dit, 0 = gratuit (l'écran
+  ne l'écrit que par la pastille « Gratuit » ; la base l'accepte d'où qu'il
+  vienne), de 1 à 100 000 centimes = payant,
+  TTC, **hors des totaux** ; `devis_cout_check`. « Payant » n'écrit jamais 0,
+  et ne reprend le prix des tarifs que quand ils disent payant.
+- **La base ne lit toujours pas `tarifs_pro`** pour le devis : la proposition
+  d'après « Mes tarifs » vit à l'écran, comme les six avis, qui ne bloquent
+  rien. **2c** imprime « gratuit » ou « payant » et le prix, le FIGE sur le
+  devis remis, et tranche l'imputation du prix du devis sur les travaux et
+  son taux de TVA (J13, J50).
+- **L'avis de l'attestation sous-estime** (calculé sur un brouillon, sur la
+  validité, plus 30 jours seulement pour le délai par défaut) : **2c le
+  recalcule au jour de la remise**, et tranche le jour qui compte (la base
+  juge au jour de Paris, l'avis au jour du téléphone).
+- **Le rang 12 sort aussi pour un client « pour son entreprise »**, comme les
+  rangs 4 et 6 : l'art. 4-I de l'arrêté de 2017 dit « client ». Au juriste
+  (J1) ; une réponse « pas entre professionnels » changerait les trois rangs
+  ensemble.
+- **2b-5 (les déchets) demande d'abord la classe de blancs consolidée** :
+  huit copies dans cinq fonctions SQL et deux constantes JavaScript, et
+  l'étape ajoute des colonnes de texte.
+- **2b-6 (le RGE) ne lit jamais le badge `rge` de la fiche**, que pose
+  l'administration ; et jamais le RGE comme condition d'un taux de TVA.
+
+**Les questions laissées au propriétaire** : Q4 (la forme des déchets, avant
+2b-5), Q5 (la forme du RGE, avant 2b-6), Q6 (le mot « artisan » sur un devis
+imprimé, avant 2c) — écrites dans le cahier, §1.3 bis, avec leurs réponses
+recommandées. Et, à lui montrer : « Gratuit » puis « Payant » rouvre un champ
+vide (M5) ; trois phrases de droit retouchables (D1, D7, D9 dans A-FAIRE).
+
+**La suite** : **2b-5**, les déchets de chantier ; **2b-6**, le label RGE ;
+puis **2c** (numéro, aperçu au format final, PDF, remise, tri des devis
+remis) ; puis, en lot à part, la signature par le client dans Opus.

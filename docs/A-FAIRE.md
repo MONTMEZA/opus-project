@@ -3248,7 +3248,9 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
   sur un DEVIS (« aucun autre document en tenant lieu ») — Opus le traite
   par prudence comme une facture.
 - [ ] **L'arrêté de 2017 (4-I) face à un client professionnel** (Q-J6) : le
-  lieu, la validité et le nom y sont-ils dus ?
+  lieu, la validité et le nom y sont-ils dus ? **Et, depuis 2b-4, le
+  caractère payant ou gratuit du devis** (rang 12, constat B1 ; J1 du cahier
+  de 2b-4 — « Après l'étape 2b-4 »).
 
 **Pour 2b-2 à 2b-4, et pour 2c — les règles à tenir :**
 
@@ -3260,7 +3262,9 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
 - [ ] **2b-4, services à la personne** : l'adresse du client deviendra un
   motif (arrêté du 17/03/2015, art. 7 4° : « le nom et l'adresse »). Ne PAS
   ajouter l'adresse à la phrase de `devis_client`, qui ne vérifie que le
-  client choisi.
+  client choisi. **Pas en 2b-4 (décision Q3 du 16/11, « Pas pour
+  l'instant »)** : une phrase d'aide et « Pas encore vérifié » seulement ; la
+  règle vaut pour le jour où la question sera posée.
 - [x] **2b-2** : le motif « taux réduit sur un immeuble neuf » (CGI 279-0
   bis 2), et un avis pour le SIREN d'un client professionnel. **Faits le
   10/11/2026** : `devis_taux_reduit_neuf`, et l'avis `avis_siret_client`,
@@ -3268,8 +3272,8 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
 - [x] **2b-3** : si la garde d'urgence naît, elle prend `OP028`. **Sans
   objet (13/11/2026)** : elle n'est pas née, `OP028` reste libre.
 - [ ] **Les gabarits de la ligne ont des bornes** : 500 lignes (OP014), 508
-  motifs pour le devis (**510 depuis 2b-3, le 13/11 : toujours trois
-  chiffres**), 21 pour l'entreprise. Un lot qui dépasserait 999 ou
+  motifs pour le devis (**510 depuis 2b-3, le 13/11 ; 511 depuis 2b-4, le
+  17/11 : toujours trois chiffres**), 21 pour l'entreprise. Un lot qui dépasserait 999 ou
   99 leur fait gagner un chiffre ; `CHIFFRE_LE_PLUS_LARGE` (« 4 » en Inter)
   se remesure avec toute nouvelle police ; et la superposition suppose un
   parent de largeur imposée.
@@ -3641,7 +3645,9 @@ détail est au §1.5 du cahier) :
 - [ ] **Un de vos brouillons est valable plus de 30 jours** (même relevé) :
   remis aujourd'hui, son chantier pourrait s'ouvrir après la fin de votre
   attestation actuelle. La loi regarde la date d'ouverture du chantier :
-  question au juriste (J2), et un avis prévu en 2b-4.
+  question au juriste (J2), et un avis prévu en 2b-4. **Construit le 17/11
+  (2b-4)** : « Votre attestation décennale est valable jusqu’au … », sous
+  « À vérifier ».
 - [ ] **Vos modalités de paiement** (« Mon entreprise ») s'impriment sur tous
   vos devis : si elles parlent d'un paiement à la signature, l'avis vous dit
   maintenant de retirer cette formule, et de choisir dans les conditions de
@@ -3740,7 +3746,9 @@ signature ». La liste reste ci-dessous pour mémoire :
   49.9) : « Joignez … votre attestation décennale et sa date de fin… » ne dit
   pas que le fichier est là. Le choix du cahier (une clé au plus) ; la phrase
   n'est pas fausse. Une variante « déjà jointe », si vous la voulez.
-- [ ] **Deux jours, deux horloges** (B-P3 de la base, P1 de l'écran) : la
+- [ ] **Deux jours, deux horloges** (B-P3 de la base, P1 de l'écran ; et,
+  depuis 2b-4, l'avis de l'attestation dans la saisie : M1, « Après l'étape
+  2b-4 ») : la
   base juge l'attestation au jour de Paris ; la rangée de « Mon entreprise »
   (`src/lib/emetteur.js`, `etatDeLAssurance`), l'avis d'expiration et le
   miroir de démonstration (`src/lib/devis.js`), au jour du téléphone. Le
@@ -3905,6 +3913,309 @@ signature ». La liste reste ci-dessous pour mémoire :
 - [ ] **Quand la base, le miroir et `cas-remise.json` changent ENSEMBLE, la
   parité ne voit rien** (banc S3) : ce qui garde, c'est la forme exacte du
   corps dans `verifier-devis`, l'invariant et la couverture du générateur.
+
+### Après l'étape 2b-4 — ce qui reste (17/11/2026)
+
+> **La migration de 2b-4 est APPLIQUÉE sur la vraie base depuis le
+> 17/11/2026 à 07 h 35**, avec votre accord, Opus fermé (CLAUDE.md, « Le prix
+> du devis lui-même, l'attestation qui arrive à échéance, le plafond de la
+> franchise — étape 2b-4 »). Les avertissements « NE PAS FAIRE `git pull`
+> AVANT LA MIGRATION 2b-4 » des commits `1444819`, `a247766`, `cc9697c` et
+> `3767443` ne valent plus : `git pull`, puis `npx expo start -c`, suffisent
+> (aucun module natif). L'essai sur la vraie base a rendu 105 vérifications
+> justes ; la seule en échec venait du script, et refaite, elle est juste.
+>
+> **Règle « Accélérer »** : une seule relecture (base, écran, droit, un
+> contradicteur par angle). **Aucun défaut grave** : 21 constats, 2 réfutés
+> (D8, D11), les autres mineurs. Trois phrases de droit confirmées sont
+> corrigées dans `3767443` (D2, D3, D4) ; le reste est ci-dessous. Les noms
+> (B…, M…, D…, S…, J…) viennent des comptes rendus de la session, qui ne sont
+> pas dans le dépôt, et du cahier (`docs/CAHIER-LOT-2B-4.md`).
+
+**Des gestes à vous** :
+
+- [ ] **`git pull`, puis `npx expo start -c`** (le build de développement).
+  Avant, vos trois brouillons montrent un point « Dites si le devis lui-même
+  est gratuit ou payant » SANS bouton (B2) : rien ne casse, la réponse attend
+  la nouvelle version.
+- [ ] **Vos trois brouillons** : dites, devis par devis, si le devis
+  lui-même est gratuit ou payant. Vos tarifs disent « Mes devis sont
+  gratuits » : la carte vous le rappelle, et un appui sur « Gratuit » éteint
+  le point. Opus ne le fait pas à votre place (votre réponse Q2).
+- [ ] **Votre attestation décennale** (le geste de 2b-3, toujours là) : si
+  l'avis « Votre attestation décennale est valable jusqu’au … » sort sous
+  « À vérifier », c'est que le chantier d'un devis pourrait s'ouvrir après
+  sa fin. Mettez la nouvelle dans « Mon entreprise » → Assurances, AVEC sa
+  date de fin.
+
+**À essayer sur votre iPhone** (le build de développement, après `git pull`
+et `npx expo start -c`) :
+
+- [ ] « Conditions » : le bloc « Le devis lui-même : gratuit ou payant ? »,
+  EN DERNIER sous la retenue, se trouve-t-il bien ? Les deux pastilles se
+  touchent-elles au pouce (60 × 44 et 58 × 44 au navigateur) ?
+- [ ] « Dans vos tarifs : vos devis sont gratuits. » : la phrase est-elle
+  claire ? Un appui sur « Gratuit » suffit-il, et le point de « Pour le
+  remettre » s'éteint-il ?
+- [ ] « Payant » : le champ s'ouvre-t-il sous les pastilles sans qu'elles
+  bougent ? Le pavé décimal et sa virgule ? Le clavier cache-t-il le champ,
+  tout en bas de la carte ? « 0 » tapé : la phrase rouge ; « 1000,01 » :
+  « … jusqu’à 1 000,00 € ».
+- [ ] « Gratuit » puis « Payant » : le champ s'ouvre VIDE (M5, voulu par le
+  cahier : le prix d'avant a été remplacé par « Gratuit »). Est-ce gênant ?
+- [ ] Le point : « Choisir : devis gratuit ou payant » ouvre-t-il la carte
+  SUR le bloc ? Et « Corriger », depuis la bande de sortie (un « 0 » tapé,
+  puis la barre du bas), aussi, avec « ‹ Devis » pour revenir ?
+- [ ] Votre brouillon valable 60 jours : l'avis de l'attestation sort-il
+  sous « À vérifier », et se comprend-il (près de 580 caractères, la phrase
+  du permis comprise) ?
+- [ ] Plusieurs avis l'un sous l'autre : est-ce trop long à lire ? (l'avis
+  du devis payant fait 583 caractères, 744 pour une association).
+- [ ] VoiceOver : les deux pastilles (elles se lisent « Le devis lui-même
+  est gratuit, bouton » même quand elles ne sont pas choisies — le motif
+  déjà en place pour « C’est un acompte »), le champ, et l'annonce « Prix du
+  devis : …, d’après vos tarifs. ».
+- [ ] « Pas encore vérifié : … si ce devis relève des services à la
+  personne … », sous « rien ne manque » ; et le résumé de la rangée
+  « Conditions » (« Devis lui-même : gratuit ou payant ? à choisir », puis
+  « Devis lui-même gratuit »).
+
+**Au juriste, avant 2c — ce que la relecture a laissé ouvert** :
+
+- [ ] **B1 — le rang 12 pour un client « pour son entreprise »** : le point
+  « Par prudence » sort aussi quand le client commande pour son entreprise,
+  dans son activité principale. L'art. 4-I de l'arrêté du 24/01/2017 dit
+  « client », l'art. 2 « consommateur » : c'est **J1**, la même question que
+  pour les rangs 4 (lieu) et 6 (validité). Si la réponse est « pas entre
+  professionnels » : `and v_valable is distinct from 'professionnel'` dans
+  les branches des rangs 4, 6 et 12, le miroir, les cas 133 et 25 f inversés,
+  `cas-remise.json` régénéré.
+- [ ] **D3 — « ni ce délai de rétractation ni ces règles »**, la phrase de
+  prudence ajoutée pour une association, une copropriété, une société
+  civile : rien n'étend L. 221-9, L. 221-10 ni L. 221-18 à une personne
+  morale qui n'agit pas à des fins professionnelles ; « peut-être » à
+  confirmer. Et pour une petite entreprise hors de son activité, l'avis est
+  la loi (L. 221-3) sauf « au téléphone ou par messages » : L. 221-3 ne vise
+  que le hors établissement.
+- [ ] **D4, J18 et la phrase nouvelle** (« …avec un permis de construire, une
+  déclaration d’ouverture déposée ; sans permis, un premier ordre de service
+  donné, ou, à défaut, des travaux déjà commencés ») : **pas définitive**. La
+  ligne 33 de l'annexe I de A. 243-1 (« Lorsqu'un professionnel établit son
+  activité postérieurement à la date unique… ») peut retourner le sens de
+  toute la clause « sauf si ce chantier est déjà ouvert ». **M2 de la
+  relecture de la correction, non corrigé** : la loi dit « des travaux
+  NÉCESSITANT un permis de construire » ; « avec un permis » peut se lire
+  « le bâtiment a un permis », et « sans permis » ranger un permis
+  d'aménager du mauvais côté. Si la phrase est retouchée : « si ces travaux
+  demandent un permis de construire, … ; sinon, … ». Et un chantier ouvert
+  AVANT le début de l'attestation actuelle relève d'une plus ancienne, ce que
+  la phrase ne dit pas.
+- [ ] **D1 (avec J2 et J13)** — rien ne dit que le prix d'un devis payant se
+  convient AVANT qu'il soit établi ; écrire « Payant 50 € » sur un devis remis
+  sans accord ne ferait sans doute rien devoir (déduit de L. 111-1 2°, pas
+  écrit dans l'arrêté de 2017 : à faire confirmer). Si la phrase est ajoutée, sans forme
+  imposée que la loi ne pose pas : « Son prix se convient avec votre client
+  avant que vous l’établissiez. »
+- [ ] **D2, ce qui reste** : L. 221-25 al. 3 a un second cas (l'information
+  du 9° de L. 221-5 non donnée), non cité ; et « demande écrite » est plus
+  strict que la loi pour un contrat à distance (« par tout moyen ») — avec J2.
+- [ ] **D10 (avec J12)** — tarifs affichés à 30 €, ce devis à 80 € : aucun
+  avis. La carte montre « Dans vos tarifs : 30,00 € TTC. » au-dessus du
+  champ, et l'avis du devis payant sort déjà pour un particulier.
+- [ ] **D12 (avec J15)** — « D’autres plafonds peuvent s’appliquer selon les
+  matériaux que vous fournissez » ne dit pas que c'est plutôt en sa faveur
+  (activité mixte : seule la part services compte contre 37 500 €).
+- [ ] **D6 (avec DROIT-18)** — un franchisé sous le plafond pour CE devis ne
+  lit nulle part qu'Opus ne surveille pas son chiffre d'affaires de l'année ;
+  la première année, le plafond est réduit et aucun avis ne sort.
+- [ ] **Le reste de la liste du cahier** (`docs/CAHIER-LOT-2B-4.md`, §1.5) :
+  J1 à J13 et J50 (le prix du devis, l'arrêté de 2017, les services à la
+  personne ; dont J13 et J50 : l'imputation du prix du devis sur les travaux,
+  et son taux de TVA) ; J14 à J17 (la franchise) ; J18 à J25 (l'attestation) ;
+  J26 à J36 (les déchets, pour 2b-5) ; J37 à J48 (le RGE, pour 2b-6) ; J49 (le
+  mot « artisan »).
+- [ ] **À vous dire, pas à vous demander** (cahier §1.4), hors du devis : la
+  prospection par messages pour des travaux d'énergie ou d'adaptation au
+  vieillissement (L. 223-8, et la messagerie d'Opus : J46) ; la mention
+  France Rénov' sur la publicité de rénovation énergétique (L. 122-26 : J47) ;
+  « Prix du devis : Gratuit » sur la fiche publique à côté des frais de
+  déplacement (J12 : cinq ans et 750 000 € quand c'est en ligne) ; le mot
+  « Artisans » déjà affiché pour tous les pros (J49) ; l'affichage des tarifs
+  peut-être dû pour un artisan de dépannage (J11).
+
+**Défauts connus, non corrigés — la base et les contrôles** :
+
+- [ ] **B2 — la fenêtre entre la migration et `git pull`** : annoncée, sans
+  effet si vous faites `git pull` (ci-dessus).
+- [ ] **« Sans défaut » n'est pas lu dans le catalogue** : la colonne n'entre
+  ni au cas 23 de l'essai 49-conditions (le juge des défauts) ni dans
+  `DEFAUTS_ATTENDUS` de `verifier-devis`. La garde tient quand même par
+  `verifier-devis` (un `default 0` n'est pas une des formes permises) et par
+  les cas 13, 23 et 24 de l'essai 49-remise ; à aligner un jour.
+- [ ] **Le commentaire de `TARIFS_NON_AFFICHES`** (`src/lib/tarifs.js`) dit
+  encore « aucun devis n'existe encore » : faux depuis le lot 1. Le texte
+  affiché est juste ; seul le commentaire est à reprendre.
+- [ ] **L'appel unique des avis est figé deux fois** dans `verifier-devis`
+  (dans la vérification « des changements partent », et à son nom) : tout
+  changement de l'appel — passer le jour de Paris pour M1, par exemple —
+  réécrit les deux.
+- [ ] **La garde nouvelle du générateur** (« aucun des 125 premiers cas ne
+  porte `devis_cout` ») n'est jamais atteinte par le sabotage du cahier (S5) :
+  la garde de couverture se lève avant. Elle n'est prouvée que par une forme
+  étroite (S5b). Rien à faire ; à savoir.
+- [ ] **D19b** : la démonstration écrit `coutDevisCentimes: null` « écrit,
+  jamais une clé absente » ; aucune vérification ne le tient, et c'est sans
+  effet (la saisie et le miroir lisent les deux pareil).
+- [ ] **Le brouillon NEUF à « 5 points »** de `mesure-devis` n'a été éprouvé
+  par aucun sabotage.
+- [ ] **M6 — un refus du prix par la base n'est pas tenu à part** : il
+  entraînerait l'objet, le lieu et le délai avec lui. Impossible sur une
+  base migrée (`validerDevis` tient la même borne) ; seulement sur une base
+  EN RETARD (PGRST204). D'où l'ordre « la base d'abord, puis `git pull` »,
+  nécessaire.
+
+**Défauts connus, non corrigés — l'écran** :
+
+- [ ] **M1 — deux jours, deux horloges, encore** : l'avis de l'attestation
+  juge au jour du TÉLÉPHONE, le point de la base au jour de Paris.
+  Outre-mer, le jour de l'échéance, un point « Joignez … votre attestation
+  décennale » peut sortir au-dessus d'un avis « valable jusqu’au … »
+  (reproduit avec la vraie fonction de la base, à l'heure réelle). C'est
+  l'entrée « Deux jours, deux horloges » de 2b-3, qui gagne l'avis de la
+  saisie ; la piste reste « le jour de Paris des deux côtés » — pas l'avis
+  seul, qui contredirait alors la rangée de « Mon entreprise ».
+- [ ] **M2 — une décennale renouvelée jointe SANS date** : l'avis dit
+  « Demandez-la à votre assureur » alors qu'elle est jointe. Rien de faux ; à
+  ajouter, si vous le voulez : « … ou donnez dans « Mon entreprise » la date
+  de fin de celle que vous avez déjà jointe ».
+- [ ] **M3 — `lireFiche` (`MonEntreprise.js`) n'a pas de garde de
+  démontage** : une relecture tardive de la fiche, après la fermeture, fait
+  jeter la relecture des assurances, et l'avis garde l'ancienne date jusqu'à
+  l'ouverture suivante d'un devis. Rare ; et le commentaire d'`OpusApp.js`
+  (« aucun `surEmetteur` ne vient après la fermeture ») est faux. Correction :
+  une génération à part pour les assurances, que `recevoirEmetteur` ne touche
+  pas — PAS un drapeau « monté », qui couperait aussi la remontée des tarifs.
+- [ ] **M4 — fermer « Mon entreprise » relit maintenant le régime** : un
+  échec à 8 s remplace un régime connu, et aucun poste ne s'ajoute avant
+  « Réessayer ». Rien de faux. Correction possible : sur l'échec d'une
+  relecture DISCRÈTE, garder le régime et n'oublier que les assurances — à
+  décider pour les quatre appels ensemble.
+- [ ] **M5 — « Gratuit » puis « Payant »** : le champ s'ouvre vide (ou sur la
+  proposition des tarifs). Conforme au cahier ; si vous le voulez, la carte
+  retiendrait le dernier prix payant de la session.
+- [ ] **M7 — des tarifs en échec au démarrage le restent jusqu'à l'ouverture
+  de « Mon entreprise » ou une nouvelle session** (une réponse tardive les
+  corrige aussi ; antérieur à 2b-4) : `lireRegime` relit pourtant la fiche, tarifs compris,
+  sans les garder. 2b-4 y ajoute des lecteurs (la phrase « Vos tarifs n’ont
+  pas pu être lus. », la proposition, deux avis), tous dans le sens sûr.
+- [ ] **« Corriger » rouvre « Conditions » en haut** pour la validité et la
+  retenue (défaut d'avant ; 2b-4 ne le corrige que pour le prix).
+- [ ] **La proposition quand les tarifs changent pendant la saisie** : elle
+  suit `mesTarifs` ; et la phrase des tarifs qui arrive pendant que la carte
+  est ouverte fait descendre le champ d'une ligne (lu, pas mesuré).
+- [ ] **Des tarifs écrits puis vidés restent une ligne vide** (ni la
+  démonstration ni la base ne savent retirer une ligne de tarifs) : sans
+  effet, `tarifsConnus` lit les deux pareil.
+
+**Défauts connus, non corrigés — les textes** :
+
+- [ ] **D5 — un délai écrit à la main fait taire l'avis de l'attestation** :
+  l'horizon ne compte les 30 jours que pour le délai par défaut. Rien de faux
+  n'est affiché (« Pas encore vérifié » nomme « la date où le chantier
+  s’ouvrira ») ; c'est 2c qui recalcule au jour de la remise.
+- [ ] **D7 — « le devis lui-même » n'est pas tenu partout** : « Pour dire que
+  ce devis est gratuit, touchez « Gratuit ». », le bouton « Choisir : devis
+  gratuit ou payant », et « Le prix d’un devis s’écrit jusqu’à 1 000,00 € »
+  (une borne d'Opus dite comme un fait). Le cahier se contredisait (T19
+  contre ses annexes) ; la plus petite correction est le message du « 0 »
+  seul.
+- [ ] **D9** — « Ce prix ne s’ajoute pas au total des travaux » peut se lire
+  comme une règle : « Opus ne l’ajoute pas au total des travaux. », si vous
+  le voulez.
+- [ ] **« au moins » dans les phrases des rangs 4 et 6** (`devis_lieu`,
+  `devis_validite`) : elles disent « La loi le demande pour … signé dans vos
+  locaux », l'étroitesse corrigée pour le prix. Un lot à part, après J3.
+- [ ] **Les deux copies de la mention de franchise** (`devis.js` et
+  `LIBELLES_IMPRIMES` d'`emetteur.js`) : à réunir quand `mentions-devis.js`
+  naîtra (2c).
+- [ ] **La ré-acceptation des CGU** : toujours absente, alors que `VERSION`
+  a encore changé (`'2026-11-17'`).
+
+**Rangé par le cahier (§7), pour qu'on ne le redécouvre pas** :
+
+- [ ] la qualité d'« artisan » sur un devis imprimé (Q6, avant 2c ; J49) ;
+- [ ] le bloc public « Ses tarifs » (« Prix du devis : Gratuit » à côté du
+  déplacement) : rien ne change, à décider avec le juriste (J12, J11) ;
+- [ ] la franchise de la première année : abaisser le seuil demanderait la
+  date de création de l'entreprise (la preuve SIRET la range-t-elle ? À
+  VÉRIFIER) ;
+- [ ] la sous-traitance (pour le RGE, son omission rend le contrat nul ; pour
+  les déchets, J34) : Opus ne la modélise pas encore ;
+- [ ] une date de début des travaux : écartée, l'avis s'en passe ;
+- [ ] la main-d'œuvre hors établissement (close au lot 1) et un devis gratuit
+  par exception quand les tarifs disent payant (voulu) : rien à faire.
+
+**Pour 2c — ce que 2b-4 lui laisse** :
+
+- [ ] imprimer « gratuit » ou « payant » et le prix — où, sur le gabarit, est
+  une décision de 2c ; le refus de remise lit la MÊME liste, rang 12 compris ;
+  et FIGER le prix du devis sur le devis remis ;
+- [ ] **recalculer l'avis de l'attestation au jour de la remise** (calculé
+  sur un brouillon, il sous-estime : la validité court de la date de remise),
+  et trancher le jour qui compte (M1) ;
+- [ ] l'imputation du prix du devis sur les travaux, et son taux de TVA (J13,
+  J50) ; au module facture, la note due avant paiement d'un devis payant dès
+  25 € TTC ;
+- [ ] si les services à la personne entrent un jour (Q3) : la copie figée du
+  client avec son adresse, la conservation d'un an, les prix HT et TTC de
+  chaque prestation.
+
+**Les étapes suivantes** :
+
+- [ ] **2b-5, les déchets de chantier.** Une question à vous d'abord (Q4,
+  cahier §1.3 bis). La forme recommandée (cahier §8.1) : vos lieux de dépôt
+  rangés une fois dans « Mon entreprise », une carte « Déchets » par devis
+  (quantité, tris, lieux, coût estimé hors des totaux), et une question « Ces
+  travaux produisent-ils des déchets ? », « Oui » tant que rien n'est dit ;
+  un motif au rang 13. **Avant elle, la classe de blancs consolidée** : huit
+  copies dans cinq fonctions SQL et deux constantes JavaScript, et 2b-5
+  ajoute des colonnes de texte. `motifs_refus_remise` lirait une table de
+  plus (le cas 14 c s'ouvre en le décidant). Jamais « registre des déchets »
+  dans une phrase. Vos métiers rendent presque tous vos devis concernés.
+- [ ] **2b-6, le label RGE.** Une question à vous d'abord (Q5). La forme
+  recommandée (cahier §8.2) : deux questions par devis pour un particulier ou
+  une association (« Ces travaux portent-ils sur l'énergie d'un logement ? »,
+  et la sous-traitance), votre label dans « Mon entreprise » — **jamais le
+  badge `rge` de la fiche**, que pose l'administration ; un motif au rang 14.
+  Et la garde déjà écrite : jamais le RGE comme condition d'un taux de TVA.
+- [ ] **Puis 2c** (numéro, aperçu au format final, PDF, remise, tri des devis
+  remis).
+
+**Ce que l'essai sur la vraie base n'a pas joué** :
+
+- [ ] aucun écran sur la vraie base (les six avis se calculent au
+  téléphone ; l'écran n'a tourné qu'en démonstration) ; la file d'écriture
+  elle-même (les numéros d'écriture ont été fabriqués par le script) ;
+- [ ] la phrase de prudence d'une association, jamais vue à l'écran ; un
+  téléphone hors de l'heure de Paris ; le régime franchise ; un devis venu
+  d'une demande ou d'une urgence.
+
+**Contrôles et méthode** :
+
+- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+  comptes à relire après 2b-4 sont le 49-remise (21 erreurs, 289 valeurs
+  jugées, le compte `t` sur 288), le 49-conditions (27, 43) et le 49 (79) ;
+  la parité, par `node scripts/generer-cas-remise.mjs --verifier` (139 cas).
+  Ils se jouent depuis la RACINE du dépôt.
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 953 mesures,
+  33 min 30 s au passage complet. Il lit l'arbre VALIDÉ depuis la racine de
+  React, jamais la fibre d'un élément du DOM.
+- [ ] **Le banc complet n'a pas été rejoué** après les trois phrases de droit
+  (seulement six sabotages de ces corrections, et quatre de leur relecteur).
+- [ ] **Le relevé complémentaire d'une migration** (comptes, ACL, md5 des
+  `id:xmin`, sessions visibles), joué avant ET après, n'est pas dans le dépôt :
+  il vit dans les comptes rendus de la session. À y verser, la prochaine fois
+  qu'une migration touche des lignes existantes.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
