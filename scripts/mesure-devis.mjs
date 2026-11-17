@@ -404,6 +404,38 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
     const suffixe = tous.filter((m) => m && m.isInitialized && typeof m.verboseName === 'string' && m.verboseName.endsWith(`/${chemin}`));
     return suffixe.length === 1 ? suffixe[0].publicModule.exports : null;
   };
+  /* LA SAISIE D'UN DEVIS TELLE QUE REACT L'A VALIDÉE — cherchée depuis la
+     RACINE, jamais depuis un élément du DOM (intégration 2b-4, 17/11/2026).
+     React garde DEUX versions de chaque fibre et les échange à chaque rendu ;
+     la fibre qu'on trouve sur un élément (`__reactFiber$`) est celle qui l'a
+     CRÉÉ, et React 19 ne la met pas à jour (`commitUpdate` ne change que
+     `__reactProps$`). Elle peut donc être l'ANCIENNE version, et toute la
+     chaîne `.return` au-dessus d'elle avec : un rendu en retard. MESURÉ : après
+     « Réessayer » sur le bandeau du régime, l'arbre validé portait « reel »
+     dès 600 ms, et la fibre du DOM `{ chargement: true }` pour toujours — la
+     mesure croyait à un régime « en lecture » jamais revenu, alors que l'écran
+     était juste. Laquelle des deux versions on lit dépend du NOMBRE de rendus,
+     donc de la vitesse du navigateur : la section passait avec Chromium 1194
+     et rougissait avec 1243, sur le même code. D'ici, on part de
+     `fiberRoot.current` et on parcourt l'arbre validé ; la saisie doit y être
+     UNIQUE (sinon `null`, et la mesure le dit). */
+  window.__opusSaisieCourante = () => {
+    const conteneur = [...document.querySelectorAll('*')].find((e) => Object.keys(e).some((x) => x.startsWith('__reactContainer$')));
+    if (!conteneur) return null;
+    const cle = Object.keys(conteneur).find((x) => x.startsWith('__reactContainer$'));
+    const racine = conteneur[cle] && conteneur[cle].stateNode;
+    if (!racine || !racine.current) return null;
+    const trouvees = [];
+    const pile = [racine.current];
+    while (pile.length) {
+      const f = pile.pop();
+      if (!f) continue;
+      const p = f.memoizedProps;
+      if (p && typeof p === 'object' && 'retourEntreprise' in p && 'regime' in p) trouvees.push(f);
+      pile.push(f.sibling, f.child);
+    }
+    return trouvees.length === 1 ? trouvees[0] : null;
+  };
   /* CHAQUE PERTE DE FOCUS, ET SA CAUSE : un `blur()` venu du
      `dismissKeyboard` de react-native-web (la fin d'un défilement) n'est
      pas un défaut d'Opus ; un autre, si. */
@@ -5780,40 +5812,40 @@ await section('« Mon entreprise » refermée relit la liste UNE fois, régime c
 /* ======================================================================== */
 /* LE SETTER DE `monRegime` D'OPUSAPP, retrouvé par la fibre React de la
    saisie (la méthode de la relecture 3 et de sa contre-vérification) : on
-   l'appelle exactement comme le fait `lireRegime`. Il doit être UNIQUE. */
+   l'appelle exactement comme le fait `lireRegime`. Il doit être UNIQUE.
+   La saisie est celle de l'arbre VALIDÉ (`__opusSaisieCourante`, intégration
+   2b-4) ; en remontant (`.return`), un parent peut encore être son ancienne
+   version, et ses crochets porter le régime d'un rendu plus tôt : on regarde
+   donc les DEUX versions de chaque parent, et l'on compte les FILES d'état
+   (`queue`), qui sont les mêmes pour les deux — un setter, pas deux. */
 const trouverLeSetterDuRegime = () => page.evaluate(() => {
   const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
   if (!el) return 0;
-  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
-  let f = el[k];
-  let saisie = null;
-  while (f) {
-    if (f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps) { saisie = f; break; }
-    f = f.return;
-  }
+  const saisie = window.__opusSaisieCourante();
   if (!saisie) return 0;
   const regime = saisie.memoizedProps.regime;
   let g = saisie.return;
-  const cands = [];
+  const cands = new Set();
   while (g) {
-    if (typeof g.type === 'function' && g.memoizedState && g.memoizedState.next !== undefined) {
-      let h = g.memoizedState;
-      while (h) { if (h.queue && h.queue.dispatch && h.memoizedState === regime) cands.push(h); h = h.next; }
-      if (cands.length) break;
+    for (const v of [g, g.alternate]) {
+      if (v && typeof v.type === 'function' && v.memoizedState && v.memoizedState.next !== undefined) {
+        for (let h = v.memoizedState; h; h = h.next) if (h.queue && h.queue.dispatch && h.memoizedState === regime) cands.add(h.queue);
+      }
     }
+    if (cands.size) break;
     g = g.return;
   }
-  window.__poserRegime = cands.length === 1 ? cands[0].queue.dispatch : null;
-  return cands.length;
+  window.__poserRegime = cands.size === 1 ? [...cands][0].dispatch : null;
+  return cands.size;
 });
 const poserRegime = (v) => page.evaluate((x) => window.__poserRegime(x), v);
+/* LE RÉGIME QUE LA SAISIE A REÇU — lu dans l'arbre VALIDÉ, jamais par la
+   fibre d'un élément du DOM (voir `__opusSaisieCourante`). */
 const regimeDeLaSaisie = () => page.evaluate(() => {
   const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
   if (!el) return 'pas de ligne';
-  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
-  let f = el[k];
-  while (f) { if (f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps) return JSON.stringify(f.memoizedProps.regime); f = f.return; }
-  return '?';
+  const saisie = window.__opusSaisieCourante();
+  return saisie ? JSON.stringify(saisie.memoizedProps.regime) : '?';
 });
 /* LA LISTE DE LA SAISIE, lue par la même fibre : si elle est SÛRE (une liste
    lue, pas un échec ni une lecture en cours), et si elle porte encore un
@@ -5822,9 +5854,9 @@ const regimeDeLaSaisie = () => page.evaluate(() => {
 const listeDeLaSaisie = () => page.evaluate(() => {
   const el = document.querySelector('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]');
   if (!el) return null;
-  const k = Object.keys(el).find((x) => x.startsWith('__reactFiber$'));
-  let f = el[k];
-  while (f && !(f.memoizedProps && 'retourEntreprise' in f.memoizedProps && 'regime' in f.memoizedProps)) f = f.return;
+  /* L'arbre VALIDÉ, comme pour le régime : l'ancienne version de la saisie
+     porte la liste d'un rendu plus tôt. */
+  const f = window.__opusSaisieCourante();
   for (let h = f && f.memoizedState; h; h = h.next) {
     const v = h.memoizedState;
     if (v && typeof v === 'object' && 'motifs' in v && 'relecture' in v && 'enLecture' in v) {
@@ -7867,8 +7899,15 @@ await section('2b-4 : « Conditions » — le prix du devis lui-même : le point
   const e5 = await ecrituresDemo();
   await toucher(pastilleCout(PAYANT_2B4));
   await attendre(PAUSE_DEMO + 400);
-  verifier(`« Payant » retouché : AUCUNE écriture (${(await ecrituresDemo()) - e5}), le prix reste (« ${await champCout().inputValue()} », base ${await coutEnBase('Rénovation salle de bains')})`,
-    (await ecrituresDemo()) === e5 && net(await champCout().inputValue()) === '30' && (await coutEnBase('Rénovation salle de bains')) === 3000
+  /* La valeur se lit AVANT le libellé, sous garde : si la pastille retouchée
+     a vidé le choix, le champ n'est plus monté, et `inputValue` attendait
+     30 s puis levait — la section mourait sans dire ce qu'elle voyait (le
+     sabotage S34 du banc). */
+  const champRetouche = (await champCout().count()) ? net(await champCout().inputValue()) : '(champ disparu)';
+  const e5bis = (await ecrituresDemo()) - e5;
+  const baseRetouche = await coutEnBase('Rénovation salle de bains');
+  verifier(`« Payant » retouché : AUCUNE écriture (${e5bis}), le prix reste (« ${champRetouche} », base ${baseRetouche})`,
+    e5bis === 0 && champRetouche === '30' && baseRetouche === 3000
     && (await placesDuBloc()).selPayant === 'true');
   await capture('2b4-bloc-payant-30');
   /* « PAYANT » VIDÉ, LA CARTE FERMÉE (point 5, ÉCRAN-1) : rien de dit, sans

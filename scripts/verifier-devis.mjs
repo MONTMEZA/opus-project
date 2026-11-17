@@ -10671,6 +10671,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && (saE.match(/pasCompte=\{pasCompte\}/g) || []).length === 2
     && /const \[champOuvert, setChampOuvert\] = useState\(false\);/.test(saE) && /onFrappe=\{setChampOuvert\}/.test(saE)
     && !/\bnonParties\b/.test(saE) && !/enRoute=\{attente\.enCours\}/.test(saE));
+  /* Le même appel, À SON NOM (le banc de 2b-4, S21) : retirer `assurances`
+     de l'appel faisait rougir la vérification ci-dessus, dont le titre parle
+     de « des changements partent » — celui qui la lit chercherait ailleurs. */
+  verifier('la saisie : UN appel des avis (`avisDuDevis`), qui transmet `regime`, `assurances` et `tarifs` tels que l’écran les tient',
+    (saE.match(/avisDuDevis\(/g) || []).length === 1
+    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, \}\);/.test(saE));
   /* LA PLACE DE LA LIGNE, DANS LA SAISIE : AUCUNE MÉMOIRE (relecture 6 de
      2b-1). La relecture 5 y avait mis un état `placeGardee`, remis à jour
      pendant le rendu, qui ne rendait la place qu'au retour d'une liste
@@ -12127,6 +12133,11 @@ console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les
     ['frais offerts', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { frais_deplacement_centimes: 0 } }), false],
     ['frais vides', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { frais_deplacement_centimes: null } }), false],
     ['en lecture', a('avis_devis_gratuit_deplacement', { devis: GRATUIT, tarifs: { chargement: true } }), false],
+    /* comme e2 : il ne dépend pas de la liste (les tarifs sont lus à part,
+       T16) — sans ce cas, un avis qui attendrait la liste SÛRE passait (le
+       sabotage D11b du banc). */
+    ['même liste en lecture', D.avisDuDevis({ devis: GRATUIT, etat: 'chargement', tarifs: { frais_deplacement_centimes: 4500 } })
+      .some((x) => x.cle === 'avis_devis_gratuit_deplacement'), true],
     ['pas transmis', a('avis_devis_gratuit_deplacement', { devis: GRATUIT }), false],
     ['devis payant', a('avis_devis_gratuit_deplacement', { devis: PAYANT, tarifs: { frais_deplacement_centimes: 4500 } }), false],
     ['devis vide', a('avis_devis_gratuit_deplacement', { devis: { ...GRATUIT, coutDevisCentimes: null },
@@ -12454,13 +12465,25 @@ console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les
       && (OPm.match(/setMesAssurances\(/g) || []).length === 2
       && recevoirM.length > 20 && !/MesAssurances/.test(recevoirM)
       && balises(sansCommentairesJs(lire('src/OpusApp.js')), 'SaisieDevisScreen').some((b) => /assurances=\{mesAssurances\}/.test(b));
+    /* lu9 — le choix ne s'écrit que par `poser` : la CARTE ne choisit rien à
+       la place de l'artisan. Sans elle, une ligne glissée après le `useState`
+       (« si les tarifs disent gratuit, initial.cout = 'gratuit' ») faisait
+       écrire 0 à la fermeture, sans un appui, et tout `npm run verifier`
+       restait vert (le sabotage S8b du banc). La comparaison
+       `choix.current.cout === cout` passe (`(?!=)`) ; l'affectation entière
+       de `poser` (`choix.current = {…}`) aussi. */
+    const lu9 = !/\b(?:initial|choix\.current)(?:\.\w+|\[[^\]]+\])\s*=(?!=)/.test(CDb)
+      && !/Object\.assign\(\s*(?:initial|choix\.current)\b/.test(CDb)
+      && CDm.includes('const [initial] = useState(() => etatInitialConditions(devis, textes)); const choix = useRef(initial);')
+      && (CDm.match(/choix\.current = /g) || []).length === 1
+      && CDm.includes('const poser = (x) => { choix.current = { ...choix.current, ...x }; setC(choix.current); };');
     verifier('m. l’écran du bloc : le titre, enfant DIRECT du défilement, porte `ancre(\'cout\')` ; le bloc est le DERNIER (après la '
       + 'retenue, son aide avant le récapitulatif) ; deux pastilles par `choisirCout`, qui ne fait RIEN quand le choix ne change pas, et '
       + 'n’annonce que le prix repris des tarifs ; la proposition par `coutAProposer`, passée à `lireConditions` ; le champ sous « Payant » '
       + 'seulement ; les mots de l’annexe A.2 ; la saisie (les tarifs, la garde, « Corriger » SUR le bloc) et `OpusApp` (les assurances '
       + 'de la lecture du régime, oubliées sur un échec)',
-    lu1 && lu2 && lu3 && lu4 && lu5 && lu6 && lu7 && lu8,
-    json({ lu1, lu2, lu3, lu4, lu5, lu6, lu7, lu8, pile: pileM, corpsChoisir: corpsChoisir.slice(0, 120) }));
+    lu1 && lu2 && lu3 && lu4 && lu5 && lu6 && lu7 && lu8 && lu9,
+    json({ lu1, lu2, lu3, lu4, lu5, lu6, lu7, lu8, lu9, pile: pileM, corpsChoisir: corpsChoisir.slice(0, 120) }));
   }
 }
 
