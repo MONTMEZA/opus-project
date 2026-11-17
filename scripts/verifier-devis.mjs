@@ -8281,7 +8281,7 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
   appel.slice(-160));
   {
     /* i. LES AIDES QUE LA MESURE CHERCHE SONT CELLES DE `devis.js` (banc
-          final du lot 2a, N42). `mesure-devis` écrit les neuf aides EN TOUTES
+          final du lot 2a, N42 ; dix depuis 2b-4). `mesure-devis` écrit les aides EN TOUTES
           LETTRES — exprès, pour ne pas devenir une tautologie : il compare
           l'écran à SA copie. Mais rien ne tenait cette copie : « expressément »
           retiré de la mesure passait au vert ici (et la mesure n'est pas dans
@@ -8295,10 +8295,14 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
     const plat2 = (t) => String(t || '').replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
     const REFERENCE = [['Réduction', D.AIDE_REDUCTION], ['Réduction', D.AIDE_REDUCTION_HT], ['Acompte', D.AIDE_ACOMPTE],
       ['Acompte', D.AIDE_ACOMPTE_TTC], ['Acompte', D.AIDE_NATURE_ACOMPTE], ['Acompte', D.ECHEANCE_ACOMPTE],
-      ['Validité de l’offre', D.AIDE_VALIDITE], ['Retenue de garantie', D.AIDE_RETENUE], ['Retenue de garantie', D.PHRASE_RETENUE]];
+      ['Validité de l’offre', D.AIDE_VALIDITE], ['Retenue de garantie', D.AIDE_RETENUE], ['Retenue de garantie', D.PHRASE_RETENUE],
+      /* 2b-4 (cahier §5.5 point 1, DÉCIDÉ) : la DIXIÈME, l'aide fixe du
+         dernier bloc — sa copie dans la mesure se compare comme les neuf
+         autres, sous son titre. */
+      ['Le devis lui-même : gratuit ou payant ?', D.AIDE_COUT_DEVIS]];
     const ecarts = REFERENCE.map(([t, a], k) => (lues[k] && lues[k][0] === t && plat2(lues[k][1]) === plat2(a) ? null
       : `${k + 1} (${t}) : « ${lues[k] ? plat2(lues[k][1]).slice(0, 80) : '—'} »`)).filter(Boolean);
-    verifier('`mesure-devis` cherche à l’écran EXACTEMENT les neuf aides de `devis.js` — sa copie écrite en toutes lettres est comparée '
+    verifier('`mesure-devis` cherche à l’écran EXACTEMENT les dix aides de `devis.js` — sa copie écrite en toutes lettres est comparée '
       + 'mot pour mot aux constantes, dans l’ordre et sous leurs titres (une mesure qui perdrait « expressément » accepterait l’ancienne aide)',
     lues.length === REFERENCE.length && ecarts.length === 0, `${lues.length} aide(s) lue(s) ; écarts : ${ecarts.join(' | ') || '—'}`);
   }

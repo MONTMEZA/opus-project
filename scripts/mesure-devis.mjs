@@ -204,7 +204,7 @@
  * `verifier-postes` (G) sous `node`, et sur la vraie base par l'API seulement
  * (une écriture tardive n'y touche aucune ligne ; l'écran ne l'a jamais montré).
  */
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fabriquerDevisDemo, fabriquerPostesDemo, DEVIS_DEMO_IDS } from '../src/data/devis-demo.js';
 import {
   totauxDevis, sousTotaux, totalLigne, validerLigne, trierLignes, UNITES, cleDeLigne,
@@ -317,11 +317,26 @@ const DALLE = posteDemo('Dalle béton').designation;
 const RAGREAGE = posteDemo('Ragréage').designation;
 
 /* ======================================================================== */
-/* `CHROME` : le navigateur d'un autre conteneur (le chemin par défaut est
-   celui des sessions d'avant ; `captures-carte.mjs` et ses voisins font
-   déjà ainsi). */
+/* LE NAVIGATEUR : `CHROME` s'il est donné, sinon le PREMIER chemin qui
+   existe. Le chemin écrit en dur (`chromium-1194`) était celui des
+   conteneurs d'avant ; celui du 16/11 n'avait plus que `chromium-1243`
+   (et `chromium`, un lien vers lui) — la mesure ne se lançait plus du
+   tout. On essaie l'ancien d'abord (rien ne change là où il existe), puis
+   les nouveaux ; aucun ne répond : on le DIT, au lieu de laisser Playwright
+   chercher un navigateur qu'il ne trouvera pas. */
+const CHEMINS_CHROME = [
+  process.env.CHROME,
+  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  '/opt/pw-browsers/chromium',
+  '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome',
+].filter(Boolean);
+const CHROME = CHEMINS_CHROME.find((c) => existsSync(c));
+if (!CHROME) {
+  console.error(`Aucun navigateur trouvé (essayés : ${CHEMINS_CHROME.join(', ')}). Donnez son chemin par CHROME=…`);
+  process.exit(2);
+}
 const n = await chromium.launch({
-  executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  executablePath: CHROME,
   args: ['--no-sandbox'],
 });
 const ctx = await n.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -1942,7 +1957,18 @@ await section('La carte « Conditions » : réduction, acompte, validité, puis 
     const l = net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label').catch(() => ''));
     return /Réduction 10 % · Arrhes 0,5 % · Valable 30 jours/.test(l) ? l : null;
   }, DELAI_ECRITURE + 3000);
-  verifier(`la rangée résume, sans rien qui manque (« ${rangee || '—'} »)`, !!rangee && !/à choisir/.test(rangee));
+  /* 2b-4 (cahier T15, DÉCIDÉ) : « Rénovation » ne dit rien du prix du devis
+     lui-même, et cette section n'y touche pas — le résumé le dit donc EN
+     TÊTE, et c'est juste (le point de « Pour le remettre » le demande aussi).
+     Ce qu'on tient : il le dit une fois, en tête, et RIEN de ce que cette
+     section a rempli (réduction, nature, validité) n'y est « à choisir ».
+     Écrit ici en toutes lettres : la constante des sections 2b-4 est
+     déclarée plus bas, et une `const` lue avant sa déclaration lève. */
+  const MANQUE_COUT = 'Devis lui-même : gratuit ou payant ? à choisir';
+  verifier(`la rangée résume, sans rien qui manque de ce que cette carte vient de remplir — seul le prix du devis lui-même, `
+    + `qu’elle ne touche pas, est « à choisir », en tête (« ${rangee || '—'} »)`,
+  !!rangee && rangee.startsWith(`Conditions : ${MANQUE_COUT} · Réduction`) && rangee.split(MANQUE_COUT).length === 2
+    && !/à choisir/.test(rangee.replace(MANQUE_COUT, '')));
   const pied = await jusqua(async () => /Total TTC · réduction comprise/.test(await texte()), DELAI_ECRITURE + 3000);
   verifier('le pied : « Total TTC · réduction comprise » (une seule mention)', !!pied);
   const ventil = await page.evaluate(() => [...document.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'))
@@ -7698,10 +7724,22 @@ await section('2b-4 : « Conditions » — le prix du devis lui-même : le point
   await allerAMesDevis();
   await ouvrirLeDevis('Rénovation salle de bains');
   exiger((await coutEnBase('Rénovation salle de bains')) === null, '« Rénovation » ne dit rien du prix du devis lui-même (null ÉCRIT, T13)');
-  /* LE RÉSUMÉ DE LA RANGÉE (T15) : ce qui manque en tête. */
+  /* LE RÉSUMÉ DE LA RANGÉE (T15) : ce qui manque en tête — et le prix du
+     devis lui-même en DERNIER de ce qui manque, juste après « Validité à
+     choisir » QUAND elle manque. Joué seul, « Rénovation » n'a pas de
+     validité ; au passage complet, les sections du lot 2a lui en ont donné
+     une (mesuré : « Conditions : Devis lui-même : … à choisir · Valable 30
+     jours · … ») — les deux états se jugent par la même règle. */
   const resume0 = net(await page.getByLabel(/^Conditions : /).first().getAttribute('aria-label'));
-  verifier(`le résumé de « Conditions » dit « ${RESUME_MANQUE_2B4} », après « Validité à choisir » (« ${resume0} »)`,
-    resume0.includes(`Validité à choisir · ${RESUME_MANQUE_2B4}`));
+  const tete0 = 'Conditions : ';
+  const iManque0 = resume0.indexOf(RESUME_MANQUE_2B4);
+  const avantManque0 = iManque0 >= 0 ? resume0.slice(tete0.length, iManque0) : null;
+  verifier(`le résumé de « Conditions » dit « ${RESUME_MANQUE_2B4} », EN TÊTE avec ce qui manque, en dernier de ce qui manque — juste `
+    + `après « Validité à choisir » quand elle manque (« ${resume0} »)`,
+  resume0.startsWith(tete0) && iManque0 >= tete0.length && resume0.split(RESUME_MANQUE_2B4).length === 2
+    && /^(?:[^·]* à choisir · )*$/.test(avantManque0)
+    && !/à choisir/.test(resume0.slice(iManque0 + RESUME_MANQUE_2B4.length))
+    && (!resume0.includes('Validité à choisir') || avantManque0.endsWith('Validité à choisir · ')));
   /* LE POINT, ET SON BOUTON (point 7). */
   await ouvrirLaListe();
   const tL = await texteLu();
@@ -7943,8 +7981,14 @@ await section('2b-4 : le gratuit avec des frais de déplacement, puis le payant 
 
 await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’avis, la fermeture de « Mon entreprise » qui relit les assurances, « Non » à la décennale qui le tait (§5.5, 12 a)', async () => {
   const avant = await assurancesDemo();
-  exiger(avant.length === 1 && avant[0].id === ASSURANCE_DEMO && !!avant[0].attestation_chemin && !!avant[0].valide_jusquau,
+  /* UNE décennale jointe et datée — mais PAS forcément celle de départ
+     (`ASSURANCE_DEMO`) : la section 2b-3 de l'attestation la RETIRE puis la
+     remet, sous un identifiant neuf (mesuré au passage complet : avec
+     l'identifiant de départ, la précondition tombait). On suit celle qui
+     est là, et c'est elle qu'on rend. */
+  exiger(avant.length === 1 && avant[0].nature === 'decennale' && !!avant[0].attestation_chemin && !!avant[0].valide_jusquau,
     'la démonstration porte UNE décennale jointe et datée');
+  const idAssurance = avant[0].id;
   const finOrigine = avant[0].valide_jusquau;
   /* « Muret » d'ABORD, et rien d'écrit avant : les sections du lot 2b-1,
      plus haut, retouchent ce devis (son délai, sa validité). L'horizon de
@@ -7967,7 +8011,7 @@ await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’av
   const horizon = muret.validite + (muret.delai === DELAI_PAR_DEFAUT.texte ? 30 : 0);
   const j40 = await jourDuNavigateur(Math.max(1, horizon - 20));
   await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
-    { d: j40.iso, id: ASSURANCE_DEMO });
+    { d: j40.iso, id: idAssurance });
   /* Le devis était ouvert AVANT la nouvelle date : on le quitte et on le
      rouvre, comme l'artisan qui revient — la saisie relit à l'ouverture. */
   await quitterLaSaisie();
@@ -7985,7 +8029,7 @@ await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’av
   await toucher(page.getByRole('button', { name: /^Compléter dans « Mon entreprise » : / }).first());
   await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
   await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
-    { d: finOrigine, id: ASSURANCE_DEMO });
+    { d: finOrigine, id: idAssurance });
   await toucher(parLibelle('Fermer « Mon entreprise »'));
   await attendre(500);
   if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
@@ -7995,7 +8039,7 @@ await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’av
   await quitterLaSaisie();
   /* « NON » À LA DÉCENNALE : l'avis se tait. */
   await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
-    { d: j40.iso, id: ASSURANCE_DEMO });
+    { d: j40.iso, id: idAssurance });
   await allerAMesDevis();
   await ouvrirLeDevis('Muret de clôture');
   await ouvrirLaListe();
@@ -8012,7 +8056,7 @@ await section('2b-4 : l’attestation décennale qui arrive à sa fin — l’av
   await fermerLaListe();
   await quitterLaSaisie();
   await page.evaluate(async (v) => { await window.__opusModule('src/lib/api.js').enregistrerAssurance({ valide_jusquau: v.d }, v.id); },
-    { d: finOrigine, id: ASSURANCE_DEMO });
+    { d: finOrigine, id: idAssurance });
   exiger((await assurancesDemo())[0].valide_jusquau === finOrigine, 'la date de fin de l’attestation est REMISE');
 });
 
