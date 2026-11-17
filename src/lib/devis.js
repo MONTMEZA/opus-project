@@ -4715,6 +4715,18 @@ export const SUITE_AVIS_FRANCHISE = 'En franchise de TVA, les travaux comptent e
  *  un autre délai, Opus ne sait pas le compter. */
 export const JOURS_DU_DELAI_PAR_DEFAUT = 30;
 
+/** LA PHRASE FINALE DE L'AVIS DU DEVIS PAYANT pour une association, une
+ *  copropriété ou une société civile (`reponseVue` `non_professionnel`) — D3
+ *  de la relecture du 17/11/2026. L'avis dit le droit du CONSOMMATEUR :
+ *  L. 221-18 ne vise que lui, et L. 221-3 n'étend les sections 2, 3 et 6
+ *  qu'aux contrats HORS ÉTABLISSEMENT avec une petite entreprise hors de son
+ *  activité principale. Pour ce client-là, Opus le dit par prudence, avec les
+ *  mots d'`AIDE_NATURE_ACOMPTE_PRUDENCE` (2b-3, T7). Rien pour
+ *  `professionnel_hors_activite` : chez lui, l'avis EST la loi (seule la
+ *  demi-phrase « au téléphone ou par messages » déborde, et c'est voulu). */
+export const SUITE_AVIS_DEVIS_PAYANT_PRUDENCE = 'Pour une association, une copropriété ou une société civile, la loi ne '
+  + 'prévoit peut-être ni ce délai de rétractation ni ces règles ; Opus les dit, par prudence.';
+
 /**
  * Les avis : ils s'affichent SOUS la liste, à part. Deux depuis 2b-1, deux
  * de plus à 2b-2 (annexe A.3) — quand le client commande pour son
@@ -4722,13 +4734,23 @@ export const JOURS_DU_DELAI_PAR_DEFAUT = 30;
  *
  * SIX DE PLUS À 2b-4 (annexe A.3 du cahier 2b-4), et aucun ne bloque rien :
  *   - le prix du devis LUI-MÊME : payant (DROIT-1, DROIT-3 : il nomme les
- *     quatorze jours, le cas où le client « ne vous devra rien », l'écrit ou
- *     le support durable, « pas même un chèque », le téléphone et les
- *     messages) ; payant alors que les tarifs AFFICHÉS disent gratuit
- *     (DROIT-11) ; dit gratuit alors que les tarifs comptent des frais de
- *     déplacement (L. 121-4 19°) ;
+ *     quatorze jours, le cas où le client « ne vous devra rien s'il se
+ *     rétracte » — la condition de L. 221-25 al. 3, D2 de la relecture du
+ *     17/11 —, l'écrit ou le support durable, « pas même un chèque », le
+ *     téléphone et les messages ; pour une association, une copropriété ou
+ *     une société civile, `avisDuDevis` y ajoute
+ *     `SUITE_AVIS_DEVIS_PAYANT_PRUDENCE`, D3) ; payant alors que les tarifs
+ *     AFFICHÉS disent gratuit (DROIT-11) ; dit gratuit alors que les tarifs
+ *     comptent des frais de déplacement (L. 121-4 19°) ;
  *   - l'attestation décennale qui finit avant que le devis puisse être
- *     accepté et les travaux commencer (`{fin}`, une date) ;
+ *     accepté et les travaux commencer (`{fin}`, une date) ; un chantier
+ *     « déjà ouvert » s'y dit selon le permis de construire (A. 243-1,
+ *     annexe I : avec un permis, la déclaration d'ouverture seule ; sans
+ *     permis, le premier ordre de service ou, à défaut, le commencement des
+ *     travaux — D4 de la relecture du 17/11). La phrase n'est PAS
+ *     définitive : J18, au juriste (un professionnel qui « établit son
+ *     activité » après l'ouverture a sa propre date, et la clause « sauf si
+ *     ce chantier est déjà ouvert » pourrait changer de sens) ;
  *   - le franchisé au-delà du plafond, sur le total net (`{montant}`) ou
  *     avec ses options — deux MODÈLES à trous, composés d'une SUITE écrite
  *     une fois.
@@ -4744,13 +4766,15 @@ export const AVIS_DU_DEVIS = Object.freeze({
     + 'facture.',
   avis_fiche_particulier: 'Ce client commande pour son entreprise, mais votre carnet le range parmi les particuliers : '
     + 'passez sa fiche en « Entreprise » pour y écrire son SIRET.',
+  /* D2 de la relecture (17/11) : « s’il se rétracte » — L. 221-25 al. 3 ne
+     libère que le client « ayant exercé son droit de rétractation ». */
   avis_devis_payant:
     'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être un '
     + 'contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez '
-    + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez '
-    + 'lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le formulaire de '
-    + 'rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare pas encore ce '
-    + 'contrat : faites-le relire avant de faire payer un devis.',
+    + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien s’il se '
+    + 'rétracte. Convenu chez lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le '
+    + 'formulaire de rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare '
+    + 'pas encore ce contrat : faites-le relire avant de faire payer un devis.',
   avis_devis_payant_tarifs_gratuits:
     'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : un client '
     + 'peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis '
@@ -4759,13 +4783,17 @@ export const AVIS_DU_DEVIS = Object.freeze({
     'Le devis lui-même est dit gratuit, mais vos tarifs comptent des frais de déplacement : si vous les '
     + 'faites payer pour venir établir ce devis, ne le présentez pas comme gratuit — la loi peut y voir une '
     + 'pratique trompeuse.',
+  /* D4 de la relecture (17/11) : A. 243-1, annexe I — avec un permis de
+     construire, la seule date est celle de la déclaration d’ouverture ; sans
+     permis, celle du premier ordre de service ou, à défaut, du commencement
+     effectif. À faire relire (J18) : la phrase n’est pas définitive. */
   avis_attestation_echeance:
     'Votre attestation décennale est valable jusqu’au {fin}. Si elle vaut pour l’ensemble de vos chantiers, '
     + 'elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
     + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui '
-    + 'comptera, sauf si ce chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de '
-    + 'service donné, ou d’autres entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la '
-    + 'donner à votre client.',
+    + 'comptera, sauf si ce chantier est déjà ouvert : avec un permis de construire, une déclaration '
+    + 'd’ouverture déposée ; sans permis, un premier ordre de service donné, ou, à défaut, des travaux déjà '
+    + 'commencés. Demandez-la à votre assureur, et pensez à la donner à votre client.',
   avis_franchise_plafond: `Ce devis atteint à lui seul {montant}. ${SUITE_AVIS_FRANCHISE}`,
   avis_franchise_plafond_options: `Avec ses options, ce devis atteint {montant}. ${SUITE_AVIS_FRANCHISE}`,
 });
@@ -4814,7 +4842,11 @@ export const AVIS_DU_DEVIS = Object.freeze({
  *     PAYANT, et la réponse que la base a vue n'est pas « pour son
  *     entreprise, dans son activité principale » — un consommateur, une
  *     association, une copropriété ou une société civile (prudence, DROIT-3),
- *     une petite entreprise hors de son activité, ou pas de réponse ;
+ *     une petite entreprise hors de son activité, ou pas de réponse. Pour
+ *     `non_professionnel` SEULEMENT, la phrase gagne
+ *     `SUITE_AVIS_DEVIS_PAYANT_PRUDENCE` (D3 de la relecture du 17/11) : la
+ *     loi qu'elle cite ne vise peut-être pas ce client. La CLÉ ne change
+ *     pas ;
  *   - `avis_devis_payant_tarifs_gratuits` (suit l'écran) : les tarifs LUS,
  *     AFFICHÉS (`affiche === true`), disent un prix de devis à 0, et ce devis
  *     est payant (DROIT-11) ;
@@ -4869,7 +4901,12 @@ export function avisDuDevis({
   const cout = devis.coutDevisCentimes;
   const payant = entier(cout) && cout > 0;
   if (sure && payant && reponseVue !== 'professionnel') {
-    avis.push({ cle: 'avis_devis_payant', phrase: AVIS_DU_DEVIS.avis_devis_payant });
+    /* D3 : pour une association, une copropriété ou une société civile, la
+       phrase de la loi, puis celle de la prudence — et pour elle seule. */
+    const phrase = reponseVue === 'non_professionnel'
+      ? `${AVIS_DU_DEVIS.avis_devis_payant} ${SUITE_AVIS_DEVIS_PAYANT_PRUDENCE}`
+      : AVIS_DU_DEVIS.avis_devis_payant;
+    avis.push({ cle: 'avis_devis_payant', phrase });
   }
   const t = tarifsConnus(tarifs);
   const ligneTarifs = t && t.ligne && typeof t.ligne === 'object' ? t.ligne : null;

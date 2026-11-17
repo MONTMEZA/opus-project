@@ -5046,11 +5046,18 @@ const PROPOSITION_30_2B4 = 'Dans vos tarifs : 30,00 € TTC.';
 const ANNONCE_30_2B4 = 'Prix du devis : 30,00 €, d’après vos tarifs.';
 const ZERO_TAPE_2B4 = 'Pour dire que ce devis est gratuit, touchez « Gratuit ».';
 const RESUME_MANQUE_2B4 = 'Devis lui-même : gratuit ou payant ? à choisir';
+/* D2 de la relecture (17/11/2026) : « il ne vous devra rien s’il se
+   rétracte » (L. 221-25 al. 3). */
 const AVIS_PAYANT_2B4 = 'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être '
   + 'un contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez le devis avant, '
-  + 'sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez lui, il faut aussi un écrit '
-  + 'signé (ou un support durable qu’il accepte) avec le formulaire de rétractation, et rien ne se reçoit avant le 8e jour, '
-  + 'pas même un chèque. Opus ne prépare pas encore ce contrat : faites-le relire avant de faire payer un devis.';
+  + 'sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien s’il se rétracte. Convenu chez lui, il faut '
+  + 'aussi un écrit signé (ou un support durable qu’il accepte) avec le formulaire de rétractation, et rien ne se reçoit avant '
+  + 'le 8e jour, pas même un chèque. Opus ne prépare pas encore ce contrat : faites-le relire avant de faire payer un devis.';
+/* D3 de la relecture : la phrase finale de ce même avis pour une
+   association, une copropriété ou une société civile — et pour elle SEULE.
+   Mme Martin (à titre privé, ou sans réponse) ne doit jamais la lire. */
+const PRUDENCE_PAYANT_2B4 = 'Pour une association, une copropriété ou une société civile, la loi ne prévoit peut-être ni ce '
+  + 'délai de rétractation ni ces règles ; Opus les dit, par prudence.';
 const AVIS_TARIFS_GRATUITS_2B4 = 'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : '
   + 'un client peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis gratuitement.';
 const AVIS_GRATUIT_DEPLACEMENT_2B4 = 'Le devis lui-même est dit gratuit, mais vos tarifs comptent des frais de déplacement : si '
@@ -5059,8 +5066,9 @@ const AVIS_GRATUIT_DEPLACEMENT_2B4 = 'Le devis lui-même est dit gratuit, mais v
 const AVIS_ATTESTATION_2B4 = (fin) => `Votre attestation décennale est valable jusqu’au ${fin}. Si elle vaut pour l’ensemble `
   + 'de vos chantiers, elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
   + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui comptera, sauf si ce '
-  + 'chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de service donné, ou d’autres '
-  + 'entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la donner à votre client.';
+  + 'chantier est déjà ouvert : avec un permis de construire, une déclaration d’ouverture déposée ; sans permis, un premier '
+  + 'ordre de service donné, ou, à défaut, des travaux déjà commencés. Demandez-la à votre assureur, et pensez à la donner à '
+  + 'votre client.';
 const SUITE_FRANCHISE_2B4 = 'En franchise de TVA, les travaux comptent en principe comme des prestations de services : au-delà '
   + 'de 41 250,00 € sur une même année civile, la franchise cesse à partir du jour du dépassement ; au-delà de 37 500,00 €, '
   + 'vous n’y avez plus droit à partir du 1er janvier suivant. D’autres plafonds peuvent s’appliquer selon les matériaux que '
@@ -5240,8 +5248,10 @@ await section('« Terrasse en bois » : compléter un point depuis la liste, le 
   /* 2b-4 (T13, cahier §5.5 point 9) : « Terrasse » est PAYANTE (30,00 €) et
      Mme Martin commande à titre privé — l'avis du devis payant se lit sous
      « À vérifier », entier, et ses deux points ne bougent pas. */
-  verifier('2b-4 : l’avis du devis payant, ENTIER, sous « À vérifier » (après la liste)',
-    t.includes(AVIS_PAYANT_2B4) && t.indexOf(AVIS_PAYANT_2B4) > t.indexOf('À vérifier') && t.indexOf('À vérifier') > t.indexOf('Ce devis — 2 points'));
+  verifier('2b-4 : l’avis du devis payant, ENTIER, sous « À vérifier » (après la liste) — sans la phrase de prudence d’une '
+    + 'association (D3 : Mme Martin commande à titre privé)',
+    t.includes(AVIS_PAYANT_2B4) && t.indexOf(AVIS_PAYANT_2B4) > t.indexOf('À vérifier') && t.indexOf('À vérifier') > t.indexOf('Ce devis — 2 points')
+    && !t.includes(PRUDENCE_PAYANT_2B4));
   await jugerLaCarte('la carte de « Terrasse »');
   await capture('44-remettre-terrasse-carte');
 
@@ -7883,7 +7893,9 @@ await section('2b-4 : « Conditions » — le prix du devis lui-même : le point
   verifier('…le point « Dites si le devis lui-même… » S’ÉTEINT', !(await texteLu()).includes(POINT_COUT_2B4));
   /* L'avis du devis payant (Mme Martin, sans réponse « à quel titre » ou à
      titre privé : il parle dans les deux cas). */
-  verifier('…et l’avis du devis payant se lit sous « À vérifier »', (await texteLu()).includes(AVIS_PAYANT_2B4));
+  const tAvisPayant = await texteLu();
+  verifier('…et l’avis du devis payant se lit sous « À vérifier » — sans la phrase de prudence d’une association (D3)',
+    tAvisPayant.includes(AVIS_PAYANT_2B4) && !tAvisPayant.includes(PRUDENCE_PAYANT_2B4));
   await amenerAuTexte(AVIS_PAYANT_2B4.slice(0, 60));
   await capture('2b4-liste-avis-payant');
   await fermerLaListe();

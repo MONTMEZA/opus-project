@@ -9046,10 +9046,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
         + 'sa fiche en « Entreprise » pour y écrire son SIRET.',
       /* 2b-4 (annexe A.3 du cahier 2b-4, DÉCIDÉ) : SIX avis, mot pour mot —
          le devis lui-même payant (DROIT-1 : « quatorze jours », « ne vous
-         devra rien » ; DROIT-3 : le téléphone et les messages), payant face
+         devra rien s’il se rétracte » — la condition de L. 221-25 al. 3, D2
+         de la relecture du 17/11 ; DROIT-3 : le téléphone et les messages ;
+         sa phrase de prudence pour une association, D3, se vérifie en
+         section 43 e1 bis), payant face
          aux tarifs affichés « gratuit » (DROIT-11), dit gratuit avec des
-         frais de déplacement, l'attestation qui arrive à sa fin (`{fin}`, les
-         trois façons dont un chantier est déjà ouvert, DROIT-8), et le
+         frais de déplacement, l'attestation qui arrive à sa fin (`{fin}`, un
+         chantier déjà ouvert selon qu'il a ou non un permis de construire,
+         DROIT-8 refait par D4 de la relecture — à relire par un juriste,
+         J18), et le
          franchisé au-delà du plafond (`{montant}`, jamais « HT », DROIT-2,
          ÉCRAN-6) — ses deux phrases composées de la MÊME suite, les deux
          plafonds lus dans `PLAFONDS_FRANCHISE` (insécables ramenées à des
@@ -9057,10 +9062,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
          remplissent dans `avisDuDevis` (section 43). */
       avis_devis_payant: 'Le devis lui-même est payant : convenu chez votre client, au téléphone ou par messages, il peut être un '
         + 'contrat à lui seul. Votre client peut alors se rétracter pendant quatorze jours ; si vous lui remettez '
-        + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien. Convenu chez '
-        + 'lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le formulaire de '
-        + 'rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare pas encore ce '
-        + 'contrat : faites-le relire avant de faire payer un devis.',
+        + 'le devis avant, sans sa demande écrite de le recevoir tout de suite, il ne vous devra rien s’il se '
+        + 'rétracte. Convenu chez lui, il faut aussi un écrit signé (ou un support durable qu’il accepte) avec le '
+        + 'formulaire de rétractation, et rien ne se reçoit avant le 8e jour, pas même un chèque. Opus ne prépare '
+        + 'pas encore ce contrat : faites-le relire avant de faire payer un devis.',
       avis_devis_payant_tarifs_gratuits: 'Le devis lui-même est payant, mais vos tarifs affichés disent que vos devis sont gratuits : un client '
         + 'peut y voir une annonce trompeuse. Changez vos tarifs dans « Mon entreprise », ou faites ce devis '
         + 'gratuitement.',
@@ -9070,9 +9075,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       avis_attestation_echeance: 'Votre attestation décennale est valable jusqu’au {fin}. Si elle vaut pour l’ensemble de vos chantiers, '
         + 'elle ne couvre en principe que ceux qui s’ouvrent jusqu’à cette date ; selon la date où ce devis sera '
         + 'accepté, ce chantier pourrait s’ouvrir après. C’est alors en principe l’attestation suivante qui '
-        + 'comptera, sauf si ce chantier est déjà ouvert : une déclaration d’ouverture déposée, un premier ordre de '
-        + 'service donné, ou d’autres entreprises qui ont commencé. Demandez-la à votre assureur, et pensez à la '
-        + 'donner à votre client.',
+        + 'comptera, sauf si ce chantier est déjà ouvert : avec un permis de construire, une déclaration '
+        + 'd’ouverture déposée ; sans permis, un premier ordre de service donné, ou, à défaut, des travaux déjà '
+        + 'commencés. Demandez-la à votre assureur, et pensez à la donner à votre client.',
       avis_franchise_plafond: 'Ce devis atteint à lui seul {montant}. En franchise de TVA, les travaux comptent en principe comme des '
         + 'prestations de services : au-delà de 41 250,00 € sur une même année civile, la franchise cesse à partir '
         + 'du jour du dépassement ; au-delà de 37 500,00 €, vous n’y avez plus droit à partir du 1er janvier '
@@ -12105,6 +12110,36 @@ console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les
   e1.length === 0 && P1.includes('quatorze jours') && P1.includes('ne vous devra rien') && P1.startsWith('Le devis lui-même est payant'),
   e1.join(', '));
 
+  /* e1 bis. LA PRUDENCE DU DEVIS PAYANT, ET SA CONDITION (D2 et D3 de la
+        relecture du 17/11/2026). L'avis dit le droit du CONSOMMATEUR
+        (L. 221-18) ; L. 221-3 ne l'étend qu'à une petite entreprise HORS DE
+        SON ACTIVITÉ, hors établissement. Pour une association, une
+        copropriété ou une société civile (`non_professionnel`), la MÊME clé
+        finit par `SUITE_AVIS_DEVIS_PAYANT_PRUDENCE`, comparée mot pour mot ;
+        pour un client à titre privé, sans réponse, ou une petite entreprise
+        hors de son activité, la phrase de la loi SEULE — pas un mot de
+        prudence ; pour « professionnel », rien. On FAIT TOURNER
+        `avisDuDevis`, on ne lit pas son code. Et D2 : « il ne vous devra
+        rien » porte sa condition, « s’il se rétracte » (L. 221-25 al. 3). */
+  const SUITE_D3 = 'Pour une association, une copropriété ou une société civile, la loi ne prévoit peut-être ni ce délai de '
+    + 'rétractation ni ces règles ; Opus les dit, par prudence.';
+  const phrasesE1 = (reponseVue) => D.avisDuDevis({ ...SUR, devis: PAYANT, reponseVue })
+    .filter((x) => x.cle === 'avis_devis_payant').map((x) => x.phrase);
+  const e1bis = [
+    ['une association', phrasesE1('non_professionnel'), [`${P1} ${SUITE_D3}`]],
+    ['à titre privé', phrasesE1('consommateur'), [P1]],
+    ['pas de réponse', phrasesE1(null), [P1]],
+    ['hors de son activité', phrasesE1('professionnel_hors_activite'), [P1]],
+    ['« professionnel »', phrasesE1('professionnel'), []],
+  ].filter(([, vu, voulu]) => !egal(vu, voulu)).map(([q, vu]) => `${q} → ${json(vu)}`);
+  verifier('e1 bis. pour une association, une copropriété ou une société civile, l’avis du devis payant (même clé) finit par « Pour '
+    + 'une association, une copropriété ou une société civile, la loi ne prévoit peut-être ni ce délai de rétractation ni ces règles ; '
+    + 'Opus les dit, par prudence. » — et pour un client à titre privé, sans réponse ou hors de son activité, la phrase de la loi '
+    + 'SEULE ; « il ne vous devra rien s’il se rétracte »',
+  e1bis.length === 0 && D.SUITE_AVIS_DEVIS_PAYANT_PRUDENCE === SUITE_D3 && !P1.includes('prudence')
+    && P1.includes('il ne vous devra rien s’il se rétracte. ') && !P1.includes('il ne vous devra rien. '),
+  e1bis.join(' ; ') || json(D.SUITE_AVIS_DEVIS_PAYANT_PRUDENCE));
+
   /* e2. payant, mais des tarifs AFFICHÉS qui disent « gratuit » : il parle ;
          il se tait si les tarifs ne sont pas affichés, s'ils disent un prix,
          rien, ou s'ils ne sont pas lus — et pour un devis gratuit. Il ne
@@ -12183,7 +12218,13 @@ console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les
     + 'validité non ; avec le délai par défaut, 30 jours de plus ; un délai voisin ne compte pas ; « Non », pas lues, en échec, sans '
     + 'validité, sans fichier, une RC pro, celle d’un autre : muet ; la plus TARDIVE décide ; la date écrite par `dateFrancaise`',
   e4.length === 0 && phraseE4 && phraseE4.phrase.startsWith(`Votre attestation décennale est valable jusqu’au ${ENT.dateFrancaise(plusJ(10))}. `)
-    && !phraseE4.phrase.includes('{fin}') && D.JOURS_DU_DELAI_PAR_DEFAUT === 30,
+    && !phraseE4.phrase.includes('{fin}') && D.JOURS_DU_DELAI_PAR_DEFAUT === 30
+    /* D4 de la relecture (17/11) : avec un permis, la déclaration d'ouverture
+       seule ; sans permis, l'ordre de service, ou à défaut le commencement
+       (A. 243-1, annexe I) — jamais les trois sur le même plan. */
+    && phraseE4.phrase.includes('déjà ouvert : avec un permis de construire, une déclaration d’ouverture déposée ; sans permis, un '
+      + 'premier ordre de service donné, ou, à défaut, des travaux déjà commencés.')
+    && !phraseE4.phrase.includes('d’autres entreprises'),
   e4.join(' ; ') || json(phraseE4));
 
   /* e5. le franchisé au-delà du plafond : 37 500,00 € (le seuil de l'année
