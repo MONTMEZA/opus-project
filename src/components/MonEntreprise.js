@@ -108,7 +108,9 @@ async function lireFiche(poser, surTarifs = null, surEmetteur = null) {
     /* LOT 1 DU DEVIS : la fiche lue remonte aussi, pour le RÉGIME DE TVA de
        la saisie. Sans elle, l'artisan envoyé ici par le bandeau « régime non
        déclaré » y déclarait son régime… et retrouvait le bandeau. */
-    if (surEmetteur) surEmetteur(d.emetteur || null);
+    /* …et les LIEUX DE DÉPÔT lus par la MÊME lecture (relecture ÉCRAN-3) :
+       un tableau, ou `null` (la table absente) — jamais `undefined` ici. */
+    if (surEmetteur) surEmetteur(d.emetteur || null, Array.isArray(d.lieux) ? d.lieux : null);
     return d;
   } catch (e) {
     poser({ ...FICHE_EN_LECTURE, etat: 'echec' });

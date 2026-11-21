@@ -99,6 +99,21 @@ insert into public.reviews (professional_id, author_id, delais, qualite, tarif, 
         (:C,:A,2,2,2,'Travail bacle, je deconseille.');
 insert into public.posts (id, author_id, type, texte) values (:POST, :C, 'texte', 'Chantier du jour');
 insert into public.comments (post_id, author_id, texte) values (:POST, :A, 'Ce prix me parait trop bas.');
+-- relecture CTL-8 du 21/11 : ce que « Mon entreprise » range pour A — sa
+-- fiche émetteur, une assurance, un lieu de dépôt des déchets, une ligne de
+-- tarifs (section 46). Leur clé `pro_id ... on delete cascade` doit les
+-- emporter avec le compte : un `restrict` ferait REFUSER la suppression de
+-- tout artisan qui a un lieu, et rien d'autre ne le jouait.
+insert into public.emetteur (pro_id) values (:A);
+insert into public.emetteur_assurances (pro_id, nature, assureur_nom, assureur_coordonnees, couverture)
+ values (:A, 'decennale', 'Assureur d essai', '1 rue de l Essai 13001 Marseille', 'France');
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+ values (:A, 'Recyclage d essai', '2 rue du Port', '13002', 'Marseille', 'tri');
+insert into public.tarifs_pro (pro_id) values (:A);
+select (select count(*) from public.emetteur where pro_id = :A)
+     + (select count(*) from public.emetteur_assurances where pro_id = :A)
+     + (select count(*) from public.emetteur_lieux_depot where pro_id = :A)
+     + (select count(*) from public.tarifs_pro where pro_id = :A) as section_46_posee_attendu_4;
 
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
@@ -111,6 +126,10 @@ select (select count(*) from public.users where id = :A)                 as lign
        (select auteur_supprime from public.reviews  where professional_id = :C) as avis_marque_attendu_t,
        (select auteur_supprime from public.comments where author_id is null)    as comm_marque_attendu_t,
        (select count(*) from public.reviews where professional_id = :A)   as avis_RECUS_attendu_0;
+select (select count(*) from public.emetteur where pro_id = :A)             as emetteur_attendu_0,
+       (select count(*) from public.emetteur_assurances where pro_id = :A)  as assurances_attendu_0,
+       (select count(*) from public.emetteur_lieux_depot where pro_id = :A) as lieux_de_depot_attendu_0,
+       (select count(*) from public.tarifs_pro where pro_id = :A)           as tarifs_attendu_0;
 rollback;
 
 

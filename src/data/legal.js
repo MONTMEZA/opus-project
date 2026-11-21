@@ -29,8 +29,8 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-22';
-/* 22/11/2026 — LES DÉCHETS DU CHANTIER (étape 2b-5 du module devis ;
+export const VERSION = '2026-11-21';
+/* 21/11/2026 — LES DÉCHETS DU CHANTIER (étape 2b-5 du module devis ;
    sections 46 et 49 de `schema.sql`, cahier 2b-5 §4 ; décision Q4 = 1 du
    17/11 : les lieux de dépôt rangés une fois dans « Mon entreprise », une
    carte « Déchets » par devis ; réponses du propriétaire du 21/11, P1 à
@@ -40,7 +40,9 @@ export const VERSION = '2026-11-22';
        adresse, type d'installation (une table privée,
        `emetteur_lieux_depot`, lisible par son seul titulaire, aucune
        politique pour l'administration). Et sur chaque devis : s'il s'agit
-       de travaux sur un bâtiment ou de jardinage (`devis.dechets_concerne`),
+       ou non de travaux sur un bâtiment ou de jardinage
+       (`devis.dechets_concerne` — « ou non » : sous « Non », ce qui est déjà
+       écrit est gardé, relecture DROIT-R7 du 21/11),
        puis ce que deviendront leurs déchets — la quantité estimée et son
        unité, les déchets qui partiront à part ou « aucune collecte
        séparée », ce qui restera sur le chantier (broyage, compostage), les
@@ -67,7 +69,7 @@ export const VERSION = '2026-11-22';
        quinze jours du règlement 2019/1150 (art. 3.2) s'appliquerait. Sans
        effet tant que STATUT vaut 'essai' ; à organiser avant l'ouverture au
        public (A-FAIRE).
-   Cette version prend la date prévue du commit des textes (22/11/2026) ;
+   Cette version prend la date du commit des textes (21/11/2026) ;
    si le commit se fait un autre jour, `VERSION` prend la date de ce
    commit — jamais plus loin que le lendemain du jour où l'on publie, sinon
    la base range la trace d'acceptation à vide (`verifier-legal`). */
@@ -1616,7 +1618,7 @@ export const CONFIDENTIALITE = [
        une décision automatique, et aucun texte ne promet la mention imprimée
        — rien ne sort avant le lot 2c.
 
-       LES DÉCHETS DU CHANTIER, étape 2b-5 (22/11/2026, cahier 2b-5 §4 ;
+       LES DÉCHETS DU CHANTIER, étape 2b-5 (21/11/2026, cahier 2b-5 §4 ;
        décision Q4 = 1 du 17/11, réponses du propriétaire du 21/11). Deux
        insertions, et pas une de plus :
          - dans la phrase de « Mon entreprise », AVANT « et vos tarifs » :
@@ -1629,9 +1631,12 @@ export const CONFIDENTIALITE = [
            (une seule politique, `est_mon_entreprise`, rien pour
            l'administration ni pour `anon`) ;
          - dans la phrase des devis, AVANT « leurs lignes », juste après le
-           moment du paiement : « s’il s’agit de travaux sur un bâtiment ou
-           de jardinage, ce que deviendront leurs déchets (quantité, tri,
-           lieux de dépôt, coût estimé) ». La parenthèse est celle du
+           moment du paiement : « s’il s’agit ou non de travaux sur un
+           bâtiment ou de jardinage, ce que deviendront leurs déchets
+           (quantité, tri, lieux de dépôt, coût estimé) ». « Ou non » (la
+           relecture du 21/11, DROIT-R7) : sans lui, la phrase se lisait
+           comme une condition — « SI c'est un bâtiment, nous collectons les
+           déchets » —, alors que sous « Non » ce qui est écrit est gardé. La parenthèse est celle du
            cahier, mot pour mot. LA QUESTION, elle, a ses propres mots,
            ceux de l'écran (« S’agit-il de travaux sur un bâtiment, ou de
            jardinage ? ») : le cahier ne la nommait pas, et chaque question
@@ -1704,7 +1709,7 @@ export const CONFIDENTIALITE = [
       + 'transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font '
       + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent '
       + 'engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il '
-      + 's’agit de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets '
+      + 's’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets '
       + '(quantité, tri, lieux de dépôt, coût estimé), leurs '
       + 'lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le '
       + 'client —, leurs prix et leurs totaux, le client de votre carnet auquel ils '

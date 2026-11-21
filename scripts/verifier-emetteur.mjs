@@ -68,6 +68,46 @@ const sansCommentaires = (c) => c
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
 const lire = (f) => readFileSync(f, 'utf8');
+
+/* Les NOMS des paramètres d'une fonction écrite `f({ a = …, b, … } = {})`,
+   lus dans son TEXTE — `f.toString()` pour une fonction chargée, le fichier
+   pour un écran qui charge React Native : la parenthèse appariée, les
+   commentaires retirés, les virgules du premier niveau seulement (un défaut
+   `[]` ou `{}` ne coupe rien). Un second paramètre se dit
+   « (un second paramètre) » ; une autre forme rend `null`. Né avec 2b-5
+   (le banc des sabotages, J31b) : un paramètre ajouté ne change rien tant
+   que personne ne le passe — c'est la PORTE qu'il faut garder. */
+function parametresDestructures(texte) {
+  const src = String(texte || '');
+  const i = src.indexOf('(');
+  if (i < 0) return null;
+  let p = 0;
+  let j = i;
+  for (; j < src.length; j += 1) {
+    if (src[j] === '(') p += 1;
+    else if (src[j] === ')') { p -= 1; if (p === 0) break; }
+  }
+  const liste = sansCommentaires(src.slice(i + 1, j)).trim();
+  if (!liste.startsWith('{')) return null;
+  let q = 0;
+  let k = 0;
+  for (; k < liste.length; k += 1) {
+    if ('{[('.includes(liste[k])) q += 1;
+    else if ('}])'.includes(liste[k])) { q -= 1; if (q === 0) break; }
+  }
+  const reste = liste.slice(k + 1).replace(/\s+/g, '').replace(/^=\{\}/, '').replace(/^,$/, '');
+  const noms = [];
+  let courant = '';
+  let r = 0;
+  for (const c of liste.slice(1, k)) {
+    if ('{[('.includes(c)) r += 1;
+    else if ('}])'.includes(c)) r -= 1;
+    if (c === ',' && r === 0) { noms.push(courant); courant = ''; } else courant += c;
+  }
+  noms.push(courant);
+  const lus = noms.map((n) => n.trim()).filter(Boolean).map((n) => n.split('=')[0].split(':')[0].trim());
+  return reste === '' ? lus : [...lus, '(un second paramètre)'];
+}
 const egalEnsembles = (a, b) => a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
 
 /* ================================================================== */
@@ -875,6 +915,37 @@ if (E && M && D) {
     const fautives = cas.flatMap(lignes).filter((x) => INTERDITS.test(x));
     verifier('aucune ligne ne contient `undefined`, `null`, `NaN`, « juridiction », « vérifié »…',
       fautives.length === 0, fautives.join(' | '));
+
+    /* LES LIEUX DE DÉPÔT NE S'IMPRIMENT PAS DANS L'EN-TÊTE (2b-5, cahier
+       T13 : « l'en-tête imprimé ne les imprime pas » ; le banc des
+       sabotages, J31b). Ils appartiennent à « Mon entreprise » et se
+       choisissent devis par devis, dans la carte « Déchets » : l'en-tête
+       de l'entreprise n'en dit rien. On FAIT TOURNER `enteteImprime` en
+       lui passant AUSSI le lieu de la démonstration : il doit rendre
+       EXACTEMENT ce qu'il rend sans, et aucune ligne ne doit dire la
+       raison sociale du lieu, son adresse, ni « déchet ». Et sa signature
+       est tenue : un paramètre `lieux` que personne ne passe ne change
+       rien aujourd'hui (J31, une mutation équivalente) — c'est la porte
+       par laquelle l'aperçu les imprimerait demain. */
+    const demo2b5 = D.fabriquerEmetteurDemo(MAINTENANT);
+    const lieuDemo = (demo2b5.lieux || [])[0] || null;
+    const entree2b5 = { entreprise: A, emetteur: demo2b5.emetteur, assurances: demo2b5.assurances, tarifs: demo2b5.tarifs };
+    const sansLieux = E.enteteImprime(entree2b5);
+    const avecLieux = E.enteteImprime({ ...entree2b5, lieux: lieuDemo ? [lieuDemo] : [] });
+    const toutes2b5 = (x) => [...x.identite, ...x.mentions, x.source || '', ...(x.manques || [])];
+    const disentLeLieu = lieuDemo ? toutes2b5(avecLieux).filter((x) => x.includes(lieuDemo.raison_sociale)
+      || x.includes(lieuDemo.adresse) || /d[ée]chet/i.test(x)) : [];
+    verifier('l’en-tête n’imprime AUCUN lieu de dépôt (T13) : passé le lieu de la démonstration (`lieux: [ … ]`), il rend EXACTEMENT ce '
+      + 'qu’il rend sans, et aucune ligne ne dit sa raison sociale, son adresse ni « déchet »',
+    !!lieuDemo && JSON.stringify(avecLieux) === JSON.stringify(sansLieux) && disentLeLieu.length === 0,
+    disentLeLieu.join(' | ') || (lieuDemo ? 'l’en-tête CHANGE quand on lui passe des lieux de dépôt'
+      : 'la démonstration n’a plus de lieu de dépôt : la propriété ne s’éprouve plus'));
+    const paramsEntete = parametresDestructures(E.enteteImprime.toString());
+    verifier('…et la signature d’`enteteImprime` est EXACTEMENT `{ entreprise, emetteur, assurances, tarifs, preuveTva } = {}` : aucun '
+      + 'paramètre `lieux`, ni sous un autre nom',
+    paramsEntete !== null
+      && egalEnsembles(paramsEntete, ['entreprise', 'emetteur', 'assurances', 'tarifs', 'preuveTva']),
+    `paramètres lus : ${paramsEntete ? paramsEntete.join(', ') : '(forme illisible)'}`);
   }
 
   console.log('\n  les avis — ils ne bloquent rien');
@@ -1277,6 +1348,58 @@ if (!E) {
       && !/create (or replace )?trigger/.test(SCHEMA_BRUT.slice(iPortes)),
       'Le balayage ne voit que les fonctions déjà créées : une fonction de déclencheur née après lui '
       + 'resterait appelable par `/rest/v1/rpc`, sans compte.');
+    /* LA FORME EXACTE DES QUATRE DÉCLENCHEURS (relecture CTL-7 du 21/11) :
+       vérifiés par leur seule existence, celui des lieux pouvait ne plus
+       porter que sur l'INSERT — une modification n'aurait plus été nettoyée
+       (le formulaire envoie le texte brut) et la date de création serait
+       devenue modifiable ; l'essai 46 ne le voyait que par une cellule. Une
+       seule définition de chacun (`trg_tient_les_tarifs` n'est pas le
+       préfixe d'un autre : la frontière de mot le tient). */
+    const platSql = (x) => String(x || '').replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim();
+    const FORMES_DECLENCHEURS = {
+      trg_tient_l_emetteur: ['emetteur', 'tient_l_emetteur'],
+      trg_tient_l_assurance: ['emetteur_assurances', 'tient_l_assurance'],
+      trg_tient_le_lieu_de_depot: ['emetteur_lieux_depot', 'tient_le_lieu_de_depot'],
+      trg_tient_les_tarifs: ['tarifs_pro', 'tient_les_tarifs'],
+    };
+    const formesFausses = Object.entries(FORMES_DECLENCHEURS).filter(([d, [tb, f]]) => {
+      const toutes = [...SCHEMA.matchAll(new RegExp(`create (?:or replace )?trigger ${d}\\b[^;]*;`, 'gi'))].map((m) => platSql(m[0]));
+      return toutes.length !== 1
+        || toutes[0] !== `create or replace trigger ${d} before insert or update on public.${tb} for each row execute function public.${f}();`;
+    }).map(([d]) => d);
+    verifier('…et leur forme EXACTE, une définition chacun : « before insert or update on public.<table> for each row execute function '
+      + 'public.<fonction>(); » (CTL-7)',
+    formesFausses.length === 0, formesFausses.join(', ') || 'les quatre');
+    /* LA CLÉ DE CHAQUE TABLE VERS LA FICHE PRO, EXACTE (relecture CTL-8) :
+       un `on delete restrict` sur les lieux aurait fait REFUSER la
+       suppression du compte de tout artisan qui en a un — et seul l'essai
+       46, joué à la main, le voyait. `emetteur` et `tarifs_pro` ont leur
+       `pro_id` pour clé primaire ; les deux listes, `not null`. Et aucun
+       `alter table` ne la récrit plus bas. */
+    const COLONNES_PRO = {
+      emetteur: 'pro_id uuid primary key references public.professional_profiles(id) on delete cascade',
+      tarifs_pro: 'pro_id uuid primary key references public.professional_profiles(id) on delete cascade',
+      emetteur_assurances: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
+      emetteur_lieux_depot: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
+    };
+    const prosFaux = Object.entries(COLONNES_PRO).filter(([tb, forme]) => {
+      const ligne = String(table(tb)).replace(/--[^\n]*/g, '').split('\n').map((x) => x.replace(/\s+/g, ' ').trim())
+        .find((x) => /^pro_id\b/.test(x));
+      return !ligne || ligne.replace(/,$/, '') !== forme
+        || new RegExp(`alter table (?:only )?public\\.${tb}\\b[^;]*(?:alter column pro_id|drop column (?:if exists )?pro_id`
+          + `|add column (?:if not exists )?pro_id|foreign key \\(pro_id\\)|_pro_id_fkey)`, 'i').test(SCHEMA);
+    }).map(([tb]) => tb);
+    verifier('…et la colonne `pro_id` de chacune des quatre tables, EXACTE : `references public.professional_profiles(id) on delete cascade` '
+      + '— une suppression de compte emporte la fiche émetteur, les assurances, les lieux de dépôt et les tarifs (CTL-8)',
+    prosFaux.length === 0, prosFaux.join(', ') || 'les quatre');
+    /* LES LIEUX : LA RÉVOCATION ET L'INDEX, EXACTS (relecture CTL-13) — la
+       ligne de 46.2 bis protège le cas d'une migration jouée SANS le
+       balayage de 42 bis, que l'essai 46 ne sait pas distinguer. */
+    const s46 = platSql(SECTION_46);
+    verifier('…les lieux de dépôt : `revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated;` EXACTE, et '
+      + 'l’index sur `pro_id` (CTL-13)',
+    s46.includes('revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated;')
+      && s46.includes('create index if not exists idx_emetteur_lieux_depot_pro on public.emetteur_lieux_depot (pro_id);'));
   }
 
   /* --- 6.2-14 : les phrases, à l'octet --- */
@@ -1850,6 +1973,29 @@ console.log('\n4. L’ESSAI SQL — des refus, une donnée qui existe, et les m�
     && /update public\.emetteur set denomination_ei = 'EI' where pro_id = :B;\s*rollback;/.test(essai),
     'Un essai qui ne montre pas le cas qu’il annonce ne prouve rien.');
 
+  /* LE CAS 26 bis EST LA PREUVE DE LA FERMETURE — et une alternation à qui
+     il manque une table le rend AVEUGLE à cette table (le banc des
+     sabotages, B48) : l'essai rendrait sa sortie témoin sans plus la
+     chercher, et rien ne le verrait. On vise la PROPRIÉTÉ, pas la ligne :
+     chaque alternation `(…|…)` des expressions du cas qui nomme l'une des
+     quatre tables privées les nomme TOUTES — `emetteur_lieux_depot` (2b-5,
+     un mot à part : le tiret bas est une lettre de mot), `tarifs_pro`,
+     `emetteur_assurances`, `emetteur` —, et il y en a au moins quatre
+     (la liste hors liste, celle des fonctions, et les deux sortes de vues). */
+  {
+    const QUATRE = ['emetteur_lieux_depot', 'tarifs_pro', 'emetteur_assurances', 'emetteur'];
+    const cas26bis = morceau(essai, '=== 26 bis.', '=== 27.');
+    const alternations = [...cas26bis.matchAll(/~\*?\s*'([^']*)'/g)]
+      .flatMap((m) => [...m[1].matchAll(/\(([^()]*)\)/g)].map((g) => g[1].split('|').map((x) => x.trim())));
+    const nommantes = alternations.filter((a) => QUATRE.some((t) => a.includes(t)));
+    const incompletes = nommantes.filter((a) => !QUATRE.every((t) => a.includes(t)));
+    verifier('le cas 26 bis cherche les QUATRE tables privées dans chacune de ses alternations (`emetteur_lieux_depot`, `tarifs_pro`, '
+      + '`emetteur_assurances`, `emetteur`) : au moins quatre alternations, aucune qui en nomme une sans les autres',
+    cas26bis.length > 0 && nommantes.length >= 4 && incompletes.length === 0,
+    `${nommantes.length} alternation(s) qui les nomment ; incomplètes : `
+    + `${incompletes.map((a) => `(${a.join('|')})`).join(' ; ') || 'aucune'}. Une table oubliée, et l’essai ne la cherche plus.`);
+  }
+
   const ATTENDUES = ['emetteur_mediateur_check', 'emetteur_greffe_check', 'emetteur_denomination_ei_check',
     'emetteur_assurance_libelle_check', 'emetteur_assurance_complete_check', 'emetteur_assurance_chemin_check',
     'tarif_frais_zero_check', 'tarif_frais_check'];
@@ -2395,6 +2541,30 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     && /\{source\}/.test(code.ApercuEntete),
     'c’est la date de CONSULTATION du répertoire, et l’attribution que demande la Licence Ouverte');
 
+  /* …ET L'APERÇU NE REÇOIT NI NE PASSE AUCUN LIEU DE DÉPÔT (2b-5, T13 ; le
+     banc des sabotages, J31b). `ApercuEntete` charge React Native : `node`
+     ne peut pas le faire tourner. Sa signature, son appel à
+     `enteteImprime` et la balise que pose « Mon entreprise » se lisent donc
+     comme des propriétés — les cinq noms, rien d'autre, aucun `{...}` qui
+     ferait passer n'importe quoi. Le comportement est tenu en partie 2, où
+     `enteteImprime` TOURNE avec le lieu de la démonstration. */
+  const CINQ_ENTETE = ['entreprise', 'emetteur', 'assurances', 'tarifs', 'preuveTva'];
+  const iApercu = code.ApercuEntete.indexOf('export default function ApercuEntete(');
+  const paramsApercu = iApercu < 0 ? null : parametresDestructures(code.ApercuEntete.slice(iApercu));
+  const appelEntete = (code.ApercuEntete.match(/enteteImprime\(\{([^}]*)\}\)/) || [])[1];
+  const passesEntete = appelEntete == null ? null : appelEntete.split(',').map((x) => x.trim()).filter(Boolean);
+  const balisesApercu = balises(me, 'ApercuEntete');
+  const propsApercu = balisesApercu.map((x) => [...x.texte.matchAll(/\s([A-Za-z_]\w*)=\{/g)].map((m) => m[1]));
+  verifier('l’aperçu de l’en-tête ne reçoit ni ne passe AUCUN lieu de dépôt (T13) : la signature d’`ApercuEntete`, son appel à '
+    + '`enteteImprime` et la balise de « Mon entreprise » portent EXACTEMENT `entreprise`, `emetteur`, `assurances`, `tarifs`, `preuveTva`',
+  paramsApercu !== null && egalEnsembles(paramsApercu, CINQ_ENTETE)
+    && passesEntete !== null && egalEnsembles(passesEntete, CINQ_ENTETE)
+    && balisesApercu.length === 1 && propsApercu.every((p) => egalEnsembles(p, CINQ_ENTETE))
+    && balisesApercu.every((x) => !/\{\s*\.\.\./.test(x.texte)),
+  `signature : ${paramsApercu ? paramsApercu.join(', ') : '(illisible)'} ; passés à enteteImprime : `
+  + `${passesEntete ? passesEntete.join(', ') : '(illisibles)'} ; balises : ${balisesApercu.length}, `
+  + `${propsApercu.map((p) => p.join(', ')).join(' / ')}`);
+
   /* Le VOCABULAIRE des écrans du lot — « vérifié » est aussi tenu par
      `verifier-etats`, dont le motif voit enfin la lettre accentuée. */
   const fauxMots = [];
@@ -2466,11 +2636,11 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     verifier('« Vos lieux de dépôt des déchets » : une section de « Mon entreprise », APRÈS « Assurances » et avant « Médiateur »',
       iAss >= 0 && iLieux > iAss && iMed > iLieux,
       'la porte de la carte « Déchets » y défile par son ancre `lieux`');
-    verifier('…l’aide de la liste vide (A.7), une rangée par lieu (raison sociale ; type · commune ; chevron), « Ajouter un lieu de dépôt »',
-      plat.includes('Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés une fois, vous '
-        + 'les choisissez ensuite dans chaque devis.')
+    verifier('…l’aide de la liste vide (A.7), une rangée par lieu (raison sociale ; « type, commune » ; chevron), « Ajouter un lieu de dépôt »',
+      plat.includes('Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés ici une fois, '
+        + 'ils se choisissent ensuite dans chaque devis.')
       && /const typeLu = libelleDuTypeDeLieu\(l\);/.test(section)
-      && /\{`\$\{typeLu\} · \$\{l\.ville\}`\}/.test(section)
+      && /\{`\$\{typeLu\}, \$\{l\.ville\}`\}/.test(section) && !/\{`\$\{typeLu\} · /.test(section)
       && /<Text style=\{s\.optionLibelle\}>\{l\.raison_sociale\}<\/Text>/.test(section)
       && /onPress=\{\(\) => onOuvrirLieu\(l\)\}/.test(section) && /<ChevronRight/.test(section)
       && /onPress=\{onAjouterLieu\}/.test(section) && />Ajouter un lieu de dépôt</.test(section)
@@ -2512,6 +2682,31 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       && placeholders.every((p) => !/\d/.test(p))
       && /maxLength=\{5\}/.test(fl) && /validerLieuDepot\(v\)/.test(fl) && /messageDeContrainte\(r\.contrainte\)/.test(fl),
     `textes d’exemple : ${placeholders.join(' | ')}. « 13410 » ou « Lambesc » en gris se lirait comme déjà rempli.`);
+    /* L'AIDE DU FORMULAIRE DIT LA LOI EXACTE (relecture DROIT-R4 du 21/11) :
+       « Sur un devis de travaux sur un bâtiment ou de jardinage, la loi
+       demande… » disait plus que L. 541-21-2-3 I (« construction,
+       rénovation et démolition de bâtiments » et jardinage) — et aucun
+       contrôle ne la tenait. Une phrase qui dit « la loi » dit la loi
+       exacte ; la QUESTION de la carte, elle, peut rester large. */
+    const flPlat = fl.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+    verifier('…l’aide du formulaire d’un lieu dit la loi EXACTE : « Sur un devis de construction, de rénovation ou de démolition d’un '
+      + 'bâtiment, ou de jardinage, la loi demande… » — jamais « travaux sur un bâtiment » dans le formulaire (DROIT-R4)',
+    flPlat.includes('Sur un devis de construction, de rénovation ou de démolition d’un bâtiment, ou de jardinage, la loi demande où '
+      + 'iront les déchets : la raison sociale, l’adresse et le type d’installation de chaque lieu où vous les déposerez. Rangé ici '
+      + 'une fois, ce lieu se choisit ensuite dans chaque devis.')
+      && !/travaux sur un bâtiment/.test(flPlat),
+    'une phrase qui dit « la loi » et en élargit le champ engage l’artisan au-delà de ce qu’elle demande');
+    /* CHAQUE CHAMP PORTE LA LONGUEUR DE SA COLONNE (relecture CTL-11) : un
+       `maxLength` emprunté à une autre colonne laissait taper ce que
+       `validerLieuDepot` refuse ensuite. */
+    const champsLieu = [...balises(fl, 'ChampLocal'), ...balises(fl, 'ChampVille')].map((b) => b.texte.replace(/\s+/g, ' '));
+    const maxDe = (ref) => ((champsLieu.find((b) => b.includes(`ref={${ref}}`)) || '').match(/maxLength=\{([^}]+)\}/) || [])[1] || null;
+    const maxAttendus = { raison: 'L.raison_sociale', champAdresse: 'L.adresse', codePostal: '5', ville: 'L.ville', libelle: 'L.libelle' };
+    const maxFaux = Object.entries(maxAttendus).filter(([r, m]) => maxDe(r) !== m).map(([r]) => `${r} : ${maxDe(r)}`);
+    verifier('…chaque champ du formulaire porte le `maxLength` de SA colonne (`L = LONGUEUR_MAX.emetteur_lieux_depot` ; 5 pour le code '
+      + 'postal) (CTL-11)',
+    maxFaux.length === 0 && champsLieu.length === 5 && /const L = LONGUEUR_MAX\.emetteur_lieux_depot;/.test(fl),
+    maxFaux.join(' · ') || `${champsLieu.length} champs`);
     verifier('`MonEntreprise` : le mode `lieu` monte `FicheLieuDepot`, garde le brouillon, et revient sur la section des lieux',
       /\{mode === 'lieu' && \(\s*<FicheLieuDepot/.test(me)
       && /onAnnuler=\{\(\) => revenirAuFormulaire\('lieux'\)\}/.test(me)
@@ -2575,20 +2770,29 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
      qui les relit (`lireRegime`, dans `onFermer`). Les trois règles des
      assurances : `undefined` au départ (pas lus), une liste ou `null` à la
      réponse (non lus : la table pas encore là — jamais un `[]` inventé),
-     `undefined` sur un échec ; `recevoirEmetteur` n'y touche pas. Sans la
-     remise à `undefined`, un échec laisserait la carte « Déchets » cocher
-     des lieux qu'on n'a pas pu relire. */
+     `undefined` sur un échec. Sans la remise à `undefined`, un échec
+     laisserait la carte « Déchets » cocher des lieux qu'on n'a pas pu
+     relire. DEPUIS LA RELECTURE ÉCRAN-3 (21/11) : `recevoirEmetteur` pose
+     AUSSI les lieux que « Mon entreprise » vient de lire (un tableau, ou
+     `null`) — et seulement ceux-là (`undefined` : il n'y touche pas). Son
+     régime passe la génération et JETTE une lecture en route : sans les
+     lieux, la carte restait sans liste ET sans lecture en route, muette
+     jusqu'à la sortie du devis (mesuré). */
   {
     const appM = app.replace(/\s+/g, ' ');
     const recevoir = corps(app, 'const recevoirEmetteur = useCallback(');
     const surFermer = (app.match(/onFermer=\{\(\) => \{([\s\S]*?)\}\}\s*entreprise=\{monEntreprise\}/) || ['', ''])[1];
     verifier('`OpusApp` : `mesLieux` lus par `monRegimeEtSaDate`, `undefined` au départ et après un échec, jamais un `[]` inventé, et '
-      + 'passés à la saisie ; la fermeture de « Mon entreprise » les relit (2b-5, T12)',
+      + 'passés à la saisie ; la fermeture de « Mon entreprise » les relit (2b-5, T12) ; et la LECTURE de « Mon entreprise » les remonte '
+      + 'avec le régime, que `recevoirEmetteur` pose quand c’est un tableau ou `null` (ÉCRAN-3)',
     appM.includes('const [mesLieux, setMesLieux] = useState(undefined);')
       && appM.includes('setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null);')
       && appM.includes('setMonRegime({ echec: true }); setMesAssurances(undefined); setMesLieux(undefined);')
-      && (app.match(/\bsetMesLieux\(/g) || []).length === 2
-      && recevoir.length > 20 && !/MesLieux/.test(recevoir)
+      && (app.match(/\bsetMesLieux\(/g) || []).length === 3
+      && recevoir.length > 20 && /const recevoirEmetteur = useCallback\(\(emetteur, lieux\) => \{/.test(app)
+      && (recevoir.match(/MesLieux/g) || []).length === 1
+      && /if \(Array\.isArray\(lieux\) \|\| lieux === null\) setMesLieux\(lieux\);/.test(recevoir)
+      && /if \(surEmetteur\) surEmetteur\(d\.emetteur \|\| null, Array\.isArray\(d\.lieux\) \? d\.lieux : null\);/.test(me)
       && balises(app, 'SaisieDevisScreen').some((b) => /\blieux=\{mesLieux\}/.test(b.texte))
       && /lireRegime\(/.test(surFermer),
     'un échec qui garderait les lieux d’avant ferait cocher, dans un devis, des lieux qu’on n’a pas pu relire');

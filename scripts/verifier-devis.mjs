@@ -13009,6 +13009,35 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     && D.annonceDesLieux({ lieux: ['orph'] }, { lieux: null, sansDepot: true }, LUS) === null
     && D.annonceDesLieux({ lieux: ['l1'] }, { lieux: ['l1', 'l2'], sansDepot: null }, LUS) === null);
 
+  /* e bis. LE PLAFOND DES LIEUX (relecture BASE-R1 / ÉCRAN-1 du 21/11) : un
+        lieu de PLUS, quand la liste rebâtie dépasserait dix, ne s'ajoute pas
+        — le choix rendu INCHANGÉ (orphelins compris), `plafond: true` ; la
+        liste REBÂTIE est comptée, jamais ce que la carte garde (dix
+        identifiants dont trois orphelins : sept cases cochées, et un
+        huitième lieu PASSE) ; décocher, et « Aucun dépôt », restent
+        possibles ; et jamais `[]`. Sans la garde, la carte envoyait un
+        onzième lieu, que la base refuse, et disait « mettez Opus à jour » à
+        qui a la dernière version. */
+  const ONZE = Array.from({ length: 11 }, (_, i) => ({ id: `m${i}`, pro_id: 'p' }));
+  const dixIds = ONZE.slice(0, 10).map((l) => l.id);
+  const plafondDix = LA({ lieux: dixIds, sansDepot: null }, ONZE, 'm10');
+  const avecOrphelins = [...ONZE.slice(0, 7).map((l) => l.id), 'o1', 'o2', 'o3'];
+  const huitieme = LA({ lieux: avecOrphelins, sansDepot: null }, ONZE, 'm7');
+  const decocheDix = LA({ lieux: dixIds, sansDepot: null }, ONZE, 'm3');
+  const aucunDix = LA({ lieux: dixIds, sansDepot: null }, ONZE, AD);
+  const videsDix = [undefined, null, [], ONZE].flatMap((l) => [...ONZE.map((x) => x.id), AD]
+    .map((k) => LA({ lieux: dixIds, sansDepot: null }, l, k).lieux)).filter((v) => Array.isArray(v) && v.length === 0);
+  verifier('e bis. le plafond des lieux : dix choisis + un onzième → le choix INCHANGÉ, `plafond: true` ; dix identifiants dont trois '
+    + 'orphelins + un huitième lieu → huit lieux, SANS plafond (la liste rebâtie est comptée) ; décocher à dix → neuf ; « Aucun dépôt » '
+    + 'à dix → aucun lieu ; jamais `[]`',
+  egal(plafondDix, { lieux: dixIds, sansDepot: null, plafond: true })
+    && egal(huitieme, { lieux: ONZE.slice(0, 8).map((l) => l.id), sansDepot: null })
+    && egal(decocheDix, { lieux: dixIds.filter((v) => v !== 'm3'), sansDepot: null })
+    && egal(aucunDix, { lieux: null, sansDepot: true }) && videsDix.length === 0
+    && D.LIEUX_DECHETS_MAX === 10
+    && D.LES_DECHETS.lieux.plafond === 'Dix lieux au plus par devis : décochez-en un pour en choisir un autre.',
+  json({ plafondDix, huitieme, decocheDix, aucunDix }));
+
   /* f. LA RÈGLE DU RANG 13 EST ÉCRITE UNE FOIS (T26) : `rubriquesDesDechets`.
         Le miroir, la rangée, la rubrique visée par le point et la liste
         entière la LISENT — aucun ne relit un champ des déchets lui-même —,
@@ -13073,25 +13102,67 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
   relisent.length === 0 && appellent && !recopieApi && combinaisons >= 2000 && desaccords.length === 0,
   `relisent : ${relisent.join(', ') || '—'} ; appellent ${appellent} ; api ${recopieApi} ; ${desaccords.slice(0, 2).join(' | ')}`);
 
+  /* f bis. UN TRI VIDE N'EST PAS UN TRI (le banc des sabotages, J43) : la
+        rubrique « tri » se juge sur un TABLEAU NON VIDE, jamais sur « pas
+        vide de valeur ». Aucun chemin ne produit `[]` aujourd'hui — la base
+        le refuse (`devis_dechets_flux_check`), les fonctions d'appui n'en
+        écrivent jamais (e. ci-dessus) —, donc la boucle de f. ne le
+        contient pas, et `cas-remise.json` ne PEUT pas le contenir : la
+        règle n'était gardée par rien. Ce cas direct est écrit EN TOUTES
+        LETTRES, sans rien recalculer par `rubriquesDesDechets` (qui
+        changerait avec la règle qu'il doit garder). */
+  const TRI_COMPLET44 = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x',
+    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, proId: 'p', dechetsConcerne: true,
+    dechetsQuantiteMilliemes: 1000, dechetsUnite: 't', dechetsSurPlace: null, dechetsLieux: null, dechetsSansDepot: true,
+    dechetsCoutCentimes: 100 };
+  const rang13DuTri = (flux, concerne = true) => D.motifsDeRemise({
+    devis: { ...TRI_COMPLET44, dechetsConcerne: concerne, dechetsFlux: flux },
+    lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise', lieux: [],
+  }).filter((x) => x.rang === 13).map((x) => x.cle);
+  const triVide = { ...TRI_COMPLET44, dechetsFlux: [] };
+  verifier('f bis. un tri VIDE (`dechetsFlux: []`) sur un « Oui » complet par ailleurs : la rubrique du tri MANQUE — le rang 13 porte '
+    + '`devis_dechets_rubriques`, la rangée dit « À compléter : tri », le point ouvre le tri ; avec un déchet coché, rien ; sans '
+    + 'réponse, `devis_dechets`',
+  egal(rang13DuTri([]), ['devis_dechets_rubriques']) && egal(rang13DuTri(['bois']), [])
+    && egal(rang13DuTri([], null), ['devis_dechets'])
+    && D.rubriquesDesDechets(triVide, []).tri === false && D.premiereRubriqueManquante(triVide, []) === 'tri'
+    && D.resumeDesDechets({ devis: triVide, lieux: [] }) === 'À compléter : tri',
+  json({ vide: rang13DuTri([]), bois: rang13DuTri(['bois']), sansReponse: rang13DuTri([], null),
+    rubriques: D.rubriquesDesDechets(triVide, []) }));
+
   /* g. LES ÉTATS DE LA LISTE DES LIEUX (T12 bis) ET LE LIBELLÉ DU COÛT (T16),
         sur les cinq états du régime : en lecture (`undefined`), en échec
         (`{ echec: true }`), non déclaré (`null`), la franchise, le réel. */
-  const REGIMES = [['lecture', undefined], ['échec', { echec: true }], ['non déclaré', null], ['franchise', 'franchise'], ['réel', 'reel']];
+  /* La liste PAS ENCORE LUE (`undefined`) sous un régime LU se dit « en
+     lecture » (relecture ÉCRAN-3 du 21/11) : « Mon entreprise » pose le
+     régime qu'elle vient de lire pendant que la lecture des lieux est en
+     route, et la dire en échec affichait « n'ont pas pu être lus » et
+     « Réessayer » sur un réseau lent — puis une case à la place du bouton.
+     `null` (lue, la table absente) reste un échec. */
+  const REGIMES = [['lecture', undefined], ['en cours', { chargement: true }], ['échec', { echec: true }], ['non déclaré', null],
+    ['franchise', 'franchise'], ['réel', 'reel']];
   const etatsL = REGIMES.map(([quoi, r]) => [quoi, D.etatDesLieux(r, undefined), D.etatDesLieux(r, null), D.etatDesLieux(r, []),
     D.etatDesLieux(r, LUS)]);
   const attendusL = [
     ['lecture', 'lecture', 'lecture', 'vide', 'lus'],
+    ['en cours', 'lecture', 'lecture', 'vide', 'lus'],
     ['échec', 'echec', 'echec', 'vide', 'lus'],
-    ['non déclaré', 'echec', 'echec', 'vide', 'lus'],
-    ['franchise', 'echec', 'echec', 'vide', 'lus'],
-    ['réel', 'echec', 'echec', 'vide', 'lus'],
+    ['non déclaré', 'lecture', 'echec', 'vide', 'lus'],
+    ['franchise', 'lecture', 'echec', 'vide', 'lus'],
+    ['réel', 'lecture', 'echec', 'vide', 'lus'],
   ];
   const couts = REGIMES.map(([, r]) => D.libelleDuCout(r));
-  verifier('g. `etatDesLieux` : une liste vide → « vide », des lieux → « lus » ; sans liste, le régime en lecture → « lecture », LU ou en '
-    + 'échec → « echec » (jamais « aucun lieu ») — et `libelleDuCout` dit « Coût estimé HT » au réel SEULEMENT, « Coût estimé, en '
-    + 'euros » en lecture, en échec, non déclaré et en franchise',
+  const parles = REGIMES.map(([, r]) => D.libelleParleDuCout(r));
+  verifier('g. `etatDesLieux` : une liste vide → « vide », des lieux → « lus » ; le régime en ÉCHEC → « echec » ; le régime LU et la liste '
+    + 'lue à vide de valeur (`null`) → « echec » ; la liste PAS ENCORE LUE (`undefined`) → « lecture », régime lu ou non (ÉCRAN-3) ; '
+    + 'jamais « aucun lieu » — et `libelleDuCout` dit « Coût estimé HT » au réel SEULEMENT, « Coût estimé, en euros » ailleurs ; ce '
+    + 'que VoiceOver dit du champ (`libelleParleDuCout`) : « Coût estimé HT des déchets » au réel, « Coût estimé des déchets, en '
+    + 'euros » ailleurs — jamais « …, en euros des déchets » (ÉCRAN-6)',
   egal(etatsL, attendusL) && egal(couts, ['Coût estimé, en euros', 'Coût estimé, en euros', 'Coût estimé, en euros',
-    'Coût estimé, en euros', 'Coût estimé HT']), json({ etatsL, couts }));
+    'Coût estimé, en euros', 'Coût estimé, en euros', 'Coût estimé HT'])
+    && egal(parles, ['Coût estimé des déchets, en euros', 'Coût estimé des déchets, en euros', 'Coût estimé des déchets, en euros',
+      'Coût estimé des déchets, en euros', 'Coût estimé des déchets, en euros', 'Coût estimé HT des déchets']),
+  json({ etatsL, couts, parles }));
 
   /* h. L'ÉTAT INITIAL DE LA CARTE (T10, T23) : les listes recopiées NEUVES,
         un tableau vide relu comme vide de valeur, les orphelins GARDÉS (aucun
@@ -13115,6 +13186,28 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       { concerne: true, unite: 't', flux: null, surPlace: ['broyage'], lieux: ['l2'], sansDepot: true })
     && D.etatInitialDechets(dv0, { choix: { unite: 'kg' } }).unite === 'm3',
   json(e0));
+
+  /* h bis. LES DEUX TEXTES À L'OUVERTURE DES CHAMPS (`textesInitiauxDesDechets`,
+        relecture CTL-9 du 21/11), FAITS TOURNER : au premier « quitter »,
+        la carte enregistre ce qu'ils affichent — une quantité ×10 ou le
+        prix du devis lui-même à la place du coût des déchets partirait en
+        base, et seule la mesure au navigateur le voyait. */
+  const ti = D.textesInitiauxDesDechets;
+  const tiCas = [
+    ['2 500 millièmes → « 2,5 »', ti({ dechetsQuantiteMilliemes: 2500 }).quantite, '2,5'],
+    ['12 000 centimes → « 120 »', ti({ dechetsCoutCentimes: 12000 }).cout, '120'],
+    ['le prix du devis lui-même ignoré', ti({ coutDevisCentimes: 15000 }).cout, ''],
+    ['le prix du devis lui-même ignoré, à côté du coût', ti({ coutDevisCentimes: 15000, dechetsCoutCentimes: 4550 }).cout, '45,50'],
+    ['rien → vide', ti({}).quantite + ti({}).cout, ''],
+    ['un devis absent → vide', ti(null).quantite + ti(undefined).cout, ''],
+    ['un texte gardé passe d’abord', ti({ dechetsQuantiteMilliemes: 2500 }, { quantite: '0' }).quantite, '0'],
+    ['un texte gardé VIDE : la valeur enregistrée', ti({ dechetsCoutCentimes: 12000 }, { cout: '  ' }).cout, '120'],
+    ['un coût de 0 enregistré ne s’affiche pas', ti({ dechetsCoutCentimes: 0 }).cout, ''],
+    ['12 345 millièmes → « 12,345 »', ti({ dechetsQuantiteMilliemes: 12345 }).quantite, '12,345'],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([quoi, vu]) => `${quoi} → « ${vu} »`);
+  verifier('h bis. `textesInitiauxDesDechets` : 2 500 millièmes → « 2,5 », 12 000 centimes → « 120 », le prix du devis lui-même JAMAIS '
+    + 'repris, un texte gardé passe d’abord (vide : la valeur enregistrée), rien → vide (CTL-9)',
+  tiCas.length === 0, tiCas.join(' | '));
 
   /* i. CE QUE LA CARTE ÉCRIT (`lireDechets`, T23) : la quantité et le coût
         lus du texte tapé — 0 refusé avec la phrase de la carte, vide → vide de
@@ -13148,6 +13241,32 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     && D.vibrerPourLesDechets('unite', ['dechetsQuantiteMilliemes'], ['dechetsQuantiteMilliemes']) === true
     && D.vibrerPourLesDechets('lieux', ['dechetsSansDepot'], ['dechetsSansDepot']) === true,
   json({ l1, l0, lv }));
+
+  /* i bis. CE QUE LA CARTE NE TOUCHE PAS (le banc des sabotages, J38 et
+        J33b). T23 : « toucher l'autre unité garde le nombre (comme l'unité
+        d'une ligne) » ; §3.8 : sous « Non », « ce qui est écrit est GARDÉ
+        (le modèle de `lireConditions` : un champ démonté se lit
+        `undefined`) ». Sans texte tapé, ni la quantité ni le coût n'entrent
+        dans ce qui part : un vide de valeur écrit là EFFACERAIT en base ce
+        que l'artisan avait saisi, et « Oui » de nouveau ne le rendrait plus.
+        Aucune mesure de `npm run verifier` ne le voyait : seule
+        `mesure-devis`, au navigateur et à la main, refusait le second. */
+  const enBase44 = { dechetsConcerne: true, dechetsUnite: 'm3', dechetsQuantiteMilliemes: 2500, dechetsCoutCentimes: 12000 };
+  const autreUnite = D.lireDechets({ choix: { unite: 't' }, tapes: {},
+    devis: { dechetsUnite: 'm3', dechetsQuantiteMilliemes: 2500 } });
+  const nonDemonte = D.lireDechets({ choix: { concerne: false }, tapes: { quantite: undefined, cout: undefined }, devis: enBase44 });
+  const nonSansTapes = D.lireDechets({ choix: { concerne: false }, tapes: {}, devis: enBase44 });
+  const nonAffiche = D.lireDechets({ choix: { concerne: false }, tapes: { quantite: '2,5', cout: '120' }, devis: enBase44 });
+  const aEcrit44 = (l, cle) => Object.prototype.hasOwnProperty.call(l.changements, cle);
+  verifier('i bis. `lireDechets` : passer de « m³ » à « tonnes » sans rien taper n’envoie QUE l’unité — la quantité garde son nombre '
+    + '(T23) ; « Non », champs démontés, n’envoie NI la quantité NI le coût, et avec les textes encore affichés il les renvoie tels '
+    + 'quels — jamais un vide qui effacerait ce qui est écrit (§3.8)',
+  egal(autreUnite.changements, { dechetsUnite: 't' }) && egal(autreUnite.erreurs, {}) && egal(autreUnite.rappels, {})
+    && [nonDemonte, nonSansTapes].every((l) => l.changements.dechetsConcerne === false
+      && !aEcrit44(l, 'dechetsQuantiteMilliemes') && !aEcrit44(l, 'dechetsCoutCentimes'))
+    && nonAffiche.changements.dechetsQuantiteMilliemes === 2500 && nonAffiche.changements.dechetsCoutCentimes === 12000,
+  json({ autreUnite: autreUnite.changements, nonDemonte: nonDemonte.changements, nonSansTapes: nonSansTapes.changements,
+    nonAffiche: nonAffiche.changements }));
 
   /* j. LA RANGÉE « DÉCHETS » (annexe A.3, T24) : dix-huit résumés, chacun
         avec trois suffixes — cinquante-quatre gabarits, tous différents ;
@@ -13239,6 +13358,33 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     + 'inconnue, « aucune » avec une autre, quinze sortes, onze lieux, un lieu vide, 0, « Aucun dépôt » faux, une unité inconnue '
     + 'refusés ; un doublon accepté, comme par la base ; deux fautes ensemble, la première dans l’ordre alphabétique',
   fauxL.length === 0, fauxL.join(' | '));
+  /* …et le CHAMP que nomme chaque refus (relecture CTL-12 du 21/11) :
+     `enregistrerEntete` met la faute SOUS ce champ, et retient les autres —
+     le refus du coût rangé sous la quantité retiendrait une quantité
+     valable. */
+  const champsL = [
+    [{ dechetsCoutCentimes: 0 }, 'dechetsCoutCentimes'], [{ dechetsFlux: [] }, 'dechetsFlux'], [{ dechetsLieux: [] }, 'dechetsLieux'],
+    [{ dechetsQuantiteMilliemes: 0 }, 'dechetsQuantiteMilliemes'], [{ dechetsSansDepot: false }, 'dechetsSansDepot'],
+    [{ dechetsSurPlace: [] }, 'dechetsSurPlace'], [{ dechetsUnite: 'kg' }, 'dechetsUnite'],
+  ].filter(([x, voulu]) => D.validerDevis({ ...x }).champ !== voulu).map(([x]) => `${json(x)} → ${D.validerDevis({ ...x }).champ}`);
+  verifier('…chaque refus des déchets NOMME son champ (`.champ` de `validerDevis`) : le coût, les déchets triés, les lieux, la quantité, '
+    + '« Aucun dépôt », ce qui reste sur le chantier, l’unité — chacun le sien (CTL-12)',
+  champsL.length === 0, champsL.join(' | '));
+  /* …et la phrase d'ÉCHEC de la bande, une par contrainte, EN TOUTES LETTRES
+     (relecture CTL-4) : échanger celles du coût et de la quantité passait. */
+  const ECHECS_DECHETS = {
+    devis_dechets_cout_check: 'Le coût estimé des déchets n’a pas pu être enregistré.',
+    devis_dechets_flux_check: 'Les déchets triés n’ont pas pu être enregistrés.',
+    devis_dechets_lieux_check: 'Les lieux de dépôt des déchets n’ont pas pu être enregistrés.',
+    devis_dechets_quantite_check: 'La quantité estimée des déchets n’a pas pu être enregistrée.',
+    devis_dechets_sans_depot_check: 'La réponse « Aucun dépôt » n’a pas pu être enregistrée.',
+    devis_dechets_sur_place_check: 'Ce qui reste sur le chantier n’a pas pu être enregistré.',
+    devis_dechets_unite_check: 'L’unité des déchets n’a pas pu être enregistrée.',
+  };
+  const echecsFaux = Object.entries(ECHECS_DECHETS)
+    .filter(([k, v]) => net(D.phraseEchecDuDevis({ enBase: true, erreur: { message: `x "${k}"` } })) !== v).map(([k]) => k);
+  verifier('…la phrase d’échec de la bande, pour chacune des sept contraintes des déchets, EN TOUTES LETTRES (`phraseEchecDuDevis`, CTL-4)',
+    echecsFaux.length === 0, echecsFaux.join(', '));
   /* …et chacune a SA phrase dans `MESSAGES_CONTRAINTE` (annexe A.8, en
      minuscule initiale, la forme du fichier), ainsi que les quatre des lieux
      de dépôt — mot pour mot. */
@@ -13252,10 +13398,42 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     devis_dechets_unite_check: 'choisissez m³ ou tonnes.',
   };
   const A8faux = Object.entries(A8).filter(([k, v]) => net(ERR.MESSAGES_CONTRAINTE[k]) !== v).map(([k]) => k);
-  verifier('…chacune a SA phrase dans `MESSAGES_CONTRAINTE` (annexe A.8), mot pour mot, et les quatre des lieux de dépôt la leur',
-    A8faux.length === 0 && ['emetteur_lieu_code_postal_check', 'emetteur_lieu_complet_check', 'emetteur_lieu_longueurs_check',
-      'emetteur_lieu_type_check'].every((k) => typeof ERR.MESSAGES_CONTRAINTE[k] === 'string' && ERR.MESSAGES_CONTRAINTE[k].length > 15)
-    && /mettez l’application à jour/i.test(ERR.MESSAGES_CONTRAINTE.emetteur_lieu_type_check || ''), A8faux.join(', '));
+  verifier('…chacune a SA phrase dans `MESSAGES_CONTRAINTE` (annexe A.8), mot pour mot',
+    A8faux.length === 0, A8faux.join(', '));
+  /* LES QUATRE REFUS D'UN LIEU DE DÉPÔT, EN TOUTES LETTRES, ET FAITS TOURNER
+     par le chemin du formulaire (`validerLieuDepot`, puis
+     `messageDeContrainte` — `FicheLieuDepot.enregistrer`), relecture CTL-3
+     du 21/11 : tenues par leur seule longueur, la phrase des longueurs
+     posée sur le code postal passait — et un code postal de quatre
+     chiffres aurait fait dire « Un de vos textes dépasse la longueur
+     prévue » sous le champ. Les phrases d'aujourd'hui (l'annexe A.8 n'en
+     donne que le sujet). */
+  const PHRASES_LIEUX = {
+    emetteur_lieu_code_postal_check: 'Un code postal fait cinq chiffres.',
+    emetteur_lieu_complet_check: 'Un lieu de dépôt s’écrit avec sa raison sociale, son adresse, son code postal, sa commune et son type '
+      + 'd’installation : c’est ce que le devis doit porter. Pour « Autre installation autorisée », précisez laquelle.',
+    emetteur_lieu_longueurs_check: 'Un de vos textes dépasse la longueur prévue : le formulaire indique la limite de chaque champ.',
+    emetteur_lieu_type_check: 'Ce type d’installation n’est pas connu d’Opus : rien n’a été enregistré. Mettez l’application à jour, '
+      + 'puis réessayez.',
+  };
+  const LIEU_L = { raison_sociale: 'A', adresse: 'B', code_postal: '29200', ville: 'C', type_installation: 'tri' };
+  const fautesLieu = [
+    [{ code_postal: '1341' }, 'emetteur_lieu_code_postal_check', 'code_postal'],
+    [{ raison_sociale: '' }, 'emetteur_lieu_complet_check', 'raison_sociale'],
+    [{ type_installation: 'autre' }, 'emetteur_lieu_complet_check', 'libelle'],
+    [{ ville: 'x'.repeat(E.LONGUEUR_MAX.emetteur_lieux_depot.ville + 1) }, 'emetteur_lieu_longueurs_check', 'ville'],
+    [{ type_installation: 'inconnu' }, 'emetteur_lieu_type_check', 'type_installation'],
+  ].map(([x, contrainte, champ]) => {
+    const r = E.validerLieuDepot({ ...LIEU_L, ...x });
+    const dit = r.ok ? null : net(ERR.messageDeContrainte(r.contrainte));
+    return r.ok === false && r.contrainte === contrainte && r.champ === champ && dit === PHRASES_LIEUX[contrainte] ? null
+      : `${json(x)} → ${r.contrainte}/${r.champ} : « ${dit} »`;
+  }).filter(Boolean);
+  verifier('…les quatre refus d’un lieu de dépôt, EN TOUTES LETTRES, faits tourner par le chemin du formulaire (`validerLieuDepot` puis '
+    + '`messageDeContrainte`) : quatre chiffres → « Un code postal fait cinq chiffres. », un texte trop long → la phrase des longueurs, '
+    + '« Autre » sans précision → la phrase complète, un type inconnu → la phrase du type (CTL-3)',
+  fautesLieu.length === 0 && Object.keys(PHRASES_LIEUX).every((k) => net(ERR.messageDeContrainte(k)) === PHRASES_LIEUX[k]),
+  fautesLieu.join(' | '));
 
   /* m. LE VOCABULAIRE CIBLÉ (cahier §5.2, critiques DROIT-16 et CTL-15) :
         ni « registre » en mot entier (la frontière posée à la main : `\b` ne
@@ -13306,7 +13484,7 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       non: 'Non, ni l’un ni l’autre',
       ouiParDefaut: 'Oui (par défaut)',
       oui: 'Oui',
-      aide: 'La loi demande, sur tout devis de construction, de rénovation ou de démolition d’un bâtiment, et sur tout devis de '
+      aide: 'La loi demande, sur un devis de construction, de rénovation ou de démolition d’un bâtiment, et sur un devis de '
         + 'jardinage, ce que deviendront les déchets — même s’il y en a très peu. Répondez Non seulement si ce devis n’est ni l’un ni '
         + 'l’autre : une étude ou une fourniture sans pose (ce ne sont pas des travaux), une route ou un réseau sans rapport avec un '
         + 'bâtiment. Dans le doute (un dépannage, une réparation, une terrasse ou une allée contre la maison, l’entretien d’espaces '
@@ -13328,10 +13506,15 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       sousAucune: 'Seulement si rien ne partira à part.',
       aide: 'Le plâtre, les déchets dangereux et les déchets verts triés ne se mélangent pas aux autres. Sur un petit chantier '
         + '(moins de 10 m³ de déchets, ou sans 40 m² pour les stocker), les règles de tri du décret ne s’appliquent pas ; la loi '
-        + 'demande quand même un tri à la source, et le devis doit dire ce que vous faites.',
+        + 'demande quand même un tri à la source et, pour les déchets qui ne sont pas traités sur place, une collecte séparée ; et le '
+        + 'devis doit dire ce que vous faites.',
       retires: 'Les déchets cochés ont été retirés.',
     },
-    surPlace: { titre: 'Sur le chantier', question: 'Ce qui y restera, s’il y en a. Facultatif.' },
+    surPlace: {
+      titre: 'Sur le chantier',
+      question: 'Ce qui y restera, s’il y en a. Pour des travaux de jardinage, si vous broyez, compostez ou paillez sur place, la '
+        + 'loi demande de le dire.',
+    },
     lieux: {
       titre: 'Où les déposerez-vous ?',
       echec: 'Vos lieux de dépôt n’ont pas pu être lus.',
@@ -13340,8 +13523,10 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       ajouter: 'Ajouter un lieu de dépôt',
       porte: 'Mes lieux de dépôt',
       aucunDepot: 'Aucun dépôt : rien ne quittera le chantier',
-      sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés.',
+      sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés : choisissez alors aussi « Aucune collecte '
+        + 'séparée » et, dans « Sur le chantier », ce que vous en faites.',
       retires: 'Les lieux cochés ont été retirés.',
+      plafond: 'Dix lieux au plus par devis : décochez-en un pour en choisir un autre.',
       aide: 'Si vous les remettez à quelqu’un d’autre, la loi vous demande de vous assurer qu’il est autorisé à les prendre en '
         + 'charge ; Opus ne peut pas le vérifier. Pour votre propre dépôt, nommez aussi, si vous la connaissez, l’installation où ils '
         + 'finiront.',
@@ -13349,10 +13534,12 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     cout: {
       libelleHt: 'Coût estimé HT',
       libelleEuros: 'Coût estimé, en euros',
+      parleHt: 'Coût estimé HT des déchets',
+      parleEuros: 'Coût estimé des déchets, en euros',
       question: 'Combien coûteront le tri, le chargement, le transport et le dépôt ?',
       placeholder: 'Montant',
-      aide: 'Une estimation, qui ne s’ajoute pas au total. Si ce coût est déjà compris dans vos prix, n’ajoutez rien ; s’il ne l’est '
-        + 'pas et que vous le faites payer, ajoutez une ligne au devis.',
+      aide: 'Une estimation, qui ne s’ajoute pas au total. Si ce coût est déjà compris dans vos prix, n’ajoutez pas de ligne : écrivez '
+        + 'quand même son estimation ici. S’il ne l’est pas et que vous le faites payer, ajoutez une ligne au devis.',
       zero: 'Le coût estimé des déchets doit être un montant positif.',
     },
   };
@@ -13419,6 +13606,22 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     && vl({ type_installation: 'autre', libelle: 'Plateforme' }) === null
     && vl({ type_installation: 'inconnu' }) === 'emetteur_lieu_type_check/type_installation',
   json(nl));
+
+  /* o bis. LE CODE POSTAL D'UN LIEU N'EST ROGNÉ QU'AUX BOUTS (le banc des
+        sabotages, J89 ; T22, « rogné aux bouts, cinq chiffres »). La base
+        (`tient_le_lieu_de_depot`) ne retire l'espace, la tabulation et les
+        retours qu'AUX BORDS, puis `emetteur_lieu_code_postal_check` exige
+        cinq chiffres : « 13 410 » y est REFUSÉ. Un nettoyage qui retirerait
+        l'espace du MILIEU ferait accepter en démonstration ce que la base
+        refuse — et la démonstration doit refuser comme elle (§3.9). */
+  const cpMilieu = E.nettoyerLieuDepot({ ...LIEU, code_postal: ' 13 410 ' }, null, QUAND);
+  const cpRefus = E.validerLieuDepot(cpMilieu);
+  verifier('o bis. `nettoyerLieuDepot` rogne le code postal AUX BOUTS seulement : « 13 410 » entouré d’espaces devient « 13 410 », '
+    + 'l’espace du milieu GARDÉE ; et `validerLieuDepot` le refuse sous `emetteur_lieu_code_postal_check`, champ `code_postal` — '
+    + 'comme la base',
+  cpMilieu.code_postal === '13 410' && cpRefus.ok === false && cpRefus.contrainte === 'emetteur_lieu_code_postal_check'
+    && cpRefus.champ === 'code_postal',
+  json({ code_postal: cpMilieu.code_postal, refus: cpRefus }));
 
   /* p. CE QUE L'APPLICATION ENVOIE (`devisVersBase`, api.js, FAITE TOURNER) :
         les huit colonnes des déchets, TELLES QUELLES — aucune normalisation
@@ -13510,7 +13713,8 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
         depuis la liste VIVANTE (la prop `lieux`). */
   verifier('c. les appuis, ENTIERS : la question et l’unité ne réécrivent pas ce qui est déjà choisi ; un déchet, un lieu, ce qui reste '
     + 'sur place passent par `fluxApresAppui`, `lieuxApresAppui` (sur la liste VIVANTE, la prop `lieux`) et `surPlaceApresAppui` ; '
-    + '« Aucune collecte séparée » et « Aucun dépôt » s’ANNONCENT (`annonceDuTri`, `annonceDesLieux`), les cases jamais',
+    + '« Aucune collecte séparée » et « Aucun dépôt » s’ANNONCENT (`annonceDuTri`, `annonceDesLieux`), les cases jamais — sauf un lieu '
+    + 'de TROP (`plafond`) : rien n’est écrit, la phrase s’annonce et la carte vibre (BASE-R1 / ÉCRAN-1)',
   corpsAppui('repondre') === "=> { if (choix.current.concerne === valeur) return; choisir({ concerne: valeur }, 'concerne'); }"
     && corpsAppui('choisirUnite') === "=> { if (choix.current.unite === unite) return; choisir({ unite }, 'unite'); }"
     && corpsAppui('toucherDechet') === "=> { choisir({ flux: fluxApresAppui(choix.current.flux, cle) }, 'tri'); }"
@@ -13518,11 +13722,14 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     && corpsAppui('toucherAucuneCollecte') === "=> { const avant = choix.current.flux; const apres = fluxApresAppui(avant, AUCUNE_COLLECTE); "
       + "choisir({ flux: apres }, 'tri'); const dire = annonceDuTri(avant, apres); if (dire) retour.annoncer(dire); }"
     && corpsAppui('toucherLieu') === '=> { const avant = { lieux: choix.current.lieux, sansDepot: choix.current.sansDepot }; '
-      + "const apres = lieuxApresAppui(avant, lieux, id); choisir({ lieux: apres.lieux, sansDepot: apres.sansDepot }, 'lieux'); }"
-    && corpsAppui('toucherAucunDepot') === '=> { const avant = { lieux: choix.current.lieux, sansDepot: choix.current.sansDepot }; '
+      + 'const apres = lieuxApresAppui(avant, lieux, id); if (apres.plafond) { setPlafond(true); retour.echec(); '
+      + 'retour.annoncer(LES_DECHETS.lieux.plafond); return; } setPlafond(false); '
+      + "choisir({ lieux: apres.lieux, sansDepot: apres.sansDepot }, 'lieux'); }"
+    && corpsAppui('toucherAucunDepot') === '=> { setPlafond(false); const avant = { lieux: choix.current.lieux, sansDepot: '
+      + 'choix.current.sansDepot }; '
       + "const apres = lieuxApresAppui(avant, lieux, AUCUN_DEPOT); choisir({ lieux: apres.lieux, sansDepot: apres.sansDepot }, 'lieux'); "
       + 'const dire = annonceDesLieux(avant, apres, lieux); if (dire) retour.annoncer(dire); }'
-    && (CDd.match(/retour\.annoncer\(/g) || []).length === 2,
+    && (CDd.match(/retour\.annoncer\(/g) || []).length === 3,
   `${corpsAppui('toucherLieu').slice(0, 160)}`);
 
   /* d. L'ORDRE DES BLOCS (§3.8) et l'ancre de chaque rubrique, sur un titre
@@ -13637,6 +13844,23 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     && (CDd.match(/onPress=\{allerAMesLieux\}/g) || []).length === 3
     && !/useState\([^)]*\blieux\b/.test(CDd) && !/\blieux = /.test(CDd.slice(0, CDd.indexOf('}, ref) {'))),
   `${blocEchec.slice(0, 80)} | ${blocLus.slice(0, 80)}`);
+  /* g bis. LE PLAFOND (relecture BASE-R1 / ÉCRAN-1 du 21/11) : la phrase est
+        MONTRÉE à la place de la faute des lieux, dans une région vivante —
+        une annonce seule laisserait à qui voit une case qui ne fait rien —,
+        et `plafond` ne se pose QU'AU doigt (un seul `setPlafond(true)`, dans
+        l'appui sur un lieu ; aucun `useEffect`, tenu en b). */
+  const iPlafond = blocLus.indexOf('{plafond && <Text style={s.erreur} accessibilityLiveRegion="polite">{LES_DECHETS.lieux.plafond}</Text>}');
+  verifier('g bis. le plafond des lieux : `const [plafond, setPlafond] = useState(false);`, posé VRAI dans le seul appui sur un lieu, '
+    + 'remis à faux par un lieu qui passe et par « Aucun dépôt » ; la phrase MONTRÉE (région vivante) JUSTE SOUS LES CASES, avant la '
+    + 'porte — sous « Aucun dépôt », elle tombait hors de l’écran (mesuré) ; la faute des lieux reste à sa place',
+  CDd.includes('const [plafond, setPlafond] = useState(false);')
+    && (CDd.match(/setPlafond\(true\)/g) || []).length === 1 && corpsAppui('toucherLieu').includes('setPlafond(true)')
+    && (CDd.match(/setPlafond\(false\)/g) || []).length === 2
+    && iPlafond > blocLus.indexOf('{lieuxMontres.map((l) => (') && iPlafond < blocLus.indexOf('label={LES_DECHETS.lieux.porte}')
+    && (CDd.match(/LES_DECHETS\.lieux\.plafond/g) || []).length === 2
+    && CDd.includes("{faute('dechetsLieux', 'dechetsSansDepot')} <Text style={s.aide}>{LES_DECHETS.lieux.aide}</Text>")
+    && (CDd.match(/faute\('dechetsLieux'/g) || []).length === 1,
+  'sans la phrase visible, un onzième lieu touché ne ferait rien, sans un mot');
 
   /* h. LA QUANTITÉ ET LE COÛT : deux `ChampMontant` (le pavé décimal, et le
         seul endroit des écrans du devis où s'écrit `keyboardType`), chacun
@@ -13658,6 +13882,19 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     && CDd.includes('const sansUnite = present(devis.dechetsQuantiteMilliemes) && !present(c.unite) ? LES_DECHETS.quantite.sansUnite : null;')
     && CDd.includes('{UNITES_DECHETS.map((u) => (') && CDd.includes('onPress={() => choisirUnite(u.cle)}'),
   json(balMontants.map((b) => b.slice(0, 80))));
+  /* h bis. CE QUE LES DEUX CHAMPS AFFICHENT D'ABORD vient de
+        `textesInitiauxDesDechets` (que la section 44 fait tourner, CTL-9) —
+        la carte ne convertit rien elle-même : ni `milliemesEnSaisie` ni
+        `centimesEnSaisie` n'y entrent. Et VoiceOver lit le champ du coût par
+        `libelleParleDuCout(regime)` (ÉCRAN-6), jamais par le titre suivi de
+        « des déchets ». */
+  verifier('h bis. les deux champs s’ouvrent sur `textesInitiauxDesDechets(devis, textes)` (recalculé à chaque rendu), sans conversion '
+    + 'dans la carte ; le champ du coût porte `accessibilityLabel={libelleParleDuCout(regime)}` (CTL-9, ÉCRAN-6)',
+  CDd.includes('const textesInit = textesInitiauxDesDechets(devis, textes);')
+    && balMontants[0].includes('defaut={textesInit.quantite}') && balMontants[1].includes('defaut={textesInit.cout}')
+    && balMontants[1].includes('accessibilityLabel={libelleParleDuCout(regime)}')
+    && !/milliemesEnSaisie|centimesEnSaisie|des déchets`/.test(CDdb) && !/useState\(\(\) => textesInitiauxDesDechets/.test(CDd),
+  json(balMontants.map((b) => b.slice(0, 120))));
 
   /* i. LES MOTS DE LA CARTE viennent TOUS de `devis.js` (`LES_DECHETS`, annexe
         A.2) : chaque texte de l'annexe y est NOMMÉ, et la carte n'écrit
@@ -13669,7 +13906,7 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     'LES_DECHETS.tri.sousAucune', 'LES_DECHETS.tri.aide', 'LES_DECHETS.surPlace.titre', 'LES_DECHETS.surPlace.question',
     'LES_DECHETS.lieux.titre', 'LES_DECHETS.lieux.echec', 'LES_DECHETS.lieux.reessayer', 'LES_DECHETS.lieux.vide',
     'LES_DECHETS.lieux.ajouter', 'LES_DECHETS.lieux.porte', 'LES_DECHETS.lieux.aucunDepot', 'LES_DECHETS.lieux.sousAucunDepot',
-    'LES_DECHETS.lieux.aide', 'LES_DECHETS.cout.question', 'LES_DECHETS.cout.placeholder', 'LES_DECHETS.cout.aide', 'LES_DECHETS.amende'];
+    'LES_DECHETS.lieux.aide', 'LES_DECHETS.lieux.plafond', 'LES_DECHETS.cout.question', 'LES_DECHETS.cout.placeholder', 'LES_DECHETS.cout.aide', 'LES_DECHETS.amende'];
   const absents = NOMMES.filter((n) => !CDd.includes(n));
   const textesJsxD = [...CDdb.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1].trim()).filter(Boolean);
   verifier('i. chaque texte de l’annexe A.2 est NOMMÉ dans la carte (`LES_DECHETS`), et elle n’écrit aucune phrase entre ses balises '
@@ -13748,6 +13985,23 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     && corrigerD.indexOf('CHAMPS_CONDITIONS.includes(champ)') < corrigerD.indexOf('CHAMPS_DECHETS.includes(champ)')
     && abandonD.includes('setTextesDechets(null);'),
   json(rubriquesSaisie));
+  /* l bis. LES NOMS ET LES RUBRIQUES, EXACTS (relecture CTL-5 et CTL-10 du
+        21/11) : tenus par leur seule présence, le nom du coût pouvait devenir
+        « Prix du devis lui-même » — la garde de sortie aurait envoyé
+        l'artisan vérifier le mauvais champ —, et « Corriger » un refus du coût
+        rouvrir la carte sur la quantité. */
+  const nomsSaisie = Object.fromEntries([...corpsNoms.matchAll(/(dechets\w+): '([^']+)'/g)].map((m) => [m[1], m[2]]));
+  verifier('l bis. les huit noms des déchets dans `NOMS_ENTETE`, EXACTS, et la table `RUBRIQUE_DU_CHAMP`, EXACTE (CTL-5, CTL-10)',
+    egal(nomsSaisie, {
+      dechetsConcerne: 'Déchets du chantier', dechetsQuantiteMilliemes: 'Quantité de déchets', dechetsUnite: 'Quantité de déchets',
+      dechetsFlux: 'Déchets du chantier', dechetsSurPlace: 'Déchets du chantier', dechetsLieux: 'Lieux de dépôt des déchets',
+      dechetsSansDepot: 'Lieux de dépôt des déchets', dechetsCoutCentimes: 'Coût estimé des déchets',
+    })
+    && egal(rubriquesSaisie, {
+      dechetsConcerne: 'question', dechetsQuantiteMilliemes: 'quantite', dechetsUnite: 'quantite', dechetsFlux: 'tri',
+      dechetsSurPlace: 'surPlace', dechetsLieux: 'lieu', dechetsSansDepot: 'lieu', dechetsCoutCentimes: 'cout',
+    }),
+  json({ nomsSaisie, rubriquesSaisie }));
 
   /* m. LA RANGÉE « DÉCHETS » (T24) : entre « Le chantier » et « Conditions »,
         toujours là, posée sur ses CINQUANTE-QUATRE gabarits (la hauteur ne

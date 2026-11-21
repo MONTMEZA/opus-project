@@ -945,7 +945,8 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
       {/* 7 bis. — LES LIEUX DE DÉPÔT DES DÉCHETS (étape 2b-5, cahier §3.6 et
           annexe A.7) : rangés une fois ici, choisis ensuite dans la carte
           « Déchets » de chaque devis. Sur le modèle des assurances : une
-          rangée par lieu (sa raison sociale ; son type · sa commune ; un
+          rangée par lieu (sa raison sociale ; « son type, sa commune » — la
+          virgule de la carte « Déchets » et de l'étiquette parlée ; un
           chevron), puis « Ajouter un lieu de dépôt ». Chaque lieu s'écrit
           À PART de « Enregistrer mes informations de devis », comme une
           assurance : par son propre formulaire (`FicheLieuDepot`).
@@ -962,8 +963,8 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
           <>
             {lieux.length === 0 && (
               <Aide>
-                {'Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés une '
-                  + 'fois, vous les choisissez ensuite dans chaque devis.'}
+                {'Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés ici '
+                  + 'une fois, ils se choisissent ensuite dans chaque devis.'}
               </Aide>
             )}
             {lieux.map((l) => {
@@ -978,7 +979,7 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
                 >
                   <View style={s.optionTexte}>
                     <Text style={s.optionLibelle}>{l.raison_sociale}</Text>
-                    <Text style={s.optionAide} numberOfLines={2}>{`${typeLu} · ${l.ville}`}</Text>
+                    <Text style={s.optionAide} numberOfLines={2}>{`${typeLu}, ${l.ville}`}</Text>
                   </View>
                   <ChevronRight size={15} color={C.muted} />
                 </Pressable>

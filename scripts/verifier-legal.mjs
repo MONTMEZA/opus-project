@@ -2265,17 +2265,20 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
        devis payant (`devis.cout_devis_centimes`), insérés après « leur durée
        de validité » ; RIEN d'autre dans la section (empreinte d'avant :
        58d1524f…, celle de 2b-3).
-       Étape 2b-5 (22/11/2026, cahier 2b-5 §4, VERSION 2026-11-22) : DEUX
+       Étape 2b-5 (21/11/2026, cahier 2b-5 §4, VERSION 2026-11-21) : DEUX
        insertions, et rien d'autre dans la section — dans la phrase de
        « Mon entreprise », « vos lieux de dépôt des déchets (raison sociale,
        adresse, type d’installation) », avant « et vos tarifs » ; dans la
-       phrase des devis, « s’il s’agit de travaux sur un bâtiment ou de
-       jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
+       phrase des devis, « s’il s’agit ou non de travaux sur un bâtiment ou
+       de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
        dépôt, coût estimé) », avant « leurs lignes ». Les deux sont gardées
        en toutes lettres par la section « Étape 2b-5 » (empreinte d'avant :
-       3d67dfe0…, celle de 2b-4). */
+       3d67dfe0…, celle de 2b-4). La relecture du 21/11 (DROIT-R7) y a
+       ajouté « ou non » : « s’il s’agit ou non de travaux sur un bâtiment ou
+       de jardinage » — sans lui, la phrase se lisait comme une condition
+       (empreinte de la construction : a29287d0…). */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      'a29287d0dfbcb888102a62f9788f565b6d2c646b4b8057895747d2235bd9ae77'],
+      'e07dd3e20a9a1ecd46bc035c711968463281816810f680028006d78bf21d15b8'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2777,7 +2780,7 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
        « Aucun dépôt » (`dechets_sans_depot`) est une réponse à la rubrique
        des lieux. Les mots de la parenthèse sont cherchés AVEC leur
        ponctuation : « tri » seul se lirait dans un autre mot. */
-    dechets_concerne: 's’il s’agit de travaux sur un bâtiment ou de jardinage',
+    dechets_concerne: 's’il s’agit ou non de travaux sur un bâtiment ou de jardinage',
     dechets_quantite_milliemes: 'leurs déchets (quantité,',
     dechets_unite: 'leurs déchets (quantité,',
     dechets_flux: '(quantité, tri,',
@@ -3038,8 +3041,8 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
 
   /* LA PHRASE DES DEVIS, ENTIÈRE, a quitté cette section à l'étape 2b-5
      (21/11/2026), comme celle de 2b-3 avait quitté la sienne à 2b-4 : elle
-     s'est allongée (« s’il s’agit de travaux sur un bâtiment ou de
-     jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
+     s'est allongée (« s’il s’agit ou non de travaux sur un bâtiment ou
+     de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
      dépôt, coût estimé) »), et elle est gardée mot pour mot, ENTIÈRE, par
      la section « Étape 2b-5 » plus bas — avec le prix du devis de 2b-4, qui
      en fait toujours partie. Ce qui reste ici : le FRAGMENT de 2b-4, en
@@ -3124,7 +3127,7 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
 }
 
 /* ==================================================================
-   ÉTAPE 2b-5 DU DEVIS (22/11/2026) — les déchets du chantier (cahier 2b-5
+   ÉTAPE 2b-5 DU DEVIS (21/11/2026) — les déchets du chantier (cahier 2b-5
    §4 ; sections 46.2 bis et 49 de `schema.sql` : la table privée
    `emetteur_lieux_depot` et les huit colonnes `devis.dechets_*`, 49.4
    sexies ; décision Q4 = 1 du 17/11, réponses du propriétaire du 21/11).
@@ -3136,7 +3139,7 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
        qui range les lieux dans cette promesse, et la base la tient (une
        seule politique, `est_mon_entreprise`, rien pour l'administration ni
        pour `anon`) ;
-     - celle des devis nomme la question (« s’il s’agit de travaux sur un
+     - celle des devis nomme la question (« s’il s’agit ou non de travaux sur un
        bâtiment ou de jardinage », les mots de l'écran) et « ce que
        deviendront leurs déchets (quantité, tri, lieux de dépôt, coût
        estimé) », la parenthèse du cahier, AVANT « leurs lignes », comme
@@ -3182,8 +3185,8 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
   const iHist5 = sourceLegal2b5.indexOf('LES DÉCHETS DU CHANTIER (étape 2b-5');
   const finHist5 = iHist5 < 0 ? -1 : sourceLegal2b5.indexOf('*/', iHist5);
   const histoire2b5 = finHist5 < 0 ? '' : plat(sourceLegal2b5.slice(iHist5, finHist5));
-  const ATTENDUS_HISTOIRE = ['vos lieux de dépôt des déchets', 'raison sociale', "s'il s'agit de travaux sur un bâtiment ou de jardinage",
-    'ce que deviendront leurs déchets', 'le coût estimé', "RIEN D'AUTRE", "« Ce que les autres voient de vous » ne change pas d'un mot",
+  const ATTENDUS_HISTOIRE = ['vos lieux de dépôt des déchets', 'raison sociale', "s'il s'agit ou non de travaux sur un bâtiment ou de jardinage",
+    'ce que deviendront leurs déchets', 'le coût estimé', 'DROIT-R7', "RIEN D'AUTRE", "« Ce que les autres voient de vous » ne change pas d'un mot",
     '« Vos tarifs et vos prix » non plus', 'LA MÊME LIMITE', 'ré-accepter', '2019/1150'];
   verifier('le bloc d’historique de 2b-5 nomme les faits (les lieux de dépôt, la question, ce que deviendront les déchets, le coût estimé), « RIEN D’AUTRE » (les deux sections qui ne changent pas comprises) et la limite connue',
     ATTENDUS_HISTOIRE.every((x) => histoire2b5.includes(x)),
@@ -3196,7 +3199,7 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
      existe qu'UNE écriture : la changer se DÉCIDE — VERSION, son bloc
      d'historique, l'empreinte de « Ce que nous collectons » et cette
      constante, dans le même lot. */
-  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il s’agit de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
+  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il s’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
   verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase des devis de 2b-5 (avec 2a, 2b-2, 2b-3 et 2b-4)',
     collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(560, 760)}… »`);
   /* …UNE phrase : `NOMMEES_DEVIS` (section 2b-2) la découpe de « devis en
@@ -3205,7 +3208,7 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
   verifier('…et elle reste UNE phrase (aucun « . » avant sa fin) : la découpe de `NOMMEES_DEVIS` va jusqu’à « d’où ils viennent »',
     PHRASE_DEVIS.indexOf('. ') < 0 && PHRASE_DEVIS.endsWith('d’où ils viennent.'));
   const iDevis5 = collecte.indexOf('devis en préparation');
-  const REPERES = ['quand l’acompte ou les arrhes sont payés', 's’il s’agit de travaux sur un bâtiment ou de jardinage',
+  const REPERES = ['quand l’acompte ou les arrhes sont payés', 's’il s’agit ou non de travaux sur un bâtiment ou de jardinage',
     'ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé)', 'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
   const positions = REPERES.map((x) => collecte.indexOf(x, Math.max(0, iDevis5)));
   verifier('…dans l’ORDRE : après le moment du paiement, la question puis ce que deviendront les déchets, avant « leurs lignes » — la base de postes toujours après',
@@ -3223,7 +3226,7 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
   const question = String((LES_DECHETS && LES_DECHETS.question && LES_DECHETS.question.question) || '');
   verifier('…et la question nommée est celle de l’écran (`LES_DECHETS.question.question` : « travaux sur un bâtiment », « jardinage »)',
     /travaux sur un bâtiment/.test(question) && /jardinage/.test(question)
-    && collecte.includes('s’il s’agit de travaux sur un bâtiment ou de jardinage'),
+    && collecte.includes('s’il s’agit ou non de travaux sur un bâtiment ou de jardinage'),
     question || '`LES_DECHETS.question` introuvable');
 
   /* LA PHRASE DE « MON ENTREPRISE » : les lieux AVANT « et vos tarifs »,

@@ -83,18 +83,12 @@ import * as retour from '../lib/retour';
 import {
   LES_DECHETS, FLUX_DECHETS, SUR_PLACE_DECHETS, UNITES_DECHETS, AUCUNE_COLLECTE, AUCUN_DEPOT,
   etatInitialDechets, lireDechets, fluxApresAppui, surPlaceApresAppui, lieuxApresAppui,
-  annonceDuTri, annonceDesLieux, etatDesLieux, libelleDuCout, pastillesDeLaQuestionDesDechets,
-  milliemesEnSaisie, centimesEnSaisie, ligneDEtatDeLaCarte,
+  annonceDuTri, annonceDesLieux, etatDesLieux, libelleDuCout, libelleParleDuCout, pastillesDeLaQuestionDesDechets,
+  textesInitiauxDesDechets, ligneDEtatDeLaCarte,
 } from '../lib/devis';
 import { libelleDuTypeDeLieu } from '../lib/emetteur';
 
 const present = (v) => v !== null && v !== undefined;
-
-/* Le texte d'un champ à l'ouverture : celui que la saisie a gardé (un texte
-   refusé, rouvert par « Corriger »), sinon la valeur enregistrée. Un texte
-   gardé VIDE n'a rien à corriger : la valeur enregistrée. */
-const texteDe = (textes, cle, valeur) => (textes && present(textes[cle]) && String(textes[cle]).trim() !== ''
-  ? textes[cle] : valeur);
 
 const DechetsDevis = forwardRef(function DechetsDevis({
   devis = {}, regime, erreurs = {}, textes = null,
@@ -131,6 +125,11 @@ const DechetsDevis = forwardRef(function DechetsDevis({
   const choix = useRef(initial);
   const [c, setC] = useState(initial);
   const poser = (x) => { choix.current = { ...choix.current, ...x }; setC(choix.current); };
+  /* LE PLAFOND DES LIEUX (relecture BASE-R1 / ÉCRAN-1) : un onzième lieu ne
+     s'ajoute pas, et la carte le DIT juste sous les cases — rien n'est
+     écrit. Retombe au premier appui sur un lieu qui passe, ou
+     sur « Aucun dépôt ». */
+  const [plafond, setPlafond] = useState(false);
 
   /* TOUT CE QUE LA CARTE PORTE À CET INSTANT — la règle vit dans
      `lireDechets` (`devis.js`). Un champ PAS MONTÉ (sous « Non ») se lit
@@ -190,16 +189,27 @@ const DechetsDevis = forwardRef(function DechetsDevis({
     choisir({ surPlace: surPlaceApresAppui(choix.current.surPlace, cle) }, 'surPlace');
   };
   /* Un lieu : rebâti depuis la liste LUE, dans son ordre (`lieuxApresAppui`) —
-     le SEUL endroit où les lieux choisis se récrivent (T10). */
+     le SEUL endroit où les lieux choisis se récrivent (T10). Un lieu de
+     trop (`plafond`) n'écrit RIEN : la phrase se MONTRE, s'annonce (iOS n'a
+     pas de région vivante), et la carte vibre — une annonce seule
+     laisserait à qui voit une case qui ne fait rien. */
   const toucherLieu = (id) => {
     const avant = { lieux: choix.current.lieux, sansDepot: choix.current.sansDepot };
     const apres = lieuxApresAppui(avant, lieux, id);
+    if (apres.plafond) {
+      setPlafond(true);
+      retour.echec();
+      retour.annoncer(LES_DECHETS.lieux.plafond);
+      return;
+    }
+    setPlafond(false);
     choisir({ lieux: apres.lieux, sansDepot: apres.sansDepot }, 'lieux');
   };
   /* La pastille « Aucun dépôt » (réponse P6) : allumée, elle RETIRE les lieux
      cochés ET MONTRÉS — et le DIT ; un orphelin, jamais montré, ne s'annonce
      pas (T28). */
   const toucherAucunDepot = () => {
+    setPlafond(false);
     const avant = { lieux: choix.current.lieux, sansDepot: choix.current.sansDepot };
     const apres = lieuxApresAppui(avant, lieux, AUCUN_DEPOT);
     choisir({ lieux: apres.lieux, sansDepot: apres.sansDepot }, 'lieux');
@@ -232,6 +242,11 @@ const DechetsDevis = forwardRef(function DechetsDevis({
      enregistrée sans unité — RIEN n'est refusé, la quantité est partie. */
   const sansUnite = present(devis.dechetsQuantiteMilliemes) && !present(c.unite) ? LES_DECHETS.quantite.sansUnite : null;
   const libelleCout = libelleDuCout(regime);
+  /* Les deux textes à l'ouverture des champs (`textesInitiauxDesDechets`,
+     que `verifier-devis` fait tourner) — recalculés à chaque rendu, comme
+     avant : sous « Non » les champs sont démontés, et revenus à « Oui » ils
+     se remontent sur la valeur ENREGISTRÉE entre-temps. */
+  const textesInit = textesInitiauxDesDechets(devis, textes);
   const etat = ligneDEtatDeLaCarte({
     echec: etatEcriture && etatEcriture.echec,
     reessayable: !!(etatEcriture && etatEcriture.reessayable),
@@ -295,8 +310,7 @@ const DechetsDevis = forwardRef(function DechetsDevis({
             <Text style={s.etiquette}>{LES_DECHETS.quantite.question}</Text>
             <ChampMontant
               ref={refQuantite}
-              defaut={texteDe(textes, 'quantite', present(devis.dechetsQuantiteMilliemes)
-                ? milliemesEnSaisie(devis.dechetsQuantiteMilliemes) : '')}
+              defaut={textesInit.quantite}
               placeholder={LES_DECHETS.quantite.placeholder}
               accessibilityLabel={unite ? `Quantité estimée des déchets, en ${unite.nom}` : 'Quantité estimée des déchets'}
               onBlur={() => enregistrer('quantite')}
@@ -387,6 +401,12 @@ const DechetsDevis = forwardRef(function DechetsDevis({
                     onPress={() => toucherLieu(l.id)}
                   />
                 ))}
+                {/* LE PLAFOND, JUSTE SOUS LES CASES (relecture BASE-R1 /
+                    ÉCRAN-1) : posée à la place de la faute des lieux — sous
+                    « Aucun dépôt » —, la phrase tombait HORS DE L'ÉCRAN
+                    quand on touchait la onzième case (mesuré au navigateur,
+                    à 393 × 852). Rien AU-DESSUS ne bouge. */}
+                {plafond && <Text style={s.erreur} accessibilityLiveRegion="polite">{LES_DECHETS.lieux.plafond}</Text>}
                 <View style={s.boutons}>
                   <BtnOutline label={LES_DECHETS.lieux.porte}
                     accessibilityLabel="Mes lieux de dépôt : ouvrir « Mon entreprise » sur vos lieux de dépôt" onPress={allerAMesLieux} />
@@ -410,10 +430,9 @@ const DechetsDevis = forwardRef(function DechetsDevis({
             <Text style={s.etiquette}>{LES_DECHETS.cout.question}</Text>
             <ChampMontant
               ref={refCout}
-              defaut={texteDe(textes, 'cout', present(devis.dechetsCoutCentimes) && devis.dechetsCoutCentimes > 0
-                ? centimesEnSaisie(devis.dechetsCoutCentimes) : '')}
+              defaut={textesInit.cout}
               placeholder={LES_DECHETS.cout.placeholder}
-              accessibilityLabel={`${libelleCout} des déchets`}
+              accessibilityLabel={libelleParleDuCout(regime)}
               onBlur={() => enregistrer('cout')}
             />
             <View style={s.zone}>{faute('dechetsCoutCentimes')}</View>

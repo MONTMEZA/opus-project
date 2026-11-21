@@ -4245,11 +4245,20 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   /* CE QUE « MON ENTREPRISE » VIENT DE LIRE OU D'ÉCRIRE — `surEmetteur`, sur
      le modèle de `recevoirMesTarifs`. Sans lui, l'artisan envoyé dans « Mon
      entreprise » par le bandeau du régime y déclarait son régime… et
-     retrouvait le bandeau. */
-  const recevoirEmetteur = useCallback((emetteur) => {
+     retrouvait le bandeau.
+     LES LIEUX DE DÉPÔT VIENNENT AVEC (relecture ÉCRAN-3 du 21/11) : ce
+     régime passe la génération, donc JETTE une lecture du régime en route —
+     et avec elle les lieux qu'elle aurait posés. Sans les lieux ici, la
+     carte « Déchets » restait sans liste ET sans lecture en route
+     (mesuré : une lecture de « Mon entreprise » qui répond après sa
+     fermeture). `lieux` : le tableau lu (ou `null`, la table absente) quand
+     « Mon entreprise » vient de LES lire ; `undefined` quand elle ne les
+     porte pas (un enregistrement de la fiche) — on n'y touche pas alors. */
+  const recevoirEmetteur = useCallback((emetteur, lieux) => {
     generationRegime.current += 1;
     setMonRegime(emetteur && emetteur.regime_tva != null ? emetteur.regime_tva : null);
     setRegimeDeclareLe(emetteur && emetteur.regime_tva_declare_le ? emetteur.regime_tva_declare_le : null);
+    if (Array.isArray(lieux) || lieux === null) setMesLieux(lieux);
   }, []);
 
   const ouvrirMesDevis = () => {

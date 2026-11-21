@@ -1620,6 +1620,50 @@ const lecteursEnTrop = (texte) => propositionsDe(texte)
     !horsForme.length && isoLisible('2026-09-02') === null, horsForme.join(' ; '));
 }
 
+/* ================================================================== */
+/*  G. L'ESSAI SQL — le cas 14 de `supabase/essais-section-47.sql`     */
+/* ================================================================== */
+/* Né avec 2b-5 (le banc des sabotages, B49) : le cas 14 est la preuve
+   qu'aucune fonction `security definer` ni aucune vue ne lit les tables
+   privées de « Mon entreprise ». Une alternation à qui il manque une table
+   le rend AVEUGLE à cette table — il rendrait sa sortie témoin sans plus la
+   chercher —, et ce contrôle ne relisait pas l'essai. On vise la
+   PROPRIÉTÉ : chaque alternation `(…|…)` du cas qui nomme l'une de ces
+   tables nomme les QUATRE (`emetteur_lieux_depot`, `tarifs_pro`,
+   `emetteur_assurances`, `emetteur`) — à UNE exception, écrite : la liste
+   `nomment_emetteur`, qui par construction ne cherche PAS `tarifs_pro`
+   (elle a sa propre liste juste au-dessus, `nomment_tarifs_pro`, dont les
+   lectrices ne sont pas les mêmes), nomme exactement les TROIS tables
+   d'émetteur. */
+console.log('\nG. L’ESSAI SQL — le cas 14 cherche toutes les tables privées');
+{
+  let brut47 = '';
+  try { brut47 = lire('supabase/essais-section-47.sql'); } catch { brut47 = ''; }
+  const cas14 = morceau(sqlSansCommentaires(brut47), '=== 14.', '=== 15.');
+  const TROIS = ['emetteur_lieux_depot', 'emetteur_assurances', 'emetteur'];
+  const QUATRE = [...TROIS, 'tarifs_pro'];
+  const alternationsDe = (ordre) => [...ordre.matchAll(/~\*?\s*'([^']*)'/g)]
+    .flatMap((m) => [...m[1].matchAll(/\(([^()]*)\)/g)].map((g) => g[1].split('|').map((x) => x.trim())));
+  let aQuatre = 0;
+  let aTrois = 0;
+  const fautives = [];
+  for (const ordre of cas14.split(';')) {
+    const nommantes = alternationsDe(ordre).filter((a) => QUATRE.some((t) => a.includes(t)));
+    const exception = /\bnomment_emetteur\b/.test(ordre);
+    for (const a of nommantes) {
+      if (exception && a.length === TROIS.length && TROIS.every((t) => a.includes(t))) aTrois += 1;
+      else if (!exception && QUATRE.every((t) => a.includes(t))) aQuatre += 1;
+      else fautives.push(`(${a.join('|')})`);
+    }
+  }
+  verifier('50. le cas 14 de l’essai 47 cherche TOUTES les tables privées : chaque alternation nomme les quatre — et la liste '
+    + '`nomment_emetteur` exactement les trois tables d’émetteur ; au moins trois alternations à quatre, au moins une à trois, aucune '
+    + 'autre forme',
+  cas14.length > 0 && aQuatre >= 3 && aTrois >= 1 && fautives.length === 0,
+  `${aQuatre} à quatre, ${aTrois} à trois ; fautives : ${fautives.join(' ; ') || 'aucune'}. Une table oubliée, et l’essai ne la `
+  + 'cherche plus (banc B49).');
+}
+
 console.log('');
 if (echecs) {
   console.error(`✘ ${echecs} vérification(s) en échec.\n`);

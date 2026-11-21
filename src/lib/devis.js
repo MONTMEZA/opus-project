@@ -6620,7 +6620,18 @@ const idsDesLieux = (lieuxLus) => [...new Set((Array.isArray(lieuxLus) ? lieuxLu
  *     d'un seul geste les identifiants orphelins (ils n'ont jamais été
  *     montrés : leur retrait ne s'annonce pas) ; le dernier décoché rend
  *     `null`, jamais `[]` ;
- *   - un identifiant qui n'est pas dans la liste lue ne change rien.
+ *   - un identifiant qui n'est pas dans la liste lue ne change rien ;
+ *   - LE PLAFOND (relecture BASE-R1 / ÉCRAN-1 du 21/11) : un lieu de PLUS,
+ *     quand la liste rebâtie dépasserait `LIEUX_DECHETS_MAX`, ne s'ajoute
+ *     pas — le choix est rendu INCHANGÉ (orphelins compris), avec
+ *     `plafond: true`, et la carte dit pourquoi (`LES_DECHETS.lieux.plafond`)
+ *     sans rien écrire. Sans cette garde, un onzième lieu partait vers la
+ *     base, qui le refuse, et la carte disait « mettez Opus à jour » à
+ *     quelqu'un qui a la dernière version. On compte la liste REBÂTIE (dans
+ *     l'ordre de la liste lue, sans orphelins), jamais ce que la carte
+ *     garde : un devis qui cite dix identifiants dont trois orphelins
+ *     montre sept cases cochées, et un huitième lieu doit passer. Décocher
+ *     reste toujours possible.
  * C'est le SEUL endroit où `dechetsLieux` se récrit : jamais à l'ouverture
  * de la carte, jamais sur un appui ailleurs (un déchet, l'unité, « Non »).
  */
@@ -6635,8 +6646,10 @@ export function lieuxApresAppui(choix, lieuxLus, id) {
   const ids = idsDesLieux(lieuxLus);
   if (!ids.includes(id)) return tel;
   const choisis = new Set(tel.lieux || []);
-  if (choisis.has(id)) choisis.delete(id); else choisis.add(id);
+  const ajout = !choisis.has(id);
+  if (ajout) choisis.add(id); else choisis.delete(id);
   const range = ids.filter((v) => choisis.has(v));
+  if (ajout && range.length > LIEUX_DECHETS_MAX) return { lieux: tel.lieux, sansDepot: tel.sansDepot, plafond: true };
   return { lieux: range.length ? range : null, sansDepot: null };
 }
 
@@ -6747,9 +6760,18 @@ export function rubriqueDuPoint(point, { devis = null, lieux = undefined } = {})
  *   - un tableau : `'vide'` s'il n'a aucun lieu, `'lus'` sinon ;
  *   - le régime en ÉCHEC (`{ echec: true }`) : `'echec'` — « Vos lieux de
  *     dépôt n'ont pas pu être lus », et « Réessayer » ;
- *   - le régime LU (franchise, réel, ou non déclaré) mais pas la liste (la
- *     table absente : un cache de PostgREST pas encore rechargé après la
- *     migration rend `null`, jamais `[]`) : `'echec'` aussi ;
+ *   - le régime LU (franchise, réel, ou non déclaré) et la liste LUE À VIDE
+ *     DE VALEUR (`null` : la table absente — un cache de PostgREST pas encore
+ *     rechargé après la migration rend `null`, jamais `[]`) : `'echec'`
+ *     aussi ;
+ *   - le régime LU mais la liste PAS ENCORE LUE (`undefined`) : `'lecture'`
+ *     (relecture ÉCRAN-3 du 21/11). « Mon entreprise » pose le régime qu'elle
+ *     vient de lire, et la lecture des lieux peut être en route : la dire en
+ *     échec affichait « n'ont pas pu être lus » et « Réessayer » sur un
+ *     réseau lent, puis remplaçait ce bouton par une case, sans transition.
+ *     C'est sûr parce qu'aucun régime posé ne laisse la liste sans lecture
+ *     en route : « Mon entreprise » remonte AUSSI les lieux qu'elle vient de
+ *     lire (`recevoirEmetteur`, OpusApp) ;
  *   - sinon (en lecture, pas encore demandé) : `'lecture'` — rien n'est
  *     dit, aucune case.
  * JAMAIS « vide » d'une liste qu'on n'a pas lue : montrer « aucun lieu » à
@@ -6758,7 +6780,7 @@ export function rubriqueDuPoint(point, { devis = null, lieux = undefined } = {})
 export function etatDesLieux(etatRegime, lieux) {
   if (Array.isArray(lieux)) return lieux.length ? 'lus' : 'vide';
   if (etatRegime && typeof etatRegime === 'object' && etatRegime.echec) return 'echec';
-  if (regimeConnu(etatRegime) !== null) return 'echec';
+  if (regimeConnu(etatRegime) !== null && lieux === null) return 'echec';
   return 'lecture';
 }
 
@@ -6770,6 +6792,15 @@ export function etatDesLieux(etatRegime, lieux) {
  *  convertit rien. */
 export function libelleDuCout(etatRegime) {
   return libellesDesTotaux(etatRegime).taxe ? LES_DECHETS.cout.libelleHt : LES_DECHETS.cout.libelleEuros;
+}
+
+/** CE QUE VOICEOVER DIT DU CHAMP DU COÛT (relecture ÉCRAN-6 et DROIT-R9 du
+ *  21/11) — composé À PART du titre : « Coût estimé, en euros » suivi de
+ *  « des déchets » se lisait « Coût estimé, en euros des déchets ». La
+ *  même règle que `libelleDuCout` (« HT » au seul régime réel), le modèle
+ *  de « Quantité estimée des déchets, en mètres cubes ». */
+export function libelleParleDuCout(etatRegime) {
+  return libellesDesTotaux(etatRegime).taxe ? LES_DECHETS.cout.parleHt : LES_DECHETS.cout.parleEuros;
 }
 
 /**
@@ -6809,7 +6840,7 @@ export const LES_DECHETS = Object.freeze({
     non: 'Non, ni l’un ni l’autre',
     ouiParDefaut: 'Oui (par défaut)',
     oui: 'Oui',
-    aide: 'La loi demande, sur tout devis de construction, de rénovation ou de démolition d’un bâtiment, et sur tout '
+    aide: 'La loi demande, sur un devis de construction, de rénovation ou de démolition d’un bâtiment, et sur un '
       + 'devis de jardinage, ce que deviendront les déchets — même s’il y en a très peu. Répondez Non seulement si ce '
       + 'devis n’est ni l’un ni l’autre : une étude ou une fourniture sans pose (ce ne sont pas des travaux), une route ou '
       + 'un réseau sans rapport avec un bâtiment. Dans le doute (un dépannage, une réparation, une terrasse ou une allée '
@@ -6834,13 +6865,15 @@ export const LES_DECHETS = Object.freeze({
     sousAucune: 'Seulement si rien ne partira à part.',
     aide: 'Le plâtre, les déchets dangereux et les déchets verts triés ne se mélangent pas aux autres. Sur un petit '
       + 'chantier (moins de 10\u00a0m³ de déchets, ou sans 40\u00a0m² pour les stocker), les règles de tri du décret ne '
-      + 's’appliquent pas ; la loi demande quand même un tri à la source, et le devis doit dire ce que vous faites.',
+      + 's’appliquent pas ; la loi demande quand même un tri à la source et, pour les déchets qui ne sont pas traités sur '
+      + 'place, une collecte séparée ; et le devis doit dire ce que vous faites.',
     /* Annoncé quand la pastille retire des cases cochées (T28). */
     retires: 'Les déchets cochés ont été retirés.',
   }),
   surPlace: Object.freeze({
     titre: 'Sur le chantier',
-    question: 'Ce qui y restera, s’il y en a. Facultatif.',
+    question: 'Ce qui y restera, s’il y en a. Pour des travaux de jardinage, si vous broyez, compostez ou paillez sur place, '
+      + 'la loi demande de le dire.',
   }),
   lieux: Object.freeze({
     titre: 'Où les déposerez-vous ?',
@@ -6851,8 +6884,12 @@ export const LES_DECHETS = Object.freeze({
     /* La porte permanente vers « Mon entreprise », section des lieux (T25). */
     porte: 'Mes lieux de dépôt',
     aucunDepot: 'Aucun dépôt : rien ne quittera le chantier',
-    sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés.',
+    sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés : choisissez alors aussi « Aucune '
+      + 'collecte séparée » et, dans « Sur le chantier », ce que vous en faites.',
     retires: 'Les lieux cochés ont été retirés.',
+    /* Un lieu de plus que `LIEUX_DECHETS_MAX` (relecture BASE-R1 / ÉCRAN-1) :
+       MONTRÉ à la place de la faute des lieux, annoncé, rien n'est écrit. */
+    plafond: 'Dix lieux au plus par devis : décochez-en un pour en choisir un autre.',
     aide: 'Si vous les remettez à quelqu’un d’autre, la loi vous demande de vous assurer qu’il est autorisé à les '
       + 'prendre en charge ; Opus ne peut pas le vérifier. Pour votre propre dépôt, nommez aussi, si vous la '
       + 'connaissez, l’installation où ils finiront.',
@@ -6860,10 +6897,14 @@ export const LES_DECHETS = Object.freeze({
   cout: Object.freeze({
     libelleHt: 'Coût estimé HT',
     libelleEuros: 'Coût estimé, en euros',
+    /* Ce que VoiceOver dit du champ (`libelleParleDuCout`). */
+    parleHt: 'Coût estimé HT des déchets',
+    parleEuros: 'Coût estimé des déchets, en euros',
     question: 'Combien coûteront le tri, le chargement, le transport et le dépôt ?',
     placeholder: 'Montant',
-    aide: 'Une estimation, qui ne s’ajoute pas au total. Si ce coût est déjà compris dans vos prix, n’ajoutez rien ; '
-      + 's’il ne l’est pas et que vous le faites payer, ajoutez une ligne au devis.',
+    aide: 'Une estimation, qui ne s’ajoute pas au total. Si ce coût est déjà compris dans vos prix, n’ajoutez pas de '
+      + 'ligne : écrivez quand même son estimation ici. S’il ne l’est pas et que vous le faites payer, ajoutez une ligne au '
+      + 'devis.',
     zero: 'Le coût estimé des déchets doit être un montant positif.',
   }),
   amende: AMENDE_DES_DECHETS,
@@ -6903,6 +6944,29 @@ export function versCoutDesDechets(texte) {
     return { ok: false, centimes: null, message: `Le coût estimé des déchets s’écrit jusqu’à ${centimesLisibles(COUT_DECHETS_MAX)}.` };
   }
   return r;
+}
+
+/**
+ * LES DEUX TEXTES DE LA CARTE À SON OUVERTURE (relecture CTL-9 du 21/11) —
+ * `{ quantite, cout }`, ce que les deux champs affichent d'abord. Le texte
+ * que la saisie a GARDÉ (une valeur refusée, rouverte par « Corriger »)
+ * passe d'abord ; un texte gardé VIDE n'a rien à corriger, la valeur
+ * enregistrée revient. Sinon : la quantité du devis en saisie
+ * (`milliemesEnSaisie` : 2 500 millièmes → « 2,5 »), le coût DES DÉCHETS en
+ * saisie (`centimesEnSaisie` : 12 000 centimes → « 120 ») — jamais le prix
+ * du devis lui-même (`coutDevisCentimes`, un AUTRE montant : 2b-4) —, ou
+ * rien. Écrits ici, et pas dans la carte, pour que `verifier-devis` les
+ * FASSE TOURNER : au premier « quitter », la carte enregistre ce qu'ils
+ * affichent, et une valeur fausse partirait en base.
+ */
+export function textesInitiauxDesDechets(devis, textes = null) {
+  const x = devis || {};
+  const garde = (cle) => (textes && typeof textes === 'object' && present(textes[cle]) && String(textes[cle]).trim() !== ''
+    ? String(textes[cle]) : null);
+  return {
+    quantite: garde('quantite') ?? (present(x.dechetsQuantiteMilliemes) ? milliemesEnSaisie(x.dechetsQuantiteMilliemes) : ''),
+    cout: garde('cout') ?? (present(x.dechetsCoutCentimes) && x.dechetsCoutCentimes > 0 ? centimesEnSaisie(x.dechetsCoutCentimes) : ''),
+  };
 }
 
 /* Un tableau de la base, recopié NEUF — ou `null` (vide de valeur). Un

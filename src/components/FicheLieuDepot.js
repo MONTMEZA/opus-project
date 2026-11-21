@@ -4,7 +4,8 @@
  *
  * POURQUOI ICI, ET PAS DANS CHAQUE DEVIS
  * --------------------------------------
- * Sur un devis de travaux sur un bâtiment ou de jardinage, la loi demande
+ * Sur un devis de construction, de rénovation ou de démolition d'un
+ * bâtiment, ou de jardinage, la loi demande
  * le ou les points de collecte où l'entreprise prévoit de déposer les
  * déchets : leur raison sociale, leur adresse, leur type d'installation
  * (code de l'environnement, D. 541-45-1 I 3°). Un artisan dépose presque
@@ -169,9 +170,9 @@ const FicheLieuDepot = forwardRef(function FicheLieuDepot({
       {/* Ce que la loi demande, et pour QUELS devis (D. 541-45-1 I 3°) — sans
           promettre d'impression : rien ne s'imprime avant le lot 2c. */}
       <Text style={s.aide}>
-        {'Sur un devis de travaux sur un bâtiment ou de jardinage, la loi demande où iront les déchets : la raison '
-          + 'sociale, l’adresse et le type d’installation de chaque lieu où vous les déposerez. Rangé ici une fois, '
-          + 'ce lieu se choisit ensuite dans chaque devis.'}
+        {'Sur un devis de construction, de rénovation ou de démolition d’un bâtiment, ou de jardinage, la loi demande '
+          + 'où iront les déchets : la raison sociale, l’adresse et le type d’installation de chaque lieu où vous les '
+          + 'déposerez. Rangé ici une fois, ce lieu se choisit ensuite dans chaque devis.'}
       </Text>
 
       <Text style={s.label}>Raison sociale</Text>

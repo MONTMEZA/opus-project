@@ -2504,7 +2504,7 @@ try {
       + '`postesPrepares`) ; `lireRegime` lit le régime ET sa date (`monRegimeEtSaDate`)',
     /setPostes\(\(liste\) => \{/.test(ranger) && !/liste\.(?:push|splice|sort|reverse)\(|liste\[\w+\]\s*=/.test(ranger)
       && /\.slice\(\)/.test(ranger) && /api\.monRegimeEtSaDate\(\)/.test(app) && !/api\.monRegime\(\)/.test(app)
-      && /setRegimeDeclareLe\(/.test(blocApres(app, 'const recevoirEmetteur = useCallback((emetteur) => {')));
+      && /setRegimeDeclareLe\(/.test(blocApres(app, 'const recevoirEmetteur = useCallback((emetteur, lieux) => {')));
   }
 
   /* -- CE QUE LES ÉCRANS AFFICHENT, FAIT TOURNER ------------------------- */
