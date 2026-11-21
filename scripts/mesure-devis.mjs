@@ -8811,6 +8811,151 @@ await section('2b-5 : la carte « Déchets du chantier » sur un brouillon NEUF,
   await attendre(400);
 });
 
+/* DROIT-R2 (décision du propriétaire du 21/11 : « Le signaler ») : « Aucun
+   dépôt : rien ne quittera le chantier » ne remplit la rubrique des lieux que
+   si le tri ne nomme aucune sorte qui part à part. Avec du bois coché, la
+   carte le DIT sous la pastille, la rangée dit que le lieu manque, le point
+   ouvre la carte SUR les lieux ; « Aucune collecte séparée » fait tomber la
+   phrase ; rien de ce qui est écrit ne se perd. La phrase, EN TOUTES LETTRES. */
+const PARTENT_A_PART = 'Des déchets partiront à part : choisissez où vous les déposerez. Si en fait rien ne quitte le chantier, '
+  + 'choisissez « Aucune collecte séparée ».';
+const DEBUT_PARTENT = 'Des déchets partiront à part';
+const SOUS_AUCUN_DEPOT = 'Seulement si tous les déchets restent sur place';
+
+await section('2b-5 : « Aucun dépôt » avec un tri qui nomme une sorte (DROIT-R2) — la phrase sous la pastille, la rangée « À compléter : lieu », le point qui ouvre la carte SUR les lieux, « Aucune collecte séparée » qui la fait tomber, rien de perdu', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (!(await dansLaSaisie())) { await allerAMesDevis(); await ouvrirLeDevis(OBJET_DECHETS); }
+  const d0 = await dechetsEnBase(OBJET_DECHETS);
+  exiger(!!d0 && d0.concerne === true && d0.quantite === 2500 && d0.unite === 'm3' && JSON.stringify(d0.flux) === JSON.stringify(['bois'])
+    && Array.isArray(d0.lieux) && d0.lieux.length === 1 && d0.sansDepot === null && d0.cout === 12000,
+  `« ${OBJET_DECHETS} » part de « Oui », 2,5 m³, le bois trié à part, le lieu de démonstration, 120 €`);
+  verifier(`au départ : « Déchets : ${RESUME_REMPLIES}. Ouvrir »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`,
+    await resumeDechets());
+  await noterHauteur(393, 'R2 : remplies, avant');
+
+  /* « AUCUN DÉPÔT » TOUCHÉ, LE BOIS COCHÉ : le lieu se décoche, la phrase NAÎT sous la pastille. */
+  await ouvrirLesDechets();
+  verifier('la carte ouverte, le lieu coché : la phrase n’est pas là', !(await texteLu()).includes(DEBUT_PARTENT));
+  await pastilleDechets(AUCUN_DEPOT_DECHETS).scrollIntoViewIfNeeded();
+  await attendre(500);
+  /* Une mesure de POSITION éteint d'abord l'ancrage du défilement de
+     Chromium (`sansAncrage`) : iOS n'en a pas. */
+  const ancre = await sansAncrage();
+  exiger(Array.isArray(ancre.carte) && ancre.carte.length > 0 && ancre.carte.every((v) => v === 'none'),
+    `l’ancrage du défilement de la carte est éteint (${JSON.stringify(ancre)})`);
+  const bA0 = await pastilleDechets(AUCUN_DEPOT_DECHETS).boundingBox();
+  const bL0 = await caseDechets(LIEU_DEMO_DECHETS).boundingBox();
+  await oublierAnnonces();
+  const e0 = await ecrituresDemo();
+  await toucher(pastilleDechets(AUCUN_DEPOT_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const bA1 = await pastilleDechets(AUCUN_DEPOT_DECHETS).boundingBox();
+  const bL1 = await caseDechets(LIEU_DEMO_DECHETS).boundingBox();
+  noter('la case du lieu, avant → après « Aucun dépôt »', JSON.stringify([bL0 && [Math.round(bL0.y), Math.round(bL0.height)],
+    bL1 && [Math.round(bL1.y), Math.round(bL1.height)]]));
+  const d1 = await dechetsEnBase(OBJET_DECHETS);
+  const t1 = await texteLu();
+  const bP = await boiteDuTexte(DEBUT_PARTENT);
+  const bS = await boiteDuTexte(SOUS_AUCUN_DEPOT);
+  verifier(`« ${AUCUN_DEPOT_DECHETS} » avec le bois coché : une écriture (${(await ecrituresDemo()) - e0}), la base dit « aucun dépôt » `
+    + `(${d1 && d1.sansDepot}) sans lieu (${JSON.stringify(d1 && d1.lieux)}), le tri GARDÉ (${JSON.stringify(d1 && d1.flux)})`,
+  (await ecrituresDemo()) - e0 === 1 && !!d1 && d1.sansDepot === true && d1.lieux === null && JSON.stringify(d1.flux) === JSON.stringify(['bois'])
+    && (await choisie(pastilleDechets(AUCUN_DEPOT_DECHETS))) && !(await coche(caseDechets(LIEU_DEMO_DECHETS))));
+  verifier('…la phrase est là, ENTIÈRE : « Des déchets partiront à part : choisissez où vous les déposerez. Si en fait rien ne quitte '
+    + 'le chantier, choisissez « Aucune collecte séparée ». »', t1.includes(PARTENT_A_PART), t1.slice(Math.max(0, t1.indexOf(DEBUT_PARTENT) - 20), t1.indexOf(DEBUT_PARTENT) + 160));
+  /* La phrase naît SOUS la pastille : rien au-dessus ne bouge à cause
+     d'elle. La case du lieu, au-dessus, se décoche dans le même geste, et un
+     `Interrupteur` décoché n'a pas tout à fait la hauteur d'un coché (mesuré
+     ici : 55 → 53 points, avant cette étape comme après) — la pastille ne
+     bouge donc QUE de ce que la case a changé : l'écart entre le bas de la
+     case et le haut de la pastille reste le même. */
+  const ecartCase = (bl, ba) => (bl && ba ? ba.y - (bl.y + bl.height) : null);
+  verifier(`…JUSTE SOUS la pastille (pastille ${bA1 && Math.round(bA1.y + bA1.height)}, phrase ${bP && Math.round(bP.y)}), avant son aide `
+    + `(${bS && Math.round(bS.y)}), et la phrase ne fait rien bouger AU-DESSUS : la pastille ne bouge que de ce que la case du lieu a `
+    + `changé (${bA0 && Math.round(bA0.y)} → ${bA1 && Math.round(bA1.y)} ; écart case → pastille ${Math.round(ecartCase(bL0, bA0))} → `
+    + `${Math.round(ecartCase(bL1, bA1))})`,
+  !!bA0 && !!bA1 && !!bP && !!bS && !!bL0 && !!bL1 && bP.y >= bA1.y + bA1.height - 1 && bP.bas <= bS.y + 1
+    && Math.abs(bL0.y - bL1.y) <= 1 && Math.abs(ecartCase(bL0, bA0) - ecartCase(bL1, bA1)) <= 1);
+  verifier(`…VoiceOver entend « ${LIEUX_RETIRES} » (le lieu retiré), comme avant`, (await annonces()).includes(LIEUX_RETIRES), JSON.stringify(await annonces()));
+  await capture('2b5-r2-aucun-depot-et-bois');
+  await fermerLesDechets();
+  verifier('la rangée : « Déchets : À compléter : lieu. Ouvrir » — « Aucun dépôt » ne remplit plus les lieux',
+    (await resumeDechets()) === 'Déchets : À compléter : lieu. Ouvrir', await resumeDechets());
+  await noterHauteur(393, 'R2 : à compléter, lieu');
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteur(320, 'R2 : à compléter, lieu');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+
+  /* LE POINT : « La loi », et « Compléter les déchets » ouvre la carte SUR les lieux, où la phrase est. */
+  await ouvrirLaListe();
+  const n0 = await compteDansLaListe();
+  const tL = await texteLu();
+  verifier('« Pour le remettre » : le point « … puisque vous avez répondu « Oui ». », « La loi », et son bouton',
+    tL.includes(POINT_DECHETS_LOI) && tL.slice(Math.max(0, tL.indexOf(POINT_DECHETS_LOI) - 30), tL.indexOf(POINT_DECHETS_LOI)).includes('La loi')
+    && (await page.getByRole('button', { name: BOUTON_DECHETS, exact: true }).count()) === 1);
+  await amenerAuTexte(DEBUT_POINT_DECHETS);
+  await toucher(bouton(BOUTON_DECHETS));
+  await page.getByText(TITRE_DECHETS, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tLieu = await boiteDuTexte('Où les déposerez-vous ?');
+  verifier(`« Compléter les déchets » ouvre la carte SUR les lieux (titre à y = ${tLieu && Math.round(tLieu.y)}, fenêtre ${tLieu && tLieu.fenetre}), `
+    + 'retour « ‹ Liste », et la phrase est là',
+  !!tLieu && tLieu.y >= 0 && tLieu.bas <= tLieu.fenetre && (await parLibelle(RETOUR_DECHETS_LISTE).count()) === 1
+    && (await texteLu()).includes(PARTENT_A_PART));
+
+  /* « AUCUNE COLLECTE SÉPARÉE » : le bois se décoche (et s'annonce), la phrase TOMBE, « Aucun dépôt » reste. */
+  await oublierAnnonces();
+  await pastilleDechets(AUCUNE_COLLECTE_DECHETS).scrollIntoViewIfNeeded();
+  await attendre(500);
+  await toucher(pastilleDechets(AUCUNE_COLLECTE_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const d2 = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« ${AUCUNE_COLLECTE_DECHETS} » : la base dit ${JSON.stringify(d2 && d2.flux)}, « aucun dépôt » GARDÉ (${d2 && d2.sansDepot}), `
+    + `VoiceOver entend « ${TRI_RETIRES} » — et la phrase TOMBE`,
+  !!d2 && JSON.stringify(d2.flux) === JSON.stringify(['aucune']) && d2.sansDepot === true && d2.lieux === null
+    && (await annonces()).includes(TRI_RETIRES) && !(await texteLu()).includes(DEBUT_PARTENT), JSON.stringify(await annonces()));
+  await capture('2b5-r2-aucune-collecte');
+  await toucher(parLibelle(RETOUR_DECHETS_LISTE));
+  await jusqua(async () => (await enCarte()) && !(await texteLu()).includes(DEBUT_POINT_DECHETS), DELAI_ECRITURE + 3000);
+  const n1 = await compteDansLaListe();
+  verifier(`« ‹ Liste » : la liste relue, le point S’ÉTEINT (« Ce devis » : ${n0} → ${n1})`,
+    (await enCarte()) && !(await texteLu()).includes(DEBUT_POINT_DECHETS) && n0 !== null && n1 === n0 - 1);
+  await fermerLaListe();
+  verifier(`…la rangée dit « ${RESUME_REMPLIES} »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await noterHauteur(393, 'R2 : remplies, aucune collecte');
+
+  /* UNE SORTE COCHÉE SOUS « AUCUN DÉPÔT » : la phrase REVIENT ; un lieu coché la fait TOMBER — et le devis revient à son départ. */
+  await ouvrirLesDechets();
+  await toucher(caseDechets('Bois'));
+  await attendre(PAUSE_DEMO + 400);
+  const d3 = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Bois » coché sous « ${AUCUN_DEPOT_DECHETS} » : la base dit ${JSON.stringify(d3 && d3.flux)}, et la phrase REVIENT`,
+    !!d3 && JSON.stringify(d3.flux) === JSON.stringify(['bois']) && d3.sansDepot === true && (await texteLu()).includes(PARTENT_A_PART));
+  await toucher(caseDechets(LIEU_DEMO_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const d4 = await dechetsEnBase(OBJET_DECHETS);
+  verifier('le lieu coché : « Aucun dépôt » tombe, la phrase TOMBE, la base cite le lieu',
+    !!d4 && d4.sansDepot === null && Array.isArray(d4.lieux) && d4.lieux.length === 1 && d4.lieux[0] === AVANT_2B5.lieux[0].id
+    && !(await choisie(pastilleDechets(AUCUN_DEPOT_DECHETS))) && !(await texteLu()).includes(DEBUT_PARTENT));
+  await fermerLesDechets();
+  const d5 = await dechetsEnBase(OBJET_DECHETS);
+  verifier('RIEN N’EST PERDU : la quantité (2 500 millièmes de m³), le coût (12 000 centimes), la réponse « Oui » n’ont pas bougé, et le '
+    + `devis est revenu à son départ (${JSON.stringify(d5)})`,
+  !!d5 && JSON.stringify({ ...d5, id: null }) === JSON.stringify({ ...d0, id: null }) && d5.id === d0.id);
+  verifier(`la rangée : « Déchets : ${RESUME_REMPLIES}. Ouvrir »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`,
+    await resumeDechets());
+  await noterHauteur(393, 'R2 : remplies, après');
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteur(320, 'R2 : remplies, après');
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
 await section('2b-5 : « Déchets (mesure) » — « Corriger » et la garde de sortie, puis une écriture qui ne revient pas : la ligne d’état, « Réessayer », et la rangée qui ne bouge pas (§5.5)', async () => {
   const tailleAvant = page.viewportSize();
   await page.setViewportSize({ width: 393, height: 852 });

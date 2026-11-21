@@ -84,7 +84,7 @@ import {
   LES_DECHETS, FLUX_DECHETS, SUR_PLACE_DECHETS, UNITES_DECHETS, AUCUNE_COLLECTE, AUCUN_DEPOT,
   etatInitialDechets, lireDechets, fluxApresAppui, surPlaceApresAppui, lieuxApresAppui,
   annonceDuTri, annonceDesLieux, etatDesLieux, libelleDuCout, libelleParleDuCout, pastillesDeLaQuestionDesDechets,
-  textesInitiauxDesDechets, ligneDEtatDeLaCarte,
+  textesInitiauxDesDechets, ligneDEtatDeLaCarte, aucunDepotContredit,
 } from '../lib/devis';
 import { libelleDuTypeDeLieu } from '../lib/emetteur';
 
@@ -418,6 +418,17 @@ const DechetsDevis = forwardRef(function DechetsDevis({
                 <View style={s.pastilles}>
                   <Pastille label={LES_DECHETS.lieux.aucunDepot} choisie={c.sansDepot === true} onPress={toucherAucunDepot} />
                 </View>
+                {/* « AUCUN DÉPÔT » CONTREDIT PAR LE TRI (DROIT-R2, décision du
+                    21/11 : « Le signaler ») : des déchets cochés dans le tri
+                    PARTIRONT, et leur lieu manque — la phrase le dit JUSTE
+                    SOUS la pastille, tant que la contradiction dure
+                    (`aucunDepotContredit`, sur les choix de la carte), et
+                    tombe dès qu'elle tombe. De l'encre, pas le rouge des
+                    refus : rien n'est refusé, le choix est enregistré. Rien
+                    AU-DESSUS ne bouge. */}
+                {aucunDepotContredit(c) && (
+                  <Text style={s.rappelLieux} accessibilityLiveRegion="polite">{LES_DECHETS.lieux.partentAPart}</Text>
+                )}
                 <Text style={s.aide}>{LES_DECHETS.lieux.sousAucunDepot}</Text>
               </>
             )}
@@ -478,6 +489,8 @@ const s = StyleSheet.create({
   /* Le rappel de l'unité : de l'encre, pas le rouge des refus — rien n'est
      refusé, la quantité est enregistrée. */
   rappel: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit) },
+  /* Le même rappel, sous la pastille « Aucun dépôt » (DROIT-R2). */
+  rappelLieux: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xs },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginTop: S.xs },
   /* LA LIGNE D'ÉTAT : une ligne réservée même au repos — l'envoi qui
      commence ne pousse pas la carte. */

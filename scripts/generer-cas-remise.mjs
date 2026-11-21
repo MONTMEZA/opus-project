@@ -620,10 +620,15 @@ const SITUATIONS = [
     devis: { ...DECHETS, dechets_lieux: [LA1, LA2] }, lieux: [lieu(LA1), lieu(LA2)], lignes: UN_POSTE_0 },
   { nom: 'déchets « Oui », le MÊME lieu de A choisi deux fois (un doublon que la base ne refuse pas) : rien ne manque', e: 'franchise',
     devis: { ...DECHETS, dechets_lieux: [LA1, LA1] }, lieux: LIEU_A, lignes: UN_POSTE_0 },
-  //     « Aucun dépôt » (réponse P6) remplit la rubrique des lieux.
-  { nom: 'déchets « Oui », « Aucun dépôt », aucun lieu choisi : rien ne manque', e: 'franchise',
+  //     « Aucun dépôt » (réponse P6) remplit la rubrique des lieux — SEULEMENT
+  //     si le tri ne nomme aucune sorte qui part à part (décision du 21/11,
+  //     question DROIT-R2 : « Le signaler »). Le décor `DECHETS` trie le bois
+  //     et le plâtre : ces deux cas, qui rendaient « rien ne manque » jusqu'à
+  //     cette décision, rendent désormais le point — c'est voulu. Les cas qui
+  //     prouvent la règle sont À LA FIN (les numéros d'avant ne bougent pas).
+  { nom: 'déchets « Oui », « Aucun dépôt », le bois et le plâtre triés à part, aucun lieu choisi : devis_dechets_rubriques (des déchets partent, leur lieu manque)', e: 'franchise',
     devis: { ...DECHETS, dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
-  { nom: 'déchets « Oui », « Aucun dépôt » et un lieu orphelin : rien ne manque', e: 'franchise',
+  { nom: 'déchets « Oui », « Aucun dépôt », le bois et le plâtre triés à part, un lieu orphelin : devis_dechets_rubriques', e: 'franchise',
     devis: { ...DECHETS, dechets_lieux: [LX], dechets_sans_depot: true }, lignes: UN_POSTE_0 },
   //     Le rang 13 parmi les autres : après le rang 12, avant l'entreprise ;
   //     il ne lit pas la réponse « à quel titre ».
@@ -644,6 +649,50 @@ const SITUATIONS = [
     devis: { ...VIDE, dechets_concerne: null, sos_request_id: SA, source: 'urgence' }, lignes: [] },
   { nom: 'D4-c : devis NEUF VIDE SANS RÉPONSE AUX DÉCHETS venu d’une demande ET d’une urgence', e: 'franchise',
     devis: { ...VIDE, dechets_concerne: null, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
+  // --- 2b-5, DROIT-R2 (décision du propriétaire du 21/11 : « Le signaler »),
+  //     À LA FIN : « Aucun dépôt : rien ne quittera le chantier » ne remplit
+  //     la rubrique des lieux que si le tri ne nomme aucune sorte qui part à
+  //     part — vide de valeur (le tri manque alors de toute façon) ou
+  //     exactement `{aucune}`. Un lieu choisi qui existe chez A remplit
+  //     toujours la rubrique. « Sur le chantier » n'y change rien.
+  { nom: 'DROIT-R2 : « Oui », « Aucun dépôt » et « Aucune collecte séparée » ({aucune}), aucun lieu : rien ne manque', e: 'franchise',
+    devis: { ...DECHETS, dechets_flux: ['aucune'], dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : « Oui », « Aucun dépôt », un tri VIDE DE VALEUR, aucun lieu : devis_dechets_rubriques (le tri manque, pas le lieu)',
+    e: 'franchise', devis: { ...DECHETS, dechets_flux: null, dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : « Oui », « Aucun dépôt », le bois et le plâtre triés à part, ET un lieu de A : rien ne manque (le lieu existe)',
+    e: 'franchise', devis: { ...DECHETS, dechets_lieux: [LA1], dechets_sans_depot: true }, lieux: LIEU_A, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : « Oui », « Aucun dépôt », le bois et le plâtre triés à part, et seul le lieu d’un AUTRE artisan (B) : devis_dechets_rubriques',
+    e: 'franchise', devis: { ...DECHETS, dechets_lieux: [LB1], dechets_sans_depot: true }, lieux: LIEUX_A_ET_B, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : « Oui », « Aucun dépôt », les déchets dangereux à part, aucun lieu : devis_dechets_rubriques', e: 'franchise',
+    devis: { ...DECHETS, dechets_flux: ['dangereux'], dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : SANS RÉPONSE, « Aucun dépôt », le bois et le plâtre triés à part, aucun lieu : devis_dechets (une prudence)',
+    e: 'franchise', devis: { ...DECHETS, dechets_concerne: null, dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : SANS RÉPONSE, « Aucun dépôt » et {aucune}, aucun lieu : rien ne manque', e: 'franchise',
+    devis: { ...DECHETS, dechets_concerne: null, dechets_flux: ['aucune'], dechets_lieux: null, dechets_sans_depot: true },
+    lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : SANS RÉPONSE, « Aucun dépôt », un tri VIDE DE VALEUR, aucun lieu : devis_dechets', e: 'franchise',
+    devis: { ...DECHETS, dechets_concerne: null, dechets_flux: null, dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : « Non », « Aucun dépôt », le bois et le plâtre triés à part, aucun lieu : rien (« Non » ne lit rien)', e: 'franchise',
+    devis: { ...DECHETS, dechets_concerne: false, dechets_lieux: null, dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  //     Le jardinage (le coût de la règle, dit au propriétaire) : des déchets
+  //     verts cochés « à part » ET compostés sur place, « Aucun dépôt » —
+  //     le point ; « Aucune collecte séparée » et le compostage — rien.
+  { nom: 'DROIT-R2 : jardinage, les déchets verts triés à part ET compostés sur place, « Aucun dépôt », aucun lieu : devis_dechets_rubriques',
+    e: 'franchise', devis: { ...DECHETS, dechets_flux: ['verts'], dechets_sur_place: ['compostage'], dechets_lieux: null,
+      dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : jardinage, « Aucune collecte séparée », compostés sur place, « Aucun dépôt », aucun lieu : rien ne manque',
+    e: 'franchise', devis: { ...DECHETS, dechets_flux: ['aucune'], dechets_sur_place: ['compostage'], dechets_lieux: null,
+      dechets_sans_depot: true }, lignes: UN_POSTE_0 },
+  //     LE VIDE DE « AUCUN DÉPÔT » (banc des sabotages de DROIT-R2, B2) : la
+  //     condition reste sûre face au vide — `v_dechets_sans is true`, jamais
+  //     `v_dechets_sans` seul : `null and vrai` vaut `null`, son `not` aussi,
+  //     et le point se TAIT. Seul un tri `{aucune}` le montre (avec une sorte,
+  //     `null and faux` vaut faux) : sans ces deux cas, la parité restait
+  //     verte sous cette mutation.
+  { nom: 'DROIT-R2 : « Oui », « Aucune collecte séparée » ({aucune}), « Aucun dépôt » VIDE, aucun lieu : devis_dechets_rubriques (le lieu manque)',
+    e: 'franchise', devis: { ...DECHETS, dechets_flux: ['aucune'], dechets_lieux: null }, lignes: UN_POSTE_0 },
+  { nom: 'DROIT-R2 : SANS RÉPONSE, {aucune}, « Aucun dépôt » VIDE, aucun lieu : devis_dechets', e: 'franchise',
+    devis: { ...DECHETS, dechets_concerne: null, dechets_flux: ['aucune'], dechets_lieux: null }, lignes: UN_POSTE_0 },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -934,6 +983,9 @@ if (cas.length < 139 || cas.slice(0, 139).some((c, i) => c.n !== i + 1)) throw n
 if (cas.slice(0, 139).some((c) => c.attendu.some((m) => m.rang === 13))) {
   throw new Error('un des 139 cas d’avant porte le rang 13 : le décor « complet » ne répond plus « Non »');
 }
+/* 2b-5, DROIT-R2 (21/11) : les 171 cas d'avant la décision gardent leur
+   numéro — les cas qui la prouvent sont ajoutés À LA FIN. */
+if (cas.length < 171 || cas.slice(0, 171).some((c, i) => c.n !== i + 1)) throw new Error('les 171 cas d’avant DROIT-R2 ont bougé');
 /* 2b-5 : UNE SEULE CLÉ AU RANG 13, toujours — et chacune avec sa nature
    (la réponse vide : une prudence ; « Oui » : la loi). */
 if (cas.some((c) => c.attendu.filter((m) => m.rang === 13).length > 1)) throw new Error('le rang 13 a rendu plus d’une clé');
@@ -952,6 +1004,10 @@ if (cas.some((c) => c.attendu.some((m) => (m.cle === 'devis_dechets' && m.nature
   const choisis = (c) => bruts[c.n].dechets_lieux || [];
   const connus = (c) => new Map((c.lieux || []).map((l) => [l.id, l.proId]));
   const sansDepot = (c) => bruts[c.n].dechets_sans_depot === true;
+  /* La sorte qui part à part (DROIT-R2), lue sur la ligne BRUTE : écrite
+     ICI à nouveau, jamais importée de `devis.js` — la garde ne doit pas
+     changer avec la règle qu'elle couvre. */
+  const nommeSorte = (c) => Array.isArray(bruts[c.n].dechets_flux) && bruts[c.n].dechets_flux.some((x) => x !== 'aucune');
   const repondu = (c) => bruts[c.n].dechets_concerne !== false;
   const orphelinSeul = (c) => repondu(c) && !sansDepot(c) && choisis(c).length > 0
     && choisis(c).every((id) => !connus(c).has(id)) && (c.lieux || []).some((l) => l.proId === bruts[c.n].pro_id) && r13(c);
@@ -960,7 +1016,31 @@ if (cas.some((c) => c.attendu.some((m) => (m.cle === 'devis_dechets' && m.nature
   const gardes = [
     ['un lieu orphelin seul choisi (le point reste)', orphelinSeul],
     ['le lieu d’un autre artisan seul choisi (le point reste)', autreSeul],
-    ['« Aucun dépôt » sans lieu, et rien ne manque', (c) => repondu(c) && sansDepot(c) && choisis(c).length === 0 && c.attendu.length === 0],
+    ['« Aucun dépôt » sans lieu, un tri qui ne nomme aucune sorte ({aucune}), et rien ne manque', (c) => repondu(c) && sansDepot(c)
+      && choisis(c).length === 0 && egalTableau(bruts[c.n].dechets_flux || [], ['aucune']) && c.attendu.length === 0],
+    /* DROIT-R2 (décision du 21/11) : « Aucun dépôt » ne remplit plus les
+       lieux quand le tri nomme une sorte — à « Oui » (la loi) ET sans réponse
+       (la prudence) ; un lieu de A qui existe les remplit toujours ; un tri
+       vide de valeur : le point reste (par le tri). */
+    ['« Aucun dépôt » sans lieu, une sorte triée à part, « Oui » : le point (la loi) reste', (c) => bruts[c.n].dechets_concerne === true
+      && sansDepot(c) && choisis(c).length === 0 && nommeSorte(c) && c.attendu.some((m) => m.cle === 'devis_dechets_rubriques')],
+    ['« Aucun dépôt » sans lieu, une sorte triée à part, sans réponse : le point (la prudence) reste', (c) => bruts[c.n].dechets_concerne === null
+      && sansDepot(c) && choisis(c).length === 0 && nommeSorte(c) && c.attendu.some((m) => m.cle === 'devis_dechets')],
+    ['« Aucun dépôt », une sorte triée à part, ET un lieu de A : rien ne manque', (c) => repondu(c) && sansDepot(c) && nommeSorte(c)
+      && choisis(c).some((id) => connus(c).get(id) === bruts[c.n].pro_id) && c.attendu.length === 0],
+    ['« Aucun dépôt », une sorte triée à part, seul le lieu d’un autre artisan : le point reste', (c) => repondu(c) && sansDepot(c)
+      && nommeSorte(c) && choisis(c).length > 0 && choisis(c).every((id) => connus(c).has(id) && connus(c).get(id) !== bruts[c.n].pro_id)
+      && r13(c)],
+    ['« Aucun dépôt », un tri vide de valeur : le point reste (par le tri)', (c) => repondu(c) && sansDepot(c)
+      && bruts[c.n].dechets_flux === null && choisis(c).length === 0 && r13(c)],
+    /* Le VIDE de « Aucun dépôt » (B2) : un tri `{aucune}`, aucun lieu, la
+       pastille jamais touchée — le point reste, à « Oui » ET sans réponse. */
+    ['« Aucun dépôt » VIDE, un tri {aucune}, aucun lieu, « Oui » : le point (la loi) reste', (c) => bruts[c.n].dechets_concerne === true
+      && bruts[c.n].dechets_sans_depot === null && egalTableau(bruts[c.n].dechets_flux, ['aucune']) && choisis(c).length === 0
+      && c.attendu.some((m) => m.cle === 'devis_dechets_rubriques')],
+    ['« Aucun dépôt » VIDE, un tri {aucune}, aucun lieu, sans réponse : le point (la prudence) reste', (c) => bruts[c.n].dechets_concerne === null
+      && bruts[c.n].dechets_sans_depot === null && egalTableau(bruts[c.n].dechets_flux, ['aucune']) && choisis(c).length === 0
+      && c.attendu.some((m) => m.cle === 'devis_dechets')],
     ['le tri {aucune}, et rien ne manque', (c) => repondu(c) && egalTableau(bruts[c.n].dechets_flux, ['aucune']) && c.attendu.length === 0],
     ['« sur le chantier » seul, et le point reste', (c) => repondu(c) && bruts[c.n].dechets_flux === null
       && (bruts[c.n].dechets_sur_place || []).length > 0 && r13(c)],

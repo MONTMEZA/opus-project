@@ -13559,7 +13559,13 @@ comment on column public.devis.cout_devis_centimes is
 --      au plus.
 --    `dechets_sans_depot` (réponse P6) : VRAI, par la seule pastille
 --      « Aucun dépôt : rien ne quittera le chantier » ; VIDE sinon ; JAMAIS
---      faux. Vrai, il compte comme réponse à la rubrique des lieux.
+--      faux. Vrai, il compte comme réponse à la rubrique des lieux
+--      SEULEMENT si le tri ne nomme aucune sorte qui part à part —
+--      `dechets_flux` vide de valeur ou `{aucune}` (décision du 21/11,
+--      question DROIT-R2 : « Le signaler ») : des déchets collectés à part
+--      PARTENT, et leur lieu de dépôt doit être nommé. La base ne refuse
+--      pas la combinaison (aucune contrainte ne lie deux colonnes) : le
+--      rang 13 la compte comme un lieu qui manque, et la carte le dit.
 --    `dechets_cout_centimes` (réponse P2) : l'estimation des coûts, un
 --      montant TOUJOURS chiffré, jamais 0 (de 1 à 999 999 999 centimes) —
 --      HT au régime réel, comme les lignes, et l'écran le dit
@@ -13617,7 +13623,8 @@ comment on column public.devis.dechets_lieux is
   'DISTINCTS, dans l’ordre, et figera ce tableau. 49.4 sexies.';
 comment on column public.devis.dechets_sans_depot is
   'Vrai par la seule pastille « Aucun dépôt : rien ne quittera le chantier » ; vide sinon ; jamais faux. Vrai, '
-  'il compte comme réponse à la rubrique des lieux. 49.4 sexies.';
+  'il compte comme réponse à la rubrique des lieux SEULEMENT si le tri ne nomme aucune sorte qui part à part '
+  '(dechets_flux vide de valeur ou {aucune}) ; sinon les déchets qui partent ont un lieu à nommer. 49.4 sexies.';
 comment on column public.devis.dechets_cout_centimes is
   'L’estimation des coûts de gestion et d’enlèvement des déchets, en centimes (HT au régime réel). De 1 à '
   '999 999 999, jamais 0. Vide = pas dite. HORS des totaux : une estimation, pas un prix facturé. 49.4 sexies.';
@@ -15426,8 +15433,11 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  UNE RUBRIQUE MANQUE quand : la quantité OU son unité est vide ; le tri
 --  est vide de valeur (`{aucune}` le remplit ; ce qui reste sur le chantier,
 --  `dechets_sur_place`, n'y compte JAMAIS, et la fonction ne le lit pas) ;
---  aucun des lieux choisis n'existe encore CHEZ CETTE ENTREPRISE et « Aucun
---  dépôt » n'est pas vrai (réponse P6) ; le coût est vide. LA LECTURE DES
+--  aucun des lieux choisis n'existe encore CHEZ CETTE ENTREPRISE, et
+--  « Aucun dépôt » n'est pas vrai (réponse P6) OU le tri nomme une sorte qui
+--  part à part — « Aucun dépôt » ne remplit les lieux que si le tri est vide
+--  de valeur ou `{aucune}` (décision du 21/11, question DROIT-R2) ; le coût
+--  est vide. LA LECTURE DES
 --  LIEUX EST UNE, ses colonnes nommées, filtrée par l'entreprise du devis
 --  (`l.pro_id = v_pro`) et par le tableau du devis : un identifiant étranger
 --  ou orphelin ne compte pas (le contrat de `dechets_lieux`, 49.4 sexies).
@@ -15753,13 +15763,24 @@ begin
   -- et une des quatre rubriques manque — la quantité (ou son unité) ; le
   -- tri (ce qui reste sur le chantier n'y compte JAMAIS : le broyage n'est
   -- pas une collecte séparée) ; un lieu choisi qui existe encore, ou
-  -- « Aucun dépôt » ; le coût. UNE clé au plus : `devis_dechets` (prudence)
-  -- quand la réponse est vide, puisqu'Opus ne sait pas si ce devis relève
-  -- de la loi ; `devis_dechets_rubriques` (la loi) quand elle est « Oui ».
+  -- « Aucun dépôt » QUAND LE TRI NE NOMME AUCUNE SORTE ; le coût. UNE clé
+  -- au plus : `devis_dechets` (prudence) quand la réponse est vide,
+  -- puisqu'Opus ne sait pas si ce devis relève de la loi ;
+  -- `devis_dechets_rubriques` (la loi) quand elle est « Oui ».
+  -- « AUCUN DÉPÔT : RIEN NE QUITTERA LE CHANTIER » (décision du propriétaire
+  -- du 21/11, question DROIT-R2 : « Le signaler ») ne remplit la rubrique
+  -- des lieux que si le tri ne nomme aucune sorte qui part à part : vide de
+  -- valeur (le tri manque alors de toute façon), ou exactement `{aucune}`.
+  -- Un tri qui nomme du bois, du plâtre, des déchets dangereux… dit que des
+  -- déchets PARTIRONT, et ceux-là ont un lieu de dépôt à nommer : la
+  -- rubrique manque, sauf si un lieu choisi existe chez l'entreprise.
+  -- `is true` et `is null` : jamais `not x` sur une valeur qui peut manquer.
   if v_dechets is not false
      and (v_dechets_qte is null or v_dechets_unite is null
           or v_dechets_flux is null
-          or (v_lieux_existants = 0 and v_dechets_sans is not true)
+          or (v_lieux_existants = 0
+              and not (v_dechets_sans is true
+                       and (v_dechets_flux is null or v_dechets_flux = array['aucune']::text[])))
           or v_dechets_cout is null) then
     if v_dechets is null then
       rang := 13; cle := 'devis_dechets'; nature := 'prudence';

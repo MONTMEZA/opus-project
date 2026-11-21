@@ -6523,6 +6523,41 @@ export const SUR_PLACE_DECHETS = Object.freeze([
  *  pastille « Aucun dépôt : rien ne quittera le chantier » (réponse P6). */
 export const AUCUN_DEPOT = 'aucun_depot';
 
+/**
+ * CE TRI NOMME-T-IL UNE SORTE QUI PART À PART ? (décision du propriétaire du
+ * 21/11, question DROIT-R2 : « Le signaler ») — VRAI quand la liste des
+ * déchets collectés à part contient autre chose qu'« Aucune collecte
+ * séparée » (du bois, du plâtre, des déchets dangereux…) ; FAUX pour une
+ * liste vide de valeur (rien de dit) et pour `['aucune']`. Écrite UNE fois
+ * de ce côté : la règle du rang 13 (`rubriquesDesDechets`), la phrase de la
+ * carte (`aucunDepotContredit`) et l'annonce du tri (`annonceDuTri` : « des
+ * déchets cochés ») la lisent.
+ * Le miroir de `not (v_dechets_flux is null or v_dechets_flux =
+ * array['aucune'])` (49.9), sur les seules listes que la base accepte :
+ * jamais `[]` (la base le refuse), et `aucune` toujours seule.
+ */
+export function triNommeUneSorte(flux) {
+  return Array.isArray(flux) && flux.some((c) => c !== AUCUNE_COLLECTE);
+}
+
+/**
+ * « AUCUN DÉPÔT » CONTREDIT PAR LE TRI (DROIT-R2) — `choix` : `{ flux,
+ * sansDepot }`, la valeur de la carte. VRAI quand la pastille « Aucun
+ * dépôt : rien ne quittera le chantier » est choisie ET que le tri nomme une
+ * sorte qui part à part : ces déchets-là PARTIRONT, et leur lieu de dépôt
+ * doit être nommé — « Aucun dépôt » ne remplit alors plus la rubrique des
+ * lieux (le rang 13 la compte comme un lieu qui manque). La carte le DIT
+ * sous la pastille (`LES_DECHETS.lieux.partentAPart`), et la phrase tombe
+ * dès que la contradiction tombe : « Aucune collecte séparée » choisie
+ * (`fluxApresAppui` rend `['aucune']`), la dernière sorte décochée (`null`),
+ * un lieu coché ou « Aucun dépôt » retouché (`lieuxApresAppui` rend
+ * `sansDepot: null`).
+ */
+export function aucunDepotContredit(choix) {
+  const x = choix && typeof choix === 'object' ? choix : {};
+  return x.sansDepot === true && triNommeUneSorte(x.flux);
+}
+
 /** Les quatre rubriques que la loi demande, dans l'ordre de la carte et du
  *  résumé. */
 export const RUBRIQUES_DES_DECHETS = Object.freeze(['quantite', 'tri', 'lieu', 'cout']);
@@ -6658,7 +6693,7 @@ export function lieuxApresAppui(choix, lieuxLus, id) {
  *  geste doit s'annoncer ». `null` sinon — décocher une case, ou allumer la
  *  pastille quand rien n'était coché, ne retire rien qu'on n'ait touché. */
 export function annonceDuTri(avant, apres) {
-  const retire = Array.isArray(avant) && avant.some((c) => c !== AUCUNE_COLLECTE);
+  const retire = triNommeUneSorte(avant);
   const pastille = Array.isArray(apres) && apres.length === 1 && apres[0] === AUCUNE_COLLECTE;
   return retire && pastille ? LES_DECHETS.tri.retires : null;
 }
@@ -6685,7 +6720,10 @@ function entrepriseDuLieu(l) {
  *   - `quantite` : la quantité ET son unité ;
  *   - `tri` : la liste des déchets collectés à part (`['aucune']` compte) —
  *     ce qui reste sur le chantier n'y compte JAMAIS ;
- *   - `lieu` : VRAI si « Aucun dépôt », ou si un lieu choisi existe dans
+ *   - `lieu` : VRAI si « Aucun dépôt » ET que le tri ne nomme aucune sorte
+ *     qui part à part (`triNommeUneSorte` : DROIT-R2, décision du 21/11 —
+ *     « Aucun dépôt » avec du bois ou du plâtre à part ne dit pas où ces
+ *     déchets iront), ou si un lieu choisi existe dans
  *     `lieux` CHEZ L'ENTREPRISE DU DEVIS (le miroir de `l.pro_id = v_pro` :
  *     un lieu qui ne dit pas son entreprise n'est pas écarté, comme une
  *     assurance dans `etatDeLAttestation`) ; FAUX si aucun lieu n'est choisi
@@ -6701,7 +6739,7 @@ export function rubriquesDesDechets(devis, lieux) {
   const d = devis || {};
   const choisis = Array.isArray(d.dechetsLieux) ? d.dechetsLieux.filter((v) => v != null) : [];
   let lieu;
-  if (d.dechetsSansDepot === true) lieu = true;
+  if (d.dechetsSansDepot === true && !triNommeUneSorte(d.dechetsFlux)) lieu = true;
   else if (choisis.length === 0) lieu = false;
   else if (!Array.isArray(lieux)) lieu = null;
   else {
@@ -6886,6 +6924,18 @@ export const LES_DECHETS = Object.freeze({
     aucunDepot: 'Aucun dépôt : rien ne quittera le chantier',
     sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés : choisissez alors aussi « Aucune '
       + 'collecte séparée » et, dans « Sur le chantier », ce que vous en faites.',
+    /* « Aucun dépôt » choisi ET un tri qui nomme une sorte qui part à part
+       (DROIT-R2, décision du 21/11 : « Le signaler ») : MONTRÉE sous la
+       pastille, tant que la contradiction dure (`aucunDepotContredit`) — le
+       rang 13 compte alors le lieu comme manquant. Sa seconde phrase est
+       conditionnée par ce qui garde « Aucun dépôt » VRAI — rien ne quitte le
+       chantier —, jamais par « rien ne partira à part » (relecture R2-1) :
+       des déchets qui partent MÉLANGÉS à la déchèterie ne partent pas « à
+       part », et l'artisan qui aurait suivi l'ancienne phrase gardait
+       « rien ne quittera le chantier » sans aucun point de collecte
+       (D. 541-45-1, I, 3°). */
+    partentAPart: 'Des déchets partiront à part : choisissez où vous les déposerez. Si en fait rien ne quitte le chantier, '
+      + 'choisissez « Aucune collecte séparée ».',
     retires: 'Les lieux cochés ont été retirés.',
     /* Un lieu de plus que `LIEUX_DECHETS_MAX` (relecture BASE-R1 / ÉCRAN-1) :
        MONTRÉ à la place de la faute des lieux, annoncé, rien n'est écrit. */

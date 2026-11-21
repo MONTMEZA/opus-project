@@ -8982,8 +8982,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      `devis_dechets` (prudence) quand la réponse est vide, ou
      `devis_dechets_rubriques` (la loi) quand c'est « Oui », dès qu'une des
      quatre rubriques manque — `is not false`, `is not true`, jamais
-     `not x`. Même signature, mêmes attributs. */
-  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_cout bigint; v_dechets boolean; v_dechets_qte bigint; v_dechets_unite text; v_dechets_flux text[]; v_dechets_lieux uuid[]; v_dechets_sans boolean; v_dechets_cout bigint; v_lieux_existants bigint := 0; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes, d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux, d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature, v_cout, v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux, v_dechets_lieux, v_dechets_sans, v_dechets_cout from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; if v_dechets is not false then select count(distinct l.id) into v_lieux_existants from public.emetteur_lieux_depot l where l.pro_id = v_pro and l.id = any (v_dechets_lieux); end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; if v_cout is null then rang := 12; cle := 'devis_cout'; nature := 'prudence'; phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_dechets is not false and (v_dechets_qte is null or v_dechets_unite is null or v_dechets_flux is null or (v_lieux_existants = 0 and v_dechets_sans is not true) or v_dechets_cout is null) then if v_dechets is null then rang := 13; cle := 'devis_dechets'; nature := 'prudence'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.'; return next; else rang := 13; cle := 'devis_dechets_rubriques'; nature := 'loi'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
+     `not x`. Même signature, mêmes attributs.
+     2b-5, DROIT-R2 (décision du propriétaire du 21/11, « Le signaler ») —
+     UN changement, et rien d'autre : la rubrique des lieux, `(v_lieux_existants
+     = 0 and v_dechets_sans is not true)`, devient `(v_lieux_existants = 0 and
+     not (v_dechets_sans is true and (v_dechets_flux is null or v_dechets_flux
+     = array['aucune']::text[])))` — « Aucun dépôt » ne remplit les lieux que
+     si le tri ne nomme aucune sorte qui part à part. Le `not` porte sur une
+     expression qui ne vaut JAMAIS `null` : `is true` et `is null` rendent
+     vrai ou faux, et `v_dechets_flux = …` n'est lu que quand le tableau
+     n'est pas vide de valeur. */
+  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_cout bigint; v_dechets boolean; v_dechets_qte bigint; v_dechets_unite text; v_dechets_flux text[]; v_dechets_lieux uuid[]; v_dechets_sans boolean; v_dechets_cout bigint; v_lieux_existants bigint := 0; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes, d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux, d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature, v_cout, v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux, v_dechets_lieux, v_dechets_sans, v_dechets_cout from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; if v_dechets is not false then select count(distinct l.id) into v_lieux_existants from public.emetteur_lieux_depot l where l.pro_id = v_pro and l.id = any (v_dechets_lieux); end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; if v_cout is null then rang := 12; cle := 'devis_cout'; nature := 'prudence'; phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_dechets is not false and (v_dechets_qte is null or v_dechets_unite is null or v_dechets_flux is null or (v_lieux_existants = 0 and not (v_dechets_sans is true and (v_dechets_flux is null or v_dechets_flux = array['aucune']::text[]))) or v_dechets_cout is null) then if v_dechets is null then rang := 13; cle := 'devis_dechets'; nature := 'prudence'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.'; return next; else rang := 13; cle := 'devis_dechets_rubriques'; nature := 'loi'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
   const defsMRR = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
   const vuMRR = defsMRR.length === 1 ? `${sansEspaces(defsMRR[0].attributs)} $$ ${sansEspaces(defsMRR[0].corps)} $$` : `(${defsMRR.length} définition(s) dans le fichier)`;
   verifier('a. `motifs_refus_remise` a EXACTEMENT la forme du contrat, relue et éprouvée par l’essai et `cas-remise.json` — une seule '
@@ -9442,19 +9451,45 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const lieuOrphelin = casR.some((c) => (c.devis.dechetsLieux || []).length > 0
     && !(c.lieux || []).some((l) => (c.devis.dechetsLieux || []).includes(l.id)) && c.attendu.some((m) => m.rang === 13));
   const videComplet = casR.some((c) => c.devis.dechetsConcerne === null && c.attendu.length === 0);
+  /* 2b-5, DROIT-R2 (21/11) : « Aucun dépôt » SANS lieu, avec une sorte triée
+     à part — le point reste, à « Oui » et sans réponse ; avec `['aucune']` —
+     rien ne manque ; avec une sorte ET un lieu de l'entreprise — rien ne
+     manque. Lus sur le devis, écrits ici sans `triNommeUneSorte`. */
+  const sorteDe = (c) => Array.isArray(c.devis.dechetsFlux) && c.devis.dechetsFlux.some((x) => x !== 'aucune');
+  const aucunDepotSansLieu = (c) => c.devis.dechetsSansDepot === true && (c.devis.dechetsLieux || []).length === 0;
+  const lieuDeLEntreprise = (c) => (c.lieux || []).some((l) => (c.devis.dechetsLieux || []).includes(l.id)
+    && String(l.proId) === String(c.devis.proId));
+  const droitR2 = casR.some((c) => aucunDepotSansLieu(c) && sorteDe(c) && c.devis.dechetsConcerne === true
+      && c.attendu.some((m) => m.cle === 'devis_dechets_rubriques'))
+    && casR.some((c) => aucunDepotSansLieu(c) && sorteDe(c) && c.devis.dechetsConcerne === null
+      && c.attendu.some((m) => m.cle === 'devis_dechets'))
+    && casR.some((c) => aucunDepotSansLieu(c) && egal(c.devis.dechetsFlux, ['aucune']) && c.attendu.length === 0)
+    && casR.some((c) => c.devis.dechetsSansDepot === true && sorteDe(c) && lieuDeLEntreprise(c) && c.attendu.length === 0)
+    /* Le VIDE de « Aucun dépôt » (banc de DROIT-R2, B2) : `{aucune}`, aucun
+       lieu, la pastille jamais touchée — le point, à « Oui » ET sans
+       réponse : sans ces cas, une condition écrite `v_dechets_sans` au lieu
+       de `v_dechets_sans is true` gardait la parité verte. */
+    && casR.some((c) => c.devis.dechetsSansDepot === null && egal(c.devis.dechetsFlux, ['aucune'])
+      && (c.devis.dechetsLieux || []).length === 0 && c.devis.dechetsConcerne === true
+      && c.attendu.some((m) => m.cle === 'devis_dechets_rubriques'))
+    && casR.some((c) => c.devis.dechetsSansDepot === null && egal(c.devis.dechetsFlux, ['aucune'])
+      && (c.devis.dechetsLieux || []).length === 0 && c.devis.dechetsConcerne === null
+      && c.attendu.some((m) => m.cle === 'devis_dechets'));
   const nonCouverts = CONTRAT_B2.map(([k]) => k).filter((k) => !seul(k));
   verifier('…et ils COUVRENT la règle : chaque motif du devis seul au moins une fois, les trois natures, au moins un devis où rien ne '
     + 'manque, un motif de l’entreprise, trois lignes fautives rangées autrement qu’écrites (en franchise ET au réel), le devis NEUF VIDE '
     + 'ouvert à la main, venu d’une urgence, venu d’une demande et d’une urgence (D4-c), le délai fait d’un seul U+3000 sans motif (BASE-1), '
     + 'des assurances aux dates FIXES (2001 ou 2999, jamais entre) et une d’un AUTRE artisan (2b-3), un lieu de dépôt d’un AUTRE '
-    + 'artisan, un lieu ORPHELIN, et la réponse vide aux quatre rubriques dites (2b-5) '
+    + 'artisan, un lieu ORPHELIN, et la réponse vide aux quatre rubriques dites (2b-5) ; « Aucun dépôt » avec une sorte triée à part, '
+    + 'sans lieu (le point, à « Oui » et sans réponse), avec `[\'aucune\']` (rien), avec une sorte ET un lieu de l’entreprise (rien), '
+    + 'et `[\'aucune\']` SANS « Aucun dépôt » ni lieu (le point, à « Oui » et sans réponse : le vide ne le tait pas) (DROIT-R2) '
     + '— et le devis est dans la forme de l’application '
     + '(`rowToDevis`)',
   nonCouverts.length === 0 && ['loi', 'prudence', 'regle_opus'].every((n) => natures.has(n))
     && casR.some((c) => c.attendu.length === 0) && casR.some((c) => c.attendu.some((a) => a.rang > 100)) && desordre && d4cNeufs && u3000 && formeApp
-    && datesProches.length === 0 && autreArtisan && lieuEtranger && lieuOrphelin && videComplet
+    && datesProches.length === 0 && autreArtisan && lieuEtranger && lieuOrphelin && videComplet && droitR2
     && casR.every((c) => Array.isArray(c.lieux)),
-  `non couverts seuls : ${nonCouverts.join(', ') || '—'} ; natures ${json([...natures])} ; désordre ${desordre} ; neufs D4-c ${d4cNeufs} ; U+3000 ${u3000} ; forme ${formeApp} ; dates proches ${json(datesProches)} ; autre artisan ${autreArtisan} ; lieu étranger ${lieuEtranger} ; orphelin ${lieuOrphelin} ; vide complet ${videComplet}`);
+  `non couverts seuls : ${nonCouverts.join(', ') || '—'} ; natures ${json([...natures])} ; désordre ${desordre} ; neufs D4-c ${d4cNeufs} ; U+3000 ${u3000} ; forme ${formeApp} ; dates proches ${json(datesProches)} ; autre artisan ${autreArtisan} ; lieu étranger ${lieuEtranger} ; orphelin ${lieuOrphelin} ; vide complet ${videComplet} ; DROIT-R2 ${droitR2}`);
   let PKG = {};
   try { PKG = JSON.parse(lire('package.json')); } catch (e) { PKG = {}; }
   const GEN = sansCommentairesJs(lireSiExiste('scripts/generer-cas-remise.mjs') || '');
@@ -9718,12 +9753,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      orphelins et en double, l'enveloppe `security definer` qui prouve le
      filtre `pro_id`, D4-c, les dix-sept refus et les bornes), comptées par
      le rôle « base » ; le compte est désormais le cas 27. Les 114
-     variables des refus (63 et les 51 du cas 26 e) déclarées d'avance. */
-  verifier('…il ANNONCE ses 361 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
-    + '288 avec le cas 25 de 2b-4, et le cas 26 de 2b-5), les COMPTE (chaque valeur passe par '
+     variables des refus (63 et les 51 du cas 26 e) déclarées d'avance.
+     2b-5, DROIT-R2 (décision du 21/11) : 364 valeurs — trois de plus au cas
+     26 a (« Aucun dépôt » avec le bois et le plâtre à part rallume le point,
+     un lieu de A l'éteint, `{aucune}` remis l'éteint), aucun refus de plus. */
+  verifier('…il ANNONCE ses 364 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
+    + '288 avec le cas 25 de 2b-4, 361 avec le cas 26 de 2b-5, et les trois de DROIT-R2), les COMPTE (chaque valeur passe par '
     + '`pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre compte ; les 114 variables des '
     + 'refus sont déclarées d’avance (un cas retiré laisse un `f`, pas une autre erreur)',
-  valeursAnnoncees === 361 && /JUGE EXACTEMENT 361 VALEURS/.test(brutE)
+  valeursAnnoncees === 364 && /JUGE EXACTEMENT 364 VALEURS/.test(brutE)
     && /create temporary sequence essai_valeurs;/.test(essE)
     && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
     && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
@@ -12849,11 +12887,15 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
      lieux comptés chez L'ENTREPRISE DU DEVIS seulement ; `is not false`,
      jamais `not x` sur une réponse qui peut manquer. */
   verifier('…la base ne lit jamais `dechets_sur_place` pour le rang 13, ne compte que les lieux choisis de L’ENTREPRISE DU DEVIS '
-    + '(`l.pro_id = v_pro and l.id = any (v_dechets_lieux)`), et teste la réponse par `is not false` (vide = « Oui », par prudence)',
+    + '(`l.pro_id = v_pro and l.id = any (v_dechets_lieux)`), teste la réponse par `is not false` (vide = « Oui », par prudence), et '
+    + 'ne compte « Aucun dépôt » comme un lieu que si le tri ne nomme aucune sorte (`v_dechets_flux is null or v_dechets_flux = '
+    + 'array[\'aucune\']`, DROIT-R2 du 21/11)',
   corps44.length > 5000 && !/dechets_sur_place/.test(corps44)
     && corps44.includes('from public.emetteur_lieux_depot l where l.pro_id = v_pro and l.id = any (v_dechets_lieux)')
     && (corps44.match(/v_dechets is not false/g) || []).length === 2 && !/not v_dechets\b/.test(corps44)
-    && corps44.includes('(v_lieux_existants = 0 and v_dechets_sans is not true)'));
+    && corps44.includes("(v_lieux_existants = 0 and not (v_dechets_sans is true and (v_dechets_flux is null "
+      + "or v_dechets_flux = array['aucune']::text[])))")
+    && !corps44.includes('v_dechets_sans is not true'));
 
   /* b. `memeValeur` (T4), FAITE TOURNER : `Object.is`, ou deux listes de même
         longueur égales élément par élément (l'ORDRE compte) ; une liste vide
@@ -13057,7 +13099,7 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
   let combinaisons = 0;
   for (const concerne of [null, true, false]) {
     for (const [q, u] of [[null, null], [1000, null], [null, 'm3'], [1000, 't']]) {
-      for (const flux of [null, ['aucune'], ['bois']]) {
+      for (const flux of [null, ['aucune'], ['bois'], ['bois', 'platre'], ['dangereux']]) {
         for (const surPlace of [null, ['broyage']]) {
           for (const [choisis, sans] of [[null, null], [['l1'], null], [['orph'], null], [['lb'], null], [null, true], [['orph'], true]]) {
             for (const cout of [null, 100]) {
@@ -13082,11 +13124,23 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
                 lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise', lieux: liste })
                   .filter((x) => x.rang === 13).map((x) => x.cle);
                 const point = D.rubriqueDuPoint({ cle: 'devis_dechets_rubriques' }, { devis: dv, lieux: liste });
-                const ok = m === attenduM && resume === attenduR && egal(rang13, m ? [m] : [])
+                /* LA RUBRIQUE DES LIEUX, écrite ICI À NOUVEAU (l'oracle, jamais
+                   importé) — DROIT-R2, décision du 21/11 : « Aucun dépôt » ne la
+                   remplit que si le tri ne nomme aucune sorte qui part à part
+                   (vide de valeur, ou `['aucune']`) ; sinon un lieu choisi qui
+                   existe chez l'entreprise, inconnu faute de liste lue. */
+                const nommeSorte = Array.isArray(flux) && flux.some((x) => x !== 'aucune');
+                let attenduLieu;
+                if (sans === true && !nommeSorte) attenduLieu = true;
+                else if (!Array.isArray(choisis) || choisis.length === 0) attenduLieu = false;
+                else if (!Array.isArray(liste)) attenduLieu = null;
+                else attenduLieu = liste.some((l) => choisis.includes(l.id) && l.proId === 'p');
+                const ok = m === attenduM && resume === attenduR && egal(rang13, m ? [m] : []) && r.lieu === attenduLieu
                   && egal(r, sansSurPlace) && point === (manquent[0] || 'question')
                   && D.rubriqueDuPoint({ cle: 'devis_dechets' }, { devis: dv, lieux: liste }) === 'question'
                   && D.GABARITS_DES_DECHETS.includes(resume)
-                  && (r.lieu !== null || (Array.isArray(choisis) && choisis.length > 0 && sans !== true && !Array.isArray(liste)));
+                  && (r.lieu !== null || (Array.isArray(choisis) && choisis.length > 0 && !(sans === true && !nommeSorte)
+                    && !Array.isArray(liste)));
                 if (!ok) desaccords.push(json({ dv, liste, r, m, resume, rang13, point }));
               }
             }
@@ -13097,10 +13151,56 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
   }
   verifier(`f. la règle du rang 13 est écrite UNE fois (\`rubriquesDesDechets\`) : le miroir, la rangée, la rubrique visée par le point et `
     + `la liste entière la LISENT sans relire un champ des déchets, \`api.js\` ne la recopie pas, et ils CONCORDENT sur les ${combinaisons} `
-    + 'combinaisons (réponse, quantité et unité, tri, sur place, lieux choisis — d’ici, orphelin, d’un AUTRE artisan —, « Aucun dépôt », '
-    + 'coût, liste lue, vide ou non lue) ; « sur le chantier » ne change JAMAIS une rubrique ; « non lus » seulement faute de liste',
+    + 'combinaisons (réponse, quantité et unité, tri — rien, « aucune », une, deux sortes, des déchets dangereux —, sur place, lieux '
+    + 'choisis — d’ici, orphelin, d’un AUTRE artisan —, « Aucun dépôt », coût, liste lue, vide ou non lue) ; la rubrique des lieux '
+    + 'égale à l’oracle écrit ici (DROIT-R2 : « Aucun dépôt » ne la remplit que si le tri ne nomme aucune sorte) ; « sur le chantier » '
+    + 'ne change JAMAIS une rubrique ; « non lus » seulement faute de liste',
   relisent.length === 0 && appellent && !recopieApi && combinaisons >= 2000 && desaccords.length === 0,
   `relisent : ${relisent.join(', ') || '—'} ; appellent ${appellent} ; api ${recopieApi} ; ${desaccords.slice(0, 2).join(' | ')}`);
+
+  /* f ter. « AUCUN DÉPÔT » ET UN TRI QUI NOMME UNE SORTE (DROIT-R2, décision
+        du propriétaire du 21/11 : « Le signaler ») — `triNommeUneSorte`, la
+        seule écriture de « ce tri nomme une sorte qui part », lue par la
+        règle (`rubriquesDesDechets`), par la phrase de la carte
+        (`aucunDepotContredit`) et par l'annonce du tri ; FAITE TOURNER, ses
+        réponses écrites EN TOUTES LETTRES. Puis la phrase, geste par geste,
+        par les VRAIES fonctions d'appui : elle naît quand « Aucun dépôt » et
+        une sorte se rencontrent, et tombe dès que la contradiction tombe. */
+  const TNS44 = [[null, false], [undefined, false], [[], false], [['aucune'], false], [['bois'], true], [['bois', 'platre'], true],
+    [['dangereux'], true], [['verts'], true], [['bois', 'bois'], true], ['bois', false]];
+  const tnsFaux = TNS44.filter(([f, r]) => D.triNommeUneSorte(f) !== r).map(([f]) => json(f));
+  const ADC44 = [[{ sansDepot: true, flux: ['bois'] }, true], [{ sansDepot: true, flux: ['bois', 'platre'] }, true],
+    [{ sansDepot: true, flux: ['dangereux'] }, true], [{ sansDepot: true, flux: ['aucune'] }, false], [{ sansDepot: true, flux: null }, false],
+    [{ sansDepot: null, flux: ['bois'] }, false], [{ sansDepot: false, flux: ['bois'] }, false], [{ sansDepot: 'true', flux: ['bois'] }, false],
+    [null, false], [undefined, false]];
+  const adcFaux = ADC44.filter(([c, r]) => D.aucunDepotContredit(c) !== r).map(([c]) => json(c));
+  const LUS_ADC = [{ id: 'l1' }, { id: 'l2' }];
+  const contredit = (flux, lieux) => D.aucunDepotContredit({ flux, sansDepot: lieux.sansDepot });
+  const avecBois = { lieux: null, sansDepot: true };
+  const gestes44 = [
+    ['« Aucun dépôt » touché, du bois et du plâtre cochés : la phrase NAÎT',
+      contredit(['bois', 'platre'], D.lieuxApresAppui({ lieux: ['l1'], sansDepot: null }, LUS_ADC, D.AUCUN_DEPOT)), true],
+    ['une sorte cochée sous « Aucun dépôt » : la phrase NAÎT', contredit(D.fluxApresAppui(['aucune'], 'bois'), avecBois), true],
+    ['« Aucune collecte séparée » choisie : elle TOMBE', contredit(D.fluxApresAppui(['bois', 'platre'], D.AUCUNE_COLLECTE), avecBois), false],
+    ['la dernière sorte décochée : elle TOMBE', contredit(D.fluxApresAppui(['bois'], 'bois'), avecBois), false],
+    ['un lieu coché : elle TOMBE', contredit(['bois'], D.lieuxApresAppui(avecBois, LUS_ADC, 'l2')), false],
+    ['« Aucun dépôt » retouché : elle TOMBE', contredit(['bois'], D.lieuxApresAppui(avecBois, LUS_ADC, D.AUCUN_DEPOT)), false],
+    ['une seconde sorte cochée : elle RESTE', contredit(D.fluxApresAppui(['bois'], 'platre'), avecBois), true],
+    ['« Aucune collecte séparée » éteinte (rien de dit) : elle ne naît pas', contredit(D.fluxApresAppui(['aucune'], D.AUCUNE_COLLECTE), avecBois),
+      false],
+  ].filter(([, vu, voulu]) => vu !== voulu).map(([quoi]) => quoi);
+  const corpsTNS = corpsDeFonction(srcDevis44, 'triNommeUneSorte') || '';
+  const uneEcriture = sansEspaces(corpsTNS) === '{ return Array.isArray(flux) && flux.some((c) => c !== AUCUNE_COLLECTE); }'
+    && (srcDevis44.match(/\.some\(\(c\) => c !== AUCUNE_COLLECTE\)/g) || []).length === 1
+    && /if \(d\.dechetsSansDepot === true && !triNommeUneSorte\(d\.dechetsFlux\)\) lieu = true;/.test(corpsDeFonction(srcDevis44, 'rubriquesDesDechets') || '')
+    && /return x\.sansDepot === true && triNommeUneSorte\(x\.flux\);/.test(corpsDeFonction(srcDevis44, 'aucunDepotContredit') || '')
+    && /const retire = triNommeUneSorte\(avant\);/.test(corpsDeFonction(srcDevis44, 'annonceDuTri') || '');
+  verifier('f ter. DROIT-R2 (décision du 21/11, « Le signaler ») : `triNommeUneSorte` — vrai pour une sorte (bois, plâtre, déchets '
+    + 'dangereux, déchets verts), faux pour rien de dit et pour `[\'aucune\']` — est la SEULE écriture de la règle, lue par '
+    + '`rubriquesDesDechets`, `aucunDepotContredit` et `annonceDuTri` ; la phrase de la carte naît quand « Aucun dépôt » et une sorte '
+    + 'se rencontrent et TOMBE après « Aucune collecte séparée », la dernière sorte décochée, un lieu coché, « Aucun dépôt » retouché',
+  tnsFaux.length === 0 && adcFaux.length === 0 && gestes44.length === 0 && uneEcriture,
+  `tri : ${tnsFaux.join(', ') || '—'} ; contredit : ${adcFaux.join(', ') || '—'} ; gestes : ${gestes44.join(' | ') || '—'} ; une écriture ${uneEcriture}`);
 
   /* f bis. UN TRI VIDE N'EST PAS UN TRI (le banc des sabotages, J43) : la
         rubrique « tri » se juge sur un TABLEAU NON VIDE, jamais sur « pas
@@ -13111,13 +13211,17 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
         règle n'était gardée par rien. Ce cas direct est écrit EN TOUTES
         LETTRES, sans rien recalculer par `rubriquesDesDechets` (qui
         changerait avec la règle qu'il doit garder). */
+  /* DROIT-R2 (21/11) : le lieu est un lieu CHOISI QUI EXISTE, plus « Aucun
+     dépôt » — avec un déchet coché, « Aucun dépôt » ne remplirait plus la
+     rubrique des lieux, et ce cas ne garderait plus le seul tri. */
   const TRI_COMPLET44 = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x',
     validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, proId: 'p', dechetsConcerne: true,
-    dechetsQuantiteMilliemes: 1000, dechetsUnite: 't', dechetsSurPlace: null, dechetsLieux: null, dechetsSansDepot: true,
+    dechetsQuantiteMilliemes: 1000, dechetsUnite: 't', dechetsSurPlace: null, dechetsLieux: ['l1'], dechetsSansDepot: null,
     dechetsCoutCentimes: 100 };
+  const LIEU_P44 = [{ id: 'l1', pro_id: 'p' }];
   const rang13DuTri = (flux, concerne = true) => D.motifsDeRemise({
     devis: { ...TRI_COMPLET44, dechetsConcerne: concerne, dechetsFlux: flux },
-    lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise', lieux: [],
+    lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise', lieux: LIEU_P44,
   }).filter((x) => x.rang === 13).map((x) => x.cle);
   const triVide = { ...TRI_COMPLET44, dechetsFlux: [] };
   verifier('f bis. un tri VIDE (`dechetsFlux: []`) sur un « Oui » complet par ailleurs : la rubrique du tri MANQUE — le rang 13 porte '
@@ -13125,8 +13229,8 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     + 'réponse, `devis_dechets`',
   egal(rang13DuTri([]), ['devis_dechets_rubriques']) && egal(rang13DuTri(['bois']), [])
     && egal(rang13DuTri([], null), ['devis_dechets'])
-    && D.rubriquesDesDechets(triVide, []).tri === false && D.premiereRubriqueManquante(triVide, []) === 'tri'
-    && D.resumeDesDechets({ devis: triVide, lieux: [] }) === 'À compléter : tri',
+    && D.rubriquesDesDechets(triVide, LIEU_P44).tri === false && D.premiereRubriqueManquante(triVide, LIEU_P44) === 'tri'
+    && D.resumeDesDechets({ devis: triVide, lieux: LIEU_P44 }) === 'À compléter : tri',
   json({ vide: rang13DuTri([]), bois: rang13DuTri(['bois']), sansReponse: rang13DuTri([], null),
     rubriques: D.rubriquesDesDechets(triVide, []) }));
 
@@ -13284,7 +13388,11 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
     && R({ devis: { dechetsLieux: ['l1'] } }) === 'Lieux de dépôt non lus'
     && R({ devis: { dechetsQuantiteMilliemes: 1, dechetsUnite: 'm3', dechetsFlux: ['aucune'], dechetsSansDepot: true,
       dechetsCoutCentimes: 1 } }) === 'Les quatre rubriques sont remplies'
+    /* DROIT-R2 (21/11) : du bois trié à part et « Aucun dépôt » — le lieu
+       MANQUE ; avec « aucune », il ne manque pas. */
     && R({ devis: { dechetsQuantiteMilliemes: 1, dechetsFlux: ['bois'], dechetsSansDepot: true }, enEchec: true })
+      === `À compléter : quantité, lieu, coût${D.SUFFIXE_EN_ECHEC}`
+    && R({ devis: { dechetsQuantiteMilliemes: 1, dechetsFlux: ['aucune'], dechetsSansDepot: true }, enEchec: true })
       === `À compléter : quantité, coût${D.SUFFIXE_EN_ECHEC}`,
   json(D.GABARITS_DES_DECHETS.slice(0, 6)));
 
@@ -13312,7 +13420,26 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       ['13:devis_dechets_rubriques']],
     ['« Oui », seul un lieu ORPHELIN', M44({ dechetsConcerne: true, ...QUATRE, dechetsLieux: ['orph'] }, LU_P),
       ['13:devis_dechets_rubriques']],
-    ['« Oui », « Aucun dépôt » sans lieu', M44({ dechetsConcerne: true, ...QUATRE, dechetsLieux: null, dechetsSansDepot: true }, []), []],
+    /* DROIT-R2 (décision du 21/11, « Le signaler ») : « Aucun dépôt » ne
+       remplit les lieux que si le tri ne nomme aucune sorte qui part à part. */
+    ['« Oui », « Aucun dépôt » sans lieu, du bois trié à part : le lieu manque',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsLieux: null, dechetsSansDepot: true }, []), ['13:devis_dechets_rubriques']],
+    ['« Oui », « Aucun dépôt » sans lieu, « aucune » collecte séparée : rien ne manque',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: ['aucune'], dechetsLieux: null, dechetsSansDepot: true }, []), []],
+    ['« Oui », « Aucun dépôt » sans lieu, un tri vide de valeur : le point (par le tri)',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: null, dechetsLieux: null, dechetsSansDepot: true }, []), ['13:devis_dechets_rubriques']],
+    ['« Oui », « Aucun dépôt », du bois à part ET un lieu de l’entreprise : rien ne manque',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsSansDepot: true }, LU_P), []],
+    ['« Oui », « Aucun dépôt », des déchets dangereux à part, seul le lieu d’un AUTRE artisan : le lieu manque',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: ['dangereux'], dechetsSansDepot: true }, [{ id: 'l1', pro_id: 'b' }]),
+      ['13:devis_dechets_rubriques']],
+    ['SANS RÉPONSE, « Aucun dépôt », le bois et le plâtre à part, sans lieu : `devis_dechets`',
+      M44({ ...QUATRE, dechetsFlux: ['bois', 'platre'], dechetsLieux: null, dechetsSansDepot: true }, []), ['13:devis_dechets']],
+    ['« Oui », jardinage : des déchets verts à part ET compostés sur place, « Aucun dépôt » — le lieu manque',
+      M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: ['verts'], dechetsSurPlace: ['compostage'], dechetsLieux: null,
+        dechetsSansDepot: true }, []), ['13:devis_dechets_rubriques']],
+    ['« Non », « Aucun dépôt », du bois à part : rien', M44({ dechetsConcerne: false, ...QUATRE, dechetsLieux: null,
+      dechetsSansDepot: true }, []), []],
     ['« Oui », rien de trié, « broyage » sur place', M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: null,
       dechetsSurPlace: ['broyage'] }, LU_P), ['13:devis_dechets_rubriques']],
     ['« Oui », « aucune » collecte séparée', M44({ dechetsConcerne: true, ...QUATRE, dechetsFlux: ['aucune'] }, LU_P), []],
@@ -13325,8 +13452,9 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
   ].filter(([, vu, voulu]) => !egal(vu, voulu)).map(([quoi, vu]) => `${quoi} → ${json(vu)}`);
   verifier('k. le miroir, à ses bords, écrits ici et FAITS TOURNER : vide → `devis_dechets`, « Oui » → `devis_dechets_rubriques`, '
     + '« Non » → rien ; la réponse vide aux quatre rubriques dites ne demande rien ; des lieux non transmis, le lieu d’un AUTRE artisan, '
-    + 'un orphelin ne comptent pas ; « Aucun dépôt » compte ; « sur le chantier » ne complète pas le tri, « aucune » si ; le rang 13 '
-    + 'après le rang 12, avant l’entreprise', bords44.length === 0, bords44.join(' | '));
+    + 'un orphelin ne comptent pas ; « Aucun dépôt » compte SEULEMENT si le tri ne nomme aucune sorte (DROIT-R2 : du bois, des déchets '
+    + 'dangereux, des déchets verts compostés sur place le rallument ; un lieu de l’entreprise l’éteint) ; « sur le chantier » ne complète '
+    + 'pas le tri, « aucune » si ; le rang 13 après le rang 12, avant l’entreprise', bords44.length === 0, bords44.join(' | '));
 
   /* l. LES SEPT CONTRAINTES, DU CÔTÉ DU TÉLÉPHONE (`validerDevis`), à leurs
         bords — ce que la base REFUSE (un tableau vide, deux dimensions, une
@@ -13525,6 +13653,10 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
       aucunDepot: 'Aucun dépôt : rien ne quittera le chantier',
       sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés : choisissez alors aussi « Aucune collecte '
         + 'séparée » et, dans « Sur le chantier », ce que vous en faites.',
+      /* DROIT-R2 (décision du 21/11, « Le signaler ») : sous la pastille,
+         tant que « Aucun dépôt » et une sorte triée à part se contredisent. */
+      partentAPart: 'Des déchets partiront à part : choisissez où vous les déposerez. Si en fait rien ne quitte le chantier, choisissez '
+        + '« Aucune collecte séparée ».',
       retires: 'Les lieux cochés ont été retirés.',
       plafond: 'Dix lieux au plus par devis : décochez-en un pour en choisir un autre.',
       aide: 'Si vous les remettez à quelqu’un d’autre, la loi vous demande de vous assurer qu’il est autorisé à les prendre en '
@@ -13862,6 +13994,69 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     && (CDd.match(/faute\('dechetsLieux'/g) || []).length === 1,
   'sans la phrase visible, un onzième lieu touché ne ferait rien, sans un mot');
 
+  /* g ter. « AUCUN DÉPÔT » CONTREDIT PAR LE TRI (DROIT-R2, décision du
+        21/11 : « Le signaler ») : la phrase est MONTRÉE juste SOUS la
+        pastille « Aucun dépôt », avant son aide, sur la seule condition
+        `aucunDepotContredit(c)` — les choix de la carte, jamais l'en-tête —,
+        en ENCRE (`s.rappelLieux`, pas le rouge des refus : rien n'est refusé)
+        et dans une région vivante ; une seule fois. */
+  const blocAucun = CDd.slice(CDd.indexOf("{(etatLieux === 'vide' || etatLieux === 'lus') && ("), CDd.indexOf("{faute('dechetsLieux'"));
+  const PHRASE_R2 = '{aucunDepotContredit(c) && ( <Text style={s.rappelLieux} accessibilityLiveRegion="polite">'
+    + '{LES_DECHETS.lieux.partentAPart}</Text> )}';
+  const iR2 = blocAucun.indexOf(PHRASE_R2);
+  verifier('g ter. DROIT-R2 : la phrase « Des déchets partiront à part… » est MONTRÉE juste sous la pastille « Aucun dépôt » et avant son '
+    + 'aide, sur `aucunDepotContredit(c)` seul (les choix de la carte), en encre (`s.rappelLieux`, jamais `s.erreur`), dans une région '
+    + 'vivante — une seule fois',
+  iR2 > blocAucun.indexOf('onPress={toucherAucunDepot} /> </View>') && blocAucun.indexOf('onPress={toucherAucunDepot} /> </View>') > 0
+    && iR2 < blocAucun.indexOf('{LES_DECHETS.lieux.sousAucunDepot}')
+    && (CDd.match(/LES_DECHETS\.lieux\.partentAPart/g) || []).length === 1 && (CDd.match(/aucunDepotContredit\(/g) || []).length === 1
+    && /rappelLieux: \{ fontFamily: F\.inter6, fontSize: T\.petit, color: C\.ink, lineHeight: interligne\(T\.petit\), marginTop: S\.xs \},/
+      .test(CDd),
+  blocAucun.slice(0, 400));
+
+  /* g quater. LA MESURE DE DROIT-R2 TOURNE, ET ELLE CHERCHE LA PHRASE DE
+        `devis.js` (banc des sabotages de DROIT-R2, X2 à X4 — la leçon de
+        N42, lot 2a, appliquée à cette phrase) : `mesure-devis` écrit la phrase
+        EN TOUTES LETTRES pour la chercher à l'écran, et rien ne tenait ni
+        cette copie ni la section elle-même. Une section rendue
+        conditionnelle (`if (…) await section(…)`), vidée par un `return`,
+        une vérification affaiblie par un `||`, ou une copie raccourcie
+        laissaient passer au vert une phrase changée dans `devis.js` ET dans
+        la copie de `n` — et la mesure n'est pas dans `npm run verifier`. On
+        tient donc : la copie ÉGALE à `LES_DECHETS.lieux.partentAPart` ; son
+        début, préfixe de la phrase ; la section appelée telle quelle, au
+        niveau du fichier, juste après la précédente (seules ses trois
+        constantes entre les deux) ; ni `return` ni `||` dans son corps ; et
+        ses vérifications de la phrase ENTIÈRE et de la rangée « À compléter :
+        lieu », écrites telles quelles. */
+  {
+    const M45 = sansCommentairesJs(lire('scripts/mesure-devis.mjs'));
+    const brutCopie = (/const PARTENT_A_PART = ((?:'(?:[^'\\]|\\.)*'\s*\+?\s*)+);/.exec(M45) || [])[1] || '';
+    const copieMesure = [...brutCopie.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]).join('');
+    const debutMesure = (/const DEBUT_PARTENT = '([^']*)';/.exec(M45) || [])[1] || '';
+    const TITRE_R2 = "await section('2b-5 : « Aucun dépôt » avec un tri qui nomme une sorte (DROIT-R2)";
+    const iS = M45.indexOf(TITRE_R2);
+    const finPrec = iS > 0 ? M45.lastIndexOf('\n});\n', iS) : -1;
+    const entre = finPrec >= 0 ? M45.slice(finPrec + 5, iS) : 'absente';
+    const resteEntre = entre.split('\n')
+      .filter((l) => l.trim() !== '' && !/^const (?:PARTENT_A_PART|DEBUT_PARTENT|SOUS_AUCUN_DEPOT) = /.test(l) && !/^ {2}\+ '/.test(l));
+    const finS = iS > 0 ? M45.indexOf('\n});\n', iS) : -1;
+    const corpsR2 = iS > 0 && finS > iS ? M45.slice(iS, finS) : '';
+    const plat = sansEspaces(corpsR2);
+    const VERIF_RANGEE = "verifier('la rangée : « Déchets : À compléter : lieu. Ouvrir » — « Aucun dépôt » ne remplit plus les lieux', "
+      + "(await resumeDechets()) === 'Déchets : À compléter : lieu. Ouvrir', await resumeDechets());";
+    const VERIF_PHRASE = 't1.includes(PARTENT_A_PART), t1.slice(';
+    verifier('g quater. DROIT-R2 : `mesure-devis` cherche à l’écran EXACTEMENT la phrase de `devis.js` (sa copie en toutes lettres, '
+      + 'comparée mot pour mot), et sa section TOURNE — appelée telle quelle, au niveau du fichier, sans `return` ni `||`, avec ses '
+      + 'vérifications de la phrase entière et de la rangée « À compléter : lieu » écrites telles quelles',
+    copieMesure === D.LES_DECHETS.lieux.partentAPart && debutMesure.length >= 20 && D.LES_DECHETS.lieux.partentAPart.startsWith(debutMesure)
+      && iS > 0 && M45.split(TITRE_R2).length === 2 && M45[iS - 1] === '\n' && resteEntre.length === 0
+      && corpsR2.length > 3000 && !/\breturn\b/.test(corpsR2) && !/\|\|/.test(corpsR2)
+      && plat.includes(sansEspaces(VERIF_RANGEE)) && plat.includes(VERIF_PHRASE)
+      && (corpsR2.match(/\.includes\(PARTENT_A_PART\)/g) || []).length >= 3,
+    `copie « ${copieMesure.slice(0, 60)}… » ; début « ${debutMesure} » ; section ${iS > 0} ; entre : ${json(resteEntre).slice(0, 160)}`);
+  }
+
   /* h. LA QUANTITÉ ET LE COÛT : deux `ChampMontant` (le pavé décimal, et le
         seul endroit des écrans du devis où s'écrit `keyboardType`), chacun
         enregistré en le quittant, sa faute dans sa PLACE RÉSERVÉE ; le
@@ -13906,7 +14101,7 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     'LES_DECHETS.tri.sousAucune', 'LES_DECHETS.tri.aide', 'LES_DECHETS.surPlace.titre', 'LES_DECHETS.surPlace.question',
     'LES_DECHETS.lieux.titre', 'LES_DECHETS.lieux.echec', 'LES_DECHETS.lieux.reessayer', 'LES_DECHETS.lieux.vide',
     'LES_DECHETS.lieux.ajouter', 'LES_DECHETS.lieux.porte', 'LES_DECHETS.lieux.aucunDepot', 'LES_DECHETS.lieux.sousAucunDepot',
-    'LES_DECHETS.lieux.aide', 'LES_DECHETS.lieux.plafond', 'LES_DECHETS.cout.question', 'LES_DECHETS.cout.placeholder', 'LES_DECHETS.cout.aide', 'LES_DECHETS.amende'];
+    'LES_DECHETS.lieux.partentAPart', 'LES_DECHETS.lieux.aide', 'LES_DECHETS.lieux.plafond', 'LES_DECHETS.cout.question', 'LES_DECHETS.cout.placeholder', 'LES_DECHETS.cout.aide', 'LES_DECHETS.amende'];
   const absents = NOMMES.filter((n) => !CDd.includes(n));
   const textesJsxD = [...CDdb.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1].trim()).filter(Boolean);
   verifier('i. chaque texte de l’annexe A.2 est NOMMÉ dans la carte (`LES_DECHETS`), et elle n’écrit aucune phrase entre ses balises '

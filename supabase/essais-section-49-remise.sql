@@ -79,12 +79,12 @@
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 361 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 362e qui les compte (cas 27) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 364 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 365e qui les compte (cas 27) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
 --  transaction déjà annulée, un cas retiré) manque au compte, et le cas 27
---  vaut `f`. Joué comme ci-dessus, le juge relit 362 colonnes `…_attendu_`
+--  vaut `f`. Joué comme ci-dessus, le juge relit 365 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
 --
 --  CE QUE 2b-5 A AJOUTÉ (21/11/2026) : `devis_complet` RÉPOND « NON » AUX
@@ -123,7 +123,12 @@
 --  lieux, un coût de 0, une quantité de 0, une unité inconnue, « Aucun
 --  dépôt » écrit faux ; f. les bornes acceptées. Soixante-treize valeurs de
 --  plus (288 → 361), dix-sept refus de plus (21 → 38). Le compte est devenu
---  le cas 27.
+--  le cas 27. PUIS LA DÉCISION DROIT-R2 DU PROPRIÉTAIRE (21/11, « Le
+--  signaler ») : « Aucun dépôt » ne remplit plus la rubrique des lieux quand
+--  le tri nomme une sorte qui part à part — trois valeurs de plus au cas
+--  26 a (le bois et le plâtre à part rallument le point, un lieu de A qui
+--  existe l'éteint, `{aucune}` remis l'éteint), aucun refus de plus
+--  (361 → 364).
 --
 --  CE QUE 2b-4 A AJOUTÉ (16/11/2026) : `devis_complet` DIT AUSSI « GRATUIT »
 --  (`cout_devis_centimes = 0`) — sans lui, le prix du devis vide comptant
@@ -257,13 +262,13 @@
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 361. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 364. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
 -- pas. Le jugement final (cas 27) compare le compte à l’annonce.
-\set VALEURS_ANNONCEES 361
+\set VALEURS_ANNONCEES 364
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -2133,7 +2138,8 @@ select pg_temp.v(:'e25h1_err' = 'true' and :'e25h1_code' = '23514'
 \echo '       « — » ; vide → devis_dechets (rang 13, prudence, la phrase, aucune ligne) ; « Oui » → devis_dechets_rubriques'
 \echo '       (rang 13, la loi, la phrase) ; il reste tant qu’UNE rubrique manque, et part quand les quatre sont là — les'
 \echo '       totaux INCHANGÉS (le coût est hors des totaux) ; chacune retirée SEULE le rallume ; « sur le chantier » ne'
-\echo '       remplace pas le tri, {aucune} le remplit ; « Aucun dépôt » remplace les lieux ; « Non » le tait SANS RIEN'
+\echo '       remplace pas le tri, {aucune} le remplit ; « Aucun dépôt » remplace les lieux SI le tri ne nomme aucune sorte'
+\echo '       (DROIT-R2 : le bois et le plâtre à part le rallument, un lieu de A qui existe l’éteint) ; « Non » le tait SANS RIEN'
 \echo '       effacer ; les rangs dans l’ordre (6 puis 13 ; 12 puis 13) ; la réponse « professionnel » ne le lève pas'
 \echo '    attendu : t partout, et les listes annoncées'
 -- ==========================================================================
@@ -2194,30 +2200,39 @@ select pg_temp.v(dechets_sur_place = array['broyage', 'compostage'] and dechets_
 execute motifs(:D1, 'devis_dechets_rubriques');
 update public.devis set dechets_flux = array['aucune'], generation = 15 where id = :D1;
 execute motifs(:D1, '—');
-\echo '-- les lieux : aucun → rubriques ; « Aucun dépôt » → « — » ; sans lui → rubriques ; le lieu remis → « — »'
+\echo '-- les lieux : aucun → rubriques ; « Aucun dépôt » (le tri dit {aucune}) → « — » ; sans lui → rubriques ; le lieu remis → « — »'
 update public.devis set dechets_lieux = null, generation = 16 where id = :D1;
 execute motifs(:D1, 'devis_dechets_rubriques');
 update public.devis set dechets_sans_depot = true, generation = 17 where id = :D1;
 execute motifs(:D1, '—');
-update public.devis set dechets_sans_depot = null, generation = 18 where id = :D1;
+\echo '-- DROIT-R2 (décision du 21/11 : « Le signaler ») : « Aucun dépôt » ne remplit les lieux que si le tri ne nomme'
+\echo '   aucune sorte — le bois et le plâtre à part → rubriques ; un lieu de A qui existe → « — » ; le lieu retiré et'
+\echo '   {aucune} remis → « — » (attendu : rubriques, « — », « — »)'
+update public.devis set dechets_flux = array['bois', 'platre'], generation = 18 where id = :D1;
 execute motifs(:D1, 'devis_dechets_rubriques');
 update public.devis set dechets_lieux = array[:LA]::uuid[], generation = 19 where id = :D1;
 execute motifs(:D1, '—');
-\echo '-- le coût retiré → rubriques ; « Non » le tait, et la base n’efface RIEN de ce qui est écrit'
-update public.devis set dechets_cout_centimes = null, generation = 20 where id = :D1;
+update public.devis set dechets_lieux = null, dechets_flux = array['aucune'], generation = 20 where id = :D1;
+execute motifs(:D1, '—');
+update public.devis set dechets_sans_depot = null, generation = 21 where id = :D1;
 execute motifs(:D1, 'devis_dechets_rubriques');
-update public.devis set dechets_concerne = false, generation = 21 where id = :D1;
+update public.devis set dechets_lieux = array[:LA]::uuid[], generation = 22 where id = :D1;
+execute motifs(:D1, '—');
+\echo '-- le coût retiré → rubriques ; « Non » le tait, et la base n’efface RIEN de ce qui est écrit'
+update public.devis set dechets_cout_centimes = null, generation = 23 where id = :D1;
+execute motifs(:D1, 'devis_dechets_rubriques');
+update public.devis set dechets_concerne = false, generation = 24 where id = :D1;
 execute motifs(:D1, '—');
 select pg_temp.v(dechets_quantite_milliemes = 2500 and dechets_unite = 't' and dechets_flux = array['aucune']
                  and dechets_sur_place = array['broyage', 'compostage'] and dechets_lieux = array[:LA]::uuid[]
                  and dechets_cout_centimes is null and dechets_sans_depot is null)
          as non_garde_ce_qui_est_ecrit_attendu_t from public.devis where id = :D1;
 \echo '-- les rangs dans l’ordre : 6 puis 13 ; 12 puis 13 ; et la réponse « professionnel » ne le lève pas'
-update public.devis set dechets_concerne = true, validite_jours = null, generation = 22 where id = :D1;
+update public.devis set dechets_concerne = true, validite_jours = null, generation = 25 where id = :D1;
 execute liste(:D1, '6:devis_validite=prudence,13:devis_dechets_rubriques=loi');
-update public.devis set dechets_concerne = null, validite_jours = 30, cout_devis_centimes = null, generation = 23 where id = :D1;
+update public.devis set dechets_concerne = null, validite_jours = 30, cout_devis_centimes = null, generation = 26 where id = :D1;
 execute liste(:D1, '12:devis_cout=prudence,13:devis_dechets=prudence');
-update public.devis set cout_devis_centimes = 0, pour_qui = 'professionnel', generation = 24 where id = :D1;
+update public.devis set cout_devis_centimes = 0, pour_qui = 'professionnel', generation = 27 where id = :D1;
 execute liste(:D1, '13:devis_dechets=prudence');
 rollback;
 
@@ -2510,7 +2525,7 @@ select pg_temp.v(:'e26j_err' = 'true' and :'e26j_code' = '23514'
 \echo ''
 \echo '=== 27. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 362e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 365e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

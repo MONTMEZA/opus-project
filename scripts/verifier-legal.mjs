@@ -2778,7 +2778,8 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
        sur le chantier (`dechets_sur_place` : broyage, compostage) est ce
        que DEVIENNENT ces déchets — la tête de l'énumération le nomme ;
        « Aucun dépôt » (`dechets_sans_depot`) est une réponse à la rubrique
-       des lieux. Les mots de la parenthèse sont cherchés AVEC leur
+       des lieux (qu'il ne remplit que si le tri ne nomme aucune sorte, depuis
+       la décision DROIT-R2 du 21/11 : la donnée reste une donnée des lieux). Les mots de la parenthèse sont cherchés AVEC leur
        ponctuation : « tri » seul se lirait dans un autre mot. */
     dechets_concerne: 's’il s’agit ou non de travaux sur un bâtiment ou de jardinage',
     dechets_quantite_milliemes: 'leurs déchets (quantité,',

@@ -1648,7 +1648,10 @@ export const CONFIDENTIALITE = [
            sur le chantier (broyage, compostage) est ce que deviennent ces
            déchets : la tête de l'énumération le couvre. « Aucun dépôt » et
            « aucune collecte séparée » sont des réponses aux rubriques
-           « lieux de dépôt » et « tri ».
+           « lieux de dépôt » et « tri » — « Aucun dépôt » ne REMPLIT la
+           rubrique des lieux que si le tri ne nomme aucune sorte qui part à
+           part (décision du 21/11, question DROIT-R2), mais c'est toujours
+           une donnée sur les lieux, que « lieux de dépôt » nomme.
        Les deux restent UNE phrase chacune : `verifier-legal` découpe celle
        des devis de « devis en préparation » au point suivant, et compare
        chaque colonne de `devis` lue dans le schéma à ses mots. Rien
