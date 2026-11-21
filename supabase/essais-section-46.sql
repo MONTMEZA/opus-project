@@ -31,6 +31,21 @@
 --  mention « EI » seule ne fait pas un nom ; la date de création d'une
 --  assurance est posée par la base ; et aucune fonction hors d'une liste
 --  fermée ne lit ces trois tables (l'engagement « Vos tarifs et vos prix »).
+--
+--  CE QUE 2b-5 A AJOUTÉ (21/11/2026) : une QUATRIÈME table privée,
+--  `emetteur_lieux_depot` (46.2 bis), les lieux où l'artisan dépose les
+--  déchets de ses chantiers. Elle entre, EN LE DÉCIDANT, dans chaque liste
+--  de ce fichier : B n'y écrit pas au nom de A (cas 22 quater), un visiteur
+--  n'y a aucun droit (cas 24 d), son déclencheur ne s'appelle pas et
+--  `authenticated` n'a ni `truncate`, ni `references`, ni `trigger` (cas 26),
+--  aucune fonction hors d'une liste fermée ne la nomme — le tiret bas est
+--  une lettre de mot : l'expression qui cherchait `emetteur` en mot entier
+--  ne la voyait PAS (cas 26 bis) —, ses quatre contraintes sont en `_check`
+--  (cas 29), rien n'y est `not null` hors des clés (cas 30) ; et un cas
+--  nouveau, 31 : le nettoyage (la grande classe de blancs pour les textes,
+--  la petite pour le code postal), le libellé effacé hors « autre », la date
+--  posée par la base, B qui ne lit rien, l'export, le compte qui part — puis
+--  cinq refus (31 b à f). Sept erreurs de plus.
 -- ==========================================================================
 
 \set A '''a4600000-0000-4000-8000-00000000000a'''
@@ -804,6 +819,16 @@ values (:A, 'decennale', 'Assureur', 'Paris', 'France');
 rollback;
 
 
+\echo ''
+\echo '=== 22 quater. …un lieu de depot des dechets au nom de A -> RLS sur "emetteur_lieux_depot" (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+values (:A, 'Déchèterie d’essai', '1 rue de l’Essai', '13004', 'Marseille', 'decheterie_publique');
+rollback;
+
+
 -- --------------------------------------------------------------------------
 \echo ''
 \echo '=== 23. Un PARTICULIER ecrit « sa » fiche -> RLS (ERREUR attendue) ==='
@@ -841,6 +866,13 @@ set local role anon;
 select count(*) from public.tarifs_pro;
 rollback;
 
+\echo ''
+\echo '=== 24 d. …sur "emetteur_lieux_depot" (ERREUR attendue) ==='
+begin;
+set local role anon;
+select count(*) from public.emetteur_lieux_depot;
+rollback;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -874,7 +906,7 @@ rollback;
 -- --------------------------------------------------------------------------
 select f, r, has_function_privilege(r, f, 'execute') as execute_attendu_f
   from unnest(array['public.tient_l_emetteur()', 'public.tient_l_assurance()',
-                    'public.tient_les_tarifs()']) f,
+                    'public.tient_les_tarifs()', 'public.tient_le_lieu_de_depot()']) f,
        unnest(array['anon', 'authenticated']) r
  order by 1, 2;
 select has_function_privilege('anon', 'public.emetteur_incomplet(uuid)', 'execute') as anon_attendu_f,
@@ -882,8 +914,17 @@ select has_function_privilege('anon', 'public.emetteur_incomplet(uuid)', 'execut
          as authenticated_attendu_t;
 select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
        has_table_privilege('authenticated', t, 'truncate') as truncate_attendu_f
-  from unnest(array['public.emetteur', 'public.emetteur_assurances', 'public.tarifs_pro']) t
+  from unnest(array['public.emetteur', 'public.emetteur_assurances', 'public.tarifs_pro',
+                    'public.emetteur_lieux_depot']) t
  order by 1;
+-- 2b-5 : la table des lieux révoque EN TOUTES LETTRES ce que la RLS ne tient
+-- pas (son balayage de 42 bis n'est pas dans la migration) ; RLS activée,
+-- une seule politique.
+select has_table_privilege('authenticated', 'public.emetteur_lieux_depot', 'references') as lieux_references_attendu_f,
+       has_table_privilege('authenticated', 'public.emetteur_lieux_depot', 'trigger') as lieux_trigger_attendu_f,
+       (select c.relrowsecurity from pg_class c where c.oid = 'public.emetteur_lieux_depot'::regclass) as lieux_rls_attendu_t,
+       (select count(*) from pg_policies where schemaname = 'public' and tablename = 'emetteur_lieux_depot')
+         as lieux_une_politique_attendu_1;
 
 
 -- --------------------------------------------------------------------------
@@ -933,21 +974,31 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public'
-   and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M'
+   and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M'
    and p.proname <> all (array['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs',
                                'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence',
-                               'motifs_refus_remise']);
+                               'motifs_refus_remise', 'tient_le_lieu_de_depot']);
 select count(*) filter (where p.prosecdef) as definer_attendu_0,
        string_agg(p.proname, ', ' order by p.proname)
          as les_nomment,
        string_agg(p.proname, ', ' order by p.proname)
          = 'artisans_urgence, emetteur_incomplet, mes_donnees, motifs_refus_remise, tient_l_urgence' as liste_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M';
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M';
 select (select count(*) from pg_views
-         where definition ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M')
+         where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
      + (select count(*) from pg_matviews
-         where definition ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M') as vues_attendu_0;
+         where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M') as vues_attendu_0;
+-- ET DEPUIS 2b-5 (21/11/2026) : `emetteur_lieux_depot` (46.2 bis), sa propre
+-- liste — la lisent l'export (`mes_donnees`) et la liste des motifs
+-- (`motifs_refus_remise`, une lecture filtrée par `l.pro_id = v_pro`) ; son
+-- déclencheur ne la nomme pas. Une fonction sous n'importe quel autre nom la
+-- ferait rougir.
+select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)') as nomment_les_lieux,
+       coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
+         = 'mes_donnees, motifs_refus_remise' as lieux_liste_fermee_attendu_t
+  from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+ where ns.nspname = 'public' and p.prosrc ~ '\memetteur_lieux_depot\M';
 
 
 -- --------------------------------------------------------------------------
@@ -998,15 +1049,17 @@ rollback;
 -- ATTENDU CHANGÉ PAR LA SECTION 47 (lot T) : 25 et non plus 20. La
 -- section 47 pose cinq contraintes de plus sur `tarifs_pro` (le taux
 -- horaire, la majoration, le prix du devis, le décompte, l'affichage).
+-- PUIS PAR 2b-5 : 29 — les quatre de `emetteur_lieux_depot` (code postal,
+-- complet, longueurs, type).
 -- --------------------------------------------------------------------------
 select count(*) filter (where conname !~ '_check$') as mal_nommees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as anonymes_attendu_0,
        count(*) filter (where conname = 'emetteur_paiement_check') as paiement_attendu_0,
-       count(*) as contraintes_check_attendu_25
+       count(*) as contraintes_check_attendu_29
   from pg_constraint
  where contype = 'c'
    and conrelid in ('public.emetteur'::regclass, 'public.emetteur_assurances'::regclass,
-                    'public.tarifs_pro'::regclass);
+                    'public.tarifs_pro'::regclass, 'public.emetteur_lieux_depot'::regclass);
 
 
 -- --------------------------------------------------------------------------
@@ -1017,8 +1070,99 @@ select string_agg(table_name || '.' || column_name, ', ' order by table_name, co
          as seules_les_cles
   from information_schema.columns
  where table_schema = 'public'
-   and table_name in ('emetteur', 'emetteur_assurances', 'tarifs_pro')
+   and table_name in ('emetteur', 'emetteur_assurances', 'tarifs_pro', 'emetteur_lieux_depot')
    and is_nullable = 'NO';
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 31. LES LIEUX DE DEPOT DES DECHETS (2b-5, 46.2 bis) : A range un lieu « sale » — la base le nettoie (la grande classe de blancs pour les textes, invisibles compris ; la petite pour le code postal), pose SA date, efface le libelle hors « autre » ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses lieux avec lui ==='
+-- Les lignes de A existent d'abord, et A les lit : c'est ce qui rend les
+-- « 0 » de B crédibles.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation, libelle, created_at)
+values (:A, chr(8203) || ' Déchèterie d’essai ' || chr(160), '  1 rue de l’Essai' || chr(65279), ' 13004' || chr(9),
+        chr(10) || 'Marseille ', 'decheterie_publique', 'Un libellé inutile', '2001-01-01T00:00:00Z');
+select raison_sociale = 'Déchèterie d’essai' as raison_sociale_rognee_attendu_t,
+       adresse = '1 rue de l’Essai' as adresse_rognee_attendu_t,
+       code_postal = '13004' as code_postal_rogne_attendu_t,
+       ville = 'Marseille' as commune_rognee_attendu_t,
+       libelle is null as libelle_efface_hors_autre_attendu_t,
+       created_at > '2020-01-01' as date_forcee_ignoree_lieu_attendu_t
+  from public.emetteur_lieux_depot where pro_id = :A;
+select created_at as l1 from public.emetteur_lieux_depot where pro_id = :A \gset
+update public.emetteur_lieux_depot set created_at = '2001-01-01', ville = 'Marseille 4e' where pro_id = :A;
+select created_at = :'l1' as ordre_des_lieux_garde_attendu_t, ville = 'Marseille 4e' as commune_changee_attendu_t
+  from public.emetteur_lieux_depot where pro_id = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation, libelle)
+values (:A, 'Ressourcerie d’essai', '2 rue de l’Essai', '13410', 'Lambesc', 'autre', ' Plateforme de réemploi ');
+select libelle = 'Plateforme de réemploi' as libelle_garde_pour_autre_attendu_t
+  from public.emetteur_lieux_depot where pro_id = :A and type_installation = 'autre';
+select count(*) as a_lit_ses_lieux_attendu_2 from public.emetteur_lieux_depot;
+set local request.jwt.claim.sub = :B;
+select count(*) as b_lit_les_lieux_attendu_0 from public.emetteur_lieux_depot;
+update public.emetteur_lieux_depot set ville = 'Ailleurs' where pro_id = :A;
+delete from public.emetteur_lieux_depot where pro_id = :A;
+select jsonb_array_length(d -> 'mes_lieux_de_depot') as export_de_b_attendu_0
+  from (select public.mes_donnees() as d) x;
+set local request.jwt.claim.sub = :A;
+select count(*) as lieux_intacts_attendu_2,
+       bool_and(ville in ('Marseille 4e', 'Lambesc')) as rien_n_a_change_chez_a_attendu_t
+  from public.emetteur_lieux_depot where pro_id = :A;
+select jsonb_array_length(d -> 'mes_lieux_de_depot') as export_de_a_attendu_2,
+       d -> 'mes_lieux_de_depot' -> 0 ->> 'raison_sociale' = 'Déchèterie d’essai' as export_dans_l_ordre_attendu_t
+  from (select public.mes_donnees() as d) x;
+reset role;
+delete from auth.users where id = :A;
+select count(*) as lieux_partis_avec_le_compte_attendu_0 from public.emetteur_lieux_depot where pro_id = :A;
+rollback;
+
+\echo ''
+\echo '=== 31 b. Une adresse faite de blancs INVISIBLES -> emetteur_lieu_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+values (:A, 'Déchèterie d’essai', chr(8203) || ' ' || chr(65279), '13004', 'Marseille', 'decheterie_publique');
+rollback;
+
+\echo ''
+\echo '=== 31 c. Un code postal belge (quatre chiffres) -> emetteur_lieu_code_postal_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+values (:A, 'Déchèterie d’essai', '1 rue de l’Essai', '1000', 'Bruxelles', 'decheterie_publique');
+rollback;
+
+\echo ''
+\echo '=== 31 d. Une raison sociale de 121 caracteres -> emetteur_lieu_longueurs_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+values (:A, repeat('x', 121), '1 rue de l’Essai', '13004', 'Marseille', 'decheterie_publique');
+rollback;
+
+\echo ''
+\echo '=== 31 e. Un type hors de la liste -> emetteur_lieu_type_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
+values (:A, 'Déchèterie d’essai', '1 rue de l’Essai', '13004', 'Marseille', 'decharge');
+rollback;
+
+\echo ''
+\echo '=== 31 f. « autre » sans le preciser -> emetteur_lieu_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation, libelle)
+values (:A, 'Ressourcerie d’essai', '2 rue de l’Essai', '13410', 'Lambesc', 'autre', '  ');
+rollback;
 
 deallocate fiche_complete_a;
 deallocate frais_a;

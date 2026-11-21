@@ -84,7 +84,20 @@
  *      payant se voit), et les deux premiers n'en disent rien (`null`
  *      ÉCRIT) — le point « Dites si le devis lui-même est gratuit ou
  *      payant » se voit sur eux. Un brouillon NEUF naît sans prix
- *      (`videDevis`), donc avec ce point.
+ *      (`videDevis`), donc avec ce point ;
+ *   7. depuis 2b-5, les DÉCHETS DU CHANTIER (cahier T15) : « Muret » et
+ *      « Terrasse » répondent « Oui » et remplissent les quatre rubriques —
+ *      quantité (en m³ pour l'un, en tonnes pour l'autre), tri, le lieu de
+ *      dépôt de démonstration (`LIEU_DEPOT_DEMO_ID`, `emetteur-demo.js`, un
+ *      lieu INVENTÉ), coût estimé : ils gardent leurs parcours (« rien ne
+ *      manque » pour « Muret », deux points pour « Terrasse ») ; « Rénovation
+ *      salle de bains » répond « Oui » mais n'a pas de coût estimé — on y
+ *      voit `devis_dechets_rubriques`, et son bouton ouvre la carte SUR le
+ *      coût ; « Sol du séjour » ne répond pas — on y voit `devis_dechets`.
+ *      La démonstration ne répond JAMAIS « Non » à la place d'un devis. Les
+ *      huit colonnes sont ÉCRITES sur chaque devis, `null` quand rien n'est
+ *      dit (jamais une clé absente). Un brouillon NEUF naît sans réponse
+ *      (`videDevis`), donc avec le point `devis_dechets`.
  *
  * L'artisan est la fiche `1` — un NOMBRE ici, une CHAÎNE ailleurs
  * (`Object.keys()`) : toute comparaison passe par `String()`, le piège des
@@ -98,6 +111,9 @@ import {
 import { nettoyerPoste, validerPoste, POSTES_MAX } from '../lib/postes.js';
 import { REFUS_DEVIS, SUPPRESSION_DEPASSEE, REFUS_POSTES, REFUS_DEMANDES } from '../lib/erreurs.js';
 import { initialClients } from './demo.js';
+/* 2b-5 : l'identifiant du lieu de dépôt de démonstration — `emetteur-demo.js`
+   n'importe RIEN : ce fichier reste ouvrable par `node`. */
+import { LIEU_DEPOT_DEMO_ID } from './emetteur-demo.js';
 
 /** L'artisan de démonstration : la fiche 1 (`Object.keys(proProfiles)[0]`). */
 export const PRO_DEMO_DEVIS = 1;
@@ -162,6 +178,26 @@ export function dateDeDemandeDemo(id, maintenant = new Date()) {
  * calcule (`creerBaseDevisDemo`), et `verifier-devis` vérifie qu'aucun
  * n'est écrit ici.
  */
+/* LES HUIT COLONNES DES DÉCHETS d'un devis de démonstration (2b-5), TOUTES
+   écrites — `null` quand rien n'est dit, jamais une clé absente : la
+   cohérence de 2b-4 (une clé absente se lirait `undefined`, et la carte
+   comparerait `undefined` à `null`). Les listes sont des tableaux NEUFS,
+   jamais vides (la base refuse `[]`). */
+function dechets({
+  concerne = null, quantite = null, unite = null, flux = null, surPlace = null, lieux = null, sansDepot = null, cout = null,
+} = {}) {
+  return {
+    dechetsConcerne: concerne,
+    dechetsQuantiteMilliemes: quantite,
+    dechetsUnite: unite,
+    dechetsFlux: flux ? [...flux] : null,
+    dechetsSurPlace: surPlace ? [...surPlace] : null,
+    dechetsLieux: lieux ? [...lieux] : null,
+    dechetsSansDepot: sansDepot,
+    dechetsCoutCentimes: cout,
+  };
+}
+
 export function fabriquerDevisDemo(maintenant = new Date()) {
   const t = maintenant.getTime();
   const il = (ms) => new Date(t - ms).toISOString();
@@ -187,6 +223,12 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          « Dites si le devis lui-même est gratuit ou payant » se voit sans
          `.env`. */
       coutDevisCentimes: null,
+      /* 2b-5 (T15) : « Oui », une quantité, le tri, le lieu — mais PAS de coût
+         estimé : la rubrique qui manque. Le point `devis_dechets_rubriques`
+         se voit ici sans `.env`, et son bouton ouvre la carte SUR le coût. */
+      ...dechets({
+        concerne: true, quantite: 2500, unite: 'm3', flux: ['mineral', 'platre'], lieux: [LIEU_DEPOT_DEMO_ID], cout: null,
+      }),
       generation: num(3 * JOUR),
       createdAt: il(5 * JOUR),
       modifieLe: il(3 * JOUR),
@@ -216,6 +258,10 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       engageDecennale: true,
       /* 2b-4 (T13) : le prix du devis lui-même n'est pas dit, ÉCRIT `null`. */
       coutDevisCentimes: null,
+      /* 2b-5 (T15) : la question des déchets n'a PAS de réponse — le point
+         `devis_dechets` se voit ici sans `.env`, et son bouton ouvre la carte
+         EN HAUT, sur la question. Les huit colonnes ÉCRITES `null`. */
+      ...dechets({}),
       generation: num(2 * HEURE),
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
@@ -258,6 +304,12 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          « Gratuit » (0). Sans lui, « Ce devis » ne serait plus complet
          (`devis_cout`, rang 12), et « aucun avis » non plus. */
       coutDevisCentimes: 0,
+      /* 2b-5 (T15) : les quatre rubriques des déchets — sans elles, « Ce
+         devis » ne serait plus complet (le rang 13). Des blocs à bancher et
+         un crépi : la fraction minérale, en m³. */
+      ...dechets({
+        concerne: true, quantite: 3000, unite: 'm3', flux: ['mineral'], lieux: [LIEU_DEPOT_DEMO_ID], cout: 12000,
+      }),
       generation: num(8 * JOUR),
       createdAt: il(9 * JOUR),
       modifieLe: il(8 * JOUR),
@@ -282,6 +334,13 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          devis payant se voit sous « À vérifier » (Mme Martin commande à
          titre privé). */
       coutDevisCentimes: 3000,
+      /* 2b-5 (T15) : les quatre rubriques aussi — « Terrasse » garde ses DEUX
+         points (validité, nature de l'acompte) jusqu'à « rien ne manque »,
+         le parcours de la section 2b-1 de `mesure-devis`. Des chutes de
+         bois, en TONNES : l'autre unité se voit. */
+      ...dechets({
+        concerne: true, quantite: 500, unite: 't', flux: ['bois'], lieux: [LIEU_DEPOT_DEMO_ID], cout: 6000,
+      }),
       generation: num(6 * JOUR),
       createdAt: il(7 * JOUR),
       modifieLe: il(6 * JOUR),
@@ -555,7 +614,13 @@ function annulee() {
 }
 
 const estAMoi = (d, proId) => Boolean(d) && String(d.proId) === String(proId);
-const copie = (x) => (x ? { ...x } : null);
+/* UNE COPIE, ses LISTES comprises (2b-5 : les déchets triés, les lieux
+   choisis) : la vraie base rend toujours un tableau NEUF. Partager le même
+   tableau entre la base de démonstration et l'écran laisserait un `push`
+   de l'écran changer la « base » en silence — et un tel défaut ne se
+   verrait qu'en démonstration, jamais sur la vraie base. */
+const copieListes = (x) => Object.fromEntries(Object.entries(x).map(([k, v]) => [k, Array.isArray(v) ? [...v] : v]));
+const copie = (x) => (x ? copieListes(x) : null);
 const videDevis = () => Object.fromEntries(CHAMPS_DEVIS.map((c) => [c, null]));
 const videLigne = () => Object.fromEntries(CHAMPS_LIGNE.map((c) => [c, null]));
 
@@ -612,7 +677,7 @@ export function creerBaseDevisDemo({
   const jeu = donnees || fabriquerDevisDemo(maintenant());
   const devis = new Map();
   const lignes = new Map();
-  (jeu.devis || []).forEach((d) => devis.set(d.id, { ...d }));
+  (jeu.devis || []).forEach((d) => devis.set(d.id, copieListes(d)));
   (jeu.lignes || []).forEach((l) => lignes.set(l.id, { ...l }));
 
   const lignesDe = (devisId) => [...lignes.values()].filter((l) => l.devisId === devisId);
@@ -711,7 +776,7 @@ export function creerBaseDevisDemo({
     if (devis.has(op.id)) throw refusCle('devis', op.id);
     const n = horodatage();
     devis.set(op.id, {
-      ...choisirChamps(x, CHAMPS_DEVIS),
+      ...copieListes(choisirChamps(x, CHAMPS_DEVIS)),
       /* La date du « Oui » au chantier neuf : posée par la base, à l'instant
          où la réponse DEVIENT vraie (`tient_le_devis()`, point 1 bis). */
       chantierNeufConsoLe: x.chantierNeufConso === true ? n : null,
@@ -762,7 +827,7 @@ export function creerBaseDevisDemo({
     const confirmeLe = x.chantierNeufConso === true
       ? (d.chantierNeufConso === true && d.chantierNeufConsoLe ? d.chantierNeufConsoLe : horodatage())
       : null;
-    Object.assign(d, choisirChamps(x, CHAMPS_DEVIS), {
+    Object.assign(d, copieListes(choisirChamps(x, CHAMPS_DEVIS)), {
       source: d.source, generation: op.generation, modifieLe: horodatage(), chantierNeufConsoLe: confirmeLe,
     });
     poserTotaux(d, t);
@@ -1028,7 +1093,7 @@ export function creerBaseDevisDemo({
     const urg = d.sosRequestId ? demandeDe('sos', d.sosRequestId) : null;
     const date = (x) => x.createdAt || dateDeDemandeDemo(x.id, maintenant());
     return {
-      ...d,
+      ...copieListes(d),
       /* Le type et le SIRET de la fiche (2b-2), comme `LIENS_DU_DEVIS_OUVERT` :
          le type choisit la phrase de la proposition, le SIRET nourrit un avis.
          Sans valeur par défaut. */

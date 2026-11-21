@@ -104,6 +104,14 @@ export const COLONNES_ECRITES = Object.freeze({
     'taux_horaire_centimes', 'majoration_pct', 'decompte_temps_texte', 'prix_devis_centimes',
     'affiche',
   ]),
+  /* 2b-5 (46.2 bis) : un lieu où l'artisan dépose les déchets de ses
+     chantiers — ce que la loi demande d'écrire sur le devis (raison sociale,
+     adresse, type d'installation ; D. 541-45-1 I 3°), et le libellé d'un
+     type « autre ». Ni `id`, ni `pro_id` (posé par l'API depuis la session),
+     ni `created_at` (posée par la BASE, toute valeur du client ignorée). */
+  emetteur_lieux_depot: Object.freeze([
+    'raison_sociale', 'adresse', 'code_postal', 'ville', 'type_installation', 'libelle',
+  ]),
 });
 
 /** Une chaîne vide ou faite de blancs ne dit rien : `null`. Il n'y a qu'UNE façon de dire « vide ». */
@@ -240,6 +248,9 @@ export const LONGUEUR_MAX = Object.freeze({
   /* Deux textes, deux contraintes : `tarif_frais_texte_check` et
      `tarif_decompte_texte_check` (section 47). */
   tarifs_pro: Object.freeze({ frais_deplacement_texte: 300, decompte_temps_texte: 200 }),
+  /* 2b-5 (46.2 bis) : `emetteur_lieu_longueurs_check`. Le code postal n'y
+     est pas : `emetteur_lieu_code_postal_check` le veut de cinq chiffres. */
+  emetteur_lieux_depot: Object.freeze({ raison_sociale: 120, adresse: 200, ville: 100, libelle: 80 }),
 });
 
 /** Où l'entreprise est immatriculée. « Registre » ne désigne ici que le RCS et le RNE. */
@@ -294,6 +305,49 @@ export const NATURES_ASSURANCE = Object.freeze([
   Object.freeze({ cle: 'rc_pro', libelle: RC_PRO.nom }),
   Object.freeze({ cle: 'autre', libelle: 'Autre assurance' }),
 ]);
+
+/**
+ * LES TYPES D'UN LIEU DE DÉPÔT DES DÉCHETS (2b-5, annexe A.5 du cahier) —
+ * ce que la loi demande d'écrire sur le devis : le « type d'installation »
+ * (D. 541-45-1 I 3°). Les CLÉS sont celles de `emetteur_lieu_type_check`
+ * (section 46.2 bis), écrites en toutes lettres des deux côtés ; les
+ * LIBELLÉS, ceux qui s'afficheront dans « Mon entreprise » et dans la carte
+ * « Déchets » d'un devis. Aucun n'est choisi d'office. « Autre installation
+ * autorisée (précisez) » demande un libellé (`emetteur_lieu_complet_check`).
+ * Aucun « agréé » : Opus ne sait pas si l'installation l'est (la loi demande
+ * à l'artisan de s'assurer que le repreneur est autorisé).
+ */
+export const TYPES_INSTALLATION = Object.freeze([
+  Object.freeze({ cle: 'decheterie_publique', libelle: 'Déchèterie publique' }),
+  Object.freeze({ cle: 'decheterie_pro', libelle: 'Déchèterie professionnelle' }),
+  Object.freeze({ cle: 'negoce', libelle: 'Point de reprise d’un distributeur de matériaux' }),
+  Object.freeze({ cle: 'tri', libelle: 'Installation de tri, de transit ou de regroupement' }),
+  Object.freeze({ cle: 'valorisation', libelle: 'Installation de valorisation (recyclage)' }),
+  Object.freeze({ cle: 'stockage_inertes', libelle: 'Installation de stockage de déchets inertes' }),
+  Object.freeze({ cle: 'stockage_non_dangereux', libelle: 'Installation de stockage de déchets non dangereux' }),
+  Object.freeze({ cle: 'stockage_dangereux', libelle: 'Installation de stockage de déchets dangereux' }),
+  Object.freeze({ cle: 'vegetaux', libelle: 'Plateforme de compostage ou de broyage de végétaux' }),
+  Object.freeze({ cle: 'collecteur', libelle: 'Collecteur (benne posée sur le chantier)' }),
+  Object.freeze({ cle: 'depot_entreprise', libelle: 'Dépôt de votre entreprise' }),
+  Object.freeze({ cle: 'autre', libelle: 'Autre installation autorisée (précisez)' }),
+]);
+
+/**
+ * LE TYPE D'UN LIEU DE DÉPÔT, tel qu'une RANGÉE le dit (2b-5) — dans « Mon
+ * entreprise », en édition comme en lecture, et dans la carte « Déchets »
+ * d'un devis : « Déchèterie professionnelle », et pour un type « autre », ce
+ * que l'artisan a PRÉCISÉ (« Autre installation autorisée (précisez) » sur
+ * une rangée ne dirait rien du lieu). Écrit UNE fois : trois rangées qui le
+ * calculeraient chacune finiraient par ne plus dire la même chose. Une clé
+ * inconnue (une version en avance sur l'application) se dit comme telle,
+ * jamais par un libellé emprunté à un autre type.
+ */
+export function libelleDuTypeDeLieu(lieu) {
+  if (!lieu) return '';
+  if (lieu.type_installation === 'autre') return lieu.libelle || 'Autre installation';
+  const t = TYPES_INSTALLATION.find((x) => x.cle === lieu.type_installation);
+  return t ? t.libelle : 'Type d’installation inconnu d’Opus';
+}
 
 /**
  * Les deux libellés que l'aperçu imprime dès le 0a. Ils DÉMÉNAGERONT dans
@@ -618,6 +672,36 @@ export function nettoyerAssurance(a, ancien = null, maintenant = new Date()) {
   return n;
 }
 
+const TEXTES_LIEU_DEPOT = ['raison_sociale', 'adresse', 'ville', 'libelle'];
+
+/**
+ * Miroir de `tient_le_lieu_de_depot()` (section 46.2 bis, étape 2b-5) :
+ *   - la raison sociale, l'adresse, la commune et le libellé rognés par la
+ *     classe de blancs des textes qui s'AFFICHENT, invisibles compris
+ *     (`rognerTarif`, `BLANCS_TARIFS` — la base l'écrit en `chr(n)`) : ces
+ *     textes s'imprimeront sur un devis ;
+ *   - le CODE POSTAL par la MÊME fonction que celui de « Mon entreprise »
+ *     (`rogner` : aux bouts, la petite classe — espace, tabulation, retour
+ *     chariot, saut de ligne — sans toucher l'intérieur), décision T22 du
+ *     cahier : le lieu appartient à « Mon entreprise », et une troisième
+ *     forme de nettoyage ne serait comparée à rien ;
+ *   - le libellé effacé hors du type « autre » ;
+ *   - `created_at` POSÉ PAR LA BASE : à la création, l'heure de l'écriture,
+ *     quoi que le client envoie ; ensuite, jamais récrite (la leçon des
+ *     assurances, 18/10/2026 : une date forcée faisait passer une ligne en
+ *     tête de la liste).
+ * Le type n'est pas rogné : c'est une clé, que l'écran choisit dans
+ * `TYPES_INSTALLATION`.
+ */
+export function nettoyerLieuDepot(l, ancien = null, maintenant = new Date()) {
+  const n = { ...(l || {}) };
+  for (const c of TEXTES_LIEU_DEPOT) n[c] = rognerTarif(n[c]);
+  n.code_postal = rogner(n.code_postal);
+  if (n.type_installation !== 'autre') n.libelle = null;
+  n.created_at = ancien ? ancien.created_at : enIso(maintenant);
+  return n;
+}
+
 /* LES BLANCS DES TARIFS : ceux de `rogner`, PLUS les caractères qu'on ne
    voit pas — l'espace insécable, les espaces de largeur nulle, le
    joint de mot et l'indicateur d'ordre des octets. Trouvé par la relecture
@@ -766,6 +850,20 @@ export const CONTRAINTES = Object.freeze({
     emetteur_assurance_nature_check: (a) => (a.nature == null || ['decennale', 'rc_pro', 'autre'].includes(a.nature)
       ? null : 'nature'),
   }),
+  /* 2b-5 (46.2 bis) : un lieu de dépôt des déchets. La CROISÉE de la loi —
+     raison sociale, adresse, code postal, commune et type, tous écrits ; le
+     libellé si et seulement si le type est « autre » — est UNE contrainte
+     nommée, pas des `not null` (un `not null` violé rend un refus anonyme,
+     sans phrase). Le type, dans la liste FERMÉE de `TYPES_INSTALLATION`. */
+  emetteur_lieux_depot: Object.freeze({
+    emetteur_lieu_code_postal_check: (l) => (l.code_postal == null || /^[0-9]{5}$/.test(l.code_postal)
+      ? null : 'code_postal'),
+    emetteur_lieu_complet_check: (l) => (['raison_sociale', 'adresse', 'code_postal', 'ville', 'type_installation']
+      .find((c) => l[c] == null) || ((l.type_installation === 'autre') !== (l.libelle != null) ? 'libelle' : null)),
+    emetteur_lieu_longueurs_check: (l) => tropLong(l, LONGUEUR_MAX.emetteur_lieux_depot),
+    emetteur_lieu_type_check: (l) => (l.type_installation == null
+      || TYPES_INSTALLATION.some((t) => t.cle === l.type_installation) ? null : 'type_installation'),
+  }),
   tarifs_pro: Object.freeze({
     /* UN BLOC AFFICHÉ N'EST JAMAIS VIDE (section 47) : au moins UN prix —
        des frais (montant, « offert » ou conditions), un taux horaire ou un
@@ -836,6 +934,12 @@ export function validerAssurance(a, proId) {
 
 export function validerTarifs(t) {
   return premierRefus('tarifs_pro', nettoyerTarifs(t), null);
+}
+
+/* 2b-5 : un lieu de dépôt des déchets, nettoyé comme la base le nettoiera,
+   puis jugé dans l'ordre de ses contraintes. */
+export function validerLieuDepot(l) {
+  return premierRefus('emetteur_lieux_depot', nettoyerLieuDepot(l), null);
 }
 
 /* ================================================================== */

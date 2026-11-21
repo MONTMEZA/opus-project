@@ -238,6 +238,9 @@ const EXCEPTIONS = [/^Faire un devis pour la demande de /];
 const PAUSE_DEMO = Number((readFileSync('src/lib/api.js', 'utf8').match(/const PAUSE_ECRITURE_DEMO = (\d+);/) || [])[1]);
 /* …et celle de la base de postes (lot P), lue de même. */
 const PAUSE_POSTES = Number((readFileSync('src/lib/api.js', 'utf8').match(/const PAUSE_POSTES_DEMO = (\d+);/) || [])[1]);
+/* …et celle des LIEUX DE DÉPÔT (2b-5, `attendreLieux`) : la croix de « Mon
+   entreprise » se mesure PENDANT un envoi, qu'on allonge par ce crochet. */
+const PAUSE_LIEUX = Number((readFileSync('src/lib/api.js', 'utf8').match(/const PAUSE_LIEUX_DEMO = ([0-9]+);/) || [])[1]);
 
 /* Les deux encres de la base de postes, LUES dans `theme.js` : la phrase
    d'aide en gris (`C.muted`), le montant à l'encre du texte (`C.ink`). Une
@@ -340,7 +343,7 @@ const n = await chromium.launch({
   args: ['--no-sandbox'],
 });
 const ctx = await n.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-await ctx.addInitScript(({ pause, pausePostes }) => {
+await ctx.addInitScript(({ pause, pausePostes, pauseLieux }) => {
   /* LA SIMULATION DE L'ÉCRITURE QUI NE REVIENT PAS : seule la minuterie de
      `pause` millisecondes appelée depuis l'écrivain de démonstration
      (`ecrire`) est allongée, et seulement quand on le demande. */
@@ -357,6 +360,13 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
      (`__opusPausePostes`, en millisecondes ; `null` = la vraie). */
   window.__opusRequetesPostes = 0;
   window.__opusPausePostes = null;
+  /* LES LIEUX DE DÉPÔT DES DÉCHETS (2b-5) : chaque écriture d'un lieu de la
+     démonstration (enregistrer, retirer) attend `pauseLieux` dans
+     `attendreLieux`. On les COMPTE, et on peut allonger leur pause le temps
+     d'une mesure (`__opusPauseLieux`, en millisecondes ; `null` = la vraie) :
+     la croix de « Mon entreprise » PENDANT un envoi. */
+  window.__opusEcrituresLieux = 0;
+  window.__opusPauseLieux = null;
   /* LES ÉCRITURES DE LA DÉMONSTRATION, COMPTÉES (reprise « écran » du lot 2a) :
      chacune passe par cette minuterie, appelée depuis l'écrivain. Une ligne
      refusée qu'on renvoie à l'identique se COMPTE ici. */
@@ -372,6 +382,10 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
     if (ms === pausePostes && /\battendrePostes\b/.test(String(new Error().stack))) {
       window.__opusRequetesPostes += 1;
       if (window.__opusPausePostes != null) return origine(f, window.__opusPausePostes, ...reste);
+    }
+    if (ms === pauseLieux && String(new Error().stack).includes('attendreLieux')) {
+      window.__opusEcrituresLieux += 1;
+      if (window.__opusPauseLieux != null) return origine(f, window.__opusPauseLieux, ...reste);
     }
     return origine(f, ms, ...reste);
   };
@@ -487,6 +501,20 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
   // eslint-disable-next-line no-extend-native
   Promise.prototype.then = function thenTrace(a, b) {
     const l = window.__opusListe;
+    /* 2b-5 : LA RÉPONSE DU RÉGIME (qui porte les lieux de dépôt), RETENUE à
+       la demande — la suite que `lireRegime` pose sur la lecture, et elle
+       SEULE (sa source nomme `setMesLieux` ; `Promise.race`, dans
+       `avecDelai`, passe des fonctions natives, qui ne sont pas retenues :
+       le délai ne mord donc pas). La rubrique des lieux de la carte
+       « Déchets » se voit ainsi EN LECTURE. */
+    const rg = window.__opusRegime;
+    if (rg && rg.retenir && !this.__opusRetenue && typeof a === 'function' && String(a).includes('setMesLieux')) {
+      const origine = this;
+      const retenue = new Promise((ok, ko) => { rg.retenues.push(() => thenOrigine.call(origine, ok, ko)); });
+      const suite = thenOrigine.call(retenue, a, b);
+      suite.__opusRetenue = true;
+      return suite;
+    }
     if (l && l.retenir && !this.__opusRetenue && /\blireLaListe\b/.test(String(new Error().stack))) {
       const origine = this;
       const retenue = new Promise((ok, ko) => { l.retenues.push(() => thenOrigine.call(origine, ok, ko)); });
@@ -502,10 +530,25 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
      de la fiche) : quand `casser` est vrai, et seulement si la pile nomme
      `monEmetteurDemo`, cet appel lève. Tout le reste est le vrai code :
      `ouvrirDevis` → `lireRegime` → `avecDelai` rejette → `{ echec: true }`. */
-  window.__opusRegime = { casser: false, casses: 0 };
+  window.__opusRegime = {
+    casser: false, casses: 0, retenir: false, retenues: [],
+  };
+  /* 2b-5 : UNE LISTE DE LIEUX VIDE, sans rien retirer de la fiche — quand
+     `vider` est vrai, la copie de la fiche de démonstration
+     (`copieEmetteur`) rend ZÉRO lieu de dépôt : « Mon entreprise », la
+     carte « Déchets » et la liste « Pour le remettre » lisent alors une
+     liste vide, comme d'une base qui n'en a aucun. */
+  window.__opusLieux = { vider: false, vides: 0 };
   const mapOrigine = Array.prototype.map;
   // eslint-disable-next-line no-extend-native
   Array.prototype.map = function mapTrace(...a) {
+    const lv = window.__opusLieux;
+    if (lv && lv.vider && this && this.length > 0
+      && Array.prototype.every.call(this, (x) => !!x && typeof x === 'object' && 'type_installation' in x)
+      && String(new Error().stack).includes('copieEmetteur')) {
+      lv.vides += 1;
+      return [];
+    }
     const r = window.__opusRegime;
     if (r && r.casser && /\bmonEmetteurDemo\b/.test(String(new Error().stack))) {
       r.casses += 1;
@@ -513,7 +556,7 @@ await ctx.addInitScript(({ pause, pausePostes }) => {
     }
     return mapOrigine.apply(this, a);
   };
-}, { pause: PAUSE_DEMO, pausePostes: PAUSE_POSTES });
+}, { pause: PAUSE_DEMO, pausePostes: PAUSE_POSTES, pauseLieux: PAUSE_LIEUX });
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
 const erreursPage = [];
@@ -5076,12 +5119,207 @@ const SUITE_FRANCHISE_2B4 = 'En franchise de TVA, les travaux comptent en princi
   + 'avec votre comptable avant de remettre ce devis.';
 const AVIS_FRANCHISE_2B4 = `Ce devis atteint à lui seul 40 000,00 €. ${SUITE_FRANCHISE_2B4}`;
 const AVIS_FRANCHISE_OPTIONS_2B4 = `Avec ses options, ce devis atteint 40 000,00 €. ${SUITE_FRANCHISE_2B4}`;
-/* « Pas encore vérifié » (annexe A.4) : « si le devis lui-même est payant »
-   sort, « si ce devis relève des services à la personne » entre. */
-const PAS_ENCORE_2B4 = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
-  + 'vraiment, si ce devis relève des services à la personne, les déchets de chantier, le label RGE pour des travaux '
-  + 'd’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), et si votre '
-  + 'attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira).';
+/* « Pas encore vérifié » (annexe A.4 de 2b-4) : « si le devis lui-même est
+   payant » sort, « si ce devis relève des services à la personne » entre.
+   2b-5 (annexe A.6, T18) : « les déchets de chantier » SORT — les déchets ont
+   leur point —, « et si vos lieux de dépôt acceptent ces déchets » ENTRE, en
+   dernier : toujours sept faits. */
+const PAS_ENCORE_2B5 = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
+  + 'vraiment, si ce devis relève des services à la personne, le label RGE pour des travaux d’énergie, les conditions du '
+  + 'taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces '
+  + 'travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.';
+
+/* ======================================================================== */
+/*  LES DÉCHETS DU CHANTIER (cahier 2b-5, §5.5)                             */
+/* ======================================================================== */
+/* Ce qu'elles mesurent, et pourquoi ICI, après les sections 2b-4 : la
+   démonstration a perdu « Sol du séjour » (« Supprimer ce brouillon », plus
+   haut) ; le point « Par prudence » (aucune réponse) se mesure donc sur un
+   brouillon NEUF, « Déchets (mesure) », que la dernière section supprime.
+   « Rénovation salle de bains » (« Oui », le coût manque) porte le point
+   « La loi » ; « Muret » et « Terrasse » ont leurs quatre rubriques — c'est
+   ce qui garde leurs arcs du lot 2b-1 (« rien ne manque »).
+   Les textes attendus sont écrits EN TOUTES LETTRES (annexe A du cahier) :
+   une mesure qui les importerait du code ne verrait pas un mot changé des
+   deux côtés à la fois. AUCUNE barre oblique inverse dans ce bloc : les
+   blancs se ramènent par `net()` et par `platDansLaPage`, écrit avec
+   `String.fromCharCode`. */
+const OBJET_DECHETS = 'Déchets (mesure)';
+const TITRE_DECHETS = 'Déchets du chantier';
+const RETOUR_DECHETS_DEVIS = 'Enregistrer les déchets et revenir au devis';
+const RETOUR_DECHETS_LISTE = 'Enregistrer les déchets et revenir à ce qu’il manque pour remettre ce devis';
+const BOUTON_DECHETS = 'Compléter les déchets';
+const DEBUT_POINT_DECHETS = 'Dites ce que deviendront les déchets';
+const POINT_DECHETS_PRUDENCE = 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
+  + 'rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.';
+const POINT_DECHETS_LOI = 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
+  + 'rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».';
+const NON_DECHETS = 'Non, ni l’un ni l’autre';
+const OUI_DEFAUT_DECHETS = 'Oui (par défaut)';
+const SOUS_NON_DECHETS = 'Ce devis ne dira rien des déchets. Ce que vous avez déjà écrit est gardé, au cas où vous changeriez d’avis.';
+const INTRO_DECHETS = 'Ce que deviendront les déchets de ce chantier. Rien ne s’ajoute au total du devis.';
+const AUCUNE_COLLECTE_DECHETS = 'Aucune collecte séparée';
+const TRI_RETIRES = 'Les déchets cochés ont été retirés.';
+const AUCUN_DEPOT_DECHETS = 'Aucun dépôt : rien ne quittera le chantier';
+const LIEUX_RETIRES = 'Les lieux cochés ont été retirés.';
+const LIEUX_ECHEC = 'Vos lieux de dépôt n’ont pas pu être lus.';
+const LIEUX_VIDE = 'Vous n’avez encore aucun lieu de dépôt.';
+const SANS_UNITE = 'Choisissez m³ ou tonnes.';
+const QUANTITE_ZERO = 'La quantité estimée des déchets doit être positive.';
+const COUT_ZERO_DECHETS = 'Le coût estimé des déchets doit être un montant positif.';
+const AMENDE_DECHETS = 'Il suffit qu’une seule de ces informations manque pour exposer à une amende administrative pouvant aller '
+  + 'jusqu’à 3 000 €, 15 000 € pour une société.';
+const CHAMP_QUANTITE = 'Quantité estimée des déchets';
+const CHAMP_QUANTITE_M3 = 'Quantité estimée des déchets, en mètres cubes';
+const CHAMP_COUT_DECHETS = 'Coût estimé HT des déchets';
+const LIEU_DEMO_DECHETS = 'Recyclage de démonstration';
+const PORTE_LIEUX = 'Mes lieux de dépôt : ouvrir « Mon entreprise » sur vos lieux de dépôt';
+const AJOUTER_LIEU_CARTE = 'Ajouter un lieu de dépôt : ouvrir « Mon entreprise » sur vos lieux de dépôt';
+const RELIRE_LIEUX = 'Relire vos lieux de dépôt';
+const REESSAYER_DECHETS = 'Réessayer l’enregistrement des déchets';
+const GARDE_QUANTITE = '« Quantité de déchets » : ce que vous avez écrit n’est pas enregistré.';
+const TITRES_DES_RUBRIQUES = ['Quantité estimée', 'Le tri', 'Sur le chantier', 'Où les déposerez-vous ?', 'Coût estimé HT'];
+const RESUME_REMPLIES = 'Les quatre rubriques sont remplies';
+/* « Mon entreprise » (annexe A.7). */
+const TITRE_LIEUX_ME = 'Vos lieux de dépôt des déchets';
+const VIDE_LIEUX_ME = 'Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés une fois, '
+  + 'vous les choisissez ensuite dans chaque devis.';
+const LIEU_ENREGISTRE = 'Lieu de dépôt enregistré pour la démonstration : rien n’est écrit en base.';
+const LIEU_RETIRE = 'Lieu de dépôt retiré. Les brouillons qui le citaient l’ont perdu.';
+const ATTENDEZ_ME = 'Enregistrement en cours : attendez qu’il se termine. L’interrompre ne l’annulerait pas.';
+const RAISON_ESSAI = 'Déchèterie (mesure)';
+const RAISON_ESSAI_2 = 'Déchèterie (mesure 2)';
+
+const rangeeDechets = () => page.getByRole('button', { name: /^Déchets : / }).first();
+const resumeDechets = async () => net((await rangeeDechets().getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '');
+const hauteurDechets = async () => {
+  const b = await rangeeDechets().boundingBox().catch(() => null);
+  return b ? Math.round(b.height * 10) / 10 : null;
+};
+const pastilleDechets = (nom) => page.locator(`[role="button"][aria-label="${nom}"]`).first();
+const pastilleOuiDechets = async () => ((await pastilleDechets('Oui').count()) ? pastilleDechets('Oui') : pastilleDechets(OUI_DEFAUT_DECHETS));
+const caseDechets = (debut) => page.getByRole('switch', { name: new RegExp(`^${echapper(debut)}`) }).first();
+const coche = async (loc) => (await loc.getAttribute('aria-checked')) === 'true';
+const choisie = async (loc) => (await loc.getAttribute('aria-selected')) === 'true';
+/** Les huit colonnes des déchets du devis dont l'objet COMMENCE par `objet`
+ *  (« Muret de clôture » devient « Muret de clôture (rehaussé) » dans les
+ *  sections du lot 2b-1), LUES par la porte de l'application. */
+const dechetsEnBase = (objet) => page.evaluate(async (o) => {
+  const api = window.__opusModule('src/lib/api.js');
+  const l = await api.mesDevis();
+  const dv = (l.devis || []).find((x) => (x.objet || '').startsWith(o));
+  if (!dv) return null;
+  const r = await api.unDevis(dv.id);
+  const d = r.devis;
+  return {
+    id: dv.id,
+    concerne: d.dechetsConcerne,
+    quantite: d.dechetsQuantiteMilliemes,
+    unite: d.dechetsUnite,
+    flux: d.dechetsFlux,
+    surPlace: d.dechetsSurPlace,
+    lieux: d.dechetsLieux,
+    sansDepot: d.dechetsSansDepot,
+    cout: d.dechetsCoutCentimes,
+  };
+}, objet);
+/** Les lieux de dépôt de la fiche de démonstration, LUS par la porte de l'application. */
+const lieuxDemo = () => page.evaluate(async () => {
+  const f = await window.__opusModule('src/lib/api.js').monEmetteur();
+  return Array.isArray(f.lieux) ? JSON.parse(JSON.stringify(f.lieux)) : f.lieux;
+});
+const ouvrirLesDechets = async () => {
+  await toucher(rangeeDechets());
+  await page.getByText(TITRE_DECHETS, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(600);
+};
+const fermerLesDechets = async (libelle = RETOUR_DECHETS_DEVIS) => {
+  await toucher(parLibelle(libelle));
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+};
+/** Quitter un champ de la carte (le fait partir), et laisser l'écriture revenir. */
+const quitterLeChamp = async (loc) => {
+  await loc.evaluate((x) => x.blur());
+  await attendre(PAUSE_DEMO + 400);
+};
+/** Les places, DANS LE CONTENU qui défile de la carte « Déchets », de ses
+ *  titres et de ses deux pastilles de la question ; leurs boîtes à l'écran ;
+ *  et la carte elle-même (sa largeur, sa fenêtre). `null` pour ce qui n'y
+ *  est pas. */
+const placesDesDechets = () => page.evaluate(({ retours, titres, non }) => {
+  const blancs = [9, 10, 13, 160, 8239].map((c) => String.fromCharCode(c));
+  const plat = (x) => {
+    let s = String(x || '');
+    blancs.forEach((ch) => { s = s.split(ch).join(' '); });
+    return s.split(' ').filter(Boolean).join(' ');
+  };
+  let carte = retours.map((r) => document.querySelector(`[aria-label="${r}"]`)).find(Boolean) || null;
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  if (!carte) return null;
+  const yContenu = (e) => {
+    if (!e) return null;
+    let d = e.parentElement;
+    while (d && !/(auto|scroll)/.test(getComputedStyle(d).overflowY)) d = d.parentElement;
+    const r = e.getBoundingClientRect();
+    return d ? Math.round((r.top - d.getBoundingClientRect().top + d.scrollTop) * 10) / 10 : null;
+  };
+  const boite = (e) => {
+    if (!e) return null;
+    const b = e.getBoundingClientRect();
+    return { x: Math.round(b.x), y: Math.round(b.y), l: Math.round(b.width), h: Math.round(b.height), droite: Math.round(b.right) };
+  };
+  const enTetes = [...carte.querySelectorAll('[role="heading"]')].filter((x) => !x.closest('[aria-hidden="true"]'));
+  const titre = (t) => enTetes.find((x) => plat(x.innerText) === plat(t)) || null;
+  const pNon = carte.querySelector(`[role="button"][aria-label="${non}"]`);
+  const pOui = [...carte.querySelectorAll('[role="button"]')].find((x) => /^Oui/.test(x.getAttribute('aria-label') || '')) || null;
+  const places = {};
+  ['Pour la loi', ...titres].forEach((t) => { places[t] = yContenu(titre(t)); });
+  return {
+    places,
+    boites: Object.fromEntries(['Pour la loi', ...titres].map((t) => [t, boite(titre(t))])),
+    non: yContenu(pNon), oui: yContenu(pOui), bNon: boite(pNon), bOui: boite(pOui),
+    selNon: pNon ? pNon.getAttribute('aria-selected') : null, selOui: pOui ? pOui.getAttribute('aria-selected') : null,
+    libelleOui: pOui ? pOui.getAttribute('aria-label') : null,
+    largeur: Math.round(carte.getBoundingClientRect().width), fenetre: window.innerHeight, vw: window.innerWidth,
+    titres: enTetes.map((x) => plat(x.innerText)),
+  };
+}, { retours: [RETOUR_DECHETS_DEVIS, RETOUR_DECHETS_LISTE], titres: TITRES_DES_RUBRIQUES, non: NON_DECHETS });
+/** Les cibles DE LA CARTE « Déchets » (la saisie reste montée dessous). */
+const ciblesDesDechets = () => page.evaluate((retours) => {
+  let carte = retours.map((r) => document.querySelector(`[aria-label="${r}"]`)).find(Boolean) || null;
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  if (!carte) return null;
+  return {
+    cibles: [...carte.querySelectorAll('[role="button"],[role="switch"],button,input')].map((e) => {
+      const b = e.getBoundingClientRect();
+      return { l: (e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.innerText || '').slice(0, 60), w: Math.round(b.width), h: Math.round(b.height) };
+    }).filter((c) => c.w > 0 && c.h > 0),
+    imbriques: carte.querySelectorAll('[role="button"] [role="button"], [role="switch"] [role="switch"], button button').length,
+  };
+}, [RETOUR_DECHETS_DEVIS, RETOUR_DECHETS_LISTE]);
+const jugerLesDechets = async (ou) => {
+  const c = await ciblesDesDechets();
+  const petites = c ? c.cibles.filter((x) => x.w < TOUCHE - 0.5 || x.h < TOUCHE - 0.5) : [];
+  verifier(`${ou} : ${c ? c.cibles.length : 0} cible(s), toutes de ${TOUCHE} points au moins par leur BOÎTE, aucune dans une autre`,
+    !!c && c.cibles.length > 0 && petites.length === 0 && c.imbriques === 0,
+    c ? `${JSON.stringify(petites)} ; imbriquées : ${c.imbriques}` : 'la carte est introuvable');
+};
+/** Le compte de « Ce devis » écrit dans la liste ouverte : un nombre, ou `null`. */
+const compteDansLaListe = async () => {
+  const m = (await texteLu()).match(/Ce devis — (aucun point|[0-9]+ points?)/);
+  return m ? nombre(m[1]) : null;
+};
+const BROUILLONS_AVANT_2B5 = { liste: null };
+const AVANT_2B5 = { lieux: null, devis: null };
+const DEVIS_SUIVIS_2B5 = ['Rénovation salle de bains', 'Muret de clôture', 'Terrasse en bois'];
+const HAUTEURS_DECHETS = { 393: [], 320: [] };
+const noterHauteur = async (largeur, etat) => {
+  const h = await hauteurDechets();
+  HAUTEURS_DECHETS[largeur].push([etat, h, (await resumeDechets()).slice(10, 70)]);
+  return h;
+};
+
 
 
 await section('« Pour le remettre » sur « Muret de clôture » : la ligne du haut, la carte, « Mon entreprise » qui relit (lot 2b-1)', async () => {
@@ -5150,8 +5388,9 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
        urgente et la couverture de l'attestation entrent. 2b-4 (annexe A.4,
        cahier §5.5 point 11) : « si le devis lui-même est payant » SORT (le
        point du rang 12 le demande), « si ce devis relève des services à la
-       personne » ENTRE. */
-    t.includes(PAS_ENCORE_2B4)
+       personne » ENTRE. 2b-5 (annexe A.6, T18) : « les déchets de chantier »
+       SORT, « si vos lieux de dépôt acceptent ces déchets » ENTRE. */
+    t.includes(PAS_ENCORE_2B5)
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
   /* 2b-2 (cahier §3.6, annexe A.3) : le Muret est commandé « à titre privé »
      — la démonstration porte la réponse POUR Mme Martin, et la base l'a vue
@@ -5245,6 +5484,11 @@ await section('« Terrasse en bois » : compléter un point depuis la liste, le 
   verifier('la carte : la validité et la nature de l’acompte, « Par prudence » toutes deux, et pas « rien ne manque »',
     t.includes('Choisissez la durée de validité du devis.') && t.includes('Dites si la somme demandée d’avance est un acompte ou des arrhes')
     && (t.match(/Par prudence/g) || []).length >= 2 && !t.includes('rien ne manque') && t.includes('Ce devis — 2 points'));
+  /* 2b-5 (T15) : « Terrasse » a ses quatre rubriques des déchets — 500 kg de
+     bois, le lieu de démonstration, 60 € — : aucun point des déchets, et son
+     arc reste « 2 points » jusqu'à « rien ne manque ». */
+  verifier('2b-5 : la carte ne réclame RIEN des déchets — « Terrasse » a ses quatre rubriques (T15)',
+    !t.includes(DEBUT_POINT_DECHETS));
   /* 2b-4 (T13, cahier §5.5 point 9) : « Terrasse » est PAYANTE (30,00 €) et
      Mme Martin commande à titre privé — l'avis du devis payant se lit sous
      « À vérifier », entier, et ses deux points ne bougent pas. */
@@ -5340,17 +5584,22 @@ await section('Un brouillon NEUF : aucune lecture avant qu’il soit en base, pu
   await jusqua(async () => COMPTE.test(await libelleLigne()), DELAI_ECRITURE + 2000);
   const l2 = await libelleLigne();
   /* 2b-4 (cahier §5.5 point 10, critique ÉCRAN-9) : un brouillon NEUF naît
-     sans prix du devis lui-même — CINQ points, celui du rang 12 compris. */
-  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité, prix du devis lui-même — « ce devis — 5 points »',
-    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '5 points' && (await lectures()) - avant >= 1, l2);
+     sans prix du devis lui-même — CINQ points, celui du rang 12 compris.
+     2b-5 (cahier §5.5) : et sans rien dire des déchets — SIX points, celui
+     du rang 13 compris, « Par prudence » (aucune réponse). */
+  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité, prix du devis lui-même, déchets — « ce devis — 6 points »',
+    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '6 points' && (await lectures()) - avant >= 1, l2);
   await toucher(ligneHaut());
   const t = await texte();
-  verifier('la carte : les cinq points (2b-4 : « Dites si le devis lui-même est gratuit ou payant… », « Par prudence »), puis l’AVIS '
+  verifier('la carte : les six points (2b-4 : « Dites si le devis lui-même est gratuit ou payant… », 2b-5 : « Dites ce que deviendront '
+    + 'les déchets… », « Par prudence » tous deux, dans cet ordre), puis l’AVIS '
     + '« pas de titre », À PART, après la liste — et jamais compté',
     t.includes('Ce devis ne s’adresse encore à personne') && t.includes('Ce devis ne chiffre encore aucun travail')
     && t.includes('Écrivez le lieu des travaux.') && t.includes('Choisissez la durée de validité')
     && t.includes(POINT_COUT_2B4) && t.slice(Math.max(0, t.indexOf(POINT_COUT_2B4) - 40), t.indexOf(POINT_COUT_2B4)).includes('Par prudence')
-    && t.includes('Ce devis — 5 points') && t.includes('À vérifier')
+    && t.includes(POINT_DECHETS_PRUDENCE) && t.indexOf(POINT_DECHETS_PRUDENCE) > t.indexOf(POINT_COUT_2B4)
+    && t.slice(Math.max(0, t.indexOf(POINT_DECHETS_PRUDENCE) - 40), t.indexOf(POINT_DECHETS_PRUDENCE)).includes('Par prudence')
+    && t.includes('Ce devis — 6 points') && t.includes('À vérifier')
     && t.includes('Ce devis n’a pas de titre : le document dira seulement « Devis ».')
     && t.indexOf('À vérifier') > t.indexOf('Mentions dues à un particulier'));
   await jugerLaCarte('la carte du brouillon neuf');
@@ -8220,6 +8469,657 @@ await section('2b-4 : la fiche de démonstration rendue à l’identique, et auc
   verifier(`les sections 2b-4 ne laissent aucun brouillon : ${BROUILLONS_AVANT_2B4.liste ? BROUILLONS_AVANT_2B4.liste.length : '?'} avant, ${objets.length} après`,
     Array.isArray(BROUILLONS_AVANT_2B4.liste) && objets.length === BROUILLONS_AVANT_2B4.liste.length
     && objets.every((o) => !o.includes('Franchise (mesure)')));
+});
+
+await section('2b-5 : le compte des brouillons, les lieux de dépôt et les déchets des devis de démonstration AVANT les sections 2b-5 (§5.5)', async () => {
+  BROUILLONS_AVANT_2B5.liste = await brouillonsDeMesDevis();
+  AVANT_2B5.lieux = await lieuxDemo();
+  AVANT_2B5.devis = {};
+  for (const o of DEVIS_SUIVIS_2B5) AVANT_2B5.devis[o] = await dechetsEnBase(o);
+  noter('les brouillons avant les sections 2b-5', JSON.stringify(BROUILLONS_AVANT_2B5.liste));
+  noter('les déchets des trois devis suivis', JSON.stringify(AVANT_2B5.devis));
+  verifier(`des brouillons à compter (${BROUILLONS_AVANT_2B5.liste.length}), UN lieu de dépôt (« ${LIEU_DEMO_DECHETS} »), et les trois devis suivis lus`,
+    BROUILLONS_AVANT_2B5.liste.length >= 3 && Array.isArray(AVANT_2B5.lieux) && AVANT_2B5.lieux.length === 1
+    && AVANT_2B5.lieux[0].raison_sociale === LIEU_DEMO_DECHETS && DEVIS_SUIVIS_2B5.every((o) => !!AVANT_2B5.devis[o]));
+  verifier('« Rénovation » répond « Oui », sans coût ; « Muret » et « Terrasse » ont leurs quatre rubriques et citent le lieu de démonstration (T15)',
+    AVANT_2B5.devis['Rénovation salle de bains'].concerne === true && AVANT_2B5.devis['Rénovation salle de bains'].cout === null
+    && ['Muret de clôture', 'Terrasse en bois'].every((o) => {
+      const d = AVANT_2B5.devis[o];
+      return d.concerne === true && d.quantite > 0 && !!d.unite && Array.isArray(d.flux) && d.flux.length > 0 && d.cout > 0
+        && Array.isArray(d.lieux) && d.lieux.includes(AVANT_2B5.lieux[0].id);
+    }), JSON.stringify(AVANT_2B5.devis));
+});
+
+await section('2b-5 : la rangée « Déchets » — entre « Le chantier » et « Conditions », ce qu’elle résume, et « Rénovation » : le point « La loi », « Compléter les déchets » SUR le coût, le coût hors du total (§5.5)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await ouvrirLeDevis('Muret de clôture');
+  verifier(`« Muret » : « Déchets : ${RESUME_REMPLIES}. Ouvrir »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await noterHauteur(393, 'Muret : remplies');
+  await quitterLaSaisie();
+  await ouvrirLeDevis('Rénovation salle de bains');
+  const bc = await rangeeChantier().boundingBox();
+  const bd = await rangeeDechets().boundingBox();
+  const bk = await page.getByLabel(/^Conditions : /).first().boundingBox();
+  verifier(`la rangée « Déchets » est ENTRE « Le chantier » (y = ${bc && Math.round(bc.y)}) et « Conditions » (y = ${bk && Math.round(bk.y)}) : y = ${bd && Math.round(bd.y)}`,
+    !!bc && !!bd && !!bk && bc.y < bd.y && bd.y < bk.y);
+  verifier('« Rénovation » : « Déchets : À compléter : coût. Ouvrir »', (await resumeDechets()) === 'Déchets : À compléter : coût. Ouvrir', await resumeDechets());
+  await noterHauteur(393, 'Rénovation : à compléter, coût');
+  const piedAvant = await pied();
+  /* LE POINT, ET SON BOUTON : « La loi », puisque « Oui ». */
+  await ouvrirLaListe();
+  const n0 = await compteDansLaListe();
+  const tL = await texteLu();
+  const iP = tL.indexOf(POINT_DECHETS_LOI);
+  verifier('la liste : « Dites ce que deviendront les déchets… puisque vous avez répondu « Oui ». », ENTIÈRE, « La loi », et UN bouton « Compléter les déchets »',
+    iP >= 0 && tL.slice(Math.max(0, iP - 30), iP).includes('La loi') && !tL.includes(POINT_DECHETS_PRUDENCE)
+    && (await page.getByRole('button', { name: BOUTON_DECHETS, exact: true }).count()) === 1, tL.slice(Math.max(0, iP - 60), iP + 40));
+  await jugerLaCarte('la liste de « Rénovation »');
+  await amenerAuTexte(DEBUT_POINT_DECHETS);
+  await capture('2b5-point-loi');
+  await toucher(bouton(BOUTON_DECHETS));
+  await page.getByText(TITRE_DECHETS, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tc = await boiteDuTexte('Coût estimé HT');
+  verifier(`« Compléter les déchets » ouvre la carte SUR le coût, la rubrique qui manque (titre à y = ${tc && Math.round(tc.y)}, fenêtre ${tc && tc.fenetre}), et son retour dit « ‹ Liste »`,
+    !!tc && tc.y >= 0 && tc.bas <= tc.fenetre && (await parLibelle(RETOUR_DECHETS_LISTE).count()) === 1 && (await texteLu()).includes('‹ Liste'));
+  await capture('2b5-carte-sur-le-cout');
+  /* LE COÛT : hors du total — il s'écrit, le point s'éteint, le pied ne bouge pas. */
+  const e0 = await ecrituresDemo();
+  await viderEtTaper(parLibelle(CHAMP_COUT_DECHETS), '150');
+  await quitterLeChamp(parLibelle(CHAMP_COUT_DECHETS));
+  const apres = await dechetsEnBase('Rénovation salle de bains');
+  verifier(`« 150 » : une écriture (${(await ecrituresDemo()) - e0}), et la base dit 15 000 centimes (${apres && apres.cout})`,
+    (await ecrituresDemo()) - e0 === 1 && !!apres && apres.cout === 15000);
+  await toucher(parLibelle(RETOUR_DECHETS_LISTE));
+  await jusqua(async () => (await enCarte()) && !(await texteLu()).includes(DEBUT_POINT_DECHETS), DELAI_ECRITURE + 3000);
+  const n1 = await compteDansLaListe();
+  verifier(`« ‹ Liste » ramène à la liste, relue : le point S’ÉTEINT (« Ce devis » : ${n0} → ${n1})`,
+    (await enCarte()) && !(await texteLu()).includes(DEBUT_POINT_DECHETS) && n0 !== null && n1 === n0 - 1);
+  await fermerLaListe();
+  verifier(`…la rangée dit « ${RESUME_REMPLIES} »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await noterHauteur(393, 'Rénovation : remplies');
+  const piedApres = await pied();
+  verifier(`…et le pied NE BOUGE PAS : le coût estimé ne s’ajoute pas au total (« ${piedAvant.texte.slice(0, 60)} »)`,
+    piedApres.texte === piedAvant.texte && piedApres.h === piedAvant.h, JSON.stringify([piedAvant.texte, piedApres.texte]));
+  /* RENDU : le coût vidé — rien de dit, le point revient. */
+  await ouvrirLesDechets();
+  verifier('…la carte rouverte par la rangée revient au DEVIS (« ‹ Devis »), le champ dit « 150 »',
+    (await parLibelle(RETOUR_DECHETS_DEVIS).count()) === 1 && net(await parLibelle(CHAMP_COUT_DECHETS).inputValue()) === '150');
+  await viderEtTaper(parLibelle(CHAMP_COUT_DECHETS), '');
+  await quitterLeChamp(parLibelle(CHAMP_COUT_DECHETS));
+  await fermerLesDechets();
+  const rendu = await dechetsEnBase('Rénovation salle de bains');
+  verifier(`le coût vidé : la base dit « rien » (${rendu && rendu.cout}), la rangée « À compléter : coût »`,
+    !!rendu && rendu.cout === null && (await resumeDechets()) === 'Déchets : À compléter : coût. Ouvrir', await resumeDechets());
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteur(320, 'Rénovation : à compléter, coût');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-5 : la carte « Déchets du chantier » sur un brouillon NEUF, à 393 et 320 — le point « Par prudence » SUR la question, « Non » à gauche, rien sous le doigt ne bouge, les unités, « Aucune collecte séparée » qui retire et s’annonce, « Sur le chantier », « Aucun dépôt », le coût, « Non » qui garde ce qui est écrit (§5.5)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), OBJET_DECHETS);
+  await toucher(parLibelle('Ajouter un premier poste chiffré'));
+  await taper('Démolition (mesure)');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '1000');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  const d0 = await dechetsEnBase(OBJET_DECHETS);
+  exiger(!!d0 && [d0.concerne, d0.quantite, d0.unite, d0.flux, d0.surPlace, d0.lieux, d0.sansDepot, d0.cout].every((v) => v === null),
+    `le brouillon neuf « ${OBJET_DECHETS} » ne dit RIEN des déchets (les huit colonnes vides)`);
+  verifier('la rangée : « Déchets : À compléter : quantité, tri, lieu, coût. Ouvrir » (sans réponse, Opus compte « Oui »)',
+    (await resumeDechets()) === 'Déchets : À compléter : quantité, tri, lieu, coût. Ouvrir', await resumeDechets());
+  await noterHauteur(393, 'neuf : à compléter, tout');
+  const piedAvant = await pied();
+  /* LE POINT « PAR PRUDENCE », ET SON BOUTON : SUR la question. */
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iP = tL.indexOf(POINT_DECHETS_PRUDENCE);
+  verifier('la liste : « … Opus ne sait pas encore si ce devis en relève. », ENTIÈRE, « Par prudence », et son bouton',
+    iP >= 0 && tL.slice(Math.max(0, iP - 40), iP).includes('Par prudence') && !tL.includes(POINT_DECHETS_LOI)
+    && (await page.getByRole('button', { name: BOUTON_DECHETS, exact: true }).count()) === 1, tL.slice(Math.max(0, iP - 60), iP + 40));
+  await amenerAuTexte(DEBUT_POINT_DECHETS);
+  await capture('2b5-point-prudence');
+  await toucher(bouton(BOUTON_DECHETS));
+  await page.getByText(TITRE_DECHETS, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tq = await boiteDuTexte('Pour la loi');
+  verifier(`« Compléter les déchets » ouvre la carte SUR la question (« Pour la loi » à y = ${tq && Math.round(tq.y)}), son retour dit « ‹ Liste »`,
+    !!tq && tq.y >= 0 && tq.bas <= tq.fenetre && (await parLibelle(RETOUR_DECHETS_LISTE).count()) === 1);
+  await toucher(parLibelle(RETOUR_DECHETS_LISTE));
+  await jusqua(enCarte, 4000);
+  verifier('…sans rien toucher, « ‹ Liste » ramène à la liste, et le point est toujours là', (await enCarte()) && (await texteLu()).includes(POINT_DECHETS_PRUDENCE));
+  await fermerLaListe();
+
+  /* LA CARTE, OUVERTE PAR LA RANGÉE : la question en tête, rien de répondu. */
+  await ouvrirLesDechets();
+  const t0 = await texteLu();
+  const p0 = await placesDesDechets();
+  verifier('la carte : « Déchets du chantier », « ‹ Devis », l’introduction qui dit « Rien ne s’ajoute au total », la question, l’aide, les cinq rubriques, l’amende',
+    (await parLibelle(RETOUR_DECHETS_DEVIS).count()) === 1 && t0.includes('‹ Devis') && t0.includes(INTRO_DECHETS)
+    && t0.includes('S’agit-il de travaux sur un bâtiment, ou de jardinage ?') && t0.includes(AMENDE_DECHETS)
+    && TITRES_DES_RUBRIQUES.every((t) => p0 && p0.places[t] !== null), JSON.stringify(p0 && p0.titres));
+  verifier(`sans réponse : « ${OUI_DEFAUT_DECHETS} » est choisie, « ${NON_DECHETS} » non — et « Non » vient AVANT (à gauche, ou au-dessus)`,
+    !!p0 && p0.selOui === 'true' && p0.selNon === 'false' && p0.libelleOui === OUI_DEFAUT_DECHETS && !!p0.bNon && !!p0.bOui
+    && (p0.bNon.y < p0.bOui.y - 4 || (Math.abs(p0.bNon.y - p0.bOui.y) <= 4 && p0.bNon.x < p0.bOui.x)), JSON.stringify([p0 && p0.bNon, p0 && p0.bOui]));
+  await jugerLesDechets('la carte « Déchets », à 393');
+  await capture('2b5-carte-393');
+  for (const largeur of [320, 393]) {
+    await page.setViewportSize({ width: largeur, height: 852 });
+    await attendre(600);
+    const p = await placesDesDechets();
+    verifier(`${largeur} : les deux pastilles de la question tiennent dans la largeur (${JSON.stringify([p.bNon, p.bOui])}, écran ${p.vw}), de ${TOUCHE} points au moins, sans se chevaucher`,
+      !!p.bNon && !!p.bOui && p.bNon.x >= 0 && p.bOui.x >= 0 && p.bNon.droite <= p.vw && p.bOui.droite <= p.vw
+      && Math.min(p.bNon.h, p.bOui.h, p.bNon.l, p.bOui.l) >= TOUCHE - 0.5
+      && (p.bNon.droite <= p.bOui.x || p.bNon.y + p.bNon.h <= p.bOui.y));
+    noter(`${largeur} : les pastilles de la question`, p.bNon.y === p.bOui.y ? 'sur une rangée' : 'sur deux rangées');
+    if (largeur === 320) {
+      await jugerLesDechets('la carte « Déchets », à 320');
+      await capture('2b5-carte-320');
+    }
+  }
+
+  /* « OUI » ÉCRIT : une écriture, et rien sous le doigt ne bouge. */
+  const e0 = await ecrituresDemo();
+  const a = await placesDesDechets();
+  await toucher(await pastilleOuiDechets());
+  await attendre(PAUSE_DEMO + 400);
+  const b = await placesDesDechets();
+  const db = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Oui » touché : une écriture (${(await ecrituresDemo()) - e0}), la base dit « Oui » (${db.concerne}), la pastille dit « Oui » — et « Pour la loi », les pastilles, le premier titre NE BOUGENT PAS`,
+    (await ecrituresDemo()) - e0 === 1 && db.concerne === true && b.libelleOui === 'Oui' && b.selOui === 'true'
+    && a.places['Pour la loi'] === b.places['Pour la loi'] && a.non === b.non && a.oui === b.oui
+    && a.places['Quantité estimée'] === b.places['Quantité estimée'], JSON.stringify([a.places, b.places]));
+
+  /* LA QUANTITÉ : « 0 » refusé sans écriture, puis 2,5 sans unité, puis m³ —
+     « Le tri », dessous, ne bouge pas (la zone est réservée). */
+  const yTri0 = (await placesDesDechets()).places['Le tri'];
+  const e1 = await ecrituresDemo();
+  await viderEtTaper(parLibelle(CHAMP_QUANTITE), '0');
+  await quitterLeChamp(parLibelle(CHAMP_QUANTITE));
+  const yTri1 = (await placesDesDechets()).places['Le tri'];
+  verifier(`« 0 » tapé : « ${QUANTITE_ZERO} », et AUCUNE écriture (${(await ecrituresDemo()) - e1})`,
+    (await texteLu()).includes(QUANTITE_ZERO) && (await ecrituresDemo()) === e1);
+  await capture('2b5-quantite-zero');
+  await viderEtTaper(parLibelle(CHAMP_QUANTITE), '2,5');
+  await quitterLeChamp(parLibelle(CHAMP_QUANTITE));
+  const dq = await dechetsEnBase(OBJET_DECHETS);
+  const yTri2 = (await placesDesDechets()).places['Le tri'];
+  verifier(`« 2,5 » sans unité : la base dit 2 500 millièmes (${dq.quantite}), sans unité (${dq.unite}) — la faute s’en va, « ${SANS_UNITE} » à sa place`,
+    dq.quantite === 2500 && dq.unite === null && !(await texteLu()).includes(QUANTITE_ZERO) && (await texteLu()).includes(SANS_UNITE));
+  await toucher(pastilleDechets('Quantité en mètres cubes'));
+  await attendre(PAUSE_DEMO + 400);
+  const du = await dechetsEnBase(OBJET_DECHETS);
+  const yTri3 = (await placesDesDechets()).places['Le tri'];
+  verifier(`« m³ » : la base dit « m3 » (${du.unite}), le rappel s’en va, le champ s’appelle « ${CHAMP_QUANTITE_M3} »`,
+    du.unite === 'm3' && !(await texteLu()).includes(SANS_UNITE) && (await parLibelle(CHAMP_QUANTITE_M3).count()) === 1);
+  verifier(`…et « Le tri » ne bouge pas : la faute, le rappel et rien prennent la MÊME place (${[yTri0, yTri1, yTri2, yTri3].join(', ')})`,
+    [yTri1, yTri2, yTri3].every((y) => y !== null && y === yTri0));
+
+  /* LE TRI : deux cases, puis « Aucune collecte séparée », qui les retire et le dit. */
+  await toucher(caseDechets('Bois'));
+  await toucher(caseDechets('Plâtre'));
+  await attendre(PAUSE_DEMO + 400);
+  const df = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Bois » et « Plâtre » cochés : la base les range (${JSON.stringify(df.flux)})`,
+    Array.isArray(df.flux) && df.flux.length === 2 && df.flux.includes('bois') && df.flux.includes('platre'));
+  await oublierAnnonces();
+  /* La pastille amenée à l'écran AVANT la mesure : `toucher` ferait sinon
+     défiler entre les deux relevés, et l'on mesurerait le défilement. */
+  await pastilleDechets(AUCUNE_COLLECTE_DECHETS).scrollIntoViewIfNeeded();
+  await attendre(500);
+  const yAucune0 = await pastilleDechets(AUCUNE_COLLECTE_DECHETS).boundingBox();
+  await toucher(pastilleDechets(AUCUNE_COLLECTE_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const da = await dechetsEnBase(OBJET_DECHETS);
+  const yAucune1 = await pastilleDechets(AUCUNE_COLLECTE_DECHETS).boundingBox();
+  const ann = await annonces();
+  verifier(`« ${AUCUNE_COLLECTE_DECHETS} » : les deux cases se DÉCOCHENT, la pastille est choisie, la base dit ${JSON.stringify(da.flux)}, VoiceOver entend « ${TRI_RETIRES} »`,
+    !(await coche(caseDechets('Bois'))) && !(await coche(caseDechets('Plâtre'))) && (await choisie(pastilleDechets(AUCUNE_COLLECTE_DECHETS)))
+    && JSON.stringify(da.flux) === JSON.stringify(['aucune']) && ann.includes(TRI_RETIRES), JSON.stringify(ann));
+  verifier('…et la pastille ne bouge pas sous le doigt', !!yAucune0 && !!yAucune1 && Math.abs(yAucune0.y - yAucune1.y) <= 1);
+  await capture('2b5-aucune-collecte');
+  await toucher(caseDechets('Bois'));
+  await attendre(PAUSE_DEMO + 400);
+  const db2 = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Bois » recoché : « ${AUCUNE_COLLECTE_DECHETS} » n’est plus choisie, la base dit ${JSON.stringify(db2.flux)}`,
+    !(await choisie(pastilleDechets(AUCUNE_COLLECTE_DECHETS))) && JSON.stringify(db2.flux) === JSON.stringify(['bois']));
+
+  /* SUR LE CHANTIER : facultatif — coché, puis décoché, et rien de vide ne s'écrit. */
+  await toucher(caseDechets('Broyage sur le chantier'));
+  await attendre(PAUSE_DEMO + 400);
+  const ds1 = await dechetsEnBase(OBJET_DECHETS);
+  await toucher(caseDechets('Broyage sur le chantier'));
+  await attendre(PAUSE_DEMO + 400);
+  const ds2 = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Broyage sur le chantier » coché (${JSON.stringify(ds1.surPlace)}) puis décoché (${JSON.stringify(ds2.surPlace)}) : jamais une liste vide en base`,
+    JSON.stringify(ds1.surPlace) === JSON.stringify(['broyage']) && ds2.surPlace === null);
+
+  /* LES LIEUX, lus : la case du lieu de démonstration, puis « Aucun dépôt », qui la retire et le dit. */
+  verifier(`les lieux LUS : une case « ${LIEU_DEMO_DECHETS} », son type et sa commune, décochée ; la porte « Mes lieux de dépôt » ; « ${AUCUN_DEPOT_DECHETS} »`,
+    (await caseDechets(`${LIEU_DEMO_DECHETS}. Déchèterie professionnelle, Lambesc`).count()) === 1 && !(await coche(caseDechets(LIEU_DEMO_DECHETS)))
+    && (await parLibelle(PORTE_LIEUX).count()) === 1 && (await pastilleDechets(AUCUN_DEPOT_DECHETS).count()) === 1
+    && !(await texteLu()).includes(LIEUX_ECHEC) && !(await texteLu()).includes(LIEUX_VIDE));
+  await toucher(caseDechets(LIEU_DEMO_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const dl = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`le lieu coché : la base cite son identifiant (${JSON.stringify(dl.lieux)})`,
+    Array.isArray(dl.lieux) && dl.lieux.length === 1 && dl.lieux[0] === AVANT_2B5.lieux[0].id && dl.sansDepot === null);
+  await oublierAnnonces();
+  await toucher(pastilleDechets(AUCUN_DEPOT_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const dd = await dechetsEnBase(OBJET_DECHETS);
+  const ann2 = await annonces();
+  verifier(`« ${AUCUN_DEPOT_DECHETS} » : le lieu se DÉCOCHE, la base dit « aucun dépôt » (${dd.sansDepot}) sans lieu (${JSON.stringify(dd.lieux)}), VoiceOver entend « ${LIEUX_RETIRES} »`,
+    !(await coche(caseDechets(LIEU_DEMO_DECHETS))) && (await choisie(pastilleDechets(AUCUN_DEPOT_DECHETS)))
+    && dd.sansDepot === true && dd.lieux === null && ann2.includes(LIEUX_RETIRES), JSON.stringify(ann2));
+  await toucher(caseDechets(LIEU_DEMO_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const dl2 = await dechetsEnBase(OBJET_DECHETS);
+  verifier('le lieu recoché : « Aucun dépôt » n’est plus choisie, la base le cite de nouveau', !(await choisie(pastilleDechets(AUCUN_DEPOT_DECHETS)))
+    && dl2.sansDepot === null && Array.isArray(dl2.lieux) && dl2.lieux.length === 1);
+
+  /* LE COÛT : « 0 » refusé sans écriture, puis 120 €. */
+  const e2 = await ecrituresDemo();
+  await viderEtTaper(parLibelle(CHAMP_COUT_DECHETS), '0');
+  await quitterLeChamp(parLibelle(CHAMP_COUT_DECHETS));
+  verifier(`le coût « 0 » : « ${COUT_ZERO_DECHETS} », et AUCUNE écriture (${(await ecrituresDemo()) - e2})`,
+    (await texteLu()).includes(COUT_ZERO_DECHETS) && (await ecrituresDemo()) === e2);
+  await viderEtTaper(parLibelle(CHAMP_COUT_DECHETS), '120');
+  await quitterLeChamp(parLibelle(CHAMP_COUT_DECHETS));
+  const dc = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`le coût « 120 » : une écriture (${(await ecrituresDemo()) - e2}), 12 000 centimes en base (${dc.cout}), la faute partie`,
+    (await ecrituresDemo()) - e2 === 1 && dc.cout === 12000 && !(await texteLu()).includes(COUT_ZERO_DECHETS));
+
+  /* « NON » : les rubriques se démontent, ce qui est écrit est GARDÉ — et « Oui » le rend. */
+  const c0 = await placesDesDechets();
+  await toucher(pastilleDechets(NON_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  const c1 = await placesDesDechets();
+  const dn = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Non » : les rubriques DISPARAISSENT, « ${SOUS_NON_DECHETS.slice(0, 40)}… » s’affiche, la base dit « Non » et GARDE le reste (quantité ${dn.quantite}, coût ${dn.cout})`,
+    TITRES_DES_RUBRIQUES.every((t) => c1.places[t] === null) && (await texteLu()).includes(SOUS_NON_DECHETS)
+    && dn.concerne === false && dn.quantite === 2500 && dn.cout === 12000 && JSON.stringify(dn.flux) === JSON.stringify(['bois']));
+  verifier('…et la question, ses pastilles NE BOUGENT PAS', c0.places['Pour la loi'] === c1.places['Pour la loi'] && c0.non === c1.non && c0.oui === c1.oui,
+    JSON.stringify([c0.non, c1.non, c0.oui, c1.oui]));
+  await capture('2b5-non');
+  await fermerLesDechets();
+  verifier('la rangée : « Déchets : Non concernés. Ouvrir »', (await resumeDechets()) === 'Déchets : Non concernés. Ouvrir', await resumeDechets());
+  await noterHauteur(393, 'neuf : non concernés');
+  await ouvrirLaListe();
+  verifier('…et la liste ne réclame plus rien des déchets', !(await texteLu()).includes(DEBUT_POINT_DECHETS));
+  await fermerLaListe();
+  await ouvrirLesDechets();
+  await toucher(await pastilleOuiDechets());
+  await attendre(PAUSE_DEMO + 400);
+  verifier('« Oui » de nouveau : tout ce qui était écrit REVIENT — 2,5, m³, Bois, le lieu, 120',
+    net(await parLibelle(CHAMP_QUANTITE_M3).inputValue()) === '2,5' && (await choisie(pastilleDechets('Quantité en mètres cubes')))
+    && (await coche(caseDechets('Bois'))) && (await coche(caseDechets(LIEU_DEMO_DECHETS)))
+    && net(await parLibelle(CHAMP_COUT_DECHETS).inputValue()) === '120');
+  await fermerLesDechets();
+  verifier(`la rangée : « Déchets : ${RESUME_REMPLIES}. Ouvrir »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await noterHauteur(393, 'neuf : remplies');
+  const piedApres = await pied();
+  verifier(`…et le pied n’a pas bougé : 120 € de déchets ne s’ajoutent pas au total (« ${piedApres.texte.slice(0, 50)} »)`,
+    piedApres.texte === piedAvant.texte, JSON.stringify([piedAvant.texte, piedApres.texte]));
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteur(320, 'neuf : remplies');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-5 : « Déchets (mesure) » — « Corriger » et la garde de sortie, puis une écriture qui ne revient pas : la ligne d’état, « Réessayer », et la rangée qui ne bouge pas (§5.5)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (!(await dansLaSaisie())) { await allerAMesDevis(); await ouvrirLeDevis(OBJET_DECHETS); }
+  /* UN « 0 » REFUSÉ, LA CARTE FERMÉE : la rangée le dit, la barre du bas est gardée. */
+  await ouvrirLesDechets();
+  const e0 = await ecrituresDemo();
+  await viderEtTaper(parLibelle(CHAMP_QUANTITE_M3), '0');
+  await quitterLeChamp(parLibelle(CHAMP_QUANTITE_M3));
+  await toucher(parLibelle(RETOUR_DECHETS_DEVIS));
+  await attendre(600);
+  verifier(`la carte fermée sur un « 0 » refusé : AUCUNE écriture (${(await ecrituresDemo()) - e0}), la rangée dit « ${RESUME_REMPLIES} — pas enregistré »`,
+    (await ecrituresDemo()) === e0 && (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES} — pas enregistré. Ouvrir`, await resumeDechets());
+  await noterHauteur(393, 'neuf : refusé à l’écran');
+  await toucher(page.getByRole('tab', { name: 'Accueil' }));
+  const bande = await jusqua(async () => (await texteLu()).includes(GARDE_QUANTITE), DELAI_ECRITURE + 3000);
+  verifier(`la barre du bas : la garde NOMME « Quantité de déchets », et l’écran ne part pas`, !!bande && await dansLaSaisie());
+  await capture('2b5-garde-quantite');
+  await toucher(bouton('Corriger'));
+  await page.getByText(TITRE_DECHETS, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tq = await boiteDuTexte('Quantité estimée');
+  verifier(`« Corriger » rouvre la carte SUR la quantité (titre à y = ${tq && Math.round(tq.y)}), le « 0 » refusé encore là, retour « ‹ Devis »`,
+    !!tq && tq.y >= 0 && tq.bas <= tq.fenetre && net(await parLibelle(CHAMP_QUANTITE_M3).inputValue()) === '0'
+    && (await parLibelle(RETOUR_DECHETS_DEVIS).count()) === 1);
+  await viderEtTaper(parLibelle(CHAMP_QUANTITE_M3), '2,5');
+  await quitterLeChamp(parLibelle(CHAMP_QUANTITE_M3));
+  await fermerLesDechets();
+  verifier(`rétabli : AUCUNE écriture (la base disait déjà 2,5 ; ${(await ecrituresDemo()) - e0}), la rangée sans « pas enregistré »`,
+    (await ecrituresDemo()) === e0 && (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+
+  /* UNE ÉCRITURE QUI NE REVIENT PAS : la ligne d'état de la carte, puis la rangée. */
+  await ouvrirLesDechets();
+  await page.evaluate(() => { window.__opusSuspendreEcritures = true; });
+  await toucher(caseDechets('Verre'));
+  const enRoute = await jusqua(async () => (await texteLu()).includes('Enregistrement en cours…'), 3000);
+  verifier('la case « Verre » partie : la ligne d’état de la carte dit « Enregistrement en cours… »', !!enRoute);
+  const hEnRoute = await hauteurDechets();
+  const rEnRoute = await resumeDechets();
+  HAUTEURS_DECHETS[393].push(['neuf : en route', hEnRoute, rEnRoute.slice(10, 70)]);
+  verifier(`…la rangée, dessous, dit « — enregistrement… » (« ${rEnRoute} »)`, rEnRoute === `Déchets : ${RESUME_REMPLIES} — enregistrement…. Ouvrir`
+    || rEnRoute === `Déchets : ${RESUME_REMPLIES} — enregistrement… Ouvrir`, rEnRoute);
+  const echec = await jusqua(async () => (await parLibelle(REESSAYER_DECHETS).count()) > 0, DELAI_ECRITURE + 5000);
+  verifier(`l’écriture ne revient pas : la ligne d’état passe en échec, avec « Réessayer » (après ${DELAI_ECRITURE} ms)`, !!echec);
+  const hEchec = await hauteurDechets();
+  const rEchec = await resumeDechets();
+  HAUTEURS_DECHETS[393].push(['neuf : en échec', hEchec, rEchec.slice(10, 70)]);
+  verifier(`…la rangée dit « — pas enregistré » (« ${rEchec} »)`, rEchec === `Déchets : ${RESUME_REMPLIES} — pas enregistré. Ouvrir`, rEchec);
+  await capture('2b5-ecriture-en-echec');
+  await page.evaluate(() => { window.__opusSuspendreEcritures = false; });
+  await toucher(parLibelle(REESSAYER_DECHETS));
+  await jusqua(async () => (await parLibelle(REESSAYER_DECHETS).count()) === 0 && !(await texteLu()).includes('Enregistrement en cours…'), DELAI_ECRITURE + 3000);
+  await attendre(PAUSE_DEMO + 400);
+  const dv = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`« Réessayer » : l’écriture repart et revient, la base range « Verre » (${JSON.stringify(dv.flux)})`,
+    (await parLibelle(REESSAYER_DECHETS).count()) === 0 && Array.isArray(dv.flux) && dv.flux.includes('verre'));
+  await fermerLesDechets();
+  verifier('la rangée revient au repos', (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-5 : les états des lieux dans la carte — en échec, en lecture (rien n’est dit), relus, vides (la démonstration lit une liste vide) — et la porte qui ouvre « Mon entreprise » SUR les lieux (§5.5, T12 bis, T25)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  await allerAMesDevis();
+  /* EN ÉCHEC : la lecture du régime (qui porte les lieux) casse. */
+  await page.evaluate(() => { window.__opusRegime.casser = true; window.__opusRegime.casses = 0; });
+  await ouvrirLeDevis(OBJET_DECHETS);
+  await jusqua(async () => (await resumeDechets()) === 'Déchets : Lieux de dépôt non lus. Ouvrir', 10000, 200);
+  const rEchec = await resumeDechets();
+  verifier(`la lecture des lieux en échec : la rangée dit « Lieux de dépôt non lus » — jamais « aucun lieu » (« ${rEchec} »)`,
+    rEchec === 'Déchets : Lieux de dépôt non lus. Ouvrir', rEchec);
+  HAUTEURS_DECHETS[393].push(['lieux non lus', await hauteurDechets(), rEchec.slice(10, 70)]);
+  await ouvrirLesDechets();
+  verifier(`EN ÉCHEC : « ${LIEUX_ECHEC} », « Réessayer » et la porte — ni case, ni « Aucun dépôt » (${await page.evaluate(() => window.__opusRegime.casses)} lecture(s) cassée(s))`,
+    (await texteLu()).includes(LIEUX_ECHEC) && (await parLibelle(RELIRE_LIEUX).count()) === 1 && (await parLibelle(PORTE_LIEUX).count()) === 1
+    && (await caseDechets(LIEU_DEMO_DECHETS).count()) === 0 && (await pastilleDechets(AUCUN_DEPOT_DECHETS).count()) === 0
+    && !(await texteLu()).includes(LIEUX_VIDE));
+  await capture('2b5-lieux-en-echec');
+  await jugerLesDechets('la carte, lieux en échec');
+  /* EN LECTURE : « Réessayer » relit — et la réponse est RETENUE (le crochet
+     `__opusRegime.retenir` garde la suite que `lireRegime` pose sur la
+     lecture), le temps de voir la rubrique pendant qu'elle se lit. */
+  await page.evaluate(() => { window.__opusRegime.casser = false; window.__opusRegime.retenir = true; window.__opusRegime.retenues = []; });
+  await toucher(parLibelle(RELIRE_LIEUX));
+  const retenue = await jusqua(async () => (await page.evaluate(() => window.__opusRegime.retenues.length)) >= 1, 4000);
+  await attendre(400);
+  const tLecture = await texteLu();
+  verifier('EN LECTURE : la rubrique des lieux ne dit RIEN — ni échec, ni « aucun lieu », ni case, ni « Aucun dépôt », ni porte',
+    !!retenue && !tLecture.includes(LIEUX_ECHEC) && !tLecture.includes(LIEUX_VIDE) && (await caseDechets(LIEU_DEMO_DECHETS).count()) === 0
+    && (await pastilleDechets(AUCUN_DEPOT_DECHETS).count()) === 0 && (await parLibelle(PORTE_LIEUX).count()) === 0
+    && (await parLibelle(RELIRE_LIEUX).count()) === 0);
+  await capture('2b5-lieux-en-lecture');
+  await page.evaluate(() => { window.__opusRegime.retenir = false; window.__opusRegime.retenues.splice(0).forEach((f) => f()); });
+  const relus = await jusqua(async () => (await caseDechets(LIEU_DEMO_DECHETS).count()) > 0, 8000, 200);
+  verifier('…la réponse arrive : la case du lieu revient, cochée (le devis le cite toujours)',
+    !!relus && (await coche(caseDechets(LIEU_DEMO_DECHETS))) && !(await texteLu()).includes(LIEUX_ECHEC));
+  await fermerLesDechets();
+  verifier(`…la rangée : « ${RESUME_REMPLIES} »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await quitterLaSaisie();
+
+  /* VIDE : la démonstration lit une liste VIDE (`__opusLieux.vider` : la
+     copie de la fiche rend zéro lieu — sans rien retirer de la fiche). */
+  await page.evaluate(() => { window.__opusLieux.vider = true; window.__opusLieux.vides = 0; });
+  await ouvrirLeDevis(OBJET_DECHETS);
+  await jusqua(async () => (await resumeDechets()) === 'Déchets : À compléter : lieu. Ouvrir', 6000);
+  verifier(`une liste VIDE : le lieu cité n’existe plus pour Opus, la rangée dit « À compléter : lieu » (« ${await resumeDechets()} »)`,
+    (await resumeDechets()) === 'Déchets : À compléter : lieu. Ouvrir', await resumeDechets());
+  HAUTEURS_DECHETS[393].push(['lieux vides', await hauteurDechets(), (await resumeDechets()).slice(10, 70)]);
+  await ouvrirLesDechets();
+  verifier(`VIDE : « ${LIEUX_VIDE} », « Ajouter un lieu de dépôt », et « ${AUCUN_DEPOT_DECHETS} » — ni case, ni échec`,
+    (await texteLu()).includes(LIEUX_VIDE) && (await parLibelle(AJOUTER_LIEU_CARTE).count()) === 1
+    && (await pastilleDechets(AUCUN_DEPOT_DECHETS).count()) === 1 && (await caseDechets(LIEU_DEMO_DECHETS).count()) === 0
+    && !(await texteLu()).includes(LIEUX_ECHEC));
+  await capture('2b5-lieux-vides');
+  /* LA PORTE : la carte s'enregistre, « Mon entreprise » s'ouvre SUR les lieux, en édition. */
+  await toucher(parLibelle(AJOUTER_LIEU_CARTE));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  const tl = await boiteDuTexte(TITRE_LIEUX_ME);
+  verifier(`« Ajouter un lieu de dépôt » ouvre « Mon entreprise » SUR « ${TITRE_LIEUX_ME} » (y = ${tl && Math.round(tl.y)}, fenêtre ${tl && tl.fenetre}), qui dit la liste vide`,
+    !!tl && tl.y >= 0 && tl.bas <= tl.fenetre && (await texteLu()).includes(VIDE_LIEUX_ME)
+    && (await bouton('Ajouter un lieu de dépôt').count()) === 1);
+  await capture('2b5-mon-entreprise-lieux-vides');
+  await page.evaluate(() => { window.__opusLieux.vider = false; });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  const revenus = await jusqua(async () => (await caseDechets(LIEU_DEMO_DECHETS).count()) > 0, 8000, 300);
+  verifier('« Mon entreprise » refermée : la carte est TOUJOURS là, et les lieux relus reviennent (la case, cochée)',
+    !!revenus && (await page.getByText(TITRE_DECHETS, { exact: true }).count()) > 0 && (await coche(caseDechets(LIEU_DEMO_DECHETS))));
+  await fermerLesDechets();
+  verifier(`…la rangée : « ${RESUME_REMPLIES} »`, (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`, await resumeDechets());
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* LA BASE ADRESSE, POSÉE PAR UNE ROUTE (le navigateur d'essai ne la joint
+   pas) : une adresse fictive, sur la commune du lieu de démonstration. */
+const BAN_ESSAI_2B5 = {
+  type: 'FeatureCollection',
+  features: [{
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [5.26, 43.65] },
+    properties: {
+      label: '12 Route de la Mesure 13410 Lambesc', score: 0.95, housenumber: '12', id: '13050_essai_00012',
+      name: '12 Route de la Mesure', postcode: '13410', citycode: '13050', city: 'Lambesc',
+      context: '13, Bouches-du-Rhône, Provence-Alpes-Côte d’Azur', type: 'housenumber', street: 'Route de la Mesure',
+    },
+  }],
+};
+
+await section('2b-5 : « Mon entreprise » → les lieux de dépôt — lire, ajouter (la Base Adresse), la croix pendant un envoi, quitter sans enregistrer, un lieu cité puis retiré en deux appuis : son point revient (§5.5, T10)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  await page.route('**/api-adresse.data.gouv.fr/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(BAN_ESSAI_2B5) }));
+  /* EN LECTURE : le bloc, le lieu, son type, son adresse, « Modifier mes lieux de dépôt ». */
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  const tR = await texteLu();
+  verifier(`en lecture : « ${TITRE_LIEUX_ME} », « ${LIEU_DEMO_DECHETS} », « Déchèterie professionnelle », « 3 Chemin de la Démonstration, 13410 Lambesc »`,
+    tR.includes(TITRE_LIEUX_ME) && tR.includes(LIEU_DEMO_DECHETS) && tR.includes('Déchèterie professionnelle')
+    && tR.includes('3 Chemin de la Démonstration, 13410 Lambesc') && (await bouton('Modifier mes lieux de dépôt').count()) === 1);
+  await amenerAuTexte(TITRE_LIEUX_ME);
+  await capture('2b5-mon-entreprise-lecture');
+  await toucher(bouton('Modifier mes lieux de dépôt'));
+  await attendre(1200);
+  const tl = await boiteDuTexte(TITRE_LIEUX_ME);
+  verifier(`« Modifier mes lieux de dépôt » : l’édition s’ouvre SUR les lieux (y = ${tl && Math.round(tl.y)}), une rangée par lieu, et « Ajouter un lieu de dépôt »`,
+    !!tl && tl.y >= 0 && tl.bas <= tl.fenetre
+    && (await bouton(`${LIEU_DEMO_DECHETS}, Déchèterie professionnelle, Lambesc. Modifier ce lieu de dépôt`).count()) === 1
+    && (await bouton('Ajouter un lieu de dépôt').count()) === 1);
+  await jugerCibles('« Mon entreprise », les lieux en édition', (c) => c.dansModale);
+  /* AJOUTER : la Base Adresse remplit le code postal et la commune ; rien n'est coché d'office. */
+  await toucher(bouton('Ajouter un lieu de dépôt'));
+  await page.getByText('Ajouter un lieu de dépôt', { exact: true }).first().waitFor({ timeout: 5000 });
+  await attendre(500);
+  verifier('le formulaire : AUCUN type coché d’office', (await page.locator('[role="radio"][aria-checked="true"]').count()) === 0);
+  await viderEtTaper(page.getByPlaceholder('Le nom de l’exploitant').first(), RAISON_ESSAI);
+  await viderEtTaper(page.getByPlaceholder('N° et rue').first(), '12 route de la');
+  const sugg = await jusqua(async () => (await page.getByText('12 Route de la Mesure 13410 Lambesc', { exact: true }).count()) > 0, 6000);
+  verifier('la Base Adresse (par la route) propose l’adresse ENTIÈRE', !!sugg);
+  await toucher(page.getByText('12 Route de la Mesure 13410 Lambesc', { exact: true }).first());
+  await attendre(600);
+  verifier('un appui : la rue seule dans son champ, le code postal et la commune remplis',
+    (await page.getByPlaceholder('N° et rue').first().inputValue()) === '12 Route de la Mesure'
+    && (await page.getByPlaceholder('Code postal').first().inputValue()) === '13410'
+    && (await page.getByPlaceholder('Commune').first().inputValue()) === 'Lambesc');
+  await toucher(page.getByRole('radio', { name: 'Déchèterie publique', exact: true }));
+  await jugerCibles('le formulaire d’un lieu de dépôt', (c) => c.dansModale);
+  await capture('2b5-lieu-formulaire');
+  const l0 = await page.evaluate(() => window.__opusEcrituresLieux);
+  await toucher(bouton('Enregistrer ce lieu'));
+  const enregistre = await jusqua(async () => (await texteLu()).includes(LIEU_ENREGISTRE), 6000);
+  const lieux1 = await lieuxDemo();
+  const ajoute = (lieux1 || []).find((x) => x.raison_sociale === RAISON_ESSAI);
+  verifier(`« Enregistrer ce lieu » : UNE écriture (${(await page.evaluate(() => window.__opusEcrituresLieux)) - l0}), « ${LIEU_ENREGISTRE} », deux lieux, le nouveau à Lambesc, type « decheterie_publique »`,
+    !!enregistre && (await page.evaluate(() => window.__opusEcrituresLieux)) - l0 === 1 && Array.isArray(lieux1) && lieux1.length === 2
+    && !!ajoute && ajoute.code_postal === '13410' && ajoute.ville === 'Lambesc' && ajoute.adresse === '12 Route de la Mesure'
+    && ajoute.type_installation === 'decheterie_publique');
+  /* Le retour défile vers la section, ANIMÉ (`tenterDefilement`) : on le
+     laisse finir avant de mesurer. */
+  await attendre(1200);
+  const tl2 = await boiteDuTexte(TITRE_LIEUX_ME);
+  verifier(`…et le retour se fait SUR la section des lieux (y = ${tl2 && Math.round(tl2.y)}), avec la rangée du nouveau lieu`,
+    !!tl2 && tl2.y >= -20 && tl2.y < tl2.fenetre
+    && (await bouton(`${RAISON_ESSAI}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`).count()) === 1);
+  /* LA CROIX PENDANT UN ENVOI : la fenêtre ne se ferme pas, elle dit pourquoi. */
+  await toucher(bouton(`${RAISON_ESSAI}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`));
+  await page.getByText('Modifier ce lieu de dépôt', { exact: true }).first().waitFor({ timeout: 5000 });
+  await viderEtTaper(page.getByPlaceholder('Le nom de l’exploitant').first(), RAISON_ESSAI_2);
+  await page.evaluate(() => { window.__opusPauseLieux = 3500; });
+  await toucher(bouton('Enregistrer ce lieu'));
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  const attendez = (await texteLu()).includes(ATTENDEZ_ME);
+  verifier(`la croix PENDANT l’envoi : « Mon entreprise » reste ouverte et dit « ${ATTENDEZ_ME.slice(0, 40)}… » — pas de « Quitter sans enregistrer »`,
+    attendez && (await parLibelle('Fermer « Mon entreprise »').count()) === 1 && (await bouton('Quitter sans enregistrer').count()) === 0);
+  await capture('2b5-croix-pendant-envoi');
+  await jusqua(async () => (await texteLu()).includes(LIEU_ENREGISTRE)
+    && (await bouton(`${RAISON_ESSAI_2}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`).count()) === 1, 8000);
+  await page.evaluate(() => { window.__opusPauseLieux = null; });
+  verifier('…l’envoi aboutit : le lieu porte son nouveau nom', ((await lieuxDemo()) || []).some((x) => x.raison_sociale === RAISON_ESSAI_2));
+  /* QUITTER SANS ENREGISTRER : une frappe non enregistrée, la croix — la bande. */
+  await toucher(bouton(`${RAISON_ESSAI_2}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`));
+  await page.getByText('Modifier ce lieu de dépôt', { exact: true }).first().waitFor({ timeout: 5000 });
+  await viderEtTaper(page.getByPlaceholder('Le nom de l’exploitant').first(), 'Autre nom');
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  verifier('une frappe non enregistrée, la croix : « Quitter sans enregistrer » s’offre, rien n’est écrit',
+    (await bouton('Quitter sans enregistrer').count()) === 1 && ((await lieuxDemo()) || []).some((x) => x.raison_sociale === RAISON_ESSAI_2));
+  await toucher(bouton('Annuler'));
+  await attendre(1400);
+  const tl3 = await boiteDuTexte(TITRE_LIEUX_ME);
+  verifier(`« Annuler » : retour SUR la section des lieux (y = ${tl3 && Math.round(tl3.y)}), le lieu inchangé`,
+    !!tl3 && tl3.y >= -20 && tl3.y < tl3.fenetre
+    && (await bouton(`${RAISON_ESSAI_2}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`).count()) === 1);
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  verifier('…et la croix ferme, sans bande (rien n’attend)', (await parLibelle('Fermer « Mon entreprise »').count()) === 0);
+
+  /* UN LIEU CITÉ, PUIS RETIRÉ (T10) : « Déchets (mesure) » ne cite que le nouveau. */
+  const nouveau = ((await lieuxDemo()) || []).find((x) => x.raison_sociale === RAISON_ESSAI_2);
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_DECHETS);
+  await ouvrirLesDechets();
+  await toucher(caseDechets(RAISON_ESSAI_2));
+  await toucher(caseDechets(LIEU_DEMO_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  await fermerLesDechets();
+  const dn = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`le brouillon ne cite plus que « ${RAISON_ESSAI_2} » (${JSON.stringify(dn.lieux)})`, !!nouveau && JSON.stringify(dn.lieux) === JSON.stringify([nouveau.id]));
+  await quitterLaSaisie();
+  await toucher(page.getByRole('tab', { name: 'Profil' }));
+  await attendre(900);
+  await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1000);
+  await toucher(bouton('Modifier mes lieux de dépôt'));
+  await attendre(1000);
+  await toucher(bouton(`${RAISON_ESSAI_2}, Déchèterie publique, Lambesc. Modifier ce lieu de dépôt`));
+  await page.getByText('Modifier ce lieu de dépôt', { exact: true }).first().waitFor({ timeout: 5000 });
+  await toucher(bouton('Retirer ce lieu'));
+  verifier('« Retirer ce lieu » : le PREMIER appui ne retire rien — il demande, et dit ce que cela coûte',
+    (await bouton('Confirmer le retrait de ce lieu. Les brouillons qui le citent le perdront.').count()) === 1
+    && (await texteLu()).includes('Les brouillons qui le citent le perdront.') && ((await lieuxDemo()) || []).length === 2);
+  await capture('2b5-retrait-premier-appui');
+  await toucher(bouton('Confirmer le retrait de ce lieu. Les brouillons qui le citent le perdront.'));
+  const retire = await jusqua(async () => (await texteLu()).includes(LIEU_RETIRE), 6000);
+  verifier(`le second : « ${LIEU_RETIRE} », un seul lieu, celui de la démonstration`,
+    !!retire && JSON.stringify(((await lieuxDemo()) || []).map((x) => x.id)) === JSON.stringify([AVANT_2B5.lieux[0].id]));
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_DECHETS);
+  const dOrphelin = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`le brouillon GARDE l’identifiant retiré (${JSON.stringify(dOrphelin.lieux)}), que plus rien ne compte : la rangée dit « À compléter : lieu »`,
+    JSON.stringify(dOrphelin.lieux) === JSON.stringify([nouveau.id]) && (await resumeDechets()) === 'Déchets : À compléter : lieu. Ouvrir', await resumeDechets());
+  await ouvrirLaListe();
+  verifier('…et le point « La loi » revient', (await texteLu()).includes(POINT_DECHETS_LOI));
+  await fermerLaListe();
+  await ouvrirLesDechets();
+  await toucher(caseDechets(LIEU_DEMO_DECHETS));
+  await attendre(PAUSE_DEMO + 400);
+  await fermerLesDechets();
+  const dRepris = await dechetsEnBase(OBJET_DECHETS);
+  verifier(`un appui sur une case : l’identifiant orphelin DISPARAÎT, seul le lieu de démonstration reste (${JSON.stringify(dRepris.lieux)})`,
+    JSON.stringify(dRepris.lieux) === JSON.stringify([AVANT_2B5.lieux[0].id]) && (await resumeDechets()) === `Déchets : ${RESUME_REMPLIES}. Ouvrir`);
+  await quitterLaSaisie();
+  await page.unroute('**/api-adresse.data.gouv.fr/**');
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-5 : la hauteur de la rangée « Déchets » ne bouge jamais — à 393, puis à 320, dans tous les états mesurés (§5.5, T24)', async () => {
+  for (const largeur of [393, 320]) {
+    const hs = HAUTEURS_DECHETS[largeur];
+    noter(`${largeur} : les hauteurs de la rangée`, JSON.stringify(hs));
+    const valeurs = [...new Set(hs.map(([, h]) => h))];
+    verifier(`${largeur} : ${hs.length} état(s) mesuré(s), UNE hauteur (${valeurs.join(', ')})`,
+      hs.length >= (largeur === 393 ? 8 : 2) && valeurs.length === 1 && valeurs[0] > 0);
+  }
+});
+
+await section('2b-5 : l’invariant — le brouillon de mesure supprimé, les brouillons, le lieu de dépôt et les déchets des devis de démonstration rendus à l’identique (§5.5)', async () => {
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_DECHETS);
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), 6000);
+  verifier(`le brouillon « ${OBJET_DECHETS} » est supprimé`, !(await texte()).includes(OBJET_DECHETS));
+  const objets = await brouillonsDeMesDevis();
+  noter('les brouillons après les sections 2b-5', JSON.stringify(objets));
+  verifier(`les sections 2b-5 ne laissent aucun brouillon : ${BROUILLONS_AVANT_2B5.liste ? BROUILLONS_AVANT_2B5.liste.length : '?'} avant, ${objets.length} après, les mêmes`,
+    Array.isArray(BROUILLONS_AVANT_2B5.liste) && JSON.stringify([...objets].sort()) === JSON.stringify([...BROUILLONS_AVANT_2B5.liste].sort()));
+  const lieux = await lieuxDemo();
+  verifier('le lieu de dépôt de démonstration : IDENTIQUE (identifiant, nom, adresse, type, date)', JSON.stringify(lieux) === JSON.stringify(AVANT_2B5.lieux),
+    JSON.stringify([AVANT_2B5.lieux, lieux]));
+  const ecarts = [];
+  for (const o of DEVIS_SUIVIS_2B5) {
+    const d = await dechetsEnBase(o);
+    if (JSON.stringify(d) !== JSON.stringify(AVANT_2B5.devis[o])) ecarts.push(`${o} : ${JSON.stringify([AVANT_2B5.devis[o], d])}`);
+  }
+  verifier(`les déchets de « Rénovation », « Muret » et « Terrasse » : identiques (${ecarts.length} écart(s))`, ecarts.length === 0, ecarts.join(' | '));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

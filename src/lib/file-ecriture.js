@@ -107,7 +107,8 @@
  * qui suivait : la réduction retirée, refusée par le plafond, repartait avec
  * l'objet tapé ensuite — refusés ensemble, et l'écran ne parlait que de la
  * réduction (reproduit par la vraie file et la base de démonstration).
- *  16. `aPart(erreur)` (passé par `api.js` : ce fichier n'importe rien) dit
+ *  16. `aPart(erreur)` (passé par `api.js` : ce fichier n'importe que
+ *      `meme-valeur.js`, qui n'importe rien) dit
  *      les colonnes que vise un refus de l'en-tête — `devis_plafond_check`
  *      ne peut venir que de la réduction. Ces colonnes sont TENUES à part,
  *      avec la valeur refusée : ce qui ne les touche pas part SEUL, tout de
@@ -168,13 +169,19 @@
  *     encore en route, peut porter un numéro plus grand que ceux de la
  *     nouvelle, et passer après elle. Fenêtre de quelques secondes.
  *
- * CE FICHIER N'IMPORTE RIEN. Il reçoit tout ce qu'il appelle : les
- * écritures (`ecrire`), les relectures (`relireUn`, `relireTotaux`), le
+ * CE FICHIER N'IMPORTE QU'UN FICHIER, QUI N'IMPORTE RIEN : `meme-valeur.js`
+ * (étape 2b-5, décision T4). Il reçoit tout le reste de ce qu'il appelle :
+ * les écritures (`ecrire`), les relectures (`relireUn`, `relireTotaux`), le
  * délai (`avecDelai`, celui de `erreurs.js`) et le générateur
  * d'identifiants. C'est ce qui permet à `verifier-devis` de le faire
  * tourner sous `node`, avec de fausses écritures, des délais dépassés et des
  * réponses dans le désordre — ce qu'aucun navigateur ne reproduit à la
- * demande.
+ * demande. `memeValeur` y entre parce que l'en-tête porte depuis 2b-5 trois
+ * LISTES (les déchets triés, ce qui reste sur le chantier, les lieux de
+ * dépôt) : deux listes égales ne sont jamais `Object.is` l'une à l'autre, et
+ * la file aurait renvoyé une liste revenue à sa valeur enregistrée. La règle
+ * vit dans un fichier à elle pour n'être écrite qu'UNE fois : `devis.js` et
+ * la saisie l'importent aussi.
  *
  * LES VALEURS sont celles de l'application (camelCase) ; `ecrire` les
  * traduit pour la base. Le devis porte la clé `'devis'`, chaque ligne son
@@ -184,6 +191,7 @@
  * file. Ce n'est pas un mode hors ligne ; la parade est l'enregistrement
  * ligne par ligne, et une file qui DIT ce qui n'est pas parti.
  */
+import { memeValeur } from './meme-valeur.js';
 
 /** Le délai de chaque requête : 8 secondes, la borne que la vraie base
  *  impose elle-même à une requête (`statement_timeout`). */
@@ -249,13 +257,16 @@ const sansNumero = (v) => {
    que la base n'a pas rendue vaut `null` ; l'identifiant ne se modifie
    jamais ; et le NUMÉRO d'écriture (`generation`) n'est pas une valeur de
    l'écran : il voyage à côté (49.5 bis). Une ligne relue en base le porte —
-   le comparer ferait renvoyer un ANCIEN numéro, que la base refuserait. */
+   le comparer ferait renvoyer un ANCIEN numéro, que la base refuserait.
+   LA COMPARAISON EST CELLE DE `memeValeur` (2b-5, T4) : une liste revenue à
+   sa valeur enregistrée, par un tableau NEUF, n'a pas changé. Avec
+   `Object.is`, elle repartait à chaque fois (CTL-3, mesuré). */
 function changements(voulu, confirme, paires = []) {
   const diff = {};
   Object.keys(voulu).forEach((c) => {
     if (c === 'id' || c === 'generation' || voulu[c] === undefined) return;
     const avant = confirme && confirme[c] !== undefined ? confirme[c] : null;
-    if (!Object.is(voulu[c], avant)) diff[c] = voulu[c];
+    if (!memeValeur(voulu[c], avant)) diff[c] = voulu[c];
   });
   /* UNE PAIRE PART ENTIÈRE (lot 2a) : la réduction en pourcentage OU en
      montant, l'acompte et sa nature. Dès qu'une colonne d'une paire change,
@@ -352,7 +363,7 @@ export function creerFileEcriture({
   }
   if (!devisId) throw new Error('La file d’écriture d’un devis exige l’identifiant du devis.');
   /* Les PAIRES du devis (`PAIRES_DEVIS`, passées par `api.js` : ce fichier
-     n'importe rien) — une liste de listes de noms de champs. */
+     n'importe pas `devis.js`) — une liste de listes de noms de champs. */
   const pairesDuDevis = Array.isArray(paires)
     ? paires.filter((p) => Array.isArray(p) && p.length > 1 && p.every((c) => typeof c === 'string')) : [];
   /* Les colonnes qu'un refus de l'en-tête met à part (16), parmi celles que

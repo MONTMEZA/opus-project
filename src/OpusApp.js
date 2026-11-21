@@ -4082,6 +4082,18 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      fermeture de « Mon entreprise » relit (`lireRegime`), et cette lecture
      est la dernière — aucun `surEmetteur` ne vient après la fermeture. */
   const [mesAssurances, setMesAssurances] = useState(undefined);
+  /* MES LIEUX DE DÉPÔT DES DÉCHETS (2b-5, cahier T12 et T12 bis), lus par la
+     MÊME lecture que le régime et les assurances (`monRegimeEtSaDate`) —
+     aucune requête de plus. Les mêmes trois règles que les assurances :
+     `undefined` tant qu'ils ne sont pas lus, GARDÉS pendant une relecture,
+     REMPLACÉS à la réponse, REMIS à `undefined` sur un échec. Une réponse
+     qui ne les porte pas (la table pas encore là) les pose à `null` : NON
+     LUS, jamais `[]` — « aucun lieu » dirait à un artisan qui en a qu'il n'en
+     a pas. L'état de la liste (« en lecture », « pas pu être lus », « vide »,
+     « lus ») se déduit de celui du régime (`etatDesLieux`, devis.js). C'est
+     la FERMETURE de « Mon entreprise » qui les relit, avec le régime : c'est
+     là que l'artisan les ajoute, les modifie, les retire. */
+  const [mesLieux, setMesLieux] = useState(undefined);
 
   /* ================================================================== */
   /*  LA BASE DE POSTES — lot P du module devis (24/10/2026)             */
@@ -4214,6 +4226,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       /* 2b-4 : les assurances de la MÊME réponse — une liste, ou `null`
          quand la fiche ne les porte pas (l'avis se tait aussi). */
       setMesAssurances(r && Array.isArray(r.assurances) ? r.assurances : null);
+      /* 2b-5 : les lieux de dépôt de la MÊME réponse — une liste, ou `null`
+         (non lus). */
+      setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null);
     }).catch(() => {});
     avecDelai(lecture, 8000, 'La lecture de votre régime de TVA')
       .catch(() => {
@@ -4221,6 +4236,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         setMonRegime({ echec: true });
         /* Un échec OUBLIE les assurances (ÉCRAN-19) : l'avis se tait. */
         setMesAssurances(undefined);
+        /* …et les lieux de dépôt (2b-5) : la carte « Déchets » dira « n'ont
+           pas pu être lus », jamais « aucun lieu ». */
+        setMesLieux(undefined);
       });
   }, []);
 
@@ -5342,6 +5360,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* 2b-4 : les assurances, pour l'avis de l'attestation qui arrive
                à sa fin — `undefined` tant qu'elles ne sont pas lues. */
             assurances={mesAssurances}
+            /* 2b-5 : les lieux de dépôt des déchets, pour la carte « Déchets » —
+               `undefined` tant qu'ils ne sont pas lus, `null` s'ils n'ont pas
+               pu l'être ; jamais un `[]` inventé. */
+            lieux={mesLieux}
             clients={clients}
             clientsEtat={clientsEtat}
             onGarde={inscrireGarde}
@@ -5562,7 +5584,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                l'artisan change la date de fin de son attestation décennale —
                les assurances se RELISENT à la fermeture, avec le régime, par
                la même lecture. Discrète quand le régime est déjà connu, comme
-               les trois autres appels. */
+               les trois autres appels. Depuis 2b-5, les LIEUX DE DÉPÔT des
+               déchets reviennent par cette même lecture : c'est ici qu'un
+               lieu ajouté ou retiré atteint la carte « Déchets » d'un devis. */
             lireRegime({ discret: typeof monRegime === 'string' });
           }}
           entreprise={monEntreprise}

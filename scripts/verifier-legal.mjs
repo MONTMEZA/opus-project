@@ -801,7 +801,18 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
      N11, prouvés : un déclencheur `definer` écrivait dans le devis d'un
      autre ; une `definer` rendait à B les prix de A). */
   const DEVIS_NOMME = /\bpublic\s*\.\s*devis(_lignes|_tva)?\b|\b(?:from|join|into|update|table|only|using)\s+devis(_lignes|_tva)?\b/i;
-  const PRIVEES = new RegExp(`\\b(tarifs_pro|emetteur_assurances|emetteur|base_postes)\\b|${DEVIS_NOMME.source}`, 'i');
+  /* LES LIEUX DE DÉPÔT DES DÉCHETS, étape 2b-5 (section 46.2 bis,
+     21/11/2026) : `emetteur_lieux_depot` entre ici, et dans `LISTES` et
+     `PRIVEES_EDGE` plus bas. Le trait de soulignement est une LETTRE de mot
+     (pour JavaScript comme pour PostgreSQL) : `\bemetteur\b` ne voit pas
+     `emetteur_lieux_depot`, et une fonction `security definer`, une vue ou
+     une fonction Edge qui ne lirait QUE cette table passait ces trois
+     gardes au vert (critique CTL-8 du cahier, rejouée avec `node` ; le
+     précédent est `base_postes`, au lot P). Ce ne sont pas des prix : la
+     promesse que ces gardes tiennent pour elle est « Aucun écran d’Opus ne
+     les montre à quelqu’un d’autre que vous » (« Ce que nous collectons »),
+     et c'est la même menace — une lecture par-dessus les politiques. */
+  const PRIVEES = new RegExp(`\\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur|base_postes)\\b|${DEVIS_NOMME.source}`, 'i');
   /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro` — à
      travers « tarifs affiches », en `security invoker` — et elle seule de
      plus. Elle n'a rien à faire dans `emetteur` ni `emetteur_assurances`,
@@ -849,6 +860,15 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
        avec sa raison (cahier du lot P, C12). */
     { tables: /\bbase_postes\b/,
       permises: ['tient_le_poste', 'mes_donnees'] },
+    /* LA CINQUIÈME, à l'étape 2b-5 (section 46.2 bis) : les lieux de dépôt
+       des déchets. Leur déclencheur (qui ne nomme aucune table, mais la
+       liste est une permission, pas une exigence), l'export, et
+       `motifs_refus_remise`, qui compte les lieux CHOISIS d'un devis qui
+       existent encore chez son artisan (rang 13, filtre `pro_id = v_pro`).
+       Ni `tient_l_emetteur`, ni une fonction `admin_*` : la première entrée
+       ne les couvre PAS (mot entier), et c'est voulu. */
+    { tables: /\bemetteur_lieux_depot\b/,
+      permises: ['tient_le_lieu_de_depot', 'mes_donnees', 'motifs_refus_remise'] },
   ];
   const sansCommentairesSql = (t) => {
     let sortie = '';
@@ -996,7 +1016,7 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
      pas une chaîne écrite en toutes lettres ne se relit pas : la table
      viendrait d'une variable. Seuls `storage.from(espace)` (le stockage,
      pas une table) et `Array.from(…)` y échappent. */
-  const PRIVEES_EDGE = /\b(tarifs_pro|emetteur_assurances|emetteur|base_postes)\b|\bfrom\(\s*['"`]devis(_lignes|_tva)?['"`]|\bpublic\.devis(_lignes|_tva)?\b/;
+  const PRIVEES_EDGE = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur|base_postes)\b|\bfrom\(\s*['"`]devis(_lignes|_tva)?['"`]|\bpublic\.devis(_lignes|_tva)?\b/;
   const FROM_ILLISIBLE = /(?<!\bstorage|\bArray)\.from\(\s*(?!['"][\w.-]*['"]\s*\))/;
   const edgeQuiLisent = edge.filter((f) => {
     const src = sansCommentairesJs(readFileSync(f, 'utf8'));
@@ -2244,9 +2264,18 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
        2026-11-17) : s'ils sont gratuits ou payants, et ce que coûte un
        devis payant (`devis.cout_devis_centimes`), insérés après « leur durée
        de validité » ; RIEN d'autre dans la section (empreinte d'avant :
-       58d1524f…, celle de 2b-3). */
+       58d1524f…, celle de 2b-3).
+       Étape 2b-5 (22/11/2026, cahier 2b-5 §4, VERSION 2026-11-22) : DEUX
+       insertions, et rien d'autre dans la section — dans la phrase de
+       « Mon entreprise », « vos lieux de dépôt des déchets (raison sociale,
+       adresse, type d’installation) », avant « et vos tarifs » ; dans la
+       phrase des devis, « s’il s’agit de travaux sur un bâtiment ou de
+       jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
+       dépôt, coût estimé) », avant « leurs lignes ». Les deux sont gardées
+       en toutes lettres par la section « Étape 2b-5 » (empreinte d'avant :
+       3d67dfe0…, celle de 2b-4). */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      '3d67dfe0f930f0630a84802cc0a7636cd580e091fe51cbd7c91a9e80a46fa192'],
+      'a29287d0dfbcb888102a62f9788f565b6d2c646b4b8057895747d2235bd9ae77'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2431,6 +2460,14 @@ console.log('\n« Ce que les autres voient de vous » : chaque table, chaque rè
     ['base_postes', 'soi', null, ['pro_idin(selectmes_entreprises())'], 'la base de postes : lui seul (« Vos tarifs et vos prix »)'],
     ['emetteur', 'soi', null, [ENTREPRISE], 'ses informations de devis : lui seul'],
     ['emetteur_assurances', 'soi', null, [ENTREPRISE], 'ses assurances : lui seul'],
+    /* Étape 2b-5 (section 46.2 bis) : une RAISON, pas une phrase (cahier
+       §2.7 et §4, critique CTL-14) — la section garde son empreinte, et ce
+       qui est vrai se lit déjà dans « Ce que nous collectons » : « Aucun
+       écran d’Opus ne les montre à quelqu’un d’autre que vous ». La forme
+       exacte de la règle (`est_mon_entreprise(pro_id)`, rien d'autre) fait
+       rougir le jour où une politique l'ouvrirait à l'administration. */
+    ['emetteur_lieux_depot', 'soi', null, [ENTREPRISE],
+      'ses lieux de dépôt des déchets : lui seul (« Ce que nous collectons »)'],
     ['preuves_tva', 'soi', null, [ENTREPRISE], 'sa preuve de TVA : lui seul'],
     ['entreprise_registre', 'soi+admin', 'l’entreprise rattachée à chaque compte professionnel', [`${ENTREPRISE}orest_admin()`],
       'son entreprise lue au répertoire : lui et l’administration'],
@@ -2732,6 +2769,22 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
        ENTIÈRE. Sans cette ligne, la colonne née en 49.4 quinquies fait
        rougir le contrôle ci-dessous (mesuré, cahier BASE-9 / ÉCRAN-7). */
     cout_devis_centimes: 's’ils sont gratuits ou payants',
+    /* 2b-5 (cahier 2b-5 §4, 49.4 sexies) : les huit colonnes des déchets.
+       La question a SES mots, ceux de l'écran ; la parenthèse est celle du
+       cahier, chacun de ses quatre mots porte ses colonnes. Ce qui reste
+       sur le chantier (`dechets_sur_place` : broyage, compostage) est ce
+       que DEVIENNENT ces déchets — la tête de l'énumération le nomme ;
+       « Aucun dépôt » (`dechets_sans_depot`) est une réponse à la rubrique
+       des lieux. Les mots de la parenthèse sont cherchés AVEC leur
+       ponctuation : « tri » seul se lirait dans un autre mot. */
+    dechets_concerne: 's’il s’agit de travaux sur un bâtiment ou de jardinage',
+    dechets_quantite_milliemes: 'leurs déchets (quantité,',
+    dechets_unite: 'leurs déchets (quantité,',
+    dechets_flux: '(quantité, tri,',
+    dechets_sur_place: 'ce que deviendront leurs déchets',
+    dechets_lieux: ', lieux de dépôt,',
+    dechets_sans_depot: ', lieux de dépôt,',
+    dechets_cout_centimes: ', coût estimé)',
     total_ht_centimes: 'leurs totaux',
     total_tva_centimes: 'leurs totaux',
     total_ttc_centimes: 'leurs totaux',
@@ -2945,7 +2998,10 @@ console.log('\nÉtape 2b-3 — la réparation urgente, la décennale, le moment 
        mention « gratuit » ou « payant » imprimée (rien ne sort avant 2c) ;
        aucun ne parle de services à la personne (réponse Q3) ni de déchets
        (2b-5), et le label RGE ne se lit que là où il se lisait avant (le
-       RGE du devis est l'étape 2b-6).
+       RGE du devis est l'étape 2b-6). DEPUIS 2b-5 : la phrase ENTIÈRE et la
+       moitié « déchets » de cette garde sont tenues par la section
+       « Étape 2b-5 », plus bas ; ici restent le fragment de 2b-4, son
+       ordre, et la moitié « services à la personne ».
    ================================================================== */
 console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui les tient');
 {
@@ -2980,10 +3036,18 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
   verifier('…et il est suivi de la version précédente, celle de 2b-3',
     finHist4 > 0 && sourceLegal2b4.slice(finHist4 + 2).trimStart().startsWith("/* VERSION PRÉCÉDENTE : '2026-11-13'. */"));
 
-  /* LA PHRASE DES DEVIS, ENTIÈRE (annexe A.6, avec 2a, 2b-2 et 2b-3). */
-  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
-  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase de l’annexe A.6 de 2b-4 (avec 2a, 2b-2 et 2b-3)',
-    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(140, 300)}… »`);
+  /* LA PHRASE DES DEVIS, ENTIÈRE, a quitté cette section à l'étape 2b-5
+     (21/11/2026), comme celle de 2b-3 avait quitté la sienne à 2b-4 : elle
+     s'est allongée (« s’il s’agit de travaux sur un bâtiment ou de
+     jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de
+     dépôt, coût estimé) »), et elle est gardée mot pour mot, ENTIÈRE, par
+     la section « Étape 2b-5 » plus bas — avec le prix du devis de 2b-4, qui
+     en fait toujours partie. Ce qui reste ici : le FRAGMENT de 2b-4, en
+     toutes lettres, et son ORDRE (l'insertion de 2b-5 vient après le
+     moment du paiement, avant « leurs lignes » : elle ne le dérange pas). */
+  const FRAGMENT_2B4 = 'leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande';
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot, le fragment de 2b-4 (« s’ils sont gratuits ou payants, et ce que coûte un devis payant »), entre la validité et « à quel titre » — la phrase ENTIÈRE est gardée par la section 2b-5',
+    collecte.includes(FRAGMENT_2B4), `attendu : « …${FRAGMENT_2B4}… »`);
   const iDevis4 = collecte.indexOf('devis en préparation');
   const REPERES = ['leur durée de validité', 's’ils sont gratuits ou payants', 'et ce que coûte un devis payant',
     'à quel titre le client commande', 'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
@@ -3011,7 +3075,7 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
     .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
   const nbPayant = tous2b4.join(' ').split('payant').length - 1;
   verifier('« payant » ne se lit que dans la phrase des devis de la collecte, deux fois (« gratuits ou payants », « un devis payant »)',
-    nbPayant === 2 && PHRASE_DEVIS.split('payant').length - 1 === 2, `${nbPayant} occurrence(s) dans les textes légaux`);
+    nbPayant === 2 && FRAGMENT_2B4.split('payant').length - 1 === 2, `${nbPayant} occurrence(s) dans les textes légaux`);
 
   /* « VOS TARIFS ET VOS PRIX » NE CHANGE PAS D'UN MOT (cahier §4) : son
      empreinte est celle de 2b-3, et la promesse du prix des devis y est. */
@@ -3046,11 +3110,233 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
   verifier('aucun texte ne promet la mention « gratuit » ou « payant » imprimée (rien ne sort avant 2c)',
     propositionsDuPrix.length > 0 && propositionsDuPrix.every((p) => !/imprim|mention|figur/i.test(p)),
     propositionsDuPrix.filter((p) => /imprim|mention|figur/i.test(p)).join(' | ') || 'aucune proposition ne nomme le prix du devis');
-  verifier('aucun texte ne parle de services à la personne (réponse Q3 : pas pour l’instant) ni de déchets (étape 2b-5)',
-    !tous2b4.some((t) => /services? à la personne|déchet/i.test(t)));
+  /* LA GARDE EST SCINDÉE à l'étape 2b-5 (critique CTL-14 du cahier
+     2b-5) : la moitié « services à la personne » reste ENTIÈRE (décision
+     Q3 du 16/11 : pas pour l'instant) ; la moitié « déchets » est devenue
+     « ne se lit QUE dans les deux fragments de la collecte », dans la
+     section « Étape 2b-5 » plus bas. La supprimer d'un bloc aurait emporté
+     la décision Q3 avec elle. */
+  verifier('aucun texte ne parle de services à la personne (réponse Q3 : pas pour l’instant)',
+    !tous2b4.some((t) => /services? à la personne/i.test(t)));
   const avecRge = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /\bRGE\b/.test(b.texte)).map((b) => b.titre);
   verifier('…et le label RGE ne se lit que là où il se lisait avant 2b-4 (« Ce que les autres voient de vous », le numéro déclaré sur la fiche) : le RGE du devis est l’étape 2b-6',
     avecRge.length === 1 && avecRge[0] === 'Ce que les autres voient de vous', avecRge.join(' · ') || 'aucun');
+}
+
+/* ==================================================================
+   ÉTAPE 2b-5 DU DEVIS (22/11/2026) — les déchets du chantier (cahier 2b-5
+   §4 ; sections 46.2 bis et 49 de `schema.sql` : la table privée
+   `emetteur_lieux_depot` et les huit colonnes `devis.dechets_*`, 49.4
+   sexies ; décision Q4 = 1 du 17/11, réponses du propriétaire du 21/11).
+
+   Deux phrases changent, et chacune reste UNE phrase :
+     - celle de « Mon entreprise » nomme « vos lieux de dépôt des déchets
+       (raison sociale, adresse, type d’installation) », AVANT « et vos
+       tarifs », donc avant « Aucun écran d’Opus ne les montre » : c'est ce
+       qui range les lieux dans cette promesse, et la base la tient (une
+       seule politique, `est_mon_entreprise`, rien pour l'administration ni
+       pour `anon`) ;
+     - celle des devis nomme la question (« s’il s’agit de travaux sur un
+       bâtiment ou de jardinage », les mots de l'écran) et « ce que
+       deviendront leurs déchets (quantité, tri, lieux de dépôt, coût
+       estimé) », la parenthèse du cahier, AVANT « leurs lignes », comme
+       2b-2 à 2b-4. Elle est gardée ici, MOT POUR MOT et ENTIÈRE : elle a
+       quitté la section 2b-4, comme celle de 2b-3 avait quitté la sienne.
+   Et ce qui la tient :
+     - chaque colonne de `devis` (la liste `NOMMEES_DEVIS`, section 2b-2
+       plus haut) ET chaque colonne de `emetteur_lieux_depot`, LUES DANS LE
+       SCHÉMA, ont leurs mots ou une raison technique ; et le schéma range
+       bien ce que les phrases annoncent (la table, les huit colonnes et
+       leurs types) — sinon une colonne retirée du schéma disparaîtrait de
+       la comparaison sans bruit, et le texte annoncerait une donnée que la
+       base ne range pas ;
+     - « déchet » ne se lit QUE dans ces deux fragments : la moitié
+       « déchets » de la garde de 2b-4, scindée (critique CTL-14) — la
+       moitié « services à la personne », elle, reste entière là-haut ;
+     - RIEN D'AUTRE (cahier §4) : « Une décision automatique » ne parle
+       pas des déchets — le point du rang 13 est un motif, pas une
+       décision ; aucun texte ne promet que les déchets s'imprimeront (rien
+       ne sort avant 2c) ; « Ce que les autres voient de vous » ne change
+       pas d'un mot (son empreinte, plus haut ; la table s'y classe par une
+       RAISON, dans `CLASSEMENT`) ; « Vos tarifs et vos prix » non plus
+       (son empreinte, section 2b-4).
+   ================================================================== */
+console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui les tient');
+{
+  const plat = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const collecte = bloc(CONFIDENTIALITE, 'Ce que nous collectons');
+  const decision = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+
+  /* UNE VERSION NOUVELLE, plus récente que celle de 2b-4 : des données
+     collectées de plus ne se rangent jamais sous la version d'avant (« pas
+     plus loin que le lendemain » est tenu plus haut, section S-d). */
+  verifier('VERSION est plus récente que celle de 2b-4 (17/11/2026) : des données nouvelles collectées (les lieux de dépôt, les déchets des devis), sous une version nouvelle',
+    VERSION > '2026-11-17', `VERSION = ${VERSION}`);
+
+  /* LE BLOC D'HISTOIRE DE 2b-5, cherché par son TITRE (la date change avec
+     `VERSION` si le commit se fait un autre jour), suivi de la version
+     d'avant : un bloc posé ailleurs ne dirait plus de quelle version il
+     raconte le changement. */
+  const sourceLegal2b5 = readFileSync('src/data/legal.js', 'utf8');
+  const iHist5 = sourceLegal2b5.indexOf('LES DÉCHETS DU CHANTIER (étape 2b-5');
+  const finHist5 = iHist5 < 0 ? -1 : sourceLegal2b5.indexOf('*/', iHist5);
+  const histoire2b5 = finHist5 < 0 ? '' : plat(sourceLegal2b5.slice(iHist5, finHist5));
+  const ATTENDUS_HISTOIRE = ['vos lieux de dépôt des déchets', 'raison sociale', "s'il s'agit de travaux sur un bâtiment ou de jardinage",
+    'ce que deviendront leurs déchets', 'le coût estimé', "RIEN D'AUTRE", "« Ce que les autres voient de vous » ne change pas d'un mot",
+    '« Vos tarifs et vos prix » non plus', 'LA MÊME LIMITE', 'ré-accepter', '2019/1150'];
+  verifier('le bloc d’historique de 2b-5 nomme les faits (les lieux de dépôt, la question, ce que deviendront les déchets, le coût estimé), « RIEN D’AUTRE » (les deux sections qui ne changent pas comprises) et la limite connue',
+    ATTENDUS_HISTOIRE.every((x) => histoire2b5.includes(x)),
+    histoire2b5 ? ATTENDUS_HISTOIRE.filter((x) => !histoire2b5.includes(x)).map((x) => `« ${x} » manque`).join(' · ')
+      : 'bloc introuvable (« LES DÉCHETS DU CHANTIER (étape 2b-5 »)');
+  verifier('…et il est suivi de la version précédente, celle de 2b-4',
+    finHist5 > 0 && sourceLegal2b5.slice(finHist5 + 2).trimStart().startsWith("/* VERSION PRÉCÉDENTE : '2026-11-17'. */"));
+
+  /* LA PHRASE DES DEVIS, ENTIÈRE (2a, 2b-2, 2b-3, 2b-4 et 2b-5). Il n'en
+     existe qu'UNE écriture : la changer se DÉCIDE — VERSION, son bloc
+     d'historique, l'empreinte de « Ce que nous collectons » et cette
+     constante, dans le même lot. */
+  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il s’agit de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase des devis de 2b-5 (avec 2a, 2b-2, 2b-3 et 2b-4)',
+    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(560, 760)}… »`);
+  /* …UNE phrase : `NOMMEES_DEVIS` (section 2b-2) la découpe de « devis en
+     préparation » au point suivant ; un point au milieu en couperait la
+     fin, et les colonnes nommées après lui seraient déclarées absentes. */
+  verifier('…et elle reste UNE phrase (aucun « . » avant sa fin) : la découpe de `NOMMEES_DEVIS` va jusqu’à « d’où ils viennent »',
+    PHRASE_DEVIS.indexOf('. ') < 0 && PHRASE_DEVIS.endsWith('d’où ils viennent.'));
+  const iDevis5 = collecte.indexOf('devis en préparation');
+  const REPERES = ['quand l’acompte ou les arrhes sont payés', 's’il s’agit de travaux sur un bâtiment ou de jardinage',
+    'ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé)', 'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
+  const positions = REPERES.map((x) => collecte.indexOf(x, Math.max(0, iDevis5)));
+  verifier('…dans l’ORDRE : après le moment du paiement, la question puis ce que deviendront les déchets, avant « leurs lignes » — la base de postes toujours après',
+    iDevis5 >= 0 && positions.every((p, k) => p > (k === 0 ? iDevis5 : positions[k - 1])),
+    REPERES.map((x, k) => `${x} : ${positions[k]}`).join(' · '));
+
+  /* LA QUESTION EST CELLE DE L'ÉCRAN : le texte ne la reformule pas — il
+     en reprend les deux termes, lus dans `LES_DECHETS` (devis.js), pas
+     recopiés ici. Si l'écran change de question (« Ces travaux
+     produisent-ils des déchets ? », écartée par la réponse P1), le texte
+     opposable doit changer avec lui. */
+  const { LES_DECHETS } = await import('../src/lib/devis.js');
+  /* `LES_DECHETS.question` est le BLOC de la question (sous-titre,
+     question, pastilles, aide) ; la phrase posée est sa clé `question`. */
+  const question = String((LES_DECHETS && LES_DECHETS.question && LES_DECHETS.question.question) || '');
+  verifier('…et la question nommée est celle de l’écran (`LES_DECHETS.question.question` : « travaux sur un bâtiment », « jardinage »)',
+    /travaux sur un bâtiment/.test(question) && /jardinage/.test(question)
+    && collecte.includes('s’il s’agit de travaux sur un bâtiment ou de jardinage'),
+    question || '`LES_DECHETS.question` introuvable');
+
+  /* LA PHRASE DE « MON ENTREPRISE » : les lieux AVANT « et vos tarifs »,
+     donc avant la phrase des devis et avant « Aucun écran d’Opus ne les
+     montre » — dont la promesse les couvre ainsi. */
+  const FRAGMENT_LIEUX = 'vos lieux de dépôt des déchets (raison sociale, adresse, type d’installation)';
+  const iPro5 = collecte.indexOf('Si vous êtes professionnel, pour vos devis');
+  const ORDRE_LIEUX = [FRAGMENT_LIEUX, 'et vos tarifs (frais de déplacement', 'et vos devis en préparation', 'Aucun écran d’Opus ne les montre'];
+  const posLieux = ORDRE_LIEUX.map((x) => collecte.indexOf(x, Math.max(0, iPro5)));
+  verifier('« Ce que nous collectons » nomme, mot pour mot, « vos lieux de dépôt des déchets (raison sociale, adresse, type d’installation) » dans la phrase de « Mon entreprise » : avant les tarifs, avant les devis, avant « Aucun écran d’Opus ne les montre »',
+    iPro5 >= 0 && posLieux.every((p, k) => p > (k === 0 ? iPro5 : posLieux[k - 1]))
+    && collecte.slice(iPro5, posLieux[0]).indexOf('. ') < 0,
+    ORDRE_LIEUX.map((x, k) => `${x} : ${posLieux[k]}`).join(' · '));
+
+  /* LE SCHÉMA RANGE CE QUE LES PHRASES ANNONCENT. */
+  const schema2b5 = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const COLONNES_2B5 = {
+    dechets_concerne: 'boolean', dechets_quantite_milliemes: 'bigint', dechets_unite: 'text',
+    dechets_flux: 'text[]', dechets_sur_place: 'text[]', dechets_lieux: 'uuid[]',
+    dechets_sans_depot: 'boolean', dechets_cout_centimes: 'bigint',
+  };
+  const ajoutsDevis = [...schema2b5.matchAll(/alter table (?:only )?public\.devis\b([^;]*);/g)].map((m) => m[1]).join('\n');
+  const manquentAuSchema = Object.entries(COLONNES_2B5).filter(([c, t]) =>
+    !new RegExp(`add column (?:if not exists )?${c}\\s+${t.replace('[', '\\[').replace(']', '\\]')}(?![\\w\\[])`).test(ajoutsDevis));
+  verifier('…et le schéma range bien ce que la phrase des devis annonce : les huit colonnes `devis.dechets_*` et leurs types (49.4 sexies)',
+    manquentAuSchema.length === 0, manquentAuSchema.map(([c, t]) => `\`${c} ${t}\` absente`).join(' · ')
+      + ' — la phrase annoncerait une donnée que la base ne range pas');
+
+  /* CHAQUE COLONNE DE LA TABLE DES LIEUX, lue dans le schéma, a ses mots
+     dans le fragment de « Mon entreprise », ou une raison technique. Une
+     colonne posée demain sans sa place fait rougir : une donnée collectée
+     qui n'est pas nommée n'est pas annoncée. */
+  const corpsLieux = (schema2b5.match(/create table if not exists public\.emetteur_lieux_depot\s*\(([\s\S]*?)\n\);/) || [])[1] || '';
+  const colonnesLieux = [...new Set([
+    ...corpsLieux.split('\n').map((l) => (l.match(/^\s+([a-z_][a-z0-9_]*)\s+/) || [])[1])
+      .filter((c) => c && !['constraint', 'references', 'primary', 'unique', 'check', 'foreign'].includes(c)),
+    ...[...schema2b5.matchAll(/alter table (?:only )?public\.emetteur_lieux_depot\b([^;]*);/g)]
+      .flatMap((m) => [...m[1].matchAll(/add column (?:if not exists )?([a-z_][a-z0-9_]*)/g)].map((x) => x[1])),
+  ])];
+  const NOMMEES_LIEUX = {
+    raison_sociale: 'raison sociale',
+    /* L'adresse d'un lieu, c'est sa rue, son code postal et sa commune. */
+    adresse: 'adresse',
+    code_postal: 'adresse',
+    ville: 'adresse',
+    /* La précision d'un type « autre » (« Autre installation autorisée
+       (précisez) ») fait partie du type. */
+    type_installation: 'type d’installation',
+    libelle: 'type d’installation',
+  };
+  const TECHNIQUES_LIEUX = {
+    id: 'un identifiant, qui ne dit rien de personne',
+    pro_id: 'le compte lui-même, déjà nommé',
+    created_at: 'une date technique, posée par la base',
+  };
+  const sansPlaceLieux = colonnesLieux.filter((c) => !(c in NOMMEES_LIEUX) && !(c in TECHNIQUES_LIEUX));
+  const absentesLieux = Object.entries(NOMMEES_LIEUX).filter(([c, mot]) => colonnesLieux.includes(c) && !FRAGMENT_LIEUX.includes(mot));
+  verifier(`« Ce que nous collectons » nomme chaque colonne de \`emetteur_lieux_depot\`, lue dans le schéma (${colonnesLieux.length} colonnes), dans le fragment des lieux`,
+    colonnesLieux.length >= 8 && collecte.includes(FRAGMENT_LIEUX) && sansPlaceLieux.length === 0 && absentesLieux.length === 0,
+    colonnesLieux.length < 8
+      ? 'la table `emetteur_lieux_depot` est introuvable dans le schéma : ce contrôle a perdu sa cible'
+      : [...sansPlaceLieux.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
+        ...absentesLieux.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · ') || 'le fragment des lieux manque à la collecte');
+
+  /* « AUCUN ÉCRAN D’OPUS NE LES MONTRE À QUELQU’UN D’AUTRE QUE VOUS » EST
+     TENU PAR LA BASE pour les lieux : dans TOUT le fichier, UNE politique,
+     `to authenticated`, `est_mon_entreprise(pro_id)` des deux côtés, sans
+     `true`, ni `est_admin`, ni `auth.uid()`, ni `anon` ; `anon` n'a aucun
+     droit de table, et rien ne le lui rend. (`CLASSEMENT`, plus haut, tient
+     la forme de la LECTURE ; ceci tient aussi l'écriture et les droits.) */
+  const sqlLieux = schema2b5.replace(/"([a-z_][a-z0-9_]*)"/g, '$1');
+  const politiquesLieux = [...sqlLieux.matchAll(/create\s+policy\s+(?:"[^"]+"|[a-z_][\w$]*)\s+on\s+(?:only\s+)?(?:public\s*\.\s*)?emetteur_lieux_depot\b[\s\S]*?;/gi)].map((m) => m[0]);
+  const ouvertesLieux = politiquesLieux.filter((x) => !/\bto authenticated\b/.test(x) || /\bto (anon|public)\b/.test(x)
+    || /\(\s*true\s*\)|\btrue\b|est_admin|auth\.uid\(\)/.test(x) || (x.match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length !== 2);
+  verifier(`…et la base les ferme à tout autre que leur titulaire : ${politiquesLieux.length} politique(s) sur \`emetteur_lieux_depot\` dans tout le fichier, `
+    + 'par `est_mon_entreprise(pro_id)` en lecture comme en écriture, sans `true`, ni `est_admin`, ni `anon` — et `anon` n’a aucun droit de table',
+  politiquesLieux.length === 1 && ouvertesLieux.length === 0
+    && /revoke\s+all\s+on\s+public\.emetteur_lieux_depot\s+from\s+anon\s*;/i.test(sqlLieux)
+    && !/grant\s+[^;]*\bon\s+(?:table\s+)?(?:public\s*\.\s*)?emetteur_lieux_depot\b[^;]*\bto\b[^;]*\b(anon|public)\b/i.test(sqlLieux),
+  ouvertesLieux.map((x) => x.replace(/\s+/g, ' ').slice(0, 120)).join(' | ') || `${politiquesLieux.length} politique(s) au lieu de 1`);
+
+  /* « DÉCHET » NE SE LIT QUE DANS LES DEUX FRAGMENTS (la moitié « déchets »
+     de la garde de 2b-4, scindée) : retirés, il ne reste aucun « déchet »
+     dans aucun texte légal — ni dans les CGU, ni dans « Une décision
+     automatique », ni dans « Ce que les autres voient de vous ». Et
+     exactement deux occurrences en tout : un « déchet » de plus ailleurs
+     serait une promesse que le cahier n'a pas décidée. */
+  const FRAGMENT_DECHETS = 'ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé)';
+  const tous2b5 = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
+  const nbDechets = tous2b5.join(' ').split(/déchet/i).length - 1;
+  const restes = tous2b5.map((t) => t.split(FRAGMENT_LIEUX).join('').split(FRAGMENT_DECHETS).join(''))
+    .filter((t) => /déchet/i.test(t));
+  verifier('« déchet » ne se lit QUE dans les deux fragments de « Ce que nous collectons » (les lieux, la phrase des devis) — deux occurrences en tout',
+    collecte.includes(FRAGMENT_LIEUX) && collecte.includes(FRAGMENT_DECHETS) && nbDechets === 2 && restes.length === 0,
+    `${nbDechets} occurrence(s)${restes.length ? ` ; hors des fragments : ${restes.map((t) => t.slice(Math.max(0, t.search(/déchet/i) - 60), t.search(/déchet/i) + 60)).join(' | ')}` : ''}`);
+  /* …et « lieu(x) de dépôt » non plus : la même règle, pour qu'une
+     promesse sur les lieux ne naisse pas sans le mot « déchet ». */
+  const restesDepot = tous2b5.map((t) => t.split(FRAGMENT_LIEUX).join('').split(FRAGMENT_DECHETS).join(''))
+    .filter((t) => /lieux? de dépôt/i.test(t));
+  verifier('…et « lieu(x) de dépôt » non plus, hors de ces deux fragments',
+    restesDepot.length === 0, restesDepot.map((t) => t.slice(0, 80)).join(' | '));
+
+  /* RIEN D'AUTRE (cahier §4). Le point du rang 13 est un motif : il dit à
+     l'artisan ce qui manque à SON devis, il ne décide rien pour personne. */
+  verifier('« Une décision automatique » ne parle pas des déchets ni des lieux de dépôt : le point du rang 13 est un motif, pas une décision',
+    decision.length > 0 && !/déchet|dépôt|jardinage/i.test(decision));
+  const propositionsDechets = tous2b5.flatMap((t) => t.split(/[.;:!?]\s+|\s+—\s+/))
+    .filter((p) => /déchet/i.test(p));
+  verifier('aucun texte ne promet que les déchets s’imprimeront sur le devis (rien ne sort avant 2c)',
+    propositionsDechets.length > 0 && propositionsDechets.every((p) => !/imprim|mention|figur/i.test(p)),
+    propositionsDechets.filter((p) => /imprim|mention|figur/i.test(p)).join(' | ') || 'aucune proposition ne nomme les déchets');
 }
 
 console.log('');

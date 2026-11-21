@@ -33,6 +33,22 @@
  * fichier rendrait l'assurance « expirée » un jour, sans que personne n'ait
  * touché à rien — la leçon des demandes de démonstration du 04/10.
  *
+ * UN LIEU DE DÉPÔT DES DÉCHETS (étape 2b-5, cahier T15) : sans lui, la carte
+ * « Déchets » d'un devis de démonstration n'aurait aucune case à cocher, et
+ * aucun devis ne pourrait se montrer complet sans fichier `.env`. Il est
+ * INVENTÉ, comme l'entreprise et l'assureur — une démonstration qui sert à
+ * la publicité ne prête rien à personne (26/10/2026). Cherchés le
+ * 21/11/2026, et absents tous les deux :
+ *   - la raison sociale « Recyclage de démonstration », dans l'annuaire
+ *     Sirene (recherche-entreprises.api.gouv.fr : 0 résultat, avec ou sans
+ *     accent) ;
+ *   - la voie « Chemin de la Démonstration », dans la Base Adresse
+ *     Nationale (api-adresse.data.gouv.fr : à Lambesc comme dans toute la
+ *     France, elle ne rend que d'AUTRES voies, au score de 0,52 au plus).
+ * La commune, elle, est réelle (Lambesc, 13410) : une commune est publique,
+ * et c'est celle du second établissement de l'entreprise de démonstration
+ * (`siret-demo.js`).
+ *
  * Ce fichier n'importe RIEN.
  */
 
@@ -48,8 +64,20 @@ function jour(d) {
 export const PRO_DEMO_EMETTEUR = '1';
 
 /**
- * `{ emetteur, assurances, tarifs }`, aux noms de la base. `tarifs` vaut
- * `null` : les frais n'ont jamais été déclarés, et c'est un des cinq manques.
+ * L'identifiant du lieu de dépôt de démonstration (2b-5) — FIXE, pour que
+ * les devis de démonstration puissent le citer dans `dechetsLieux`. De la
+ * forme d'un UUID, comme ceux que la base pose (`devis.dechets_lieux` est un
+ * `uuid[]`) : une démonstration plus permissive que la base masquerait ce
+ * que l'artisan rencontrera pour de vrai.
+ */
+export const LIEU_DEPOT_DEMO_ID = '00000000-0000-4000-8000-00000000d0e5';
+
+/**
+ * `{ emetteur, assurances, tarifs, lieux }`, aux noms de la base. `tarifs`
+ * vaut `null` : les frais n'ont jamais été déclarés, et c'est un des cinq
+ * manques. `lieux` porte UN lieu de dépôt des déchets (2b-5) : il ne change
+ * rien à « Prêt à émettre un devis ? » — `emetteur_incomplet()` ne lit pas
+ * les lieux, qui se jugent devis par devis.
  */
 export function fabriquerEmetteurDemo(maintenant = new Date()) {
   const t = maintenant instanceof Date ? maintenant.getTime() : new Date(maintenant).getTime();
@@ -107,5 +135,21 @@ export function fabriquerEmetteurDemo(maintenant = new Date()) {
       },
     ],
     tarifs: null,
+    /* Aux noms de la base, comme `emetteur_lieux_depot` les rend : déjà
+       NETTOYÉ (la forme que `tient_le_lieu_de_depot()` laisse), et passant
+       ses propres contraintes — `verifier-emetteur` le fait tourner. */
+    lieux: [
+      {
+        id: LIEU_DEPOT_DEMO_ID,
+        pro_id: PRO_DEMO_EMETTEUR,
+        raison_sociale: 'Recyclage de démonstration',
+        adresse: '3 Chemin de la Démonstration',
+        code_postal: '13410',
+        ville: 'Lambesc',
+        type_installation: 'decheterie_pro',
+        libelle: null,
+        created_at: ilYA20Jours,
+      },
+    ],
   };
 }

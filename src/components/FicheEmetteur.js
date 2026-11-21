@@ -4,7 +4,8 @@
  * Tout ce qui rend un devis légal et que le répertoire Sirene (INSEE) ne
  * donne pas : l'immatriculation, le capital, les adresses qu'Opus n'a pas,
  * les coordonnées, le régime de TVA, les assurances, le médiateur, les
- * garanties, les conditions (section 46) — et ses TARIFS (lot T, section 47) :
+ * garanties, les conditions (section 46), ses LIEUX DE DÉPÔT DES DÉCHETS
+ * (étape 2b-5, section 46.2 bis) — et ses TARIFS (lot T, section 47) :
  * frais de déplacement, taux horaire et son décompte, majoration de nuit et
  * de week-end, prix du devis, et l'interrupteur « Afficher mes tarifs sur
  * ma fiche ». C'est la SEULE porte qui les écrit : le réglage d'urgence de
@@ -56,6 +57,7 @@ import {
   MESSAGE_TAUX_ZERO, MESSAGE_MAJORATION_ZERO, MESSAGE_DEVIS_ZERO,
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
   parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance, attestationJointe,
+  libelleDuTypeDeLieu,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
@@ -268,6 +270,59 @@ const ChampPaiement = forwardRef(function ChampPaiement({ defaut }, ref) {
   );
 });
 
+/**
+ * VOS LIEUX DE DÉPÔT DES DÉCHETS, EN LECTURE (étape 2b-5, cahier T13 et
+ * annexe A.7) — le bloc que « Mon entreprise » montre avant d'entrer en
+ * édition, sur le modèle de « Vos tarifs ». Il MONTRE les lieux (raison
+ * sociale, type, adresse) ; vide, il dit que rien n'est exigé pour la fiche,
+ * mais que les devis le demanderont ; NON LU, il le dit, avec « Réessayer » —
+ * jamais « aucun lieu ». L'en-tête imprimé (`ApercuEntete`) ne les imprime
+ * pas : ils se choisissent devis par devis.
+ *
+ * Ici, et pas dans `MonEntreprise.js` : les rangées de l'édition et celles-ci
+ * lisent le type par la MÊME fonction (`libelleDuTypeDeLieu`), dans le même
+ * fichier.
+ */
+export function LieuxDeDepotEnLecture({ lieux = null, onModifier, onReessayer }) {
+  const lus = Array.isArray(lieux);
+  return (
+    <View style={s.blocLecture}>
+      <Text style={s.titreBloc} accessibilityRole="header">Vos lieux de dépôt des déchets</Text>
+      {!lus && (
+        <>
+          <Text style={s.texteBloc}>
+            {'Vos lieux de dépôt n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : réessayez.'}
+          </Text>
+          {!!onReessayer && <BtnMini outline label="Réessayer" onPress={onReessayer} style={s.cible} />}
+        </>
+      )}
+      {lus && lieux.length === 0 && (
+        <Text style={s.texteBloc}>
+          {'Aucun lieu de dépôt. Opus n’en exige aucun pour votre fiche ; mais un devis de travaux sur un bâtiment ou '
+            + 'de jardinage demande où iront ses déchets.'}
+        </Text>
+      )}
+      {lus && lieux.map((l) => (
+        <View key={String(l.id)} style={s.lieuLu}>
+          <Text style={s.optionLibelle}>{l.raison_sociale}</Text>
+          <Text style={s.optionAide}>{libelleDuTypeDeLieu(l)}</Text>
+          <Text style={s.optionAide}>{`${l.adresse}, ${l.code_postal} ${l.ville}`}</Text>
+        </View>
+      ))}
+      {lus && (
+        <Pressable
+          onPress={onModifier}
+          accessibilityRole="button"
+          accessibilityLabel={lieux.length ? 'Modifier mes lieux de dépôt' : 'Déclarer mes lieux de dépôt'}
+          style={({ pressed }) => [s.rangeeLecture, pressed && APPUI.discret]}
+        >
+          <Text style={s.rangeeLectureTexte}>{lieux.length ? 'Modifier mes lieux de dépôt' : 'Déclarer mes lieux de dépôt'}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 /* ==================================================================== */
 /*  LE FORMULAIRE                                                        */
 /* ==================================================================== */
@@ -275,6 +330,11 @@ const ChampPaiement = forwardRef(function ChampPaiement({ defaut }, ref) {
 const FicheEmetteur = forwardRef(function FicheEmetteur({
   entreprise = null, preuveTva = null, reference, depart = null, assurances = [],
   onAjouterAssurance, onOuvrirAssurance, onChoisirMediateur,
+  /* 2b-5 : les lieux de dépôt des déchets — une LISTE, ou `null` quand ils
+     n'ont pas pu être lus (la table absente : `monEmetteur()` rend `null`,
+     jamais `[]`). SANS défaut à `[]` : « aucun lieu » dirait à un artisan qui
+     en a qu'il n'en a pas, et l'inviterait au doublon (cahier T12). */
+  lieux = null, onAjouterLieu, onOuvrirLieu,
   telephoneFiche = '', emailFiche = '', emailCompte = '',
   erreur = null, onEffacerErreur, onPosition,
 }, ref) {
@@ -882,6 +942,61 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
         </Pressable>
       </Section>
 
+      {/* 7 bis. — LES LIEUX DE DÉPÔT DES DÉCHETS (étape 2b-5, cahier §3.6 et
+          annexe A.7) : rangés une fois ici, choisis ensuite dans la carte
+          « Déchets » de chaque devis. Sur le modèle des assurances : une
+          rangée par lieu (sa raison sociale ; son type · sa commune ; un
+          chevron), puis « Ajouter un lieu de dépôt ». Chaque lieu s'écrit
+          À PART de « Enregistrer mes informations de devis », comme une
+          assurance : par son propre formulaire (`FicheLieuDepot`).
+          UNE LISTE QU'ON N'A PAS PU LIRE N'EST JAMAIS « AUCUN LIEU » (T12) :
+          elle le dit, et ne propose pas d'en ajouter — un doublon naîtrait
+          d'un lieu qui existe déjà. */}
+      <Section ancre="lieux" titre="Vos lieux de dépôt des déchets" onPosition={pos}>
+        {lieux == null ? (
+          <Aide>
+            {'Vos lieux de dépôt n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : fermez « Mon '
+              + 'entreprise », puis rouvrez-la pour réessayer.'}
+          </Aide>
+        ) : (
+          <>
+            {lieux.length === 0 && (
+              <Aide>
+                {'Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés une '
+                  + 'fois, vous les choisissez ensuite dans chaque devis.'}
+              </Aide>
+            )}
+            {lieux.map((l) => {
+              const typeLu = libelleDuTypeDeLieu(l);
+              return (
+                <Pressable
+                  key={String(l.id)}
+                  onPress={() => onOuvrirLieu(l)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${l.raison_sociale}, ${typeLu}, ${l.ville}. Modifier ce lieu de dépôt`}
+                  style={({ pressed }) => [s.assurance, pressed && APPUI.discret]}
+                >
+                  <View style={s.optionTexte}>
+                    <Text style={s.optionLibelle}>{l.raison_sociale}</Text>
+                    <Text style={s.optionAide} numberOfLines={2}>{`${typeLu} · ${l.ville}`}</Text>
+                  </View>
+                  <ChevronRight size={15} color={C.muted} />
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={onAjouterLieu}
+              accessibilityRole="button"
+              accessibilityLabel="Ajouter un lieu de dépôt"
+              style={({ pressed }) => [s.ajouter, pressed && APPUI.plein]}
+            >
+              <Plus size={15} color={C.accent2} />
+              <Text style={s.ajouterTexte}>Ajouter un lieu de dépôt</Text>
+            </Pressable>
+          </>
+        )}
+      </Section>
+
       {/* 8. — LE MÉDIATEUR : la liste officielle d'abord */}
       <Section ancre="mediateur" titre="Médiateur de la consommation" onPosition={pos}>
         <Aide>
@@ -1322,4 +1437,19 @@ const s = StyleSheet.create({
   /* Le blanc sur le bleu acier : 9,27 : 1 (theme.js). */
   principalListeTexte: { fontFamily: F.oswald6, fontSize: T.corps, color: C.surface },
   cible: { minHeight: TOUCHE, alignSelf: 'flex-start', marginTop: S.sm },
+  /* LE BLOC EN LECTURE (2b-5) porte l'information : angle vif, comme le
+     bloc « Vos tarifs » de `MonEntreprise.js`. */
+  blocLecture: {
+    gap: S.sm, padding: S.md, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line,
+    borderRadius: R.vif,
+  },
+  titreBloc: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink },
+  texteBloc: { fontFamily: F.inter, fontSize: T.courant, color: C.ink, lineHeight: interligne(T.courant) },
+  lieuLu: { gap: S.xs, paddingLeft: S.sm, borderLeftWidth: S.xs, borderLeftColor: C.line },
+  /* Une rangée de réglage : 44 points par sa boîte, jamais un `hitSlop`. */
+  rangeeLecture: {
+    flexDirection: 'row', alignItems: 'center', minHeight: TOUCHE,
+    paddingHorizontal: S.md, borderWidth: 1, borderColor: C.bordChamp, backgroundColor: C.surface,
+  },
+  rangeeLectureTexte: { flex: 1, fontFamily: F.inter6, fontSize: T.courant, color: C.accent2 },
 });

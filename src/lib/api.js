@@ -49,6 +49,7 @@ import { reponseDemo, IDENTITE_DEMO_DU_PRO } from '../data/siret-demo';
 import {
   pourLaBase, nettoyerEmetteur, nettoyerAssurance, nettoyerTarifs,
   validerEmetteur, validerAssurance, validerTarifs, motifsEmetteur, lireMotifs,
+  nettoyerLieuDepot, validerLieuDepot,
 } from './emetteur';
 import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo';
 /* Les tarifs réunis (section 47, lot T). `tarifs.js` n'importe que
@@ -2141,7 +2142,7 @@ function ficheEmetteurDemo(moi) {
   if (!emetteursDemo[cle]) {
     emetteursDemo[cle] = cle === String(PRO_DEMO_EMETTEUR)
       ? fabriquerEmetteurDemo(new Date())
-      : { emetteur: null, assurances: [], tarifs: null };
+      : { emetteur: null, assurances: [], tarifs: null, lieux: [] };
   }
   return emetteursDemo[cle];
 }
@@ -2152,10 +2153,14 @@ function refusDeContrainte(table, contrainte) {
     `new row for relation "${table}" violates check constraint "${contrainte}"`);
 }
 
+/* 2b-5 : les lieux de dépôt des déchets voyagent avec le reste de la fiche.
+   Une fiche de démonstration qui n'en porte pas (celle d'avant 2b-5) en a
+   ZÉRO — une démonstration a toujours LU sa liste : jamais « non lus ». */
 const copieEmetteur = (f) => ({
   emetteur: f.emetteur ? { ...f.emetteur } : null,
   assurances: f.assurances.map((a) => ({ ...a })),
   tarifs: f.tarifs ? { ...f.tarifs } : null,
+  lieux: Array.isArray(f.lieux) ? f.lieux.map((l) => ({ ...l })) : [],
 });
 
 /* --------------------------------------------------------------------------
@@ -2180,11 +2185,20 @@ async function monEmetteurSupabase() {
      avec les trois autres, parce que l'en-tête et ce qui manque en
      dépendent ; et elle échoue avec elles — un numéro qu'on n'a pas pu
      lire ne doit pas ressembler à un numéro absent. */
-  const [e, a, t, v0] = await Promise.all([
+  /* La cinquième (2b-5, section 46.2 bis) : les lieux où l'artisan dépose
+     les déchets de ses chantiers, dans l'ordre de la base (`created_at`,
+     puis `id` : deux lieux rangés dans la même milliseconde gardent un ordre
+     fixe — c'est l'ordre dans lequel un devis les cite). Elle est rangée
+     AVANT la preuve de TVA, qui reste la DERNIÈRE du tableau : la relecture
+     de la preuve (`declare_le`, 2b-2) est écrite et contrôlée sous cette
+     forme (`verifier-emetteur`). */
+  const [e, a, t, l, v0] = await Promise.all([
     supabase.from('emetteur').select('*').eq('pro_id', currentUserId).maybeSingle(),
     supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }),
     supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
+    supabase.from('emetteur_lieux_depot').select('*').eq('pro_id', currentUserId)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('preuves_tva').select('siren, numero, reconnu_le, source, declare_le').eq('pro_id', currentUserId)
       .maybeSingle(),
   ]);
@@ -2204,11 +2218,21 @@ async function monEmetteurSupabase() {
      20/10/2026, une version en avance sur la base (311f739) avait cassé
      « Mon entreprise » entière. Toute autre erreur lève. */
   if (v.error && !tableAbsente(v.error)) throw v.error;
+  /* LES LIEUX DE DÉPÔT (2b-5, T12) : toute erreur LÈVE, comme pour les
+     assurances — la lecture entière tombe, et l'écran dit qu'elle n'a pas pu
+     se faire (le chemin choisi en 2b-4, noté dans `docs/A-FAIRE.md`). SAUF la
+     table absente : une base pas encore migrée, ou un cache de PostgREST pas
+     encore rechargé juste après la migration (la table existe, PostgREST ne
+     le sait pas). Elle rend `null` — NON LUS —, JAMAIS `[]` : « aucun lieu »
+     dirait à un artisan qui en a qu'il n'en a pas, et l'inviterait au
+     doublon. */
+  if (l.error && !tableAbsente(l.error)) throw l.error;
   return {
     emetteur: e.data || null,
     assurances: a.data || [],
     tarifs: t.data || null,
     preuveTva: v.error ? null : (v.data || null),
+    lieux: l.error ? null : (l.data || []),
   };
 }
 
@@ -2456,6 +2480,89 @@ async function retirerAssuranceDemo(id) {
 }
 
 export const retirerAssurance = hasSupabase ? retirerAssuranceSupabase : retirerAssuranceDemo;
+
+/* --------------------------------------------------------------------------
+   UN LIEU DE DÉPÔT DES DÉCHETS (2b-5, section 46.2 bis) — la liste est une
+   table fille, sur le modèle exact des assurances : rangé une fois dans
+   « Mon entreprise », choisi ensuite dans chaque devis.
+
+   `insert` pour un lieu nouveau, `update(...).eq('id').eq('pro_id')` pour un
+   lieu existant, `delete` pour le retirer — JAMAIS d'`upsert` (PostgreSQL
+   juge la ligne PROPOSÉE avant de la fusionner : le piège du lot T).
+   L'identifiant est choisi par la BASE, comme celui d'une assurance : un
+   lieu enregistré deux fois après une réponse perdue se VOIT dans la liste,
+   et se retire (noté, BASE-12).
+
+   RETIRER UN LIEU ne récrit AUCUN devis : un brouillon qui le citait garde
+   son identifiant, orphelin, que plus rien ne compte — son point revient, et
+   l'identifiant ne disparaît qu'au prochain appui de l'artisan sur une case
+   de lieu (T10). Aucun déclencheur ne le fait à sa place.
+   -------------------------------------------------------------------------- */
+async function enregistrerLieuDepotSupabase(valeurs, idExistant = null) {
+  const ligne = pourLaBase('emetteur_lieux_depot', valeurs || {});
+  if (idExistant) {
+    const { data, error } = await supabase.from('emetteur_lieux_depot')
+      .update(ligne).eq('id', idExistant).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await supabase.from('emetteur_lieux_depot')
+    .insert({ ...ligne, pro_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* LA DÉMONSTRATION : chaque écriture d'un lieu y prend une pause NOMMÉE —
+   `attendreLieux`, de `PAUSE_LIEUX_DEMO` millisecondes —, le CROCHET de
+   `mesure-devis` : un script l'allonge pour voir « Mon entreprise » refuser
+   de se fermer pendant un envoi. Elle n'est ni celle des devis ni celle des
+   postes : allonger l'une ne doit pas changer les autres. Puis elle VALIDE
+   comme la base (`validerLieuDepot`, les mots de PostgreSQL), et range comme
+   elle (`nettoyerLieuDepot` : la date de création posée ici, jamais par le
+   téléphone). */
+const PAUSE_LIEUX_DEMO = 280;
+async function attendreLieux(ms) {
+  await new Promise((r) => { setTimeout(r, ms); });
+}
+
+async function enregistrerLieuDepotDemo(valeurs, idExistant = null) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  const avant = Array.isArray(f.lieux) ? f.lieux : [];
+  const ancien = idExistant ? avant.find((x) => String(x.id) === String(idExistant)) : null;
+  if (idExistant && !ancien) throw new Error('Ce lieu de dépôt n’existe plus : rechargez l’écran.');
+  const ligne = { ...(ancien || {}), ...pourLaBase('emetteur_lieux_depot', valeurs || {}) };
+  const refus = validerLieuDepot(ligne);
+  if (!refus.ok) throw refusDeContrainte('emetteur_lieux_depot', refus.contrainte);
+  const propre = {
+    ...nettoyerLieuDepot(ligne, ancien, new Date()),
+    id: ancien ? ancien.id : nouvelIdentifiant(),
+    pro_id: moi,
+  };
+  f.lieux = ancien ? avant.map((x) => (String(x.id) === String(idExistant) ? propre : x)) : [...avant, propre];
+  return { ...propre };
+}
+
+export const enregistrerLieuDepot = hasSupabase ? enregistrerLieuDepotSupabase : enregistrerLieuDepotDemo;
+
+async function retirerLieuDepotSupabase(id) {
+  const { error } = await supabase.from('emetteur_lieux_depot')
+    .delete().eq('id', id).eq('pro_id', currentUserId);
+  if (error) throw error;
+  return true;
+}
+
+async function retirerLieuDepotDemo(id) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const f = ficheEmetteurDemo(moiEnDemo());
+  f.lieux = (Array.isArray(f.lieux) ? f.lieux : []).filter((x) => String(x.id) !== String(id));
+  return true;
+}
+
+export const retirerLieuDepot = hasSupabase ? retirerLieuDepotSupabase : retirerLieuDepotDemo;
 
 /* L'ATTESTATION, dans l'espace PRIVÉ `documents`, sous
    `<compte>/attestation-assurance-<horodatage>.<ext>` : un seul niveau, dans
@@ -3004,6 +3111,20 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
      `null` (pas dit), 0 (gratuit), un montant (payant). Hors des totaux : la
      base ne le recalcule pas, elle le range. */
   poser('cout_devis_centimes', 'coutDevisCentimes');
+  /* 2b-5 : les déchets du chantier (49.4 sexies) — huit colonnes, telles que
+     la carte les tient. AUCUNE normalisation : un tableau vide (que la carte
+     n'écrit jamais) part tel quel, et la base le REFUSE sous le nom de sa
+     contrainte — un défaut visible, que `mesure-devis` voit, jamais un
+     silence qui le changerait en « rien de dit ». Le coût estimé est hors
+     des totaux : la base ne le recalcule pas, elle le range. */
+  poser('dechets_concerne', 'dechetsConcerne');
+  poser('dechets_quantite_milliemes', 'dechetsQuantiteMilliemes');
+  poser('dechets_unite', 'dechetsUnite');
+  poser('dechets_flux', 'dechetsFlux');
+  poser('dechets_sur_place', 'dechetsSurPlace');
+  poser('dechets_lieux', 'dechetsLieux');
+  poser('dechets_sans_depot', 'dechetsSansDepot');
+  poser('dechets_cout_centimes', 'dechetsCoutCentimes');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3444,12 +3565,17 @@ async function motifsRefusRemiseDemo(devisId) {
   /* 2b-3 : les assurances de « Mon entreprise » de démonstration — le rang
      11 (l'attestation décennale) les lit ; le jour prend son défaut, celui
      du téléphone. */
+  /* 2b-5 : les lieux de dépôt de « Mon entreprise » de démonstration — le
+     rang 13 (les déchets) ne compte qu'un lieu choisi qui y EXISTE, chez
+     cette entreprise (`{ id, pro_id }`, filtrés par le miroir sur le
+     `proId` du devis). Une fiche qui n'en porte pas en a zéro. */
   return motifsDeRemise({
     devis: lu.devis,
     lignes: lu.lignes,
     regime: regimeEtSaDate(ficheEmetteurDemo(moi)).regime,
     motifsEmetteur: motifsEmetteur(entreeDesMotifsEmetteurDemo(moi)),
     assurances: ficheEmetteurDemo(moi).assurances,
+    lieux: lieuxDe(copieEmetteur(ficheEmetteurDemo(moi))),
   });
 }
 export const motifsRefusRemise = hasSupabase ? motifsRefusRemiseSupabase : motifsRefusRemiseDemo;
@@ -3580,6 +3706,15 @@ function regimeEtSaDate(f) {
 function assurancesDe(f) {
   return f && Array.isArray(f.assurances) ? f.assurances : null;
 }
+/* LES LIEUX DE DÉPÔT de la même fiche (2b-5, T12) : une LISTE (les lignes
+   d'`emetteur_lieux_depot`, aux noms de la base, dans l'ordre de la base),
+   ou `null` quand la fiche ne les porte pas — la table absente : NON LUS,
+   jamais `[]`. La carte « Déchets » d'un devis en tire ses cases, et l'état
+   de la liste (`etatDesLieux`, devis.js) se déduit de celui du régime, lu
+   par la MÊME réponse. */
+function lieuxDe(f) {
+  return f && Array.isArray(f.lieux) ? f.lieux : null;
+}
 async function monRegimeSupabase() {
   return regimeEtSaDate(await monEmetteurSupabase()).regime;
 }
@@ -3589,10 +3724,12 @@ async function monRegimeDemo() {
 export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
 
 /**
- * MON RÉGIME, LA DATE DE SA DÉCLARATION, ET MES ASSURANCES —
- * `{ regime, declareLe, assurances }` (lot P, section 50 ; la date est
- * `regime_tva_declare_le`, posée par la BASE au changement de régime,
- * section 46 ; les assurances depuis 2b-4).
+ * MON RÉGIME, LA DATE DE SA DÉCLARATION, MES ASSURANCES ET MES LIEUX DE
+ * DÉPÔT — `{ regime, declareLe, assurances, lieux }` (lot P, section 50 ; la
+ * date est `regime_tva_declare_le`, posée par la BASE au changement de
+ * régime, section 46 ; les assurances depuis 2b-4 ; les lieux de dépôt des
+ * déchets depuis 2b-5, T12 : la carte « Déchets » d'un devis les choisit,
+ * et la MÊME lecture les rend — une, jamais deux).
  *
  * POURQUOI LES ASSURANCES ICI (2b-4, T9, T20) : l'avis « votre attestation
  * décennale est valable jusqu'au … » a besoin de leurs dates de fin, et
@@ -3615,11 +3752,11 @@ export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
  */
 async function monRegimeEtSaDateSupabase() {
   const f = await monEmetteurSupabase();
-  return { ...regimeEtSaDate(f), assurances: assurancesDe(f) };
+  return { ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f) };
 }
 async function monRegimeEtSaDateDemo() {
   const f = await monEmetteurDemo();
-  return { ...regimeEtSaDate(f), assurances: assurancesDe(f) };
+  return { ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f) };
 }
 export const monRegimeEtSaDate = hasSupabase ? monRegimeEtSaDateSupabase : monRegimeEtSaDateDemo;
 

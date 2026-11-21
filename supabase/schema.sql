@@ -10932,6 +10932,11 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --    - trois tables PRIVÉES : `emetteur` (une ligne par entreprise),
 --      `emetteur_assurances` (une liste), `tarifs_pro` (les frais de
 --      déplacement du devis) ;
+--    - DEPUIS L'ÉTAPE 2b-5 (21/11/2026), une QUATRIÈME table privée,
+--      `emetteur_lieux_depot` (46.2 bis) : les lieux où l'artisan dépose
+--      les déchets de ses chantiers, rangés une fois ici et choisis ensuite
+--      dans chaque devis (49.4 sexies), avec son propre déclencheur de
+--      nettoyage ;
 --    - trois déclencheurs de NETTOYAGE, qui vivent avec leurs colonnes ;
 --    - une fonction de lecture, `emetteur_incomplet()`, qui rend ce qui
 --      manque — chaque élément « cle: phrase ».
@@ -10969,8 +10974,8 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --  public tout le reste. D'où la règle écrite en tête de cette table :
 --  ON N'Y RANGE JAMAIS RIEN QUI DOIVE RESTER PRIVÉ.
 --
---  PERSONNE D'AUTRE NE LIT CES TROIS TABLES — et ce qu'il faut en dire
---  honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
+--  PERSONNE D'AUTRE NE LIT CES TROIS TABLES (QUATRE depuis 2b-5) — et ce
+--  qu'il faut en dire honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
 --  donne à l'administration d'Opus la lecture des informations de devis
 --  d'un artisan ni de ses tarifs : le propriétaire, du métier, ne lit pas
 --  les prix des autres artisans (`DONNEES-DES-ARTISANS.md` §5.2). La seule
@@ -11240,6 +11245,188 @@ comment on table public.emetteur_assurances is
   'Les assurances professionnelles qu''un artisan déclare pour ses devis. '
   'FACULTATIVES (décision du propriétaire, 18/10/2026) ; le n° de contrat '
   'aussi. PRIVÉE, comme `emetteur`. Section 46.';
+
+-- --------------------------------------------------------------------------
+--  46.2 bis `emetteur_lieux_depot` — où l'artisan dépose les déchets de ses
+--           chantiers (lot 2b, étape 2b-5, 21/11/2026)
+--
+--  La loi demande, sur tout devis de travaux sur un bâtiment (construire,
+--  rénover, démolir) et sur tout devis de jardinage, « le ou les points de
+--  collecte » où l'entreprise prévoit de déposer les déchets : leur raison
+--  sociale, leur adresse et leur type d'installation (code de
+--  l'environnement, L. 541-21-2-3 et D. 541-45-1 I 3°). Un artisan dépose
+--  presque toujours aux mêmes endroits : il les RANGE UNE FOIS ici, dans
+--  « Mon entreprise », et les CHOISIT ensuite dans chaque devis (décision
+--  Q4 = 1 du propriétaire, 17/11/2026). Le devis ne garde que leurs
+--  identifiants (`devis.dechets_lieux`, 49.4 sexies) ; la remise de 2c
+--  COPIERA les lieux choisis dans le devis remis, et figera ce tableau.
+--
+--  LE MODÈLE EST `emetteur_assurances` (46.2), pièce par pièce : une table
+--  fille, une ligne par lieu, la clé vers la fiche professionnelle en
+--  `cascade`, des colonnes `text` nullables, les contraintes posées après
+--  coup et nommées en `_check`, une date de création posée par la base,
+--  aucun `modifie_le`. Ce qui s'imprimera (la raison sociale, l'adresse —
+--  rue, code postal, commune — et le type d'installation) est tenu par UNE
+--  contrainte nommée, `emetteur_lieu_complet_check`, plutôt que par des
+--  `not null` : un `not null` violé rend un refus anonyme (23502), sans
+--  phrase qui dise quoi corriger. Un lieu rangé est donc TOUJOURS complet :
+--  le rang 13 de la liste (49.9) n'a besoin que d'« au moins un lieu
+--  choisi qui existe », jamais d'un motif par lieu.
+--
+--  SON NOM COMMENCE PAR `emetteur_` : c'est une table d'« Mon entreprise ».
+--  Mais le tiret bas est une LETTRE de mot, pour JavaScript comme pour
+--  PostgreSQL : `emetteur_lieux_depot` ne contient PAS le mot `emetteur`, et
+--  une liste fermée qui dit qui lit ces tables, écrite en mots entiers, la
+--  laisserait passer sans un mot. Elle entre donc, EN LE DÉCIDANT, dans
+--  chacune de ces listes (`verifier-emetteur`, `verifier-legal`, les essais
+--  46 et 47).
+--
+--  LE ROGNAGE DES QUATRE TEXTES qui s'imprimeront (raison sociale, adresse,
+--  commune, libellé) est celui de LA classe de blancs du projet, invisibles
+--  compris — celle des textes qui s'affichent (sections 47, 49 et 50) —,
+--  écrite EN LIGNE et en `chr(n)`, comme dans `tient_le_poste()` : aucune
+--  barre oblique inverse (le transport du connecteur la changerait), et
+--  aucune classe rangée dans une variable (elle échapperait au compte des
+--  copies que fait `verifier-devis`, §17). Quatre copies de plus, et la
+--  classe n'est PAS consolidée ici : ce serait réécrire cinq fonctions de
+--  quatre lots finis, une refonte que le propriétaire valide d'abord
+--  (décision T1 du cahier 2b-5). Le CODE POSTAL suit la règle de la section
+--  46, celle de l'adresse de l'entreprise : rogné aux BOUTS par la PETITE
+--  classe (espace, tabulation, retour chariot, saut de ligne), puis cinq
+--  chiffres. Un lieu belge ou suisse (quatre chiffres) est donc refusé :
+--  c'est dit au propriétaire, et noté.
+--
+--  PRIVÉE, comme les trois autres : `est_mon_entreprise(pro_id)` des deux
+--  côtés, aucune politique pour l'administration ni pour `anon`. `for all`
+--  est juste ici : retirer un lieu n'engage aucun tiers. Un devis qui le
+--  citait garde son identifiant, ORPHELIN, que plus rien ne compte : son
+--  point revient (49.9), et l'identifiant ne disparaît du devis qu'au
+--  prochain appui de l'artisan sur une case de lieu. AUCUN déclencheur ne
+--  récrit les devis quand un lieu part.
+-- --------------------------------------------------------------------------
+create table if not exists public.emetteur_lieux_depot (
+  id                 uuid primary key default gen_random_uuid(),
+  pro_id             uuid not null references public.professional_profiles(id) on delete cascade,
+  raison_sociale     text,
+  adresse            text,
+  code_postal        text,
+  ville              text,
+  type_installation  text,
+  -- Seulement pour le type « autre » : le déclencheur l'efface ailleurs.
+  libelle            text,
+  -- Posée par la BASE (le déclencheur), jamais par le téléphone. Son
+  -- lecteur : l'ordre de la liste, `created_at, id`.
+  created_at         timestamptz default clock_timestamp()
+);
+
+create index if not exists idx_emetteur_lieux_depot_pro
+  on public.emetteur_lieux_depot (pro_id);
+
+alter table public.emetteur_lieux_depot enable row level security;
+
+/* LES QUATRE CONTRAINTES, dans l'ordre alphabétique de leurs noms — celui
+   dans lequel PostgreSQL nomme la première qu'une ligne viole (mesuré au
+   lot 1), et celui que `premierRefus` (`src/lib/emetteur.js`) suit déjà.
+     - le code postal : cinq chiffres, la règle de la section 46 et du lieu
+       des travaux d'un devis ;
+     - la CROISÉE de la loi : la raison sociale, l'adresse, le code postal,
+       la commune et le type, tous écrits ; le libellé écrit si et seulement
+       si le type est « autre » (ailleurs, le déclencheur l'efface : il
+       s'imprimerait à côté d'un type qui dit déjà tout) ;
+     - les longueurs ;
+     - le type, dans une liste FERMÉE écrite en toutes lettres — une
+       fonction appelée par une contrainte en ferait une gardienne, que
+       `verifier-portes` exigerait exécutable par `authenticated`. */
+alter table public.emetteur_lieux_depot drop constraint if exists emetteur_lieu_code_postal_check;
+alter table public.emetteur_lieux_depot add constraint emetteur_lieu_code_postal_check
+  check (code_postal is null or code_postal ~ '^[0-9]{5}$');
+alter table public.emetteur_lieux_depot drop constraint if exists emetteur_lieu_complet_check;
+alter table public.emetteur_lieux_depot add constraint emetteur_lieu_complet_check
+  check (raison_sociale is not null and adresse is not null and code_postal is not null
+         and ville is not null and type_installation is not null
+         and (type_installation = 'autre') = (libelle is not null));
+alter table public.emetteur_lieux_depot drop constraint if exists emetteur_lieu_longueurs_check;
+alter table public.emetteur_lieux_depot add constraint emetteur_lieu_longueurs_check
+  check (coalesce(char_length(raison_sociale), 0) <= 120
+         and coalesce(char_length(adresse), 0) <= 200
+         and coalesce(char_length(ville), 0) <= 100
+         and coalesce(char_length(libelle), 0) <= 80);
+alter table public.emetteur_lieux_depot drop constraint if exists emetteur_lieu_type_check;
+alter table public.emetteur_lieux_depot add constraint emetteur_lieu_type_check
+  check (type_installation is null or type_installation in
+         ('decheterie_publique', 'decheterie_pro', 'negoce', 'tri', 'valorisation',
+          'stockage_inertes', 'stockage_non_dangereux', 'stockage_dangereux', 'vegetaux',
+          'collecteur', 'depot_entreprise', 'autre'));
+
+/* LE DÉCLENCHEUR, créé AVANT d'être posé, et AVANT le balayage de la
+   section 43 (qui lui retire `execute` : personne ne peut l'appeler
+   autrement que par une écriture). `security invoker`, `search_path` fixé.
+   Son corps ne nomme AUCUNE table : les listes fermées des essais 46 et 47
+   relisent le texte des fonctions. */
+create or replace function public.tient_le_lieu_de_depot()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.raison_sociale := nullif(btrim(coalesce(new.raison_sociale, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.adresse := nullif(btrim(coalesce(new.adresse, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.ville := nullif(btrim(coalesce(new.ville, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.libelle := nullif(btrim(coalesce(new.libelle, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.code_postal := nullif(btrim(coalesce(new.code_postal, ''), ' ' || chr(9) || chr(13) || chr(10)), '');
+
+  if new.type_installation is distinct from 'autre' then
+    new.libelle := null;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    new.created_at := old.created_at;
+  else
+    new.created_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_lieu_de_depot
+  before insert or update on public.emetteur_lieux_depot
+  for each row execute function public.tient_le_lieu_de_depot();
+
+comment on function public.tient_le_lieu_de_depot() is
+  'Nettoie un lieu de dépôt des déchets avant écriture : la raison sociale, l''adresse, la commune et le libellé '
+  'rognés par la classe de blancs du projet (en chr(n), invisibles compris), le code postal rogné aux bouts par '
+  'la petite classe de la section 46, le libellé effacé hors du type « autre », la date de création posée par la '
+  'base à l''insertion puis gardée. security invoker. Section 46.2 bis.';
+
+comment on table public.emetteur_lieux_depot is
+  'Les lieux où un artisan dépose les déchets de ses chantiers (déchèteries, plateformes, collecteurs) : '
+  'raison sociale, adresse, type d''installation. Rangés une fois, choisis ensuite dans chaque devis '
+  '(devis.dechets_lieux, par leurs identifiants). PRIVÉE, comme emetteur : lisible par son seul titulaire, '
+  'aucune politique pour l''administration ni pour anon. Section 46.2 bis.';
+
+/* QUI LIT, QUI ÉCRIT — la forme de 46.5, pour la même raison : une seule
+   politique `for all`, `est_mon_entreprise()` des deux côtés, aucun
+   `auth.uid() = …` écrit à la main. */
+drop policy if exists "mes lieux de depot" on public.emetteur_lieux_depot;
+create policy "mes lieux de depot" on public.emetteur_lieux_depot
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+/* LES DROITS DE TABLE, EN TOUTES LETTRES, sans attendre qu'une politique
+   les rattrape (la leçon de 18.2), ni que le balayage de 42 bis passe : ce
+   balayage n'est pas dans la migration de 2b-5 (critique BASE-9), et une
+   table créée par un autre rôle que `postgres` ne naît pas sans ces droits.
+   `anon` n'a rien : un visiteur reçoit « permission denied », pas une liste
+   vide. `authenticated` n'a ni `truncate` (qu'AUCUNE politique RLS ne
+   filtre), ni `references`, ni `trigger`. MAINTAIN n'existe que sous
+   PostgreSQL 17 : ici, c'est le balayage de 42 bis qui le retire, sous
+   condition de version ; sur la vraie base, il part dans un appel À PART de
+   la migration, comme au lot S-d (M1d), pour qu'un refus n'annule rien
+   d'autre. */
+revoke all on public.emetteur_lieux_depot from anon;
+revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated;
 
 -- --------------------------------------------------------------------------
 --  46.3 `tarifs_pro` — privée aujourd'hui, publique PAR LIGNE plus tard
@@ -13320,9 +13507,125 @@ comment on column public.devis.cout_devis_centimes is
   'des totaux. 49.4 quinquies.';
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — trente-quatre ici, toutes en `_check`, et une
---       trente-cinquième en 49.6 ter (`devis_calculs_check`, posée APRÈS son
---       rattrapage)
+--  49.4 sexies LES DÉCHETS DU CHANTIER (lot 2b, étape 2b-5, 21/11/2026)
+--
+--  Ajoutées ICI pour la même raison que 49.4 bis à quinquies : les droits
+--  d'écriture vivent en 49.7. La loi demande, sur tout devis de travaux de
+--  construction, de rénovation ou de démolition d'un bâtiment, et sur tout
+--  devis de jardinage, quel que soit le client (code de l'environnement,
+--  L. 541-21-2-3 I et D. 541-45-1 I) : une estimation de la QUANTITÉ de
+--  déchets que l'entreprise produira ; le TRI (la nature des déchets pour
+--  lesquels une collecte séparée est prévue) ; les LIEUX où elle prévoit de
+--  les déposer (raison sociale, adresse, type d'installation) ; une
+--  estimation des COÛTS de gestion et d'enlèvement. Il suffit qu'une seule
+--  information manque pour exposer à une amende administrative (jusqu'à
+--  3 000 €, 15 000 € pour une personne morale). Décision Q4 = 1 du
+--  propriétaire (17/11/2026), précisée par ses réponses du 21/11 : des FAITS
+--  FERMÉS, écrits dans une carte « Déchets » par devis, dans les mots des
+--  textes ; aucun texte libre ; les lieux, rangés une fois dans « Mon
+--  entreprise » (46.2 bis). Opus ne compose aucune phrase qui tire une
+--  conclusion de droit : la phrase imprimée s'écrira en 2c.
+--
+--  HUIT COLONNES, NULLABLES, SANS DÉFAUT : un fait de 2b naît vide, et le
+--  vide vaut LE CAS LE PLUS PROTECTEUR. PostgreSQL n'écrit alors AUCUNE
+--  ligne existante (aucun rattrapage, aucune `modifie_le` qui bouge). La
+--  base les lit par `is not false`, `is true`, `is null` — jamais par
+--  `not x` (la leçon du lot 0a).
+--
+--    `dechets_concerne` (réponse P1 du 21/11) : la réponse à « S'agit-il de
+--      travaux sur un bâtiment, ou de jardinage ? », en tête de la carte.
+--      VIDE = « Oui », par prudence (le modèle d'`engage_decennale`) : un
+--      oubli ne retire jamais l'exigence. « Non » tait les quatre
+--      rubriques, sans rien effacer de ce qui est écrit.
+--    `dechets_quantite_milliemes` et `dechets_unite` : la quantité estimée,
+--      en millièmes de l'unité (la convention des quantités du devis), et
+--      son unité, `m3` ou `t` — une PAIRE, que l'écran écrit ensemble.
+--    `dechets_flux` : les déchets collectés à part, une liste FERMÉE (la
+--      liste élargie de quatorze sortes, réponse P4), dans l'ordre canonique
+--      de l'écran. VIDE DE VALEUR = rien de dit ; `{aucune}` = « Aucune
+--      collecte séparée », une valeur à elle, EXCLUSIVE des autres. JAMAIS
+--      DE TABLEAU VIDE : il naît naturellement d'une case décochée, et dirait
+--      une chose que l'artisan n'a pas dite (critique BASE-1) — sa
+--      contrainte le refuse, sous son nom.
+--    `dechets_sur_place` : ce qui RESTE sur le chantier, `broyage` ou
+--      `compostage`, facultatif ; vide de valeur = rien de dit, jamais de
+--      tableau vide. Il NE COMPLÈTE JAMAIS LE TRI : le broyage n'est pas une
+--      collecte séparée, et le décret en fait un tiret à part (critique
+--      DROIT-3). Une colonne à part évite une contrainte qui lierait deux
+--      sens dans un même tableau.
+--    `dechets_lieux` : les lieux choisis, des identifiants de
+--      `emetteur_lieux_depot`, dans l'ordre de la liste de « Mon
+--      entreprise » ; vide de valeur = aucun ; jamais de tableau vide ; dix
+--      au plus.
+--    `dechets_sans_depot` (réponse P6) : VRAI, par la seule pastille
+--      « Aucun dépôt : rien ne quittera le chantier » ; VIDE sinon ; JAMAIS
+--      faux. Vrai, il compte comme réponse à la rubrique des lieux.
+--    `dechets_cout_centimes` (réponse P2) : l'estimation des coûts, un
+--      montant TOUJOURS chiffré, jamais 0 (de 1 à 999 999 999 centimes) —
+--      HT au régime réel, comme les lignes, et l'écran le dit
+--      (`libelleDuCout`). HORS DES TOTAUX et de `devis_tva` : c'est une
+--      ESTIMATION donnée au client, pas un prix facturé (ce qui est facturé
+--      est une LIGNE : la règle M8 du lot 1, révisée et dite — précédent :
+--      `cout_devis_centimes`). Un changement de régime ne convertit rien.
+--  `recalcule_devis()` ne lit AUCUNE de ces colonnes.
+--
+--  LE CONTRAT DE `dechets_lieux` — pour 2c, et pour tout lecteur à venir :
+--  UN IDENTIFIANT DE CE TABLEAU NE PROUVE AUCUNE APPARTENANCE. Un tableau ne
+--  porte pas de clé étrangère, et un client modifié peut y écrire
+--  l'identifiant d'un lieu d'un AUTRE artisan, ou un identifiant inventé :
+--  la base l'accepte, et c'est sans effet. TOUT LECTEUR FILTRE PAR
+--  `pro_id` (la liste des motifs le fait, 49.9) : un identifiant étranger ou
+--  orphelin ne lit rien et n'est compté par rien — aucun oracle, un
+--  identifiant inventé rend exactement la même chose. LA REMISE COPIERA les
+--  lieux DISTINCTS, dans l'ordre du tableau, et FIGERA ce tableau. Aucune
+--  cascade ne récrit un devis quand un lieu part (D11) : l'identifiant
+--  reste, ignoré, jusqu'au prochain appui de l'artisan sur une case de lieu.
+--
+--  AUCUNE CONTRAINTE NE LIE DEUX COLONNES (la quantité et son unité,
+--  « Aucun dépôt » et des lieux, « Non » et des rubriques écrites) : une
+--  règle qui lie deux colonnes d'un brouillon écrit champ par champ
+--  refuserait la saisie à mi-chemin (49.5). Ce qui manque est un MOTIF
+--  (rang 13, 49.9). Pas de date : aucune n'aurait de lecteur.
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists dechets_concerne           boolean;
+alter table public.devis add column if not exists dechets_quantite_milliemes bigint;
+alter table public.devis add column if not exists dechets_unite              text;
+alter table public.devis add column if not exists dechets_flux               text[];
+alter table public.devis add column if not exists dechets_sur_place          text[];
+alter table public.devis add column if not exists dechets_lieux              uuid[];
+alter table public.devis add column if not exists dechets_sans_depot         boolean;
+alter table public.devis add column if not exists dechets_cout_centimes      bigint;
+
+comment on column public.devis.dechets_concerne is
+  'La réponse à « S’agit-il de travaux sur un bâtiment, ou de jardinage ? ». Vide = pas dit : Opus compte « Oui » '
+  '(prudence). « Oui » ou vide, et une rubrique des déchets qui manque : un motif de refus de la remise (rang 13). '
+  '« Non » tait les rubriques sans rien effacer. 49.4 sexies.';
+comment on column public.devis.dechets_quantite_milliemes is
+  'La quantité de déchets estimée, en millièmes de l’unité (dechets_unite). Vide = pas dite. 49.4 sexies.';
+comment on column public.devis.dechets_unite is
+  'L’unité de la quantité de déchets : m3 ou t. Vide = pas dite. 49.4 sexies.';
+comment on column public.devis.dechets_flux is
+  'Les déchets collectés à part, dans une liste fermée, dans l’ordre de l’écran. Vide de valeur = rien de dit ; '
+  '{aucune} = aucune collecte séparée, exclusive des autres. Jamais de tableau vide. 49.4 sexies.';
+comment on column public.devis.dechets_sur_place is
+  'Ce qui reste sur le chantier : broyage, compostage. Facultatif ; vide de valeur = rien de dit ; jamais de '
+  'tableau vide. Ne complète JAMAIS le tri. 49.4 sexies.';
+comment on column public.devis.dechets_lieux is
+  'Les lieux de dépôt choisis : des identifiants de emetteur_lieux_depot, dans l’ordre de la liste de « Mon '
+  'entreprise ». Vide de valeur = aucun ; jamais de tableau vide ; dix au plus. CONTRAT : un identifiant ne prouve '
+  'aucune appartenance (aucune clé étrangère) ; tout lecteur filtre par pro_id ; la remise copiera les lieux '
+  'DISTINCTS, dans l’ordre, et figera ce tableau. 49.4 sexies.';
+comment on column public.devis.dechets_sans_depot is
+  'Vrai par la seule pastille « Aucun dépôt : rien ne quittera le chantier » ; vide sinon ; jamais faux. Vrai, '
+  'il compte comme réponse à la rubrique des lieux. 49.4 sexies.';
+comment on column public.devis.dechets_cout_centimes is
+  'L’estimation des coûts de gestion et d’enlèvement des déchets, en centimes (HT au régime réel). De 1 à '
+  '999 999 999, jamais 0. Vide = pas dite. HORS des totaux : une estimation, pas un prix facturé. 49.4 sexies.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — quarante et une ici (sept de plus depuis 2b-5),
+--       toutes en `_check`, et une quarante-deuxième en 49.6 ter
+--       (`devis_calculs_check`, posée APRÈS son rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
 --  donne à chacune une phrase qui dit QUOI FAIRE (`MESSAGES_CONTRAINTE`).
@@ -13465,6 +13768,62 @@ alter table public.devis add constraint devis_pour_qui_check
 alter table public.devis drop constraint if exists devis_cout_check;
 alter table public.devis add constraint devis_cout_check
   check (cout_devis_centimes is null or cout_devis_centimes between 0 and 100000);
+/* LES DÉCHETS DU CHANTIER (lot 2b, étape 2b-5, 49.4 sexies) : SEPT
+   contraintes, une par colonne (la réponse, un booléen, n'en a pas besoin),
+   et AUCUNE ne lie deux colonnes — une règle qui lierait la quantité à son
+   unité, ou « Aucun dépôt » aux lieux, refuserait la saisie à mi-chemin.
+   Aucune n'appelle de fonction d'Opus : les listes fermées sont écrites EN
+   TOUTES LETTRES (une fonction appelée ici deviendrait une gardienne, que
+   `verifier-portes` exigerait exécutable par `authenticated`). Dans l'ordre
+   alphabétique, elles viennent entre `devis_cout_check` et
+   `devis_delai_check`.
+
+   LES TROIS TABLEAUX refusent d'abord les formes IMPOSSIBLES, dans un
+   `case`, sous leur nom : deux dimensions, une borne basse autre que 1, et
+   le tableau VIDE — `array_ndims('{}')` est vide de valeur, donc le `case`
+   va à `else false`. Sans ce `case`, une forme impossible rendait une
+   erreur en anglais, ou passait (critiques BASE-6 et CTL-17). Un élément
+   vide est refusé lui aussi : `<@` rend faux pour un tableau qui en
+   contient un, et `array_position(…, null)` le trouve dans les lieux. Un
+   DOUBLON n'est pas refusé : le téléphone n'en envoie jamais, et le rang 13
+   compte les lieux DISTINCTS. Le coût est TOUJOURS un montant (réponse P2) :
+   0 n'est pas une estimation. */
+alter table public.devis drop constraint if exists devis_dechets_cout_check;
+alter table public.devis add constraint devis_dechets_cout_check
+  check (dechets_cout_centimes is null or dechets_cout_centimes between 1 and 999999999);
+alter table public.devis drop constraint if exists devis_dechets_flux_check;
+alter table public.devis add constraint devis_dechets_flux_check
+  check (dechets_flux is null or case
+    when array_ndims(dechets_flux) = 1 and array_lower(dechets_flux, 1) = 1
+    then cardinality(dechets_flux) between 1 and 14
+         and dechets_flux <@ array['aucune', 'papier', 'metal', 'plastique', 'verre', 'textiles', 'bois',
+                                   'mineral', 'platre', 'menuiseries', 'membranes', 'laines', 'terres',
+                                   'verts', 'dangereux']
+         and (cardinality(dechets_flux) = 1 or not ('aucune' = any (dechets_flux)))
+    else false end);
+alter table public.devis drop constraint if exists devis_dechets_lieux_check;
+alter table public.devis add constraint devis_dechets_lieux_check
+  check (dechets_lieux is null or case
+    when array_ndims(dechets_lieux) = 1 and array_lower(dechets_lieux, 1) = 1
+    then cardinality(dechets_lieux) between 1 and 10
+         and array_position(dechets_lieux, null) is null
+    else false end);
+alter table public.devis drop constraint if exists devis_dechets_quantite_check;
+alter table public.devis add constraint devis_dechets_quantite_check
+  check (dechets_quantite_milliemes is null or dechets_quantite_milliemes between 1 and 99999999);
+alter table public.devis drop constraint if exists devis_dechets_sans_depot_check;
+alter table public.devis add constraint devis_dechets_sans_depot_check
+  check (dechets_sans_depot is null or dechets_sans_depot is true);
+alter table public.devis drop constraint if exists devis_dechets_sur_place_check;
+alter table public.devis add constraint devis_dechets_sur_place_check
+  check (dechets_sur_place is null or case
+    when array_ndims(dechets_sur_place) = 1 and array_lower(dechets_sur_place, 1) = 1
+    then cardinality(dechets_sur_place) between 1 and 2
+         and dechets_sur_place <@ array['broyage', 'compostage']
+    else false end);
+alter table public.devis drop constraint if exists devis_dechets_unite_check;
+alter table public.devis add constraint devis_dechets_unite_check
+  check (dechets_unite is null or dechets_unite in ('m3', 't'));
 
 alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
 alter table public.devis_lignes add constraint devis_ligne_designation_check
@@ -14701,6 +15060,11 @@ create policy "ventilation de mes devis" on public.devis_tva
      l'artisan, aucune date.
      Depuis 2b-4, un devis naît et se modifie AUSSI sur le prix du devis
      lui-même (`cout_devis_centimes`, 49.4 quinquies).
+     Depuis 2b-5, un devis naît et se modifie AUSSI sur les huit faits des
+     déchets du chantier (`dechets_concerne`, `dechets_quantite_milliemes`,
+     `dechets_unite`, `dechets_flux`, `dechets_sur_place`, `dechets_lieux`,
+     `dechets_sans_depot`, `dechets_cout_centimes`, 49.4 sexies) — huit
+     réponses de l'artisan, aucune date.
    Une colonne que l'application enverrait sans que la liste la rende ferait
    refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
    compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
@@ -14712,14 +15076,18 @@ grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, o
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
-              engage_decennale, acompte_a_la_signature, cout_devis_centimes, generation)
+              engage_decennale, acompte_a_la_signature, cout_devis_centimes,
+              dechets_concerne, dechets_quantite_milliemes, dechets_unite, dechets_flux,
+              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes, generation)
   on public.devis to authenticated;
 grant update (client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
               retenue_garantie_centiemes, remise_centiemes, remise_centimes,
               acompte_centiemes, acompte_centimes, acompte_nature, validite_jours,
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
-              engage_decennale, acompte_a_la_signature, cout_devis_centimes, generation)
+              engage_decennale, acompte_a_la_signature, cout_devis_centimes,
+              dechets_concerne, dechets_quantite_milliemes, dechets_unite, dechets_flux,
+              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes, generation)
   on public.devis to authenticated;
 grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
@@ -14750,8 +15118,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 
 -- --------------------------------------------------------------------------
 --  49.9 CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b, étape 2b-1,
---       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11 ; 2b-4, 16/11) —
---       `motifs_refus_remise(p_devis)`
+--       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11 ; 2b-4, 16/11 ; 2b-5,
+--       21/11) — `motifs_refus_remise(p_devis)`
 --
 --  CE QU'ELLE FAIT. Elle dit, pour UN devis, tout ce qui manque pour qu'il
 --  puisse être remis au client : ce qui manque au devis lui-même, puis ce
@@ -14781,6 +15149,11 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  d'`emetteur_assurances` choisie), dans la même transaction que le
 --  statut, et recalculera la liste au moment de la remise. Rien à
 --  construire en 2b-3.
+--  DEPUIS 2b-5, ELLE DÉPEND AUSSI des lignes d'`emetteur_lieux_depot` : un
+--  lieu retiré depuis « Mon entreprise » fait revenir le rang 13 sans
+--  aucune écriture du devis. La remise de 2c lira les lieux qu'elle COPIE
+--  sous le même verrou, dans la même transaction que le statut. Rien à
+--  construire en 2b-5.
 --
 --  « RIEN NE MANQUE » = ZÉRO LIGNE. Et seulement cela : une lecture qui
 --  échoue, ou un brouillon que la base n'a pas encore (rien tapé), n'est
@@ -14822,7 +15195,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                formulaire de rétractation même pour un autre artisan qui
 --                sous-traite. SEPT RÈGLES D'OPUS en tout — 2b-3 n'en ajoute
 --                aucune (ses quatre motifs sont une prudence ou la loi), 2b-4
---                non plus (son motif est une prudence, réponse Q2 du 16/11).
+--                non plus (son motif est une prudence, réponse Q2 du 16/11),
+--                2b-5 non plus (ses deux motifs sont une prudence et la loi).
 --                Et la TVA à 10 %
 --                ou 5,5 % : « tout permettre » ; c'est 2c qui imprimera la
 --                certification que le client signe. UNE SEULE EXCEPTION
@@ -14942,8 +15316,8 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  `filter`, même `order by l.ordre, l.id`, unique) : ils s'alignent indice
 --  par indice, et la boucle les parcourt ensemble, dans l'ordre `ordre,
 --  id`. La borne de la liste — 500 lignes au rang 3, plus les rangs 1, 2
---  et 4 à 12 : 511 motifs du devis depuis 2b-4 (le rang 11 n'en sort
---  qu'un, le rang 12 aussi) — garde trois chiffres. Elle se lit dans
+--  et 4 à 13 : 512 motifs du devis depuis 2b-5 (les rangs 11, 12 et 13
+--  n'en sortent qu'un chacun) — garde trois chiffres. Elle se lit dans
 --  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
 --  l'entreprise, `regime_tva`, le dit déjà.
@@ -15036,6 +15410,35 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  propriétaire a préférée le 16/11. La MÊME règle est écrite côté téléphone
 --  (`motifsDeRemise`).
 --
+--  LES DÉCHETS DU CHANTIER (2b-5, rang 13, 49.4 sexies) — UNE clé au plus,
+--  deux clés possibles. La loi (code de l'environnement, L. 541-21-2-3 I et
+--  D. 541-45-1 I) demande sur tout devis de travaux sur un bâtiment
+--  (construire, rénover, démolir) et sur tout devis de jardinage, quel que
+--  soit le client, la quantité estimée des déchets, leur tri, les lieux de
+--  dépôt et une estimation des coûts. La réponse à « S'agit-il de travaux
+--  sur un bâtiment, ou de jardinage ? » (`dechets_concerne`, réponse P1 du
+--  21/11) : « Non » tait le rang ; « Oui » ou vide, et une des quatre
+--  rubriques manque, il sort :
+--    `devis_dechets` (prudence) — la réponse est VIDE : Opus ne sait pas si
+--      ce devis relève de la loi (le précédent : la décennale sans
+--      réponse) ;
+--    `devis_dechets_rubriques` (loi) — la réponse est « Oui ».
+--  UNE RUBRIQUE MANQUE quand : la quantité OU son unité est vide ; le tri
+--  est vide de valeur (`{aucune}` le remplit ; ce qui reste sur le chantier,
+--  `dechets_sur_place`, n'y compte JAMAIS, et la fonction ne le lit pas) ;
+--  aucun des lieux choisis n'existe encore CHEZ CETTE ENTREPRISE et « Aucun
+--  dépôt » n'est pas vrai (réponse P6) ; le coût est vide. LA LECTURE DES
+--  LIEUX EST UNE, ses colonnes nommées, filtrée par l'entreprise du devis
+--  (`l.pro_id = v_pro`) et par le tableau du devis : un identifiant étranger
+--  ou orphelin ne compte pas (le contrat de `dechets_lieux`, 49.4 sexies).
+--  Aujourd'hui la RLS (« mes lieux de depot ») filtre aussi ; quand la
+--  remise de 2c appellera cette fonction depuis une fonction `security
+--  definer`, ce filtre sera la SEULE barrière — l'essai le prouve par une
+--  enveloppe `security definer` (le modèle du cas 22). Il ne lit ni l'origine
+--  du devis, ni la réponse « à quel titre » : la loi vise tout client. PAS
+--  une règle d'Opus. La MÊME règle est écrite côté téléphone, une seule
+--  fois (`rubriquesDesDechets`, qui sert aussi le résumé de la rangée).
+--
 --  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
 --  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
 --  102 000 devis, mesuré) : un défaut EXISTANT, noté dans `docs/A-FAIRE.md`,
@@ -15117,6 +15520,14 @@ declare
   v_decennale      boolean;
   v_signature      boolean;
   v_cout           bigint;
+  v_dechets        boolean;
+  v_dechets_qte    bigint;
+  v_dechets_unite  text;
+  v_dechets_flux   text[];
+  v_dechets_lieux  uuid[];
+  v_dechets_sans   boolean;
+  v_dechets_cout   bigint;
+  v_lieux_existants bigint := 0;
   v_valable        text;
   v_regime         text;
   v_un_poste       boolean;
@@ -15137,12 +15548,16 @@ begin
          d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes,
          d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes,
          d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva,
-         d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes
+         d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes,
+         d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux,
+         d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
          v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
          v_pour_qui, v_pour_qui_cl, v_neuf_tva,
-         v_decennale, v_signature, v_cout
+         v_decennale, v_signature, v_cout,
+         v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux,
+         v_dechets_lieux, v_dechets_sans, v_dechets_cout
     from public.devis d
    where d.id = p_devis
      and public.est_mon_entreprise(d.pro_id);
@@ -15206,6 +15621,19 @@ begin
      where a.pro_id = v_pro
        and a.nature = 'decennale'
        and a.attestation_chemin is not null;
+  end if;
+
+  -- 3 ter. Les lieux de dépôt des déchets (49.4 sexies), lus seulement si
+  --    la réponse n'est pas « Non » : UNE lecture, filtrée par l'entreprise
+  --    du devis. Un identifiant du tableau ne prouve aucune appartenance :
+  --    le lieu d'une autre entreprise, ou un identifiant orphelin (un lieu
+  --    retiré), ne compte pas — et comme pour l'attestation, ce filtre sera
+  --    la SEULE barrière quand la remise de 2c appellera cette fonction
+  --    depuis une fonction `security definer`. Les lieux DISTINCTS.
+  if v_dechets is not false then
+    select count(distinct l.id) into v_lieux_existants
+      from public.emetteur_lieux_depot l
+     where l.pro_id = v_pro and l.id = any (v_dechets_lieux);
   end if;
 
   -- 4. Les motifs du devis, rang par rang.
@@ -15321,6 +15749,28 @@ begin
     phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.';
     return next;
   end if;
+  -- Les déchets du chantier (49.4 sexies) : la réponse n'est pas « Non »,
+  -- et une des quatre rubriques manque — la quantité (ou son unité) ; le
+  -- tri (ce qui reste sur le chantier n'y compte JAMAIS : le broyage n'est
+  -- pas une collecte séparée) ; un lieu choisi qui existe encore, ou
+  -- « Aucun dépôt » ; le coût. UNE clé au plus : `devis_dechets` (prudence)
+  -- quand la réponse est vide, puisqu'Opus ne sait pas si ce devis relève
+  -- de la loi ; `devis_dechets_rubriques` (la loi) quand elle est « Oui ».
+  if v_dechets is not false
+     and (v_dechets_qte is null or v_dechets_unite is null
+          or v_dechets_flux is null
+          or (v_lieux_existants = 0 and v_dechets_sans is not true)
+          or v_dechets_cout is null) then
+    if v_dechets is null then
+      rang := 13; cle := 'devis_dechets'; nature := 'prudence';
+      phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.';
+      return next;
+    else
+      rang := 13; cle := 'devis_dechets_rubriques'; nature := 'loi';
+      phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».';
+      return next;
+    end if;
+  end if;
 
   -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
   --    Le rang garde sa position d'origine (100 + position) : un motif
@@ -15364,8 +15814,8 @@ grant execute on function public.motifs_refus_remise(uuid) to authenticated;
 comment on function public.motifs_refus_remise(uuid) is
   'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
   'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
-  'à 12 : l''acompte à la signature et l''attestation décennale depuis 2b-3, le prix du devis '
-  'lui-même depuis 2b-4) puis ceux de '
+  'à 13 : l''acompte à la signature et l''attestation décennale depuis 2b-3, le prix du devis '
+  'lui-même depuis 2b-4, les déchets du chantier depuis 2b-5) puis ceux de '
   'l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
   'réponse valable à « À quel titre ? », 2b-2). Aucune ligne = rien '
   'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '
@@ -16423,8 +16873,9 @@ create index if not exists idx_base_postes_devis
 --  CE QUI N'EST PAS ICI, et pourquoi (`verifier-remontee` refuse une table
 --  qui a une date de création et n'est ni posée ni exclue ici) :
 --    - `devis`, `devis_lignes`, `base_postes`, `emetteur`,
---      `emetteur_assurances`, `tarifs_pro`, `clients` : leur déclencheur
---      pose déjà la date, pour tous les rôles ;
+--      `emetteur_assurances`, `emetteur_lieux_depot`, `tarifs_pro`,
+--      `clients` : leur déclencheur pose déjà la date, pour tous les rôles
+--      (`tient_le_lieu_de_depot()` pour les lieux de dépôt, depuis 2b-5) ;
 --    - `professional_partners` : `tient_le_partenariat()` la pose, et le
 --      droit de colonne est fermé (lot S-b) ;
 --    - `demandes_pro`, `entreprise_registre`, `journal_admin`,
@@ -17966,6 +18417,15 @@ as $$
     'mes_specialites_proposees',
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
                              from public.specialites_proposees x where x.propose_par = auth.uid()), '[]'::jsonb),
+    /* MES LIEUX DE DÉPÔT DES DÉCHETS (section 46.2 bis, lot 2b-5) : les
+       déchèteries, plateformes ou collecteurs que l'artisan a rangés dans
+       « Mon entreprise ». Pour un artisan PERSONNE PHYSIQUE, ce qu'il y
+       range dit où il travaille : l'article 15. Les SIENS seulement, triés
+       comme l'écran les lit (`created_at, id`). Les lieux CHOISIS dans un
+       devis voyagent déjà avec lui, sous `devis_emis` (`dechets_lieux`). */
+    'mes_lieux_de_depot',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.emetteur_lieux_depot x where x.pro_id = auth.uid()), '[]'::jsonb),
     /* Bornée : d'autres la remplissent (un « j'aime », un commentaire). */
     'mes_notifications', s.j -> 'mes_notifications',
     'limites_de_l_export',             s.j -> 'limites'

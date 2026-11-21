@@ -614,6 +614,12 @@ with attendu(tab, col, ins, upd) as (values
   -- 2b-4 (49.4 quinquies) : le prix du devis lui-même — une réponse de
   -- l'artisan, aucune date ; rien pour un visiteur.
   ('devis','cout_devis_centimes',true,true),
+  -- 2b-5 (49.4 sexies) : les huit faits des déchets du chantier — huit
+  -- réponses de l'artisan, aucune date ; rien pour un visiteur.
+  ('devis','dechets_concerne',true,true), ('devis','dechets_quantite_milliemes',true,true),
+  ('devis','dechets_unite',true,true), ('devis','dechets_flux',true,true),
+  ('devis','dechets_sur_place',true,true), ('devis','dechets_lieux',true,true),
+  ('devis','dechets_sans_depot',true,true), ('devis','dechets_cout_centimes',true,true),
   ('devis_lignes','id',true,false), ('devis_lignes','devis_id',true,false),
   ('devis_lignes','ordre',true,true), ('devis_lignes','type',true,true), ('devis_lignes','designation',true,true),
   ('devis_lignes','quantite_milliemes',true,true), ('devis_lignes','unite',true,true),
@@ -639,7 +645,7 @@ select count(*) = 0 as droits_sans_ecart_attendu_t,
     or r.upd is distinct from coalesce(a.upd, false)
     or r.anon;
 \echo '--- et chaque colonne attendue existe (une faute de frappe ici ne passerait pas)'
-select count(*) as colonnes_attendues_trouvees, count(*) = 43 as colonnes_trouvees_attendu_t
+select count(*) as colonnes_attendues_trouvees, count(*) = 51 as colonnes_trouvees_attendu_t
   from information_schema.columns c
  where c.table_schema = 'public' and c.table_name in ('devis', 'devis_lignes')
    and (c.table_name, c.column_name) in (
@@ -652,12 +658,15 @@ select count(*) as colonnes_attendues_trouvees, count(*) = 43 as colonnes_trouve
      ('devis','chantier_neuf_conso_le'),
      ('devis','engage_decennale'),('devis','acompte_a_la_signature'),('devis_lignes','urgence'),
      ('devis','cout_devis_centimes'),
+     ('devis','dechets_concerne'),('devis','dechets_quantite_milliemes'),('devis','dechets_unite'),
+     ('devis','dechets_flux'),('devis','dechets_sur_place'),('devis','dechets_lieux'),
+     ('devis','dechets_sans_depot'),('devis','dechets_cout_centimes'),
      ('devis_lignes','id'),('devis_lignes','devis_id'),('devis_lignes','ordre'),('devis_lignes','type'),
      ('devis_lignes','designation'),('devis_lignes','quantite_milliemes'),('devis_lignes','unite'),
      ('devis_lignes','prix_unitaire_centimes'),('devis_lignes','taux_tva_centiemes'),('devis_lignes','offert'),
      ('devis_lignes','main_oeuvre'),('devis_lignes','fourniture_non_comprise'),
      ('devis_lignes','surface_sol_milliemes'),('devis_lignes','surface_murs_milliemes'),('devis_lignes','generation'));
-\echo '    attendu : 43 (34 jusqu’à 2b-1, les cinq colonnes de 49.4 ter, les trois de 2b-3, et la colonne de 2b-4) ; colonnes_trouvees_attendu_t t'
+\echo '    attendu : 51 (34 jusqu’à 2b-1, les cinq colonnes de 49.4 ter, les trois de 2b-3, la colonne de 2b-4, et les huit de 2b-5) ; colonnes_trouvees_attendu_t t'
 select has_table_privilege('authenticated', 'public.devis', 'INSERT') as table_devis_insert,
        has_table_privilege('authenticated', 'public.devis', 'UPDATE') as table_devis_update,
        has_table_privilege('authenticated', 'public.devis', 'SELECT') as table_devis_select,
@@ -747,8 +756,8 @@ rollback;
 
 -- ==========================================================================
 \echo ''
-\echo '=== 23. LES DÉFAUTS DES COLONNES DU LOT 2a, DE 2b-2 ET DE 2b-3, RELUS DANS LE CATALOGUE : rien de pré-choisi pour ce que l artisan choisit, 0 pour ce que la base calcule, ÉTEINT pour la réparation urgente ==='
-\echo '    attendu : dix-neuf lignes, toutes avec forme_attendu_t = t ; puis colonnes_lues_attendu_t = t'
+\echo '=== 23. LES DÉFAUTS DES COLONNES DU LOT 2a, DE 2b-2, DE 2b-3 ET DE 2b-5, RELUS DANS LE CATALOGUE : rien de pré-choisi pour ce que l artisan choisit, 0 pour ce que la base calcule, ÉTEINT pour la réparation urgente ==='
+\echo '    attendu : vingt-sept lignes, toutes avec forme_attendu_t = t ; puis colonnes_lues_attendu_t = t'
 -- ==========================================================================
 -- Relecture CONTROLES-2 (04/11) : « la nature n a pas de défaut » et « la
 -- validité : rien de pré-choisi » (décisions du 03/11) n étaient tenues par
@@ -784,7 +793,19 @@ with attendu(tab, col, defaut, nullable) as (values
   -- protecteur, et `not null` épargne un « vide » à interpréter.
   ('devis', 'engage_decennale', null, 'YES'),
   ('devis', 'acompte_a_la_signature', null, 'YES'),
-  ('devis_lignes', 'urgence', 'false', 'NO')
+  ('devis_lignes', 'urgence', 'false', 'NO'),
+  -- 2b-5 (49.4 sexies) : les huit faits des déchets naissent VIDES, SANS
+  -- défaut — un « Non » par défaut tairait le motif sur les brouillons déjà
+  -- en base, un tableau vide par défaut dirait « rien de trié » à la place de
+  -- l'artisan (le sabotage SDEF de 2b-4, refait pour les déchets).
+  ('devis', 'dechets_concerne', null, 'YES'),
+  ('devis', 'dechets_quantite_milliemes', null, 'YES'),
+  ('devis', 'dechets_unite', null, 'YES'),
+  ('devis', 'dechets_flux', null, 'YES'),
+  ('devis', 'dechets_sur_place', null, 'YES'),
+  ('devis', 'dechets_lieux', null, 'YES'),
+  ('devis', 'dechets_sans_depot', null, 'YES'),
+  ('devis', 'dechets_cout_centimes', null, 'YES')
 )
 select a.tab || '.' || a.col as colonne,
        c.column_default as defaut_lu,
@@ -794,9 +815,9 @@ select a.tab || '.' || a.col as colonne,
   left join information_schema.columns c
     on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col
  order by a.tab, a.col;
--- Les dix-neuf colonnes existent, une fois chacune (une colonne renommée
+-- Les vingt-sept colonnes existent, une fois chacune (une colonne renommée
 -- donnerait une ligne vide ci-dessus, et un faux « t » nulle part).
-select count(*) = 19 as colonnes_lues_attendu_t
+select count(*) = 27 as colonnes_lues_attendu_t
   from information_schema.columns c
  where c.table_schema = 'public'
    and (c.table_name, c.column_name) in (
@@ -807,7 +828,10 @@ select count(*) = 19 as colonnes_lues_attendu_t
      ('devis_tva', 'remise_centimes'),
      ('devis', 'pour_qui'), ('devis', 'pour_qui_client'), ('devis', 'chantier_neuf_conso'),
      ('devis', 'chantier_neuf_conso_le'), ('devis', 'chantier_neuf_tva'),
-     ('devis', 'engage_decennale'), ('devis', 'acompte_a_la_signature'), ('devis_lignes', 'urgence'));
+     ('devis', 'engage_decennale'), ('devis', 'acompte_a_la_signature'), ('devis_lignes', 'urgence'),
+     ('devis', 'dechets_concerne'), ('devis', 'dechets_quantite_milliemes'), ('devis', 'dechets_unite'),
+     ('devis', 'dechets_flux'), ('devis', 'dechets_sur_place'), ('devis', 'dechets_lieux'),
+     ('devis', 'dechets_sans_depot'), ('devis', 'dechets_cout_centimes'));
 
 \echo ''
 \echo '=== FIN — ce fichier a écrit EXACTEMENT 27 lignes « psql:… ERROR », chacune annoncée par son nom :'

@@ -29,7 +29,49 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-17';
+export const VERSION = '2026-11-22';
+/* 22/11/2026 — LES DÉCHETS DU CHANTIER (étape 2b-5 du module devis ;
+   sections 46 et 49 de `schema.sql`, cahier 2b-5 §4 ; décision Q4 = 1 du
+   17/11 : les lieux de dépôt rangés une fois dans « Mon entreprise », une
+   carte « Déchets » par devis ; réponses du propriétaire du 21/11, P1 à
+   P6 : les six recommandations). Ce qui a changé DE FOND :
+     - DES DONNÉES NOUVELLES COLLECTÉES pour les devis. Dans « Mon
+       entreprise » : vos lieux de dépôt des déchets — raison sociale,
+       adresse, type d'installation (une table privée,
+       `emetteur_lieux_depot`, lisible par son seul titulaire, aucune
+       politique pour l'administration). Et sur chaque devis : s'il s'agit
+       de travaux sur un bâtiment ou de jardinage (`devis.dechets_concerne`),
+       puis ce que deviendront leurs déchets — la quantité estimée et son
+       unité, les déchets qui partiront à part ou « aucune collecte
+       séparée », ce qui restera sur le chantier (broyage, compostage), les
+       lieux de dépôt choisis ou « aucun dépôt », et le coût estimé, qui ne
+       s'ajoute pas au total. « Ce que nous collectons » les nomme : les
+       lieux dans la phrase de « Mon entreprise », AVANT « Aucun écran
+       d'Opus ne les montre », dont la promesse les couvre donc ; le reste
+       dans la phrase des devis, avant « leurs lignes », comme 2b-2 à 2b-4 —
+       chacune restant UNE phrase ;
+     - RIEN D'AUTRE : « Ce qu'il manque pour remettre ce devis » gagne un
+       point (rang 13), mais un motif n'est pas une décision automatique —
+       il dit à l'artisan ce qui manque à SON devis, sans rien décider pour
+       personne. Aucun texte ne promet que les déchets s'imprimeront sur le
+       devis (rien ne sort avant le lot 2c, qui copiera les lieux choisis
+       dans le devis remis), ni ne parle des services à la personne
+       (réponse Q3 du 16/11) ou du label RGE (étape 2b-6). « Ce que les
+       autres voient de vous » ne change pas d'un mot : la table nouvelle
+       n'est lue que par son titulaire, ce que `verifier-legal` tient par
+       une RAISON, pas par une phrase. « Vos tarifs et vos prix » non plus :
+       l'engagement de l'éditeur ne s'étend pas aux lieux de dépôt, que rien
+       ne lui demande ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions à un compte existant, et le préavis de
+       quinze jours du règlement 2019/1150 (art. 3.2) s'appliquerait. Sans
+       effet tant que STATUT vaut 'essai' ; à organiser avant l'ouverture au
+       public (A-FAIRE).
+   Cette version prend la date prévue du commit des textes (22/11/2026) ;
+   si le commit se fait un autre jour, `VERSION` prend la date de ce
+   commit — jamais plus loin que le lendemain du jour où l'on publie, sinon
+   la base range la trace d'acceptation à vide (`verifier-legal`). */
+/* VERSION PRÉCÉDENTE : '2026-11-17'. */
 /* 17/11/2026 — LE PRIX DU DEVIS LUI-MÊME (étape 2b-4 du module devis ;
    section 49 de `schema.sql`, cahier 2b-4 §4 et annexe A.6 ; réponses du
    propriétaire du 16/11 : Q1 = trois étapes, Q2 = un point « par
@@ -1572,7 +1614,41 @@ export const CONFIDENTIALITE = [
        la compare mot pour mot, ENTIÈRE. Rien d'autre ne change : le point
        « Dites si le devis lui-même est gratuit ou payant » est un motif, pas
        une décision automatique, et aucun texte ne promet la mention imprimée
-       — rien ne sort avant le lot 2c. */
+       — rien ne sort avant le lot 2c.
+
+       LES DÉCHETS DU CHANTIER, étape 2b-5 (22/11/2026, cahier 2b-5 §4 ;
+       décision Q4 = 1 du 17/11, réponses du propriétaire du 21/11). Deux
+       insertions, et pas une de plus :
+         - dans la phrase de « Mon entreprise », AVANT « et vos tarifs » :
+           « vos lieux de dépôt des déchets (raison sociale, adresse, type
+           d’installation) » — la table privée `emetteur_lieux_depot`
+           (section 46.2 bis). « Adresse » couvre le code postal et la
+           commune, « type d’installation » la précision d'un type
+           « autre ». Posée avant « Aucun écran d’Opus ne les montre » :
+           c'est ce qui range les lieux dans cette promesse, qui est vraie
+           (une seule politique, `est_mon_entreprise`, rien pour
+           l'administration ni pour `anon`) ;
+         - dans la phrase des devis, AVANT « leurs lignes », juste après le
+           moment du paiement : « s’il s’agit de travaux sur un bâtiment ou
+           de jardinage, ce que deviendront leurs déchets (quantité, tri,
+           lieux de dépôt, coût estimé) ». La parenthèse est celle du
+           cahier, mot pour mot. LA QUESTION, elle, a ses propres mots,
+           ceux de l'écran (« S’agit-il de travaux sur un bâtiment, ou de
+           jardinage ? ») : le cahier ne la nommait pas, et chaque question
+           des étapes précédentes a les siens (« à quel titre le client
+           commande », « si leurs travaux peuvent engager votre garantie
+           décennale », « s’ils sont gratuits ou payants »). La rendre
+           implicite dans « ce que deviendront leurs déchets » aurait tu une
+           réponse qui change ce que la loi demande au devis. Ce qui reste
+           sur le chantier (broyage, compostage) est ce que deviennent ces
+           déchets : la tête de l'énumération le couvre. « Aucun dépôt » et
+           « aucune collecte séparée » sont des réponses aux rubriques
+           « lieux de dépôt » et « tri ».
+       Les deux restent UNE phrase chacune : `verifier-legal` découpe celle
+       des devis de « devis en préparation » au point suivant, et compare
+       chaque colonne de `devis` lue dans le schéma à ses mots. Rien
+       d'autre : ni « Ce que les autres voient de vous », ni « Vos tarifs et
+       vos prix », ni une promesse d'impression. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -1618,7 +1694,8 @@ export const CONFIDENTIALITE = [
       + 'rangée dans la base d’Opus. Si vous êtes professionnel, pour vos devis : votre '
       + 'immatriculation, votre capital, vos assurances et leurs attestations, votre '
       + 'médiateur, vos garanties, vos conditions de paiement, d’exécution et de '
-      + 'réclamation, et vos tarifs (frais de déplacement, taux horaire et son décompte, '
+      + 'réclamation, vos lieux de dépôt des déchets (raison sociale, adresse, type '
+      + 'd’installation), et vos tarifs (frais de déplacement, taux horaire et son décompte, '
       + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
       + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont '
@@ -1626,7 +1703,9 @@ export const CONFIDENTIALITE = [
       + 'titre le client commande, si les travaux portent sur un bâtiment neuf ou une '
       + 'transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font '
       + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent '
-      + 'engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, leurs '
+      + 'engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il '
+      + 's’agit de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets '
+      + '(quantité, tri, lieux de dépôt, coût estimé), leurs '
       + 'lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le '
       + 'client —, leurs prix et leurs totaux, le client de votre carnet auquel ils '
       + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '

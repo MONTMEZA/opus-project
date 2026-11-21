@@ -21,17 +21,21 @@
  * clavier. Aucun `KeyboardAvoidingView` par-dessus — la hauteur du clavier
  * serait comptée deux fois.
  *
- * QUATRE MODES DANS LA MÊME FENÊTRE, jamais deux fenêtres empilées (deux
+ * CINQ MODES DANS LA MÊME FENÊTRE, jamais deux fenêtres empilées (deux
  * `Modal` l'une sur l'autre laissent sur iPhone un voile invisible qui
  * avale les touches) :
- *   - `lecture`    : prêt à émettre ? l'entreprise, l'aperçu de l'en-tête ;
+ *   - `lecture`    : prêt à émettre ? l'entreprise, l'aperçu de l'en-tête,
+ *                    vos tarifs, vos lieux de dépôt des déchets ;
  *   - `edition`    : les informations de devis (`FicheEmetteur`) ;
  *   - `assurance`  : une assurance (`FicheAssurance`) ;
+ *   - `lieu`       : un lieu de dépôt des déchets (`FicheLieuDepot`, étape
+ *                    2b-5) — sur le modèle exact d'une assurance ;
  *   - `mediateur`  : la liste officielle — une `FlatList` qui REMPLACE le
  *                    `ScrollView`, parce qu'une liste virtualisée ne va pas
  *                    dans un `ScrollView` de même orientation.
- * Partir choisir un médiateur ou une assurance démonte le formulaire : son
- * état est gardé dans un BROUILLON, et il revient avec ce qu'on avait tapé.
+ * Partir choisir un médiateur, une assurance ou un lieu de dépôt démonte le
+ * formulaire : son état est gardé dans un BROUILLON, et il revient avec ce
+ * qu'on avait tapé.
  *
  * LES MESSAGES VIVENT DANS LA FENÊTRE. Le bandeau d'`OpusApp` est SOUS
  * elle : un message posé là ne se verrait qu'une fois la fenêtre fermée.
@@ -75,14 +79,19 @@ import IdentiteEntreprise from './IdentiteEntreprise';
 import TarifsPublics from './TarifsPublics';
 import PretAEmettre from './PretAEmettre';
 import ApercuEntete from './ApercuEntete';
-import FicheEmetteur, { etatDepuis, memeEtat, SECTION_DU_CHAMP } from './FicheEmetteur';
+import FicheEmetteur, {
+  etatDepuis, memeEtat, SECTION_DU_CHAMP, LieuxDeDepotEnLecture,
+} from './FicheEmetteur';
 import FicheAssurance from './FicheAssurance';
+import FicheLieuDepot from './FicheLieuDepot';
 import {
   EnteteMediateurs, RangeeMediateur, PiedMediateurs, AucunMediateur,
 } from './ListeMediateurs';
 
+/* `lieux: null` : NON LUS, jamais `[]` (2b-5, cahier T12) — pendant la
+   lecture, après un échec, ou quand la table n'existe pas encore. */
 const FICHE_EN_LECTURE = {
-  etat: 'charge', emetteur: null, assurances: [], tarifs: null, preuveTva: null,
+  etat: 'charge', emetteur: null, assurances: [], tarifs: null, preuveTva: null, lieux: null,
 };
 const MANQUES_EN_LECTURE = { etat: 'charge', liste: [] };
 
@@ -179,6 +188,11 @@ export default function MonEntreprise({
      par `onOccupe`) : pendant ce temps, fermer ne doit pas proposer de
      « quitter sans enregistrer » — l'écriture est déjà partie. */
   const [occupeAssurance, setOccupeAssurance] = useState(false);
+  /* LE LIEU DE DÉPÔT ouvert dans le mode `lieu` (2b-5), et son envoi en
+     cours — la même règle que pour une assurance : pendant un envoi ou un
+     retrait, la croix attend et le dit. */
+  const [lieu, setLieu] = useState(null);
+  const [occupeLieu, setOccupeLieu] = useState(false);
   /* Un contrôle de n° de TVA en vol (section 48) : VIES met souvent 10 à
      30 secondes. Fermer la fenêtre ne l'annulerait pas — la fonction Edge
      écrirait quand même la preuve —, et rouvrir montrait un écran qui
@@ -201,9 +215,13 @@ export default function MonEntreprise({
   /* Le garde du RETRAIT, dans une référence : deux appuis arrivés dans la
      même image verraient encore tous les deux l'ancien état. */
   const retraitEnCours = useRef(false);
+  /* …et celui du retrait d'un LIEU DE DÉPÔT (2b-5) : le même garde, à part
+     — un retrait d'assurance en vol ne doit pas en bloquer un de lieu. */
+  const retraitLieuEnCours = useRef(false);
 
   const fiche = useRef(null);
   const ficheAssurance = useRef(null);
+  const ficheLieu = useRef(null);
   const defile = useRef(null);
   /* Où se trouvent les sections, pour y défiler : l'identité (en lecture),
      le formulaire, et chacune de ses sections. */
@@ -304,6 +322,18 @@ export default function MonEntreprise({
     enHaut();
   };
 
+  /* UN LIEU DE DÉPÔT (2b-5) : le chemin d'une assurance, à l'identique —
+     le formulaire de « Mon entreprise » part dans le BROUILLON, et revient
+     sur la section des lieux. */
+  const ouvrirLieu = (l) => {
+    setBrouillon(fiche.current ? fiche.current.instantane() : brouillon);
+    setLieu({ fiche: l || null });
+    setErreur(null);
+    setQuitter(false);
+    setMode('lieu');
+    enHaut();
+  };
+
   const choisirMediateur = (instantane) => {
     setBrouillon(instantane);
     setRecherche('');
@@ -343,7 +373,10 @@ export default function MonEntreprise({
   const aDesChangements = () => {
     if (mode === 'edition') return !!(fiche.current && fiche.current.aDesChangements());
     if (mode === 'assurance' && ficheAssurance.current && ficheAssurance.current.aDesChangements()) return true;
-    if (mode === 'assurance' || mode === 'mediateur') return !!brouillon && !memeEtat(brouillon, etatDepuis(reference));
+    if (mode === 'lieu' && ficheLieu.current && ficheLieu.current.aDesChangements()) return true;
+    if (mode === 'assurance' || mode === 'lieu' || mode === 'mediateur') {
+      return !!brouillon && !memeEtat(brouillon, etatDepuis(reference));
+    }
     return false;
   };
 
@@ -359,7 +392,7 @@ export default function MonEntreprise({
      RELIRE4-A, 07/11/2026 : ce bouton appelait `onFermer` directement, et
      touché pendant un envoi il fermait quand même). */
   const fermer = () => {
-    if (occupe || occupeAssurance) {
+    if (occupe || occupeAssurance || occupeLieu) {
       afficher('Enregistrement en cours : attendez qu’il se termine. L’interrompre ne '
         + 'l’annulerait pas.');
       return;
@@ -511,6 +544,59 @@ export default function MonEntreprise({
       afficher(messageClair(e, 'Cette assurance n’a pas pu être retirée'), 'erreur');
     } finally {
       retraitEnCours.current = false;
+    }
+  };
+
+  /* ------------------------------------------------------------------ */
+  /*  Les lieux de dépôt des déchets (étape 2b-5)                         */
+  /* ------------------------------------------------------------------ */
+  /* LE MODÈLE DES ASSURANCES : la ligne part, la liste locale suit ce que la
+     BASE a rendu (sa date de création, son identifiant), puis on revient à
+     la section. « Ce qui manque » n'est pas relu : `emetteur_incomplet()`
+     ne lit pas les lieux, qui se jugent devis par devis. Et aucun devis
+     n'est récrit ici : la saisie d'un devis relit les lieux quand cette
+     fenêtre se ferme (`OpusApp`, `lireRegime`). */
+  const enregistrerLieu = async (valeurs) => {
+    const existant = lieu && lieu.fiche;
+    const pose = await api.enregistrerLieuDepot(valeurs, existant ? existant.id : null);
+    setDonnees((d) => {
+      const avant = Array.isArray(d.lieux) ? d.lieux : [];
+      return {
+        ...d,
+        lieux: existant
+          ? avant.map((x) => (String(x.id) === String(pose.id) ? pose : x))
+          : [...avant, pose],
+      };
+    });
+    retour.reussite();
+    setQuitter(false);
+    afficher(demo
+      ? 'Lieu de dépôt enregistré pour la démonstration : rien n’est écrit en base.'
+      : 'Lieu de dépôt enregistré.');
+    revenirAuFormulaire('lieux');
+  };
+
+  /* UN SEUL RETRAIT, même sous un double appui — la leçon des assurances
+     (18/10/2026). Et la phrase dit ce qu'il coûte : un brouillon qui citait
+     ce lieu garde son identifiant, que plus rien ne compte. */
+  const retirerLieu = async (l) => {
+    if (retraitLieuEnCours.current) return;
+    retraitLieuEnCours.current = true;
+    try {
+      await api.retirerLieuDepot(l.id);
+      setDonnees((d) => ({
+        ...d,
+        lieux: (Array.isArray(d.lieux) ? d.lieux : []).filter((x) => String(x.id) !== String(l.id)),
+      }));
+      retour.reussite();
+      setQuitter(false);
+      afficher('Lieu de dépôt retiré. Les brouillons qui le citaient l’ont perdu.');
+      revenirAuFormulaire('lieux');
+    } catch (e) {
+      retour.echec();
+      afficher(messageClair(e, 'Ce lieu de dépôt n’a pas pu être retiré'), 'erreur');
+    } finally {
+      retraitLieuEnCours.current = false;
     }
   };
 
@@ -765,6 +851,19 @@ export default function MonEntreprise({
                     </Pressable>
                   </View>
                 )}
+                {/* VOS LIEUX DE DÉPÔT DES DÉCHETS (2b-5, T13) — eux aussi
+                    SEULEMENT une fois la fiche LUE : pendant la lecture ou
+                    après un échec, `lieux` vaut `null`, et le bloc dirait
+                    « n'ont pas pu être lus » de lieux qu'on lit encore. Une
+                    fiche lue SANS eux (la table pas encore là), elle, le dit,
+                    avec « Réessayer ». */}
+                {donnees.etat === 'pret' && (
+                  <LieuxDeDepotEnLecture
+                    lieux={donnees.lieux}
+                    onModifier={() => entrerEnEdition('lieux')}
+                    onReessayer={reessayerFiche}
+                  />
+                )}
                 {donnees.etat === 'echec' ? (
                   <View style={s.echec}>
                     <Text style={s.texte}>
@@ -807,6 +906,9 @@ export default function MonEntreprise({
                     assurances={donnees.assurances}
                     onAjouterAssurance={() => ouvrirAssurance(null)}
                     onOuvrirAssurance={ouvrirAssurance}
+                    lieux={donnees.lieux}
+                    onAjouterLieu={() => ouvrirLieu(null)}
+                    onOuvrirLieu={ouvrirLieu}
                     onChoisirMediateur={choisirMediateur}
                     telephoneFiche={telephoneFiche}
                     emailFiche={emailFiche}
@@ -840,6 +942,18 @@ export default function MonEntreprise({
                 onOccupe={setOccupeAssurance}
                 onAnnuler={() => revenirAuFormulaire('assurances')}
                 onVoir={voirAttestation}
+              />
+            )}
+
+            {mode === 'lieu' && (
+              <FicheLieuDepot
+                key={`lieu-${cleFiche}`}
+                ref={ficheLieu}
+                lieu={lieu ? lieu.fiche : null}
+                onEnregistrer={enregistrerLieu}
+                onRetirer={retirerLieu}
+                onOccupe={setOccupeLieu}
+                onAnnuler={() => revenirAuFormulaire('lieux')}
               />
             )}
           </ScrollView>

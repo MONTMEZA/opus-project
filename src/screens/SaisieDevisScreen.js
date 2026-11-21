@@ -138,9 +138,14 @@ import {
   pourQuiValable, resumeAQuelTitre, resumeDuChantier, etatDesChampsDuDevis,
   CHAMPS_A_QUEL_TITRE, CHAMPS_DU_CHANTIER, GABARITS_DU_CHANTIER, LE_CHANTIER, DETAIL_URGENCE, DETAIL_URGENCE_SEUL,
   toutUrgent,
+  /* 2b-5 : les déchets du chantier — la rangée, ses gabarits, ses champs, le
+     point qui ouvre la carte SUR sa rubrique, la vibration de la carte. */
+  CHAMPS_DES_DECHETS, GABARITS_DES_DECHETS, LES_DECHETS, resumeDesDechets, rubriqueDuPoint, vibrerPourLesDechets,
 } from '../lib/devis';
+import { memeValeur } from '../lib/meme-valeur';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
+import DechetsDevis from '../components/DechetsDevis';
 import ChantierDevis from '../components/ChantierDevis';
 import FeuilleAQuelTitre from '../components/FeuilleAQuelTitre';
 import FeuilleChantierNeuf from '../components/FeuilleChantierNeuf';
@@ -179,6 +184,18 @@ const NOMS_ENTETE = Object.freeze({
      nomme HORS du bloc qui le porte : « Prix du devis » seul se lirait comme
      le TOTAL (T19, critique ÉCRAN-5). */
   coutDevisCentimes: 'Prix du devis lui-même',
+  /* 2b-5 : les déchets du chantier, tous dans la carte « Déchets du
+     chantier ». La quantité et son unité sont UNE écriture (la paire), les
+     lieux et « Aucun dépôt » aussi : un seul nom chacune. Seuls la quantité
+     et le coût se TAPENT — ce sont eux que l'écran peut refuser. */
+  dechetsConcerne: 'Déchets du chantier',
+  dechetsQuantiteMilliemes: 'Quantité de déchets',
+  dechetsUnite: 'Quantité de déchets',
+  dechetsFlux: 'Déchets du chantier',
+  dechetsSurPlace: 'Déchets du chantier',
+  dechetsLieux: 'Lieux de dépôt des déchets',
+  dechetsSansDepot: 'Lieux de dépôt des déchets',
+  dechetsCoutCentimes: 'Coût estimé des déchets',
 });
 
 /* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
@@ -197,6 +214,22 @@ const CHAMPS_CONDITIONS = Object.freeze([
   'coutDevisCentimes',
 ]);
 
+/* LES CHAMPS DE LA CARTE « DÉCHETS DU CHANTIER » (2b-5, cahier §3.7) : la
+   liste de `devis.js`, UNE écriture (`CHAMPS_DES_DECHETS`) — un refus de
+   l'un d'eux se dit sur la rangée « Déchets », et « Corriger » rouvre la
+   carte SUR sa rubrique (`RUBRIQUE_DU_CHAMP`). */
+const CHAMPS_DECHETS = CHAMPS_DES_DECHETS;
+const RUBRIQUE_DU_CHAMP = Object.freeze({
+  dechetsConcerne: 'question',
+  dechetsQuantiteMilliemes: 'quantite',
+  dechetsUnite: 'quantite',
+  dechetsFlux: 'tri',
+  dechetsSurPlace: 'surPlace',
+  dechetsLieux: 'lieu',
+  dechetsSansDepot: 'lieu',
+  dechetsCoutCentimes: 'cout',
+});
+
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
    d'une LIGNE, `CARTE_CONDITIONS`, ou `CARTE_POUR_REMETTRE` (lot 2b-1,
    « ce qu'il manque pour remettre ce devis »). Une seule valeur, jamais
@@ -207,6 +240,11 @@ const CARTE_CONDITIONS = 'conditions';
 /* …et `CARTE_CHANTIER` (lot 2b-2) : la carte des questions sur le chantier
    (deux sur le neuf ; 2b-3 : la troisième, la garantie décennale). */
 const CARTE_CHANTIER = 'chantier';
+/* …et `CARTE_DECHETS` (étape 2b-5) : la carte « Déchets du chantier » — la
+   question, puis la quantité, le tri, ce qui reste sur le chantier, les
+   lieux de dépôt et le coût estimé. Elle porte des CHAMPS (la quantité, le
+   coût) : `enregistrerCarte` la lit, comme « Conditions ». */
+const CARTE_DECHETS = 'dechets';
 
 /* « Rien en route, rien en échec » : l'état de départ d'un ensemble de
    champs, avant le premier événement de la file. */
@@ -402,6 +440,10 @@ function BasDuDevis({
   etatDeLOption, onReessayer,
   onOuvrir, onAjouter, onRelireTotaux, onOuvrirConditions, onSupprimer, confirmeSuppression, phraseSuppression,
   rangeeRemise = null, resumeChantier = null, onOuvrirChantier = null,
+  /* 2b-5 : la rangée « Déchets » — son résumé (`resumeDesDechets`, calculé
+     par la saisie avec l'état de la file et la liste des lieux) et ce
+     qu'elle ouvre. */
+  resumeDechets = null, onOuvrirDechets = null,
 }) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
@@ -556,6 +598,45 @@ function BasDuDevis({
         </Pressable>
       )}
 
+      {/* « DÉCHETS » (étape 2b-5, T24) — entre « Le chantier » et
+          « Conditions ». Toujours là : la loi vise tout devis de bâtiment ou
+          de jardinage, et vide, Opus compte « Oui ». SON TITRE n'est pas
+          répété par le résumé ; AUCUNE ligne sous elle : un champ refusé par
+          l'écran (un « 0 » tapé) se dit DANS le résumé (« — pas
+          enregistré »). SA HAUTEUR NE BOUGE JAMAIS : ses cinquante-quatre
+          résumés possibles sont posés en gabarits invisibles
+          (`GABARITS_DES_DECHETS`), le résumé lu par-dessus — la règle
+          « garder la grande place » de « Le chantier ». */}
+      {!!resumeDechets && (
+        <Pressable
+          onPress={onOuvrirDechets}
+          accessibilityRole="button"
+          accessibilityLabel={`${LES_DECHETS.rangee} : ${resumeDechets}. Ouvrir`}
+          style={({ pressed }) => [s.resume, pressed && APPUI.discret]}
+        >
+          <View style={s.resumeTexte}>
+            <Text style={s.replieTexte}>{LES_DECHETS.rangee}</Text>
+            <View style={s.superpose}>
+              {GABARITS_DES_DECHETS.map((g, i) => (
+                <View
+                  key={`gabarit-${i}`}
+                  style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]}
+                  aria-hidden
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={s.aide}>{g}</Text>
+                </View>
+              ))}
+              <View style={[s.couche, s.coucheSuivante]}>
+                <Text style={s.aide}>{resumeDechets}</Text>
+              </View>
+            </View>
+          </View>
+          <ChevronRight size={16} color={C.accent2} />
+        </Pressable>
+      )}
+
       {/* LES CONDITIONS — une rangée qui les RÉSUME et ouvre leur carte
           (lot 2a). Ce qui manque passe d'abord ; un champ refusé se dit. */}
       <Pressable
@@ -606,6 +687,14 @@ export default function SaisieDevisScreen({
      de l'attestation décennale qui arrive à sa fin. SANS valeur par défaut :
      `undefined` veut dire « pas transmises », et l'avis se tait (T7). */
   assurances,
+  /* 2b-5 (cahier §3.7, T12 bis) : les lieux de dépôt des déchets de « Mon
+     entreprise », lus par la MÊME lecture que le régime (`OpusApp`,
+     `mesLieux`) — pour la carte « Déchets » et sa rangée. SANS valeur par
+     défaut : `undefined` = pas encore lus, `null` = pas pu l'être ; leur
+     état (en lecture, en échec, vide, lus) se tire de celui du régime
+     (`etatDesLieux`). Jamais un `[]` inventé : « aucun lieu » dirait à un
+     artisan qui en a qu'il n'en a pas. */
+  lieux,
   onRelireRegime, onMonEntreprise, onChargerClients, onNouveauClient,
   onCarte, onRanger, onSupprime, onErreur,
   /* LA BASE DE POSTES (lot P) : lue par `OpusApp` — à la première carte
@@ -681,6 +770,7 @@ export default function SaisieDevisScreen({
   const [attente, setAttente] = useState({
     nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
     etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT,
+    etatDechets: AUCUN_ETAT,
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
@@ -708,10 +798,15 @@ export default function SaisieDevisScreen({
   const refEntete = useRef(null);
   const refCarte = useRef(null);
   const refConditions = useRef(null);
+  /* 2b-5 : la carte « Déchets du chantier ». */
+  const refDechets = useRef(null);
   /* Le TEXTE tapé dans la carte « Conditions » quand une valeur y a été
      refusée : la carte rouverte par « Corriger » le montre encore, au lieu
      de la dernière valeur enregistrée. */
   const [textesConditions, setTextesConditions] = useState(null);
+  /* …et ceux de la carte « Déchets » (2b-5, T23) : la quantité, le coût, et
+     les CHOIX de la carte, gardés tant qu'une valeur est refusée. */
+  const [textesDechets, setTextesDechets] = useState(null);
   /* LA LISTE « POUR LE REMETTRE » (lot 2b-1) — ce que la base a rendu :
        motifs   : la DERNIÈRE liste sûre (`null` : jamais lue, ou la
                   dernière lecture a échoué — elle ne peut plus être dite
@@ -767,6 +862,10 @@ export default function SaisieDevisScreen({
   /* …et la question sur laquelle « Le chantier » s'ouvre, depuis un point
      de la liste (2b-3, E-I1) : `'q2'`, `'q3'` ou `null` (en haut). */
   const [questionChantier, setQuestionChantier] = useState(null);
+  /* …et la rubrique sur laquelle « Déchets » s'ouvre (2b-5, T8) : la
+     question, la quantité, le tri, ce qui reste sur le chantier, le lieu, le
+     coût — ou `null` (en haut). */
+  const [rubriqueDechets, setRubriqueDechets] = useState(null);
   const [focusDemande, setFocusDemande] = useState(null);
   /* Les rappels d'`OpusApp`, toujours les derniers : la file écoute depuis
      son ouverture, et un rappel capturé ce jour-là serait périmé. */
@@ -870,6 +969,12 @@ export default function SaisieDevisScreen({
          la carte sans « pas enregistré », pendant que la base compte
          « Oui ». */
       etatQ3: etatDesChampsDuDevis(entrees, ['engageDecennale']),
+      /* 2b-5 (T24) : la carte « Déchets » — en route, en échec, calculés
+         ici comme les autres ; la rangée les dit dans son résumé. Les listes
+         (les déchets triés, les lieux) se comparent par leur VALEUR
+         (`memeValeur`, T4), jamais par `Object.is` : un tableau relu est
+         toujours un tableau neuf. */
+      etatDechets: etatDesChampsDuDevis(entrees, CHAMPS_DECHETS),
     });
   };
 
@@ -1252,13 +1357,17 @@ export default function SaisieDevisScreen({
        sait quel champ on vient de quitter. */
     if (!ok && vibrer) retour.echec();
     /* Ce que la base rangerait (blancs retirés, code postal sans espaces),
-       comparé à ce qu'elle a : seul ce qui CHANGE part. */
+       comparé à ce qu'elle a : seul ce qui CHANGE part. PAR SA VALEUR
+       (`memeValeur`, 2b-5, T4) : une liste de déchets ou de lieux relue est
+       un tableau NEUF, jamais le même objet — comparée par `Object.is`, elle
+       repartait à chaque écriture de l'en-tête, et la rangée disait
+       « enregistrement… » à tort (CTL-3, mesuré). */
     const net = nettoyerDevis({ ...avant, ...recevables });
     const diff = {};
     Object.keys(recevables).forEach((k) => {
       const nouveau = net[k] === undefined ? null : net[k];
       const ancien = avant[k] === undefined ? null : avant[k];
-      if (!Object.is(nouveau, ancien)) diff[k] = nouveau;
+      if (!memeValeur(nouveau, ancien)) diff[k] = nouveau;
     });
     if (!Object.keys(diff).length) return { ok, refus };
     changerDevis({ ...avant, ...diff });
@@ -1340,12 +1449,40 @@ export default function SaisieDevisScreen({
     return r;
   };
 
+  /* LES DÉCHETS (2b-5, T23) — SUR LE MODÈLE EXACT DES CONDITIONS : la carte
+     est relue ENTIÈRE à chaque fois, ses refus repartent de zéro ; ce qui se
+     lit part par l'en-tête (les PAIRES entières : la quantité et son unité,
+     les lieux et « Aucun dépôt ») ; ce qui ne se lit pas (« 0 » dans la
+     quantité ou le coût) est REFUSÉ par l'écran, avec sa phrase, et la garde
+     le saura ; les textes et les CHOIX de la carte sont gardés tant qu'une
+     valeur est refusée (« Corriger » la rouvre telle qu'on l'a laissée) ; on
+     ne vibre que pour le geste qui vise la faute (`vibrerPourLesDechets`). */
+  const enregistrerDechets = (changements, erreursSaisie = {}, textes = null, geste = 'fermer') => {
+    const fautes = Object.keys(erreursSaisie || {});
+    const deja = CHAMPS_DECHETS.filter((k) => refusEntete.current[k]);
+    poserRefusEntete(CHAMPS_DECHETS);
+    const r = enregistrerEntete(changements, { vibrer: false });
+    if (fautes.length) {
+      poserRefusEntete([], Object.fromEntries(fautes.map((k) => [k, erreursSaisie[k]])));
+    }
+    const refusees = [...fautes, ...Object.keys(r.refus || {})];
+    setTextesDechets(refusees.length ? textes : null);
+    if (vibrerPourLesDechets(geste, refusees, deja)) retour.echec();
+    return r;
+  };
+
   /* La carte ouverte : lue, puis enregistrée — ou oubliée si elle n'a jamais
      rien été. */
   const enregistrerCarte = () => {
     const id = carteRef.current;
     if (id === CARTE_CONDITIONS) {
       if (refConditions.current) refConditions.current.enregistrer();
+      return;
+    }
+    /* 2b-5 : « Déchets du chantier » porte des CHAMPS (la quantité, le
+       coût) — elle se lit comme « Conditions ». */
+    if (id === CARTE_DECHETS) {
+      if (refDechets.current) refDechets.current.enregistrer();
       return;
     }
     /* La liste « Pour le remettre » ne porte aucun champ : rien à lire. La
@@ -1431,6 +1568,29 @@ export default function SaisieDevisScreen({
     ouvrirConditions();
     setChampConditions(champ || null);
     poserRetour(CARTE_POUR_REMETTRE);
+  };
+
+  /* « DÉCHETS DU CHANTIER » (2b-5, cahier §3.7) — une carte comme
+     « Conditions » : la carte ouverte s'enregistre d'abord, ce qui est tapé
+     dans l'en-tête part, et le clavier RESTE (la carte a des champs à
+     taper). `rubrique` : celle sur laquelle elle s'ouvre (`null`, en haut). */
+  const ouvrirDechets = (rubrique = null) => {
+    if (carteRef.current && carteRef.current !== CARTE_DECHETS) enregistrerCarte();
+    if (refEntete.current) refEntete.current.enregistrer();
+    poserRetour(null);
+    setRubriqueDechets(rubrique || null);
+    poserCarte(CARTE_DECHETS);
+    setCleCarte((k) => k + 1);
+    if (rappels.current.onCarte) rappels.current.onCarte(LES_DECHETS.titre);
+  };
+  /* LA PORTE « MES LIEUX DE DÉPÔT » DE LA CARTE (T25) : la carte s'est
+     enregistrée (elle le fait avant d'appeler) ; « Mon entreprise » s'ouvre
+     PAR-DESSUS la saisie, sur la section des lieux, en édition — le chemin
+     des assurances. La carte reste ouverte dessous : à la fermeture, la
+     liste des lieux revient par la prop, et la liste « Pour le remettre » se
+     relit (`retourEntreprise`). */
+  const ouvrirMesLieux = () => {
+    if (onMonEntreprise) onMonEntreprise('lieux');
   };
 
   /* LA LISTE « POUR LE REMETTRE » (lot 2b-1). Ce qui est tapé dans
@@ -1700,6 +1860,15 @@ export default function SaisieDevisScreen({
       case 'conditions':
         ouvrirConditionsSur(e.champ);
         return;
+      /* 2b-5 (T8) : la carte « Déchets du chantier », SUR la question pour
+         une réponse vide (`devis_dechets`), sur la PREMIÈRE rubrique qui
+         manque pour une réponse « Oui » (`devis_dechets_rubriques`) — lue
+         sur le devis et les lieux de l'ÉCRAN (`rubriqueDuPoint`) ; et « ‹ »
+         ramène à la liste. */
+      case 'dechets':
+        ouvrirDechets(rubriqueDuPoint(point, { devis: devisRef.current, lieux }));
+        poserRetour(CARTE_POUR_REMETTRE);
+        return;
       case 'ligne':
         if (!lignesRef.current.some((l) => String(l.id) === String(e.ligneId))) return;
         ouvrirCarte(e.ligneId);
@@ -1932,6 +2101,9 @@ export default function SaisieDevisScreen({
        retenue gardent l'ouverture en haut (un défaut d'avant 2b-4, rangé). */
     if (champ === 'coutDevisCentimes') { ouvrirConditions(); setChampConditions('cout'); return; }
     if (CHAMPS_CONDITIONS.includes(champ)) { ouvrirConditions(); return; }
+    /* 2b-5 : un champ des déchets rouvre la carte SUR sa rubrique — on vient
+       de la garde, pas de la liste : son retour revient au devis. */
+    if (CHAMPS_DECHETS.includes(champ)) { ouvrirDechets(RUBRIQUE_DU_CHAMP[champ] || null); return; }
     if (!refListe.current) return;
     refListe.current.scrollToOffset({ offset: 0, animated: true });
   };
@@ -1942,6 +2114,7 @@ export default function SaisieDevisScreen({
     const g = gardeRef.current;
     poserRefusEntete(Object.keys(refusEntete.current));
     setTextesConditions(null);
+    setTextesDechets(null);
     reprendreLeBilan(g);
   };
 
@@ -2118,6 +2291,17 @@ export default function SaisieDevisScreen({
     enRoute: attente.etatChantier.enRoute,
     enEchec: attente.etatChantier.enEchec,
   });
+  /* « DÉCHETS » (2b-5, T24) — ce que l'écran a, avec l'état de son
+     écriture, et la liste des lieux telle qu'`OpusApp` la tient (non lue :
+     « Lieux de dépôt non lus », jamais « remplies »). Un champ de la carte
+     REFUSÉ par l'écran se dit dans le résumé (« — pas enregistré »). */
+  const resumeDechets = resumeDesDechets({
+    devis,
+    lieux,
+    enRoute: attente.etatDechets.enRoute,
+    enEchec: attente.etatDechets.enEchec,
+    refuse: CHAMPS_DECHETS.some((k) => !!erreursEntete[k]),
+  });
   /* La ligne du haut et la rangée du bas : le MÊME composant, la même
      règle — deux écritures de la même vérité finiraient par se contredire
      (la leçon des voyants du 04/10). */
@@ -2262,6 +2446,8 @@ export default function SaisieDevisScreen({
       rangeeRemise={ligneRemise('bas')}
       resumeChantier={resumeChantier}
       onOuvrirChantier={ouvrirChantier}
+      resumeDechets={resumeDechets}
+      onOuvrirDechets={() => ouvrirDechets(null)}
     />
   );
 
@@ -2562,6 +2748,38 @@ export default function SaisieDevisScreen({
           onFermer={fermerCarte}
           depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
           questionInitiale={questionChantier}
+        />
+      )}
+
+      {/* « DÉCHETS DU CHANTIER » (2b-5) — une carte comme « Conditions » :
+          elle LIT ses champs (`enregistrerCarte`), dit elle-même l'écriture
+          en cours et l'échec, et reçoit la liste des lieux VIVANTE et le
+          régime (son état en est tiré, T12 bis ; le libellé du coût aussi,
+          T16). */}
+      {carte === CARTE_DECHETS && (
+        <DechetsDevis
+          key={`dechets-${cleCarte}`}
+          ref={refDechets}
+          devis={devis}
+          regime={regime}
+          lieux={lieux}
+          erreurs={erreursEntete}
+          textes={textesDechets}
+          etatEcriture={{
+            enCours: attente.enCours,
+            echec: attente.devisErreur
+              ? `${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur, retenue: attente.devisRetenue })} ${
+                typeof attente.devisErreur === 'object' ? messageDEcritureDuDevis(attente.devisErreur, 'entete') : ''}`.trim()
+              : null,
+            reessayable: !!attente.devisErreur && !estUnRefusDefinitif(attente.devisErreur),
+          }}
+          onReessayer={() => fileRef.current && fileRef.current.reessayer('devis')}
+          onEnregistrer={enregistrerDechets}
+          onFermer={fermerCarte}
+          rubriqueInitiale={rubriqueDechets}
+          depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+          onRelireLieux={onRelireRegime}
+          onMesLieux={ouvrirMesLieux}
         />
       )}
 

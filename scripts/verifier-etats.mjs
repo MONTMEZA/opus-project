@@ -558,8 +558,19 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
      l'envoi : Enregistrement de votre déclaration… » contient les lettres
      de « registre » — la règle crue de `SaisieTva.js` l'aurait accusé. Ici,
      la règle du MOT ENTIER, et jamais « vérifié ». */
+  /* …et `FicheLieuDepot.js` (étape 2b-5) : le formulaire d'un lieu de
+     dépôt des déchets. « Registre » en MOT ENTIER seulement — « registre
+     des déchets » existe en droit (C. env., R. 541-43), et un artisan
+     pourrait croire qu'Opus le tient pour lui ; et jamais « vérifié » : Opus
+     ne sait pas si l'installation est autorisée à prendre les déchets. */
+  /* …et `DechetsDevis.js` (étape 2b-5) : la carte « Déchets du chantier » d'un
+     devis — la même règle, pour la même raison. Ses mots viennent de
+     `devis.js` (`LES_DECHETS`) : la négation « Opus ne peut pas le
+     vérifier » vit LÀ, jamais recopiée dans la carte — recopiée ici, elle
+     serait refusée, et c'est voulu. */
   const DEVIS = ['src/components/FicheEmetteur.js', 'src/components/PretAEmettre.js',
-    'src/components/ApercuEntete.js', 'src/lib/emetteur.js', 'src/lib/declaration-tva.js'];
+    'src/components/ApercuEntete.js', 'src/lib/emetteur.js', 'src/lib/declaration-tva.js',
+    'src/components/FicheLieuDepot.js', 'src/components/DechetsDevis.js'];
   const fautifsDevis = [];
   DEVIS.forEach((f) => {
     const c = sansCommentaires(lire(f));

@@ -99,6 +99,17 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   emetteur_assurance_chemin_check: 'cette attestation n’est pas rangée dans votre espace : '
     + 'envoyez-la depuis ce formulaire.',
   emetteur_assurance_longueurs_check: TEXTE_TROP_LONG,
+  /* 2b-5 (46.2 bis) : un lieu de dépôt des déchets. Le formulaire refuse
+     AVANT d'envoyer (`validerLieuDepot`, avec ces mêmes noms) ; ces phrases
+     disent quoi toucher, jamais « schema.sql ». Le type ne vient que de la
+     liste d'Opus : une autre valeur vient d'une version en retard. */
+  emetteur_lieu_code_postal_check: 'un code postal fait cinq chiffres.',
+  emetteur_lieu_complet_check: 'un lieu de dépôt s’écrit avec sa raison sociale, son adresse, son code postal, sa '
+    + 'commune et son type d’installation : c’est ce que le devis doit porter. Pour « Autre installation autorisée », '
+    + 'précisez laquelle.',
+  emetteur_lieu_longueurs_check: TEXTE_TROP_LONG,
+  emetteur_lieu_type_check: 'ce type d’installation n’est pas connu d’Opus : rien n’a été enregistré. Mettez '
+    + 'l’application à jour, puis réessayez.',
   tarif_frais_check: 'les frais de déplacement s’écrivent comme un montant entre 0 et 10 000 €.',
   tarif_frais_zero_check: 'vous avez indiqué 0 € et des conditions. Si vous facturez selon des '
     + 'conditions, laissez le montant vide et écrivez-les ; si vous ne facturez jamais de '
@@ -177,7 +188,8 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   client_ville_check: TEXTE_TROP_LONG,
 
   /* --- Le chiffrage d'un devis : section 49 (lot 1 du module devis) ---
-     LES TRENTE-DEUX (vingt-trois au lot 1, sept au lot 2a, une à 2b-2, une à 2b-3), et pas seulement celles qu'on tape. L'écran refuse
+     LES QUARANTE-DEUX de la section (vingt-trois au lot 1, neuf au lot 2a, une à 2b-2, une à 2b-3, une à 2b-4, sept à
+     2b-5 — les déchets du chantier), et pas seulement celles qu'on tape. L'écran refuse
      AVANT d'envoyer (`validerLigne`, `validerDevis`, dans `devis.js`, avec
      les mêmes noms) : ces phrases sortent donc d'une version en retard,
      d'un client modifié — ou de la base qui voit ce que l'écran ne voit
@@ -221,6 +233,20 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
      « 0 » tapé et le dépassement AVANT d'envoyer (`versCoutDeDevis`) : cette
      phrase est le repli d'une version en retard. */
   devis_cout_check: 'le prix du devis lui-même s’écrit comme un montant entre 0 et 1 000 € TTC.',
+  /* 2b-5 (49.4 sexies) : les déchets du chantier (annexe A.8 du cahier). La
+     carte refuse « 0 » AVANT d'envoyer (`versQuantiteDesDechets`,
+     `versCoutDesDechets`, avec les deux premières phrases) ; les listes et
+     « Aucun dépôt » ne viennent que des cases de la carte, jamais tapées :
+     une valeur refusée vient d'une version en retard (« mettez Opus à
+     jour »). Un tableau vide, que la carte n'écrit jamais, est refusé par
+     la base sous ces noms. */
+  devis_dechets_cout_check: 'le coût estimé des déchets doit être un montant positif.',
+  devis_dechets_flux_check: 'les déchets triés ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
+  devis_dechets_lieux_check: 'les lieux de dépôt de ce devis ne sont pas valables (dix au plus) : mettez Opus à jour.',
+  devis_dechets_quantite_check: 'la quantité estimée des déchets doit être positive.',
+  devis_dechets_sans_depot_check: 'cette réponse sur le dépôt des déchets n’est pas valable : mettez Opus à jour.',
+  devis_dechets_sur_place_check: 'ce qui reste sur le chantier ne correspond pas à la liste d’Opus : mettez Opus à jour.',
+  devis_dechets_unite_check: 'choisissez m³ ou tonnes.',
   /* LE PLAFOND — LA PHRASE DE REPLI, vraie quel que soit le chemin. Trois
      écritures y mènent, et chacune a SA phrase (`PHRASES_DU_PLAFOND`, plus
      bas, que l'écran demande par `messageDEcritureDuDevis`) : une LIGNE, une

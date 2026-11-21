@@ -1939,21 +1939,29 @@ const extraire = (nom, injecte = {}) => {
      l'avis de l'attestation qui arrive à sa fin les lit — par la MÊME
      lecture : UN appel, jamais deux (deux lectures pourraient se
      contredire). `monRegime`, lui, rend toujours le régime SEUL. Et rien
-     n'avale une erreur : une lecture qui échoue fait échouer l'appel. */
+     n'avale une erreur : une lecture qui échoue fait échouer l'appel.
+     DEPUIS 2b-5 (T12), elle rend aussi les LIEUX DE DÉPÔT des déchets
+     (`lieuxDe`, pure) — la carte « Déchets » d'un devis les choisit — par la
+     MÊME lecture : toujours UN appel. `lieuxDe` rend une LISTE, ou `null`
+     (non lus : la table absente), JAMAIS `[]` pour une fiche qui ne les
+     porte pas — « aucun lieu » dirait faux à qui en a. */
   const rs = extraire('regimeEtSaDate');
   const as = extraire('assurancesDe');
+  const ls = extraire('lieuxDe');
   const FICHE = { emetteur: { regime_tva: 'reel', regime_tva_declare_le: '2026-10-03T12:00:00Z' },
-    assurances: [{ nature: 'decennale', valide_jusquau: '2027-03-12', attestation_chemin: 'p/a.pdf' }] };
+    assurances: [{ nature: 'decennale', valide_jusquau: '2027-03-12', attestation_chemin: 'p/a.pdf' }],
+    lieux: [{ id: 'l1', pro_id: 'p', raison_sociale: 'Déchèterie d’essai', type_installation: 'tri' }] };
   const ASSURANCES = FICHE.assurances;
+  const LIEUX = FICHE.lieux;
   const tourne = async (nom, lecteur, fiche) => {
     let appels = 0;
     const lire1 = async () => { appels += 1; if (fiche instanceof Error) throw fiche; return fiche; };
-    const f = extraire(nom, { [lecteur]: lire1, regimeEtSaDate: rs, assurancesDe: as });
+    const f = extraire(nom, { [lecteur]: lire1, regimeEtSaDate: rs, assurancesDe: as, lieuxDe: ls });
     if (typeof f !== 'function') return { plante: 'introuvable' };
     try { return { rendu: await f(), appels }; } catch (e) { return { erreur: e, appels }; }
   };
   const fauxRegime = [];
-  if (!rs || !as) fauxRegime.push('`regimeEtSaDate` ou `assurancesDe` introuvable');
+  if (!rs || !as || !ls) fauxRegime.push('`regimeEtSaDate`, `assurancesDe` ou `lieuxDe` introuvable');
   else {
     if (json(rs(FICHE)) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z' })) fauxRegime.push('regimeEtSaDate(fiche)');
     if (json(rs({ emetteur: null })) !== json({ regime: null, declareLe: null }) || json(rs(null)) !== json({ regime: null, declareLe: null })) {
@@ -1961,14 +1969,22 @@ const extraire = (nom, injecte = {}) => {
     }
     [[FICHE, ASSURANCES], [{ assurances: [] }, []], [{ assurances: null }, null], [{}, null], [null, null], [{ assurances: 'x' }, null],
       [{ assurances: { 0: 'x' } }, null]].forEach(([f, voulu], i) => { if (json(as(f)) !== json(voulu)) fauxRegime.push(`assurancesDe cas ${i}`); });
+    /* 2b-5 : `lieuxDe` — la liste telle quelle, `[]` compris (lue, et vide) ;
+       `null` pour tout le reste (non lue), jamais `[]` inventé. */
+    [[FICHE, LIEUX], [{ lieux: [] }, []], [{ lieux: null }, null], [{}, null], [null, null], [{ lieux: 'x' }, null],
+      [{ lieux: { 0: 'x' } }, null]].forEach(([f, voulu], i) => { if (json(ls(f)) !== json(voulu)) fauxRegime.push(`lieuxDe cas ${i}`); });
     for (const [nom, lecteur] of [['monRegimeEtSaDateSupabase', 'monEmetteurSupabase'], ['monRegimeEtSaDateDemo', 'monEmetteurDemo']]) {
       const r = await tourne(nom, lecteur, FICHE);
       if (r.plante || r.erreur || r.appels !== 1
-        || json(r.rendu) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z', assurances: ASSURANCES })) {
+        || json(r.rendu) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z', assurances: ASSURANCES, lieux: LIEUX })) {
         fauxRegime.push(`${nom} → ${json(r.rendu)} en ${r.appels} lecture(s)${r.plante ? ` (${r.plante})` : ''}${r.erreur ? ` (${r.erreur.message})` : ''}`);
       }
-      const vide = await tourne(nom, lecteur, { emetteur: null, assurances: null });
-      if (json(vide.rendu) !== json({ regime: null, declareLe: null, assurances: null })) fauxRegime.push(`${nom}(vide) → ${json(vide.rendu)}`);
+      const vide = await tourne(nom, lecteur, { emetteur: null, assurances: null, lieux: null });
+      if (json(vide.rendu) !== json({ regime: null, declareLe: null, assurances: null, lieux: null })) fauxRegime.push(`${nom}(vide) → ${json(vide.rendu)}`);
+      /* La table des lieux ABSENTE (`monEmetteur…` rend `lieux: null`) : la
+         lecture rend `null` — non lus —, jamais `[]`. */
+      const absente = await tourne(nom, lecteur, { ...FICHE, lieux: null });
+      if (!absente.rendu || absente.rendu.lieux !== null || absente.appels !== 1) fauxRegime.push(`${nom}(table absente) → ${json(absente.rendu)}`);
       const panne = await tourne(nom, lecteur, new Error('réseau'));
       if (!panne.erreur || panne.erreur.message !== 'réseau') fauxRegime.push(`${nom} avale une erreur → ${json(panne.rendu)}`);
     }
@@ -1979,10 +1995,28 @@ const extraire = (nom, injecte = {}) => {
       if (!panne.erreur) fauxRegime.push(`${nom} avale une erreur`);
     }
   }
-  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe, assurances }` (la date posée par la base au changement de régime ; les '
-    + 'assurances depuis 2b-4, par `assurancesDe`, une LISTE ou `null`), en UNE lecture (`monEmetteur…`), FAIT TOURNER des deux côtés '
-    + '(Supabase et démonstration) — `monRegime` rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel',
+  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe, assurances, lieux }` (la date posée par la base au changement de régime ; les '
+    + 'assurances depuis 2b-4, par `assurancesDe`, et les lieux de dépôt depuis 2b-5, par `lieuxDe` — chacun une LISTE ou `null`, '
+    + 'jamais `[]` inventé), en UNE lecture (`monEmetteur…`), FAIT TOURNER des deux côtés (Supabase et démonstration) — `monRegime` '
+    + 'rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel',
   fauxRegime.length === 0, fauxRegime.join(' ; '));
+  /* 2b-5 (T12) : LA LECTURE DES LIEUX dans `monEmetteurSupabase` — une
+     cinquième requête du MÊME `Promise.all`, sur `emetteur_lieux_depot`, de
+     l'entreprise de la session, dans l'ordre `created_at` puis `id` ; une
+     erreur LÈVE, sauf la table absente (`tableAbsente`), qui rend `null` —
+     jamais `[]`. Lu sur le texte (la fonction charge Supabase). Rangée
+     QUATRIÈME : la preuve de TVA reste la dernière du tableau, la forme que
+     `verifier-emetteur` tient. */
+  const lecteurEmetteur = (API.match(/async function monEmetteurSupabase\(\) \{[\s\S]*?\n\}/) || [''])[0];
+  const lecteurM = lecteurEmetteur.replace(/\s+/g, ' ');
+  verifier('`monEmetteurSupabase` lit les lieux de dépôt dans le MÊME `Promise.all` (cinq lectures), triés `created_at` puis `id`, et '
+    + 'lève sur toute erreur sauf la table absente, qui rend `null` (non lus) — jamais `[]`',
+  /const \[e, a, t, l, v0\] = await Promise\.all\(\[/.test(lecteurM)
+    && lecteurM.includes("supabase.from('emetteur_lieux_depot').select('*').eq('pro_id', currentUserId) .order('created_at', { ascending: true }).order('id', { ascending: true }),")
+    && lecteurM.includes('if (l.error && !tableAbsente(l.error)) throw l.error;')
+    && lecteurM.includes('lieux: l.error ? null : (l.data || []),')
+    && (lecteurM.match(/emetteur_lieux_depot/g) || []).length === 1,
+  lecteurM.slice(0, 200));
 
   /* -- LA CLÉ DE RAPPROCHEMENT, NULLE PART DANS L'APPLICATION ------------ */
   const nommentLaCle = fichiers.filter((f) => f.startsWith('src/') && /cle_rapprochement/.test(f === 'src/lib/api.js' ? API : sansCommentairesJs(lire(f))));
@@ -3130,7 +3164,12 @@ try {
      entreprise — une appartenance d'ASSURANCE, pas celle d'un poste. */
   /* `finDeLAttestation` (2b-4) lit `proId` du DEVIS (`devis.pro_id`, par
      `rowToDevis`), comme `etatDeLAttestation` : pas celui d'un poste. */
-  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation', 'finDeLAttestation']
+  /* …ni, depuis 2b-5, `rubriquesDesDechets` et `entrepriseDuLieu` : la règle
+     du rang 13 ne compte qu'un lieu de dépôt de l'entreprise du DEVIS (son
+     `proId`, et le `proId` ou le `pro_id` d'un LIEU) — une appartenance de
+     lieu de dépôt, pas celle d'un poste. */
+  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation', 'finDeLAttestation',
+    'rubriquesDesDechets', 'entrepriseDuLieu']
     .reduce((s, nom) => {
       const f = fonctionJs(s, nom);
       return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;

@@ -759,16 +759,21 @@ select string_agg(p.proname, ', ' order by p.proname) as nomment_tarifs_pro,
 -- — et, depuis 2b-3 (12/11/2026), PLUS SEULEMENT LUI : l'attestation décennale
 -- dans `emetteur_assurances`, une lecture, colonnes nommées, filtrée par
 -- `a.pro_id = v_pro` (rang 11). La liste ne change pas.
+-- ET DEPUIS 2b-5 (21/11/2026) : `emetteur_lieux_depot` (46.2 bis) entre dans
+-- l'expression, EN LE DÉCIDANT — le tiret bas est une lettre de mot, et
+-- `emetteur` en mot entier ne la voyait pas. La lisent l'export et la liste
+-- des motifs (une lecture filtrée par `l.pro_id = v_pro`, rang 13), qui y
+-- étaient déjà : la liste ne change pas.
 select string_agg(p.proname, ', ' order by p.proname) as nomment_emetteur,
        string_agg(p.proname, ', ' order by p.proname)
          = 'emetteur_incomplet, mes_donnees, motifs_refus_remise' as liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_assurances|emetteur)\M';
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_assurances|emetteur)\M';
 select count(*) filter (where p.prosecdef) as definer_attendu_0
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M';
-select (select count(*) from pg_views where definition ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M')
-     + (select count(*) from pg_matviews where definition ~ '\m(tarifs_pro|emetteur_assurances|emetteur)\M')
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M';
+select (select count(*) from pg_views where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
+     + (select count(*) from pg_matviews where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
          as vues_attendu_0;
 
 

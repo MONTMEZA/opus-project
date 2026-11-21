@@ -1259,8 +1259,13 @@ const EMPREINTES = {
      l'honneur s'exporte sans `reconnu_le` ni `vies_le` — l'export ne dit
      jamais « reconnu » pour un numéro que VIES n'a pas reconnu ; une preuve
      `vies` s'exporte entière. Rien d'autre n'a changé ; essais 51d (J1
-     quater) et 48 (cas 20) rejoués. */
-  mes_donnees: 'af5ae6259c085cd2ae5a673a9d61f10b8eca397740d2aa0c9da138282b958d27',
+     quater) et 48 (cas 20) rejoués.
+     2b-5 (cahier 2b-5, §2.5) : une clé de plus dans le SECOND objet,
+     `mes_lieux_de_depot` (les lieux de dépôt des déchets, section 46.2 bis),
+     triée par `created_at, id` et filtrée sur l'artisan ; sa FORME est
+     comparée à la lettre plus bas. Rien d'autre n'a changé ; essais 51d (J1
+     et J1 quater : 49 clés) et 46 (cas 31) rejoués. */
+  mes_donnees: 'bcd55733dd8400f6085a20c79c48747bafaa366655aff1374799f198d60fb794',
 };
 for (const [nom, attendue] of Object.entries(EMPREINTES)) {
   const f = fonctionSql(nom);
@@ -1420,6 +1425,17 @@ verifier('exclusions 4 et 5 — mes signalements déposés : colonne par colonne
   deposes.length > 0 && !/\bnote\b|traite_par|to_jsonb/.test(deposes));
 verifier('…ni l’auteur ni l’extrait que la base a relevés sur ce que j’ai signalé (je n’ai pas forcément le droit de les lire)',
   deposes.length > 0 && !/cible_auteur_id|extrait/.test(deposes));
+/* LES LIEUX DE DÉPÔT DES DÉCHETS (2b-5, section 46.2 bis) : LEUR FORME, à la
+   lettre — le modèle de `ma_base_de_postes` (verifier-postes). Un cas d'essai
+   « l'export de B ne contient rien de A » ne discrimine rien sous la RLS
+   (l'export est `security invoker`) : seule la forme dit que le filtre est
+   `x.pro_id = auth.uid()`, et pas un filtre élargi ou absent. Et la clé vit
+   dans le SECOND objet. */
+verifier('l’export rend `mes_lieux_de_depot` : les lieux de dépôt de l’artisan SEUL (`x.pro_id = auth.uid()`), triés par `created_at, id`, dans le second objet',
+  /'mes_lieux_de_depot'\s*,\s*coalesce\(\(select\s+jsonb_agg\(to_jsonb\(x\)\s+order\s+by\s+x\.created_at,\s*x\.id\)\s+from\s+public\.emetteur_lieux_depot\s+x\s+where\s+x\.pro_id\s*=\s*auth\.uid\(\)\),\s*'\[\]'::jsonb\)/i.test(corpsExport)
+  && (corpsExport.match(/emetteur_lieux_depot/g) || []).length === 1
+  && objetsDuHaut.length === 2 && argumentsDuPremierNiveau(objetsDuHaut[1].interieur).includes("'mes_lieux_de_depot'"),
+  'Un filtre élargi (ou absent) rendrait les lieux d’un autre artisan dans l’export — la RLS ne le dirait pas.');
 verifier('exclusion 7 — aucune fiche de carnet ni aucun devis qu’un AUTRE artisan tient sur moi',
   !/from public\.clients x where (?!x\.pro_id = auth\.uid\(\))/.test(corpsExport)
   && !/from public\.devis x where (?!x\.pro_id = auth\.uid\(\))/.test(corpsExport));

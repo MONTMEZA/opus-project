@@ -94,17 +94,18 @@ const SUJET = 'Vos informations de devis';
 
   /* LES CONTRAINTES SONT RELEVÉES DANS LE SCHÉMA, pas comptées : le lot 0a
      en posait 20 sur les trois tables, la section 47 (lot T) en ajoute cinq
-     sur `tarifs_pro`. Un nombre écrit ici rougirait à chaque lot ; une
-     liste lue dans `schema.sql` suit le schéma, et le plancher (25) garde
-     contre un lecteur devenu aveugle. */
-  const duSchema = contraintesDesTroisTables();
+     sur `tarifs_pro`, la 46.2 bis (2b-5) quatre sur les lieux de dépôt. Un
+     nombre écrit ici rougirait à chaque lot ; une liste lue dans
+     `schema.sql` suit le schéma, et le plancher (29) garde contre un lecteur
+     devenu aveugle. */
+  const duSchema = contraintesDesQuatreTables();
   const fautives = duSchema.filter((n) => {
     const m = messageClair(refusCheck(n), SUJET);
     return !MESSAGES_CONTRAINTE[n] || m !== `${SUJET} : ${MESSAGES_CONTRAINTE[n]}` || /schema\.sql/.test(m);
   });
-  verifier('chaque contrainte `_check` des trois tables, relevée dans le schéma, a SA phrase, sans piste « schema.sql »',
-    duSchema.length >= 25 && fautives.length === 0,
-    `${duSchema.length} contrainte(s) relevée(s) dans les sections 46 et 47 (25 au moins) ; `
+  verifier('chaque contrainte `_check` des quatre tables, relevée dans le schéma, a SA phrase, sans piste « schema.sql »',
+    duSchema.length >= 29 && fautives.length === 0,
+    `${duSchema.length} contrainte(s) relevée(s) dans les sections 46 et 47 (29 au moins) ; `
     + `mal traduites : ${fautives.join(', ') || 'aucune'}. Une contrainte qui garde une SAISIE `
     + 'n’est pas une panne : « schema.sql n’a pas été rejoué » enverrait l’artisan chercher dans '
     + 'un fichier qu’il n’ouvrira jamais.');
@@ -1060,6 +1061,24 @@ if (E && M && D) {
       /démonstration/.test(demo.emetteur.garantie_legale_texte) && /démonstration/.test(demo.emetteur.modalites_paiement_texte));
     verifier('…et ses dates sont CALCULÉES : l’assurance ne s’éteint pas toute seule',
       D.fabriquerEmetteurDemo(new Date('2030-01-01T10:00:00Z')).assurances[0].valide_jusquau > '2030-01-01');
+    /* 2b-5 (cahier T15) : UN lieu de dépôt des déchets, INVENTÉ (raison
+       sociale et voie cherchées absentes de l'annuaire Sirene et de la Base
+       Adresse le 21/11/2026, `emetteur-demo.js`), à l'identifiant FIXE en
+       forme d'UUID — les devis de démonstration le citent —, déjà NETTOYÉ
+       comme la base le rangerait, et qui passe ses propres contraintes. Il
+       ne change rien à « Prêt à émettre un devis ? » : les cinq clés
+       ci-dessus sont tirées de la même fiche. */
+    const lieux = Array.isArray(demo.lieux) ? demo.lieux : [];
+    const l0 = lieux[0] || {};
+    const net = E.nettoyerLieuDepot(l0, l0);
+    verifier('…et UN lieu de dépôt des déchets (2b-5) : identifiant fixe en forme d’UUID, de la fiche 1, déjà nettoyé, qui passe ses '
+      + 'contraintes, d’un type de la liste',
+    lieux.length === 1 && l0.id === D.LIEU_DEPOT_DEMO_ID
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(l0.id))
+      && String(l0.pro_id) === String(D.PRO_DEMO_EMETTEUR) && E.validerLieuDepot(l0).ok
+      && E.COLONNES_ECRITES.emetteur_lieux_depot.every((c) => net[c] === l0[c])
+      && E.TYPES_INSTALLATION.some((t) => t.cle === l0.type_installation) && l0.type_installation !== 'autre',
+    JSON.stringify(l0));
   }
 
   console.log('\n  la liste des médiateurs — relevée, jamais écrite de mémoire');
@@ -1098,6 +1117,19 @@ if (E && M && D) {
 
   console.log('\n  les choix et les libellés');
   {
+    /* 2b-5 : le TYPE d'un lieu de dépôt sur une rangée — écrit UNE fois
+       (`libelleDuTypeDeLieu`), lu par « Mon entreprise » en édition comme en
+       lecture : le libellé de la liste ; pour « autre », ce que l'artisan a
+       précisé ; une clé inconnue se DIT inconnue, jamais par le libellé d'un
+       autre type. */
+    verifier('`libelleDuTypeDeLieu` : le libellé de la liste, ce que l’artisan a précisé pour « autre », une clé inconnue dite inconnue',
+      E.libelleDuTypeDeLieu({ type_installation: 'decheterie_pro' }) === 'Déchèterie professionnelle'
+      && E.libelleDuTypeDeLieu({ type_installation: 'autre', libelle: 'Plateforme de réemploi' }) === 'Plateforme de réemploi'
+      && E.libelleDuTypeDeLieu({ type_installation: 'autre', libelle: null }) === 'Autre installation'
+      && E.libelleDuTypeDeLieu({ type_installation: 'inventee' }) === 'Type d’installation inconnu d’Opus'
+      && E.libelleDuTypeDeLieu(null) === ''
+      && E.TYPES_INSTALLATION.filter((t) => t.cle !== 'autre')
+        .every((t) => E.libelleDuTypeDeLieu({ type_installation: t.cle, libelle: 'ignoré' }) === t.libelle));
     const pieces = await import('../src/data/pieces-justificatives.js');
     verifier('le nom d’une assurance vient de `pieces-justificatives.js`, écrit une seule fois',
       E.NATURES_ASSURANCE[0].libelle === pieces.DECENNALE.nom && E.NATURES_ASSURANCE[1].libelle === pieces.RC_PRO.nom);
@@ -1167,15 +1199,19 @@ function sectionDuSchema(brut, tete) {
   return sqlSansCommentaires(brut.slice(i, m ? m.index : undefined));
 }
 
-/* Les contraintes `add constraint` des trois tables d'« Mon entreprise »,
+/* Les contraintes `add constraint` des QUATRE tables d'« Mon entreprise »,
    relevées dans les sections 46 ET 47 — la 47 (lot T) en pose cinq sur
-   `tarifs_pro`. Une déclaration de fonction (et non une `const`) : la
-   partie 1 l'appelle, avant que le schéma ne soit lu plus bas. */
-function contraintesDesTroisTables() {
+   `tarifs_pro` ; la 46.2 bis (étape 2b-5) quatre sur `emetteur_lieux_depot`,
+   les lieux de dépôt des déchets. Le trait de soulignement est une lettre de
+   mot : `emetteur_lieux_depot` ne contient PAS le mot `emetteur`, et une
+   alternation qui ne la nomme pas la traverse sans la voir (cahier 2b-5, T6).
+   Une déclaration de fonction (et non une `const`) : la partie 1 l'appelle,
+   avant que le schéma ne soit lu plus bas. */
+function contraintesDesQuatreTables() {
   const brut = readFileSync('supabase/schema.sql', 'utf8');
   const texte = sectionDuSchema(brut, '--  46. MON ENTREPRISE POUR MES DEVIS')
     + sectionDuSchema(brut, '--  47. LES TARIFS RÉUNIS');
-  return [...texte.matchAll(/alter table public\.(?:emetteur|emetteur_assurances|tarifs_pro)\s+add constraint (\w+)/g)]
+  return [...texte.matchAll(/alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint (\w+)/g)]
     .map((m) => m[1]);
 }
 
@@ -1189,7 +1225,11 @@ const TETE_46 = '--  46. MON ENTREPRISE POUR MES DEVIS';
 const TETE_47 = '--  47. LES TARIFS RÉUNIS';
 const TETE_42 = '--  42. L\'EXPORT RGPD';
 const DERNIER_DE_45 = 'grant execute on function public.admin_retirer_entreprise(uuid, text) to authenticated;';
-const TABLES_46 = ['emetteur', 'emetteur_assurances', 'tarifs_pro'];
+/* Les QUATRE tables privées d'« Mon entreprise » : depuis l'étape 2b-5,
+   `emetteur_lieux_depot` (46.2 bis), les lieux de dépôt des déchets — DÉCIDÉ
+   (cahier T6) : chaque propriété de cette partie qui vaut pour les trois
+   autres vaut pour elle. */
+const TABLES_46 = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot', 'tarifs_pro'];
 const iTete46 = SCHEMA_BRUT.indexOf(TETE_46);
 const iTete42 = SCHEMA_BRUT.indexOf(TETE_42);
 /* La section s'arrête au PROCHAIN en-tête de section numérotée — la 47
@@ -1231,8 +1271,8 @@ if (!E) {
       iTete46 > 0 && i45 > 0 && iTete46 > i45 && iTete42 > iTete46,
       'L’export RGPD (42) et le balayage des portes (43) restent les deux derniers blocs : une '
       + 'section posée après eux ne serait ni exportée ni balayée.');
-    const declencheurs = ['trg_tient_l_emetteur', 'trg_tient_l_assurance', 'trg_tient_les_tarifs'];
-    verifier('ses trois déclencheurs naissent AVANT le balayage, et aucun déclencheur ne suit le balayage',
+    const declencheurs = ['trg_tient_l_emetteur', 'trg_tient_l_assurance', 'trg_tient_le_lieu_de_depot', 'trg_tient_les_tarifs'];
+    verifier('ses quatre déclencheurs naissent AVANT le balayage, et aucun déclencheur ne suit le balayage',
       declencheurs.every((d) => { const i = SCHEMA_BRUT.indexOf(`create or replace trigger ${d}`); return i > 0 && i < iPortes; })
       && !/create (or replace )?trigger/.test(SCHEMA_BRUT.slice(iPortes)),
       'Le balayage ne voit que les fonctions déjà créées : une fonction de déclencheur née après lui '
@@ -1267,18 +1307,21 @@ if (!E) {
 
   /* --- 6.2-16 : les noms des contraintes --- */
   {
-    /* Les ordres `add constraint` DES TROIS TABLES, relevés dans les
+    /* Les ordres `add constraint` DES QUATRE TABLES, relevés dans les
        sections 46 et 47 : la 47 (lot T) en pose cinq sur `tarifs_pro`, et
        aussi deux sur `sos_availability` (le rayon et le délai), qui ne sont
        pas d'« Mon entreprise » et n'ont pas de miroir ici — d'où un relevé
-       par TABLE, et non tout ce que contient la section. */
-    const ORDRE = /alter table public\.(?:emetteur|emetteur_assurances|tarifs_pro)\s+add constraint (\w+)([^;]*);/g;
+       par TABLE, et non tout ce que contient la section. La 46.2 bis (2b-5)
+       en pose quatre sur `emetteur_lieux_depot` : sans elle dans
+       l'alternation, ses quatre `check (` comptés dans la section ne
+       correspondaient à aucun ordre relevé. */
+    const ORDRE = /alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint (\w+)([^;]*);/g;
     const ordres = [...(SECTION_46 + SECTION_47).matchAll(ORDRE)];
     const noms = ordres.map((m) => m[1]);
     const miroir = Object.keys(E.CONTRAINTES).flatMap((t) => Object.keys(E.CONTRAINTES[t]));
     const sansPhrase = noms.filter((n) => !MESSAGES_CONTRAINTE[n]);
-    verifier('les contraintes des trois tables (sections 46 et 47) = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
-      noms.length >= 25 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
+    verifier('les contraintes des quatre tables (sections 46 et 47) = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
+      noms.length >= 29 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
       `SQL : ${noms.length} ; miroir : ${miroir.length} ; sans phrase : ${sansPhrase.join(', ') || 'aucune'}. `
       + 'Une contrainte renommée d’un seul côté rend un refus anonyme, avec une piste fausse.');
     verifier('…toutes nommées en `_check`, aucune `check (` anonyme, et pas d’`emetteur_paiement_check`',
@@ -1302,12 +1345,13 @@ if (!E) {
   {
     const paires = (txt) => Object.fromEntries([...txt.matchAll(/char_length\((\w+)\)(?:,\s*0\))?\s*<=\s*(\d+)/g)]
       .map((m) => [m[1], Number(m[2])]));
-    /* Les longueurs relevées dans TOUTES les contraintes des trois tables,
+    /* Les longueurs relevées dans TOUTES les contraintes des quatre tables,
        où qu'elles soient : `decompte_temps_texte: 200` vient de
-       `tarif_decompte_texte_check`, posée en section 47. */
-    const sql = { emetteur: {}, emetteur_assurances: {}, tarifs_pro: {} };
+       `tarif_decompte_texte_check`, posée en section 47 ; celles des lieux
+       de dépôt, d'`emetteur_lieu_longueurs_check` (46.2 bis, 2b-5). */
+    const sql = { emetteur: {}, emetteur_assurances: {}, emetteur_lieux_depot: {}, tarifs_pro: {} };
     for (const m of (SECTION_46 + SECTION_47).matchAll(
-      /alter table public\.(emetteur|emetteur_assurances|tarifs_pro)\s+add constraint \w+([^;]*);/g,
+      /alter table public\.(emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint \w+([^;]*);/g,
     )) Object.assign(sql[m[1]], paires(m[2]));
     const ecarts = Object.keys(E.LONGUEUR_MAX).flatMap((t) => {
       const a = E.LONGUEUR_MAX[t];
@@ -1331,14 +1375,17 @@ if (!E) {
        tarifs. `verifier-tarifs` (partie B) tient sa liste FERMÉE, toutes
        formes du fichier comprises. Deux contrôles pour la même liste
        finiraient par dire deux choses. */
-    const TABLES_ICI = ['emetteur', 'emetteur_assurances'];
+    /* …et les lieux de dépôt des déchets (2b-5) : leurs six colonnes écrites
+       ↔ `COLONNES_ECRITES.emetteur_lieux_depot` ; `id`, `pro_id` et
+       `created_at` posés par la base. */
+    const TABLES_ICI = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot'];
     const ecarts = TABLES_ICI.flatMap((t) => {
       const ecrites = colonnes(t).filter((c) => !POSEES_PAR_LA_BASE.includes(c));
       const js = E.COLONNES_ECRITES[t] || [];
       return [...ecrites.filter((c) => !js.includes(c)).map((c) => `${t}.${c} n’est écrite par personne`),
         ...js.filter((c) => !ecrites.includes(c)).map((c) => `${t}.${c} est envoyée sans exister`)];
     });
-    verifier('`COLONNES_ECRITES` ↔ les `create table` d’`emetteur` et d’`emetteur_assurances`, dans les deux sens',
+    verifier('`COLONNES_ECRITES` ↔ les `create table` d’`emetteur`, d’`emetteur_assurances` et d’`emetteur_lieux_depot`, dans les deux sens',
       TABLES_ICI.every((t) => colonnes(t).length > 0) && ecarts.length === 0, ecarts.join(' ; '));
     verifier('…et `tarifs_pro` a toujours son `create table` en section 46, avec sa clé',
       /^\s*pro_id\s+uuid primary key/m.test(table('tarifs_pro')),
@@ -1362,9 +1409,13 @@ if (!E) {
       && !/auth\.uid\(\)/.test(p),
       'L’appartenance passe par la fonction (la discipline du 04/10) : si un patron donne un jour un '
       + 'accès à ses compagnons, c’est elle qui change, pas les règles une par une.');
+    /* `revoke truncate on …` (46.5, les trois tables du lot 0a) ou
+       `revoke truncate, references, trigger on …` (46.2 bis, 2b-5 : les
+       lieux de dépôt, qui retirent aussi `references` et `trigger`) : les
+       deux formes retirent `truncate`, qu'AUCUNE politique RLS ne filtre. */
     verifier(`\`${t}\` : aucun droit pour \`anon\`, pas de \`truncate\` pour \`authenticated\`, aucune politique \`anon\` ni administrative`,
       new RegExp(`revoke all on public\\.${t}\\s+from anon;`).test(SECTION_46)
-      && new RegExp(`revoke truncate on [^;]*public\\.${t}\\b[^;]*from authenticated;`).test(SECTION_46)
+      && new RegExp(`revoke truncate(?:, (?:references|trigger))* on [^;]*public\\.${t}\\b[^;]*from authenticated;`).test(SECTION_46)
       && !new RegExp(`grant [^;]*on [^;]*public\\.${t}\\b[^;]*to [^;]*\\banon\\b`).test(SCHEMA)
       && politiques(t).every((x) => !/\bto\s+(anon|public)\b/.test(x) && !/est_admin\(/.test(x)),
       'Un visiteur reçoit « permission denied », pas une liste vide ; et l’administration ne lit pas '
@@ -1434,12 +1485,23 @@ if (!E) {
        la table, ses trois colonnes nommées, de la seule DÉCENNALE de
        L'ENTREPRISE DU DEVIS (`a.pro_id = v_pro`) — et rien d'autre de
        l'assureur (ni son nom, ni son adresse, ni la couverture). */
-    const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur)\b/;
+    /* …ET UNE TROISIÈME LISTE DEPUIS 2b-5 (cahier T6, T9) : les lieux de
+       dépôt des déchets. `\bemetteur\b` ne voit PAS `emetteur_lieux_depot`
+       (le trait de soulignement est une lettre de mot) : sans elle, une
+       fonction `security definer` ou une vue qui lirait les lieux de tous
+       les artisans passerait au vert. Trois fonctions ont le droit de la
+       nommer : son déclencheur (qui, de fait, n'en lit rien), l'export RGPD
+       (ses lieux à lui), et `motifs_refus_remise` (le rang 13 : combien des
+       lieux CHOISIS existent chez l'entreprise du devis — sa porte étroite
+       est ci-dessous). */
+    const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur)\b/;
     const LISTES = [
       { tables: /\b(emetteur_assurances|emetteur)\b/,
         permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees', 'motifs_refus_remise'] },
       { tables: /\btarifs_pro\b/,
         permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
+      { tables: /\bemetteur_lieux_depot\b/,
+        permises: ['tient_le_lieu_de_depot', 'mes_donnees', 'motifs_refus_remise'] },
     ];
     const fonctions = [...SCHEMA.matchAll(
       /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
@@ -1450,7 +1512,7 @@ if (!E) {
     const definer = [...new Set(lisent.filter((f) => /security\s+definer/i.test(f.attributs)).map((f) => f.nom))];
     const vues = [...SCHEMA.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+[\s\S]*?;/gi)]
       .filter((m) => PRIVEES.test(m[0]));
-    verifier(`aucune fonction hors d’une liste fermée ne lit ces trois tables, quel que soit son nom (${lisent.length} sur ${fonctions.length})`,
+    verifier(`aucune fonction hors d’une liste fermée ne lit ces quatre tables, quel que soit son nom (${lisent.length} sur ${fonctions.length})`,
       fonctions.length >= 60 && lisent.length >= 2 && horsListe.length === 0,
       horsListe.join(', ') || 'le lecteur ne trouve plus les fonctions : il est devenu aveugle');
     verifier('…aucune de celles qui les lisent n’est `security definer`, et aucune vue ne les nomme',
@@ -1484,15 +1546,30 @@ if (!E) {
     const lectureAss = LECTURE_ASSURANCES.exec(mrrSansCom);
     const jourDeParis = /\bv_jour\s+date\s*:=\s*\(now\(\)\s+at\s+time\s+zone\s+'Europe\/Paris'\)::date\s*;/i.test(mrrSansCom)
       && !/\bcurrent_date\b|\blocaltimestamp\b|\bcurrent_timestamp\b/i.test(mrrCode);
+    /* …ET DEPUIS 2b-5 (cahier T9, §2.7), UNE TROISIÈME LECTURE, À LA LETTRE,
+       FILTRE COMPRIS : combien des lieux de dépôt CHOISIS par le devis
+       existent chez L'ENTREPRISE DU DEVIS (`l.pro_id = v_pro`), distincts,
+       seulement quand la réponse n'est pas « Non ». Aucune colonne du lieu
+       n'en sort (ni sa raison sociale, ni son adresse) : un nombre. Sous la
+       RLS, retirer le filtre serait une mutation équivalente — l'essai
+       49-remise le prouve par une enveloppe `security definer` (cas 26 c) ;
+       ici, c'est sa FORME qui le tient, comme celle de la décennale. */
+    const mentionsLieux = (mrrCode.match(/\bemetteur_lieux_depot\b/gi) || []).length;
+    const LECTURE_LIEUX = /\bif\s+v_dechets\s+is\s+not\s+false\s+then\s+select\s+count\(distinct\s+l\.id\)\s+into\s+v_lieux_existants\s+from\s+public\.emetteur_lieux_depot\s+l\s+where\s+l\.pro_id\s*=\s*v_pro\s+and\s+l\.id\s*=\s*any\s*\(v_dechets_lieux\)\s*;\s*end\s+if\s*;/i;
+    const lectureLieux = LECTURE_LIEUX.test(mrrCode);
     verifier('…et `motifs_refus_remise` ne lit de l’émetteur QUE le régime de TVA (une seule mention de la table, dans '
       + '`select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro`) et, depuis 2b-3, des assurances QUE la '
       + 'décennale jointe de l’entreprise du devis (une seule mention, une lecture de `valide_jusquau`, `nature`, `attestation_chemin` '
       + 'réduite à deux booléens, filtrée par `a.pro_id = v_pro` et `a.nature = \'decennale\'`, seulement si la réponse n’est pas « Non »), '
-      + 'au jour de PARIS — et jamais `tarifs_pro`',
+      + 'au jour de PARIS ; et, depuis 2b-5, des lieux de dépôt QUE le nombre de ceux qu’il CHOISIT et qui existent chez l’entreprise du '
+      + 'devis (une seule mention, `count(distinct l.id)` filtré par `l.pro_id = v_pro`, seulement si la réponse n’est pas « Non ») — '
+      + 'et jamais `tarifs_pro`',
     mrr.length === 1 && mentions === 1 && lecture && mentionsAss === 1 && !!lectureAssForme && !!lectureAss
-      && lectureAss[1] === 'decennale' && jourDeParis && !/\btarifs_pro\b/i.test(mrrCode),
-    `${mrr.length} définition(s) ; ${mentions} mention(s) d’emetteur, ${mentionsAss} d’emetteur_assurances ; lecture du seul régime : `
-    + `${lecture} ; lecture de la décennale : ${!!lectureAssForme}/${lectureAss ? lectureAss[1] : '—'} ; jour de Paris : ${jourDeParis}`);
+      && lectureAss[1] === 'decennale' && jourDeParis && !/\btarifs_pro\b/i.test(mrrCode)
+      && mentionsLieux === 1 && lectureLieux,
+    `${mrr.length} définition(s) ; ${mentions} mention(s) d’emetteur, ${mentionsAss} d’emetteur_assurances, ${mentionsLieux} `
+    + `d’emetteur_lieux_depot ; lecture du seul régime : ${lecture} ; lecture de la décennale : ${!!lectureAssForme}/`
+    + `${lectureAss ? lectureAss[1] : '—'} ; jour de Paris : ${jourDeParis} ; lecture des lieux, filtre compris : ${lectureLieux}`);
   }
 
   /* --- 6.3-22 : rien n'est `not null` hors des clés --- */
@@ -1505,8 +1582,10 @@ if (!E) {
       if (/\bnot null\b/i.test(m[2])) nonNuls.push(`add column ${m[1]}`);
     }
     for (const m of (SECTION_46 + SECTION_47).matchAll(/alter column (\w+) set not null/gi)) nonNuls.push(`set not null ${m[1]}`);
+    /* Deux tables FILLES depuis 2b-5 : leur `pro_id` est `not null`, leur
+       clé est un `id`. Rien d'autre. */
     verifier('rien n’est `not null` sauf les clés',
-      nonNuls.join() === 'emetteur_assurances.pro_id',
+      nonNuls.join() === 'emetteur_assurances.pro_id,emetteur_lieux_depot.pro_id',
       `Trouvés : ${nonNuls.join(', ') || 'aucun'}. Une fiche se remplit en plusieurs fois : c’est à la `
       + 'REMISE que sa complétude se juge, et un `not null` violé rend un refus anonyme (23502).');
   }
@@ -1646,10 +1725,47 @@ if (!E) {
       /denomination_ei ~\* '\\m\(EI\|EIRL\)\\M\|entrepreneur individuel' and char_length\(regexp_replace\( regexp_replace\(denomination_ei, '\\m\(EI\|EIRL\)\\M\|entrepreneur individuel\( \. responsabilit\. limit\.e\)\?', '', 'gi'\), '\[[^']*(?:''[^']*)*\]', '', 'g'\)\) >= 2\)\);/.test(denom)
       && !/\bE'/.test(denom),
       `Sans cela, « EI » seul passait, et l’en-tête s’imprimait « EI ». Trouvé : ${denom.slice(0, 160)}`);
-    const triggers = ['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs'].map(fonction);
-    verifier('les trois fonctions sont `security invoker`, avec un `search_path` fixé',
+    /* LE DÉCLENCHEUR DES LIEUX DE DÉPÔT (2b-5, 46.2 bis) : la date de
+       création posée par la BASE, comme une assurance (un client modifié
+       choisirait sinon l'ordre de ses lieux, donc celui où un devis les
+       citerait) ; le libellé effacé hors du type « autre » ; et le code
+       postal rogné AUX BOUTS par la petite classe de la section 46 —
+       espace, tabulation, retour chariot, saut de ligne, écrits `chr(n)` —,
+       la règle du code postal de « Mon entreprise » (T22) : `rogner`, le
+       miroir de démonstration, rogne ces quatre caractères et aucun autre.
+       Les quatre textes, eux, sont tenus par `verifier-devis` (§17 : les
+       douze copies de la grande classe). */
+    const tl = fonction('tient_le_lieu_de_depot');
+    verifier('`tient_le_lieu_de_depot` pose la date de création elle-même, efface le libellé hors « autre », et rogne le code postal '
+      + 'par la petite classe de la section 46 (2b-5, T22)',
+    /if tg_op = 'UPDATE' then\s+new\.created_at := old\.created_at;\s+else\s+new\.created_at := clock_timestamp\(\);\s+end if;/.test(tl)
+      && (tl.match(/new\.created_at :=/g) || []).length === 2 && !/coalesce\(new\.created_at/.test(tl)
+      && /if new\.type_installation is distinct from 'autre' then\s+new\.libelle := null;\s+end if;/.test(tl)
+      && tl.includes("new.code_postal := nullif(btrim(coalesce(new.code_postal, ''), ' ' || chr(9) || chr(13) || chr(10)), '');")
+      && (tl.match(/new\.code_postal :=/g) || []).length === 1
+      && !/\bfrom\s+public\./.test(tl) && !/\bnow\(\)/.test(tl),
+    'Sans la date posée par la base, un lieu daté de 2001 passait en tête de la liste ; sans le libellé effacé, il s’imprimerait à '
+      + 'côté d’un type qui dit déjà tout ; et un code postal rogné autrement que celui de « Mon entreprise » ne serait comparé à rien.');
+    const triggers = ['tient_l_emetteur', 'tient_l_assurance', 'tient_le_lieu_de_depot', 'tient_les_tarifs'].map(fonction);
+    verifier('les quatre fonctions sont `security invoker`, avec un `search_path` fixé',
       triggers.every((x) => /security invoker/.test(x) && /set search_path = public/.test(x)
         && !/security definer/.test(x.slice(0, x.indexOf(' as $$')))));
+  }
+
+  /* --- 2b-5 : les TYPES D'INSTALLATION, la même liste fermée des deux
+     côtés, dans le même ordre : `emetteur_lieu_type_check` (écrite en
+     toutes lettres) et `TYPES_INSTALLATION`, dont l'écran tire ses choix.
+     Un type ajouté d'un seul côté : refusé par la base sous une option que
+     l'écran propose, ou jamais proposé. --- */
+  {
+    const typeSql = contrainte('emetteur_lieu_type_check');
+    const liste = (typeSql.match(/type_installation in\s*\(([^)]*)\)/) || [])[1] || '';
+    const cles = [...liste.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    verifier('`emetteur_lieu_type_check` et `TYPES_INSTALLATION` : la même liste fermée de types, dans le même ordre, « autre » en dernier',
+      cles.length === 12 && cles.join() === E.TYPES_INSTALLATION.map((t) => t.cle).join() && cles[cles.length - 1] === 'autre'
+      && E.TYPES_INSTALLATION.every((t) => typeof t.libelle === 'string' && t.libelle.trim() && !/agr[ée]{2}|v[ée]rifi/i.test(t.libelle)),
+    `SQL : ${cles.join(', ') || '(introuvable)'} ; JS : ${E.TYPES_INSTALLATION.map((t) => t.cle).join(', ')}. Et aucun libellé ne dit `
+      + '« agréé » : Opus ne sait pas si l’installation l’est.');
   }
 
   /* --- 6.3-27 : l'export RGPD --- */
@@ -1741,7 +1857,7 @@ console.log('\n4. L’ESSAI SQL — des refus, une donnée qui existe, et les m�
   verifier('les refus attendus nomment des contraintes qui ont leur phrase',
     absentes.length === 0, absentes.join(', '));
   verifier('les refus de RLS et de droits, table par table, et OP011 lu avec son code',
-    ['"emetteur"', '"tarifs_pro"', '"emetteur_assurances"'].every((t) => brut.includes(`RLS sur ${t}`))
+    ['"emetteur"', '"tarifs_pro"', '"emetteur_assurances"', '"emetteur_lieux_depot"'].every((t) => brut.includes(`RLS sur ${t}`))
     && TABLES_46.every((t) => new RegExp(`set local role anon;\\s*select count\\(\\*\\) from public\\.${t};`).test(essai))
     && /\\set VERBOSITY verbose[\s\S]*emetteur_incomplet\(:A\)[\s\S]*\\set VERBOSITY default/.test(essai));
 
@@ -1824,15 +1940,17 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   /* ------------------------------------------------------------------ */
   const api = sansCommentaires(lire('src/lib/api.js'));
   const iNoop = api.indexOf('const noop = async () => null;');
-  const SEPT = ['monEmetteur', 'enregistrerEmetteur', 'emetteurIncomplet', 'enregistrerAssurance',
-    'retirerAssurance', 'envoyerAttestation', 'lienAttestation'];
-  const malFormes = SEPT.filter((n) => {
+  /* NEUF depuis 2b-5 : un lieu de dépôt des déchets s'enregistre et se
+     retire, sur le modèle des assurances (cahier §2.7). */
+  const NEUF = ['monEmetteur', 'enregistrerEmetteur', 'emetteurIncomplet', 'enregistrerAssurance',
+    'retirerAssurance', 'envoyerAttestation', 'lienAttestation', 'enregistrerLieuDepot', 'retirerLieuDepot'];
+  const malFormes = NEUF.filter((n) => {
     const choix = api.indexOf(`export const ${n} = hasSupabase ? ${n}Supabase : ${n}Demo;`);
     const sup = api.indexOf(`async function ${n}Supabase(`);
     const demo = api.indexOf(`async function ${n}Demo(`);
     return iNoop < 0 || choix < 0 || sup < iNoop || demo < iNoop || choix < sup || choix < demo;
   });
-  verifier('les sept exports sont APRÈS `const noop`, en deux fonctions nommées, le choix à la fin',
+  verifier('les neuf exports sont APRÈS `const noop`, en deux fonctions nommées, le choix à la fin',
     malFormes.length === 0,
     `${malFormes.join(', ')}. La forme \`!hasSupabase ? async (o = {}) => { … } : …\` fait échouer `
     + 'Metro sans dire ni la ligne ni la cause (CLAUDE.md) ; et une `const` lue avant sa déclaration '
@@ -1919,13 +2037,59 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     /\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function enregistrerAssuranceSupabase('))
     && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(corps(api, 'async function retirerAssuranceSupabase(')));
 
+  /* LES LIEUX DE DÉPÔT DES DÉCHETS (2b-5, cahier §3.4 et T12) — le modèle
+     des assurances, et pas celui des lignes uniques : `insert` pour un
+     nouveau, `update(...).eq('id').eq('pro_id')` pour un existant, `delete`
+     pour le retirer, JAMAIS d'`upsert` (PostgreSQL juge la ligne PROPOSÉE
+     avant de la fusionner : le piège du lot T). Ce qui part passe par
+     `pourLaBase`, `pro_id` posé depuis la session ; la démonstration refuse
+     avec le texte exact de PostgreSQL, et range comme le déclencheur. */
+  {
+    const enregL = corps(api, 'async function enregistrerLieuDepotSupabase(');
+    const retirerL = corps(api, 'async function retirerLieuDepotSupabase(');
+    const enregLDemo = corps(api, 'async function enregistrerLieuDepotDemo(');
+    verifier('un lieu de dépôt et son retrait ne visent que la fiche du compte connecté, sans `upsert`, par `pourLaBase`',
+      /\.update\(ligne\)\.eq\('id', idExistant\)\.eq\('pro_id', currentUserId\)/.test(enregL)
+      && /\.insert\(\{ \.\.\.ligne, pro_id: currentUserId \}\)/.test(enregL)
+      && /const ligne = pourLaBase\('emetteur_lieux_depot', valeurs \|\| \{\}\);/.test(enregL)
+      && !/\.upsert\(/.test(enregL)
+      && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(retirerL),
+    'un lieu d’un autre artisan ne se modifie ni ne se retire ; un `upsert` partiel serait refusé par la croisée de la loi');
+    verifier('…et la démonstration refuse comme la base (`refusDeContrainte`, `validerLieuDepot`) et range comme le déclencheur '
+      + '(`nettoyerLieuDepot`), dans le dossier de `moiEnDemo()`',
+    /const refus = validerLieuDepot\(ligne\);/.test(enregLDemo)
+      && /refusDeContrainte\('emetteur_lieux_depot', refus\.contrainte\)/.test(enregLDemo)
+      && /nettoyerLieuDepot\(ligne, ancien, new Date\(\)\)/.test(enregLDemo)
+      && /const moi = moiEnDemo\(\);/.test(enregLDemo) && !/currentUserId/.test(enregLDemo),
+    'une démonstration plus aimable que la base masquerait ce que l’artisan rencontrera pour de vrai');
+    /* LA CINQUIÈME LECTURE de `monEmetteurSupabase` (T12) : la table des
+       lieux, dans l'ordre `created_at` puis `id`, RANGÉE AVANT la preuve de
+       TVA (qui reste la dernière, contrôlée plus haut) ; toute erreur LÈVE,
+       sauf la table absente, qui rend `null` — NON LUS, jamais `[]`. Et
+       c'est la SEULE lecture de la table dans `api.js` : une seconde finirait
+       par ne pas dire la même chose que la première. */
+    const lecture = corps(api, 'async function monEmetteurSupabase(');
+    verifier('`monEmetteur()` lit les lieux de dépôt en CINQUIÈME, avant la preuve de TVA : toute erreur lève, sauf la table absente '
+      + '→ `null` (non lus, jamais `[]`) — et c’est la seule lecture de la table',
+    /const \[e, a, t, l, v0\] = await Promise\.all\(\[/.test(lecture)
+      && /supabase\.from\('emetteur_lieux_depot'\)\.select\('\*'\)\.eq\('pro_id', currentUserId\)\s*\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\),\s*supabase\.from\('preuves_tva'\)/.test(lecture)
+      && /if \(l\.error && !tableAbsente\(l\.error\)\) throw l\.error;/.test(lecture)
+      && /lieux: l\.error \? null : \(l\.data \|\| \[\]\),/.test(lecture)
+      && (api.match(/from\('emetteur_lieux_depot'\)\s*\.select\(/g) || []).length === 1,
+    'une table pas encore migrée ne doit pas faire tomber « Mon entreprise » entière ; et « aucun lieu » sur une liste non lue '
+      + 'inviterait au doublon');
+  }
+
   /* ------------------------------------------------------------------ */
   /*  5b. LES ÉCRANS — 6.5-31                                            */
   /* ------------------------------------------------------------------ */
+  /* NEUF depuis 2b-5 : `FicheLieuDepot`, le formulaire d'un lieu de dépôt
+     des déchets (le mode `lieu`). HORS d'`ECRANS_DEVIS` (`verifier-devis`) :
+     c'est un écran de « Mon entreprise », et ses règles sont ici. */
   const ECRANS = ['MonEntreprise', 'IdentiteEntreprise', 'PretAEmettre', 'ApercuEntete', 'FicheEmetteur',
-    'FicheAssurance', 'ListeMediateurs', 'SaisieTva'];
+    'FicheAssurance', 'FicheLieuDepot', 'ListeMediateurs', 'SaisieTva'];
   const absents = ECRANS.filter((n) => lireSiExiste(`src/components/${n}.js`) == null);
-  verifier('les huit composants de « Mon entreprise » existent', absents.length === 0, absents.join(', '));
+  verifier('les neuf composants de « Mon entreprise » existent', absents.length === 0, absents.join(', '));
 
   const code = Object.fromEntries(ECRANS.map((n) => [n, sansCommentaires(lireSiExiste(`src/components/${n}.js`) || '')]));
   const me = code.MonEntreprise;
@@ -1973,7 +2137,9 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   /* 2b-2 : le message d'attente d'un envoi TVA nomme CE qui part (le
      contrôle, la déclaration, le retrait — `messageDOccupationTva`,
      declaration-tva.js, fait tourner par `verifier-tva`). */
-  const FORME_DE_FERMER = "if (occupe || occupeAssurance) { afficher('' + ''); return; } "
+  /* 2b-5 : un lieu de dépôt en cours d'envoi ou de retrait (`occupeLieu`,
+     posé par `FicheLieuDepot`) fait attendre la croix, comme une assurance. */
+  const FORME_DE_FERMER = "if (occupe || occupeAssurance || occupeLieu) { afficher('' + ''); return; } "
     + "if (occupeTva) { afficher(messageDOccupationTva(occupeTva, { fermer: true }), ''); return; } "
     + "if (!quitter && aDesChangements()) { setQuitter(true); retour.avertissement(); retour.annoncer(''); return; } onFermer();";
   verifier('…« Quitter sans enregistrer » passe par `fermer`, comme la croix et le geste de retour d’Android : pendant un envoi, il '
@@ -1983,7 +2149,7 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     && /accessibilityLabel="Fermer « Mon entreprise »"/.test(me) && (me.match(/onPress=\{fermer\}/g) || []).length === 2
     && !/onPress=\{onFermer\}|onPress=\{\(\) => onFermer\(\)\}/.test(me)
     && (me.match(/\bonFermer\(\)/g) || []).length === 1 && /\n {4}onFermer\(\);$/.test(corpsFermer)
-    && /if \(occupe \|\| occupeAssurance\) \{/.test(corpsFermer) && /if \(occupeTva\) \{/.test(corpsFermer)
+    && /if \(occupe \|\| occupeAssurance \|\| occupeLieu\) \{/.test(corpsFermer) && /if \(occupeTva\) \{/.test(corpsFermer)
     && /if \(!quitter && aDesChangements\(\)\) \{/.test(corpsFermer)
     && formeDeFermer === FORME_DE_FERMER && (me.match(/\bconst fermer = /g) || []).length === 1,
   `touché pendant un envoi, le bouton de la bande fermait la fenêtre ; l’écriture aboutissait quand même, et la saisie avait déjà relu ; forme de \`fermer\` : ${formeDeFermer}`);
@@ -2017,7 +2183,7 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
 
   /* Les pavés numériques n'ont PAS de touche retour sur iPhone. */
   const pavesMenteurs = [];
-  ['FicheEmetteur', 'FicheAssurance'].forEach((n) => {
+  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot'].forEach((n) => {
     ['ChampLocal', 'Field', 'TextInput'].forEach((b) => {
       balises(code[n], b).forEach((x) => {
         if (/keyboardType="(number-pad|phone-pad|decimal-pad)"/.test(x.texte) && /returnKeyType=/.test(x.texte)) {
@@ -2026,13 +2192,14 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       });
     });
   });
-  verifier('aucun pavé numérique n’annonce une touche retour (`FicheEmetteur`, `FicheAssurance`)',
-    pavesMenteurs.length === 0 && /keyboardType="decimal-pad"/.test(code.FicheEmetteur),
+  verifier('aucun pavé numérique n’annonce une touche retour (`FicheEmetteur`, `FicheAssurance`, `FicheLieuDepot`)',
+    pavesMenteurs.length === 0 && /keyboardType="decimal-pad"/.test(code.FicheEmetteur)
+    && /keyboardType="number-pad"/.test(code.FicheLieuDepot),
     pavesMenteurs.join(' | ') || 'aucun champ décimal trouvé : le contrôle a perdu sa cible');
 
   /* « Suivant » va QUELQUE PART : chaque champ qui l'annonce dit où. */
   const suivantsVides = [];
-  ['FicheEmetteur', 'FicheAssurance'].forEach((n) => {
+  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot'].forEach((n) => {
     balises(code[n], 'ChampLocal').forEach((x) => {
       if (/returnKeyType="next"/.test(x.texte)
         && !(/onSubmitEditing=\{/.test(x.texte) && /\.focus\(\)/.test(x.texte) && /blurOnSubmit=\{false\}/.test(x.texte))) {
@@ -2085,9 +2252,12 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     /arrêté du 24 janvier 2017 \(art\. 3\)/.test(aidesFrais)
     && /On ne sait pas encore si votre fiche Opus en est un\./.test(aidesFrais)
     && !/prudent|pages en ligne|Opus ne les y affiche pas encore/.test(aidesFrais));
-  const villes = balises(fe, 'ChampVille');
-  verifier('les adresses se proposent par `ChampVille type="rue"`',
-    villes.length >= 1 && villes.every((v) => /type="rue"/.test(v.texte)),
+  /* …et celle d'un lieu de dépôt (2b-5) : la liste montre l'adresse ENTIÈRE,
+     le champ garde la rue, un appui remplit le code postal et la commune. */
+  const villes = [...balises(fe, 'ChampVille'), ...balises(code.FicheLieuDepot, 'ChampVille')];
+  verifier('les adresses se proposent par `ChampVille type="rue"` (« Mon entreprise » et un lieu de dépôt)',
+    villes.length >= 2 && balises(code.FicheLieuDepot, 'ChampVille').length === 1
+    && villes.every((v) => /type="rue"/.test(v.texte)),
     'le code postal d’une COMMUNE est le plus petit de la commune (Paris → 75001) : seul le mode « rue » '
     + 'remplit un code postal juste');
 
@@ -2098,6 +2268,26 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
 
   /* RIEN DE PRÉ-COCHÉ : les choix ne viennent que d'`etatInitialFormulaire()`. */
   const choixDur = /useState\(\s*'(rcs|rne|aucun|franchise|reel|montant|variable|facture|decennale|rc_pro|autre)'\s*\)/;
+  /* 2b-5 (cahier T27) : LE TYPE D'UN LIEU DE DÉPÔT non plus. L'expression
+     des choix « en dur » est TIRÉE de `TYPES_INSTALLATION`, pas recopiée :
+     un type ajouté demain y entre tout seul. Le type part de ce qui est
+     enregistré, et d'AUCUN autre endroit — même pour un artisan qui n'aurait
+     qu'un type plausible ; `setType` n'est appelé que par le gestionnaire
+     d'un appui (`choisirType`), et le formulaire n'a aucun effet
+     (`useEffect`) qui pourrait choisir à sa place. */
+  const choixDurLieu = E ? new RegExp(`useState\\(\\s*'(${E.TYPES_INSTALLATION.map((t) => t.cle).join('|')})'\\s*\\)`) : /$^/;
+  const fl = code.FicheLieuDepot;
+  verifier('…et le TYPE d’un lieu de dépôt n’est jamais coché d’office (2b-5, T27) : il part du lieu enregistré, ou de rien, et ne '
+    + 'change que sous le doigt',
+  !!E && E.TYPES_INSTALLATION.length === 12 && !choixDurLieu.test(fl)
+    && /useState\(lieu \? lieu\.type_installation : null\)/.test(fl)
+    && (fl.match(/\bsetType\(/g) || []).length === 1
+    && /const choisirType = \(cle\) => \{[^}]*setType\(cle\);/.test(fl)
+    && /onPress=\{\(\) => choisirType\(t\.cle\)\}/.test(fl)
+    && !/useEffect/.test(fl)
+    && !balises(fl, 'Option').some((o) => /choisi=\{true\}|\bchoisi\b(?!\s*=)/.test(o.texte))
+    && /TYPES_INSTALLATION\.map\(/.test(fl),
+  'un type choisi à la place de l’artisan s’imprimerait sur ses devis comme s’il l’avait dit');
   verifier('`Option` ne reçoit ses choix que d’`etatInitialFormulaire()` — rien n’est coché d’office',
     /choix: etatInitialFormulaire\(/.test(fe) && /useState\(init\.choix\)/.test(fe)
     && /useState\(\(\) => depart \|\| etatDepuis\(reference\)\)/.test(fe)
@@ -2156,15 +2346,19 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   const enregistrerMe = corps(me, 'const enregistrer = async () => {');
   const enregistrerAssuranceMe = corps(me, 'const enregistrerAssurance = async (valeurs, doc) => {');
   const retirerMe = corps(me, 'const retirerAssurance = async (a) => {');
+  const enregistrerLieuMe = corps(me, 'const enregistrerLieu = async (valeurs) => {');
+  const retirerLieuMe = corps(me, 'const retirerLieu = async (l) => {');
   verifier('la croix PENDANT un envoi n’offre pas de « quitter sans enregistrer » : elle attend',
-    /if \(occupe \|\| occupeAssurance\) \{[^}]*Enregistrement en cours[^}]*return;\s*\}/.test(fermerMe)
+    /if \(occupe \|\| occupeAssurance \|\| occupeLieu\) \{[^}]*Enregistrement en cours[^}]*return;\s*\}/.test(fermerMe)
     && fermerMe.indexOf('occupeAssurance') < fermerMe.indexOf('aDesChangements()')
-    && /onOccupe=\{setOccupeAssurance\}/.test(me),
+    && fermerMe.indexOf('occupeLieu') > 0 && fermerMe.indexOf('occupeLieu') < fermerMe.indexOf('aDesChangements()')
+    && /onOccupe=\{setOccupeAssurance\}/.test(me) && /onOccupe=\{setOccupeLieu\}/.test(me),
     'Un renoncement qui n’en est pas un : l’écriture déjà partie aboutit quand même.');
-  verifier('…et la bande se referme à chaque succès (fiche, assurance, retrait) et à chaque changement de mode',
+  verifier('…et la bande se referme à chaque succès (fiche, assurance, lieu de dépôt, retraits) et à chaque changement de mode',
     [enregistrerMe.slice(0, enregistrerMe.indexOf('catch')), enregistrerAssuranceMe,
-      retirerMe.slice(0, retirerMe.indexOf('catch'))].every((b) => /setQuitter\(false\)/.test(b))
-    && ['const entrerEnEdition', 'const revenirAuFormulaire', 'const ouvrirAssurance', 'const choisirMediateur']
+      retirerMe.slice(0, retirerMe.indexOf('catch')), enregistrerLieuMe,
+      retirerLieuMe.slice(0, retirerLieuMe.indexOf('catch'))].every((b) => b.length > 20 && /setQuitter\(false\)/.test(b))
+    && ['const entrerEnEdition', 'const revenirAuFormulaire', 'const ouvrirAssurance', 'const ouvrirLieu', 'const choisirMediateur']
       .every((d) => /setQuitter\(false\)/.test(corps(me, d))),
     'Une bande « vos modifications ne sont pas enregistrées » au-dessus de « Enregistré » dit faux.');
   verifier('le retrait d’une assurance ne part qu’UNE fois, et ne promet une attestation que s’il y en avait une',
@@ -2173,6 +2367,19 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     && /a\.attestation_chemin\s*\?\s*'Assurance retirée\. Son attestation reste/.test(retirerMe)
     && /if \(enCours\.current\) return;/.test(corps(code.FicheAssurance, 'const retirer = async () => {')),
     'Un double appui envoyait deux suppressions, deux vibrations, deux messages.');
+  /* 2b-5 : UN SEUL RETRAIT d'un lieu de dépôt, même sous un double appui —
+     son propre garde, à part de celui des assurances ; deux appuis dans le
+     formulaire ; et la phrase dit ce qu'il coûte (annexe A.7). */
+  verifier('le retrait d’un lieu de dépôt ne part qu’UNE fois, en deux appuis, et dit ce qu’il coûte aux brouillons (2b-5, A.7)',
+    /if \(retraitLieuEnCours\.current\) return;\s*retraitLieuEnCours\.current = true;/.test(retirerLieuMe)
+    && /retraitLieuEnCours\.current = false;/.test(retirerLieuMe.slice(retirerLieuMe.indexOf('finally')))
+    && /await api\.retirerLieuDepot\(l\.id\);/.test(retirerLieuMe)
+    && /'Lieu de dépôt retiré\. Les brouillons qui le citaient l’ont perdu\.'/.test(retirerLieuMe)
+    && /if \(!confirmeRetrait\) \{ setConfirmeRetrait\(true\); return; \}\s*if \(enCours\.current\) return;/
+      .test(corps(code.FicheLieuDepot, 'const retirer = async () => {'))
+    && /\{confirmeRetrait && <Text style=\{s\.aide\}>Les brouillons qui le citent le perdront\.<\/Text>\}/.test(code.FicheLieuDepot)
+    && /'Retirer ce lieu'/.test(code.FicheLieuDepot),
+  'un double appui enverrait deux suppressions ; un retrait d’un seul appui ferait perdre un lieu choisi dans des brouillons');
   verifier('chaque avis a une CLÉ unique (deux assurances dans le même cas donnent deux avis de même `cle`)',
     /key=\{`\$\{a\.cle\}-\$\{a\.id == null \? i : a\.id\}`\}/.test(code.PretAEmettre)
     && !/key=\{a\.cle\}/.test(code.PretAEmettre));
@@ -2243,6 +2450,79 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   }
 
   /* ------------------------------------------------------------------ */
+  /*  5b bis. LES LIEUX DE DÉPÔT DES DÉCHETS (2b-5, cahier §3.6, A.7)    */
+  /* ------------------------------------------------------------------ */
+  {
+    /* LA SECTION, entre « Assurances » et « Médiateur » : son ancre est
+       celle où mène la porte « Mes lieux de dépôt » de la carte « Déchets »
+       (`ouvrirMonEntreprise('lieux')`). */
+    const iAss = fe.indexOf('<Section ancre="assurances"');
+    const iLieux = fe.indexOf('<Section ancre="lieux" titre="Vos lieux de dépôt des déchets"');
+    const iMed = fe.indexOf('<Section ancre="mediateur"');
+    const debutSection = iLieux;
+    const finSection = iLieux >= 0 ? fe.indexOf('</Section>', iLieux) : -1;
+    const section = debutSection >= 0 && finSection > debutSection ? fe.slice(debutSection, finSection) : '';
+    const plat = section.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+    verifier('« Vos lieux de dépôt des déchets » : une section de « Mon entreprise », APRÈS « Assurances » et avant « Médiateur »',
+      iAss >= 0 && iLieux > iAss && iMed > iLieux,
+      'la porte de la carte « Déchets » y défile par son ancre `lieux`');
+    verifier('…l’aide de la liste vide (A.7), une rangée par lieu (raison sociale ; type · commune ; chevron), « Ajouter un lieu de dépôt »',
+      plat.includes('Les déchèteries, plateformes ou collecteurs où vous déposez les déchets de vos chantiers. Rangés une fois, vous '
+        + 'les choisissez ensuite dans chaque devis.')
+      && /const typeLu = libelleDuTypeDeLieu\(l\);/.test(section)
+      && /\{`\$\{typeLu\} · \$\{l\.ville\}`\}/.test(section)
+      && /<Text style=\{s\.optionLibelle\}>\{l\.raison_sociale\}<\/Text>/.test(section)
+      && /onPress=\{\(\) => onOuvrirLieu\(l\)\}/.test(section) && /<ChevronRight/.test(section)
+      && /onPress=\{onAjouterLieu\}/.test(section) && />Ajouter un lieu de dépôt</.test(section)
+      && /accessibilityLabel=\{`\$\{l\.raison_sociale\}, \$\{typeLu\}, \$\{l\.ville\}\. Modifier ce lieu de dépôt`\}/.test(section),
+    'une rangée qui ne dit ni le type ni la commune laisserait deux lieux du même exploitant indiscernables');
+    /* UNE LISTE NON LUE N'EST JAMAIS « AUCUN LIEU » (T12) : pas de défaut à
+       `[]` dans les props, et la section le dit sans proposer d'ajouter. */
+    verifier('…une liste NON LUE le dit, et ne propose pas d’en ajouter : `lieux = null` par défaut, jamais `[]` (T12)',
+      /\blieux = null, onAjouterLieu, onOuvrirLieu,/.test(fe) && !/\blieux = \[\]/.test(fe)
+      && /\{lieux == null \? \(/.test(section)
+      && section.indexOf('lieux == null ?') < section.indexOf('Vos lieux de dépôt n’ont pas pu être lus')
+      && section.indexOf('Vos lieux de dépôt n’ont pas pu être lus') < section.indexOf(') : (')
+      && section.indexOf(') : (') < section.indexOf('onAjouterLieu'),
+    'un artisan qui a des lieux, à qui l’on dirait qu’il n’en a aucun, en ajouterait un second exemplaire');
+    /* LE BLOC EN LECTURE (T13, A.7). */
+    const lecture = corps(fe, 'export function LieuxDeDepotEnLecture(');
+    const lecturePlat = lecture.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+    verifier('…en LECTURE, « Mon entreprise » montre les lieux ; vide, il dit que les devis le demanderont ; non lus, il le dit, avec '
+      + '« Réessayer » (T13, A.7)',
+    lecturePlat.includes('Aucun lieu de dépôt. Opus n’en exige aucun pour votre fiche ; mais un devis de travaux sur un bâtiment ou de '
+      + 'jardinage demande où iront ses déchets.')
+      && lecturePlat.includes('Vos lieux de dépôt n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : réessayez.')
+      && /const lus = Array\.isArray\(lieux\);/.test(lecture) && /libelleDuTypeDeLieu\(l\)/.test(lecture)
+      && /onPress=\{onReessayer\}/.test(lecture) && /onPress=\{onModifier\}/.test(lecture)
+      && /donnees\.etat === 'pret' && \(\s*<LieuxDeDepotEnLecture\s+lieux=\{donnees\.lieux\}\s+onModifier=\{\(\) => entrerEnEdition\('lieux'\)\}/
+        .test(me),
+    'un bloc qui dirait « aucun » pendant la lecture, ou après un échec, ferait croire que rien n’est enregistré');
+    /* LE FORMULAIRE D'UN LIEU (A.7) : ses libellés, ses deux aides, et des
+       textes d'exemple qui ne ressemblent à AUCUNE donnée (la règle du
+       29/10) — une liste FERMÉE, aucun chiffre. */
+    const placeholders = [...fl.matchAll(/placeholder="([^"]*)"/g)].map((m) => m[1]);
+    const PERMIS = ['Le nom de l’exploitant', 'N° et rue', 'Code postal', 'Commune', 'Le type d’installation'];
+    verifier('le formulaire d’un lieu (A.7) : ses libellés, ses deux aides, et des textes d’exemple qui ne ressemblent à aucune donnée',
+      ['Raison sociale', 'Adresse', 'Code postal', 'Commune', 'Type d’installation', 'Précisez']
+        .every((l) => fl.includes(`<Text style={s.label}>${l}</Text>`))
+      && fl.includes('Le nom de l’entreprise ou de la collectivité qui exploite le lieu, pas seulement le nom du lieu.')
+      && fl.includes('Si aucune suggestion ne correspond, tapez l’adresse telle qu’elle est.')
+      && placeholders.length === PERMIS.length && placeholders.every((p) => PERMIS.includes(p))
+      && placeholders.every((p) => !/\d/.test(p))
+      && /maxLength=\{5\}/.test(fl) && /validerLieuDepot\(v\)/.test(fl) && /messageDeContrainte\(r\.contrainte\)/.test(fl),
+    `textes d’exemple : ${placeholders.join(' | ')}. « 13410 » ou « Lambesc » en gris se lirait comme déjà rempli.`);
+    verifier('`MonEntreprise` : le mode `lieu` monte `FicheLieuDepot`, garde le brouillon, et revient sur la section des lieux',
+      /\{mode === 'lieu' && \(\s*<FicheLieuDepot/.test(me)
+      && /onAnnuler=\{\(\) => revenirAuFormulaire\('lieux'\)\}/.test(me)
+      && /revenirAuFormulaire\('lieux'\);/.test(enregistrerLieuMe)
+      && /setBrouillon\(fiche\.current \? fiche\.current\.instantane\(\) : brouillon\);/.test(corps(me, 'const ouvrirLieu = (l) => {'))
+      && /if \(mode === 'lieu' && ficheLieu\.current && ficheLieu\.current\.aDesChangements\(\)\) return true;/.test(me)
+      && /lieux=\{donnees\.lieux\}/.test(me) && /lieux: null,/.test(me),
+    'sans le brouillon, partir ajouter un lieu effaçait ce qu’on venait de taper dans « Mon entreprise »');
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  5c. LES DEUX PORTES, ET UNE SEULE FENÊTRE                          */
   /* ------------------------------------------------------------------ */
   const app = sansCommentaires(lire('src/OpusApp.js'));
@@ -2288,6 +2568,31 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     /typeof section === 'string' \? section : null/.test(corps(app, 'const ouvrirMonEntreprise = (section = null) =>'))
     && /entrepriseEtat === 'jamais' \|\| entrepriseEtat === 'echec'\) chargerMonEntreprise\(\)/.test(app)
     && /key=\{`mon-entreprise-\$\{ouvertureEntreprise\.cle\}`\}/.test(app));
+
+  /* 2b-5 (cahier T12, T12 bis) : LES LIEUX DE DÉPÔT ARRIVENT À LA SAISIE par
+     la MÊME lecture que le régime et les assurances (`monRegimeEtSaDate`) —
+     aucune requête de plus —, et c'est la FERMETURE de « Mon entreprise »
+     qui les relit (`lireRegime`, dans `onFermer`). Les trois règles des
+     assurances : `undefined` au départ (pas lus), une liste ou `null` à la
+     réponse (non lus : la table pas encore là — jamais un `[]` inventé),
+     `undefined` sur un échec ; `recevoirEmetteur` n'y touche pas. Sans la
+     remise à `undefined`, un échec laisserait la carte « Déchets » cocher
+     des lieux qu'on n'a pas pu relire. */
+  {
+    const appM = app.replace(/\s+/g, ' ');
+    const recevoir = corps(app, 'const recevoirEmetteur = useCallback(');
+    const surFermer = (app.match(/onFermer=\{\(\) => \{([\s\S]*?)\}\}\s*entreprise=\{monEntreprise\}/) || ['', ''])[1];
+    verifier('`OpusApp` : `mesLieux` lus par `monRegimeEtSaDate`, `undefined` au départ et après un échec, jamais un `[]` inventé, et '
+      + 'passés à la saisie ; la fermeture de « Mon entreprise » les relit (2b-5, T12)',
+    appM.includes('const [mesLieux, setMesLieux] = useState(undefined);')
+      && appM.includes('setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null);')
+      && appM.includes('setMonRegime({ echec: true }); setMesAssurances(undefined); setMesLieux(undefined);')
+      && (app.match(/\bsetMesLieux\(/g) || []).length === 2
+      && recevoir.length > 20 && !/MesLieux/.test(recevoir)
+      && balises(app, 'SaisieDevisScreen').some((b) => /\blieux=\{mesLieux\}/.test(b.texte))
+      && /lireRegime\(/.test(surFermer),
+    'un échec qui garderait les lieux d’avant ferait cocher, dans un devis, des lieux qu’on n’a pas pu relire');
+  }
 
   const fichiersSrc = (await import('node:child_process')).execFileSync('git',
     ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })

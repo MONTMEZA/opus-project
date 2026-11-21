@@ -31,8 +31,8 @@
  *     la somme des lignes de ce taux (3 × 33,33 € à 10 % : 10,00 € de TVA,
  *     et non 9,99 € ligne par ligne).
  *
- * CE FICHIER N'IMPORTE QUE QUATRE FICHIERS PURS
- * ---------------------------------------------
+ * CE FICHIER N'IMPORTE QUE CINQ FICHIERS PURS
+ * -------------------------------------------
  * `./centimes.js` (l'écriture d'un montant, la seule du projet),
  * `./entreprise.js` (pour `dateFrancaise()` et `isoLisible()` : une date
  * d'horodatage se lit à l'heure du téléphone, jamais par ses dix premiers
@@ -43,9 +43,14 @@
  * l'attestation qui arrive à sa fin compte des jours, et l'arithmétique des
  * jours, par `Date.UTC` et sans fuseau, n'est écrite qu'à UN endroit du
  * projet — une seconde copie ici serait la faute que le projet traque ;
- * `formats.js` n'importe RIEN). Aucun des quatre ne charge React Native :
- * `node` fait tourner ce fichier, et un contrôle qui plante ne vérifie rien.
- * `verifier-devis` tient cette liste.
+ * `formats.js` n'importe RIEN) et, depuis 2b-5, `./meme-valeur.js` (pour
+ * `memeValeur()` : l'en-tête d'un devis porte désormais trois LISTES — les
+ * déchets triés, ce qui reste sur le chantier, les lieux de dépôt —, et deux
+ * listes égales ne sont jamais `Object.is` l'une à l'autre ; la règle n'est
+ * écrite qu'à UN endroit, que la file d'écriture et la saisie importent
+ * aussi ; `meme-valeur.js` n'importe RIEN). Aucun des cinq ne charge React
+ * Native : `node` fait tourner ce fichier, et un contrôle qui plante ne
+ * vérifie rien. `verifier-devis` tient cette liste.
  *
  * LES NOMS
  * --------
@@ -57,6 +62,7 @@ import { centimesLisibles, versCentimes } from './centimes.js';
 import { dateFrancaise, isoLisible } from './entreprise.js';
 import { cleDeRapprochement, aPlat } from './rapprochement.js';
 import { joursEntre } from './formats.js';
+import { memeValeur } from './meme-valeur.js';
 
 /* ================================================================== */
 /*  LES CONSTANTES — chacune a son miroir dans la base                  */
@@ -186,13 +192,15 @@ export const CONTRAINTES_LIGNE = Object.freeze([
   'devis_ligne_urgence_check',
 ]);
 
-/** Les dix-neuf contraintes de `devis`, triées de même (dix au lot 1, sept
+/** Les vingt-six contraintes de `devis`, triées de même (dix au lot 1, sept
  *  au lot 2a, une à 2b-2 : la réponse « à quel titre » ; une à 2b-4 : le
  *  prix du devis lui-même, `devis_cout_check`, rangée entre `calculs` et
  *  `delai` — PostgreSQL nomme la première dans cet ordre, et une ligne à
  *  « −1 » ET une validité fausse est nommée `devis_cout_check` des deux
- *  côtés). `validerDevis()` teste celles qui portent sur ce que l'artisan
- *  écrit ; `devis_plafond_check` est tenu par `totauxDevis()` ;
+ *  côtés ; sept à 2b-5 : les déchets du chantier, `devis_dechets_…_check`,
+ *  rangées entre `cout` et `delai` — « dec » vient avant « del »).
+ *  `validerDevis()` teste celles qui portent sur ce que l'artisan écrit ;
+ *  `devis_plafond_check` est tenu par `totauxDevis()` ;
  *  `devis_totaux_check` et `devis_calculs_check` par la base seule. */
 export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_acompte_check',
@@ -200,6 +208,13 @@ export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_acompte_une_forme_check',
   'devis_calculs_check',
   'devis_cout_check',
+  'devis_dechets_cout_check',
+  'devis_dechets_flux_check',
+  'devis_dechets_lieux_check',
+  'devis_dechets_quantite_check',
+  'devis_dechets_sans_depot_check',
+  'devis_dechets_sur_place_check',
+  'devis_dechets_unite_check',
   'devis_delai_check',
   'devis_lieu_adresse_check',
   'devis_lieu_code_postal_check',
@@ -340,6 +355,18 @@ export const CHAMPS_DEVIS = Object.freeze([
      (écrit par la seule pastille « Gratuit »), un montant = payant. HORS de
      toute paire : il ne viole aucune contrainte seul, et ne lie rien. */
   'coutDevisCentimes',
+  /* 2b-5 (49.4 sexies) : LES DÉCHETS DU CHANTIER, huit faits de la carte
+     « Déchets » — la réponse à « S’agit-il de travaux sur un bâtiment, ou de
+     jardinage ? » (vide = « Oui », par prudence), la quantité estimée et son
+     unité (une PAIRE), les déchets collectés à part (une LISTE fermée, jamais
+     vide : vide de valeur = rien de dit, `aucune` = aucune collecte
+     séparée), ce qui reste sur le chantier (une liste, jamais vide), les
+     lieux de dépôt choisis (des identifiants, jamais vide) et « Aucun
+     dépôt » (une PAIRE avec eux), le coût estimé (hors des totaux). Trois
+     listes : la file et la saisie les comparent par `memeValeur`, jamais
+     par `Object.is`. Aucune date. */
+  'dechetsConcerne', 'dechetsQuantiteMilliemes', 'dechetsUnite', 'dechetsFlux', 'dechetsSurPlace', 'dechetsLieux',
+  'dechetsSansDepot', 'dechetsCoutCentimes',
 ]);
 /** LES PAIRES qui s'écrivent ENSEMBLE, en une écriture (relecture BASE-2) :
  *  la réduction (pourcentage OU montant), l'acompte (pourcentage OU montant,
@@ -354,6 +381,15 @@ export const PAIRES_DEVIS = Object.freeze([
      écrites l'une sans l'autre, une réponse arrivée seule vaudrait pour le
      client d'AVANT, ou pour personne. */
   Object.freeze(['pourQui', 'pourQuiClient']),
+  /* 2b-5 — EN FIN, elles aussi. La quantité et son unité : « 2,5 » sans
+     unité ne dit rien, et une unité changée sans sa quantité repartirait
+     seule après une écriture d'issue inconnue (le défaut que la paire de la
+     réduction a fermé au lot 2a). Les lieux et « Aucun dépôt » : la pastille
+     retire les lieux cochés et cocher un lieu la retire, dans le MÊME geste
+     — écrits l'un sans l'autre, un devis porterait un instant des lieux ET
+     « rien ne quitte le chantier ». */
+  Object.freeze(['dechetsQuantiteMilliemes', 'dechetsUnite']),
+  Object.freeze(['dechetsLieux', 'dechetsSansDepot']),
 ]);
 /* 2b-3 : `urgence` — « Réparation urgente expressément demandée par le
    client », posée par l'artisan, sur un POSTE seulement
@@ -981,6 +1017,28 @@ const REGLES_DEVIS = {
   devis_cout_check: (d) => (!present(d.coutDevisCentimes)
     || (entier(d.coutDevisCentimes) && d.coutDevisCentimes >= 0 && d.coutDevisCentimes <= COUT_DEVIS_MAX)
     ? null : 'coutDevisCentimes'),
+  /* 2b-5 (49.5) : les sept contraintes des déchets, LES MIROIRS EXACTS de la
+     base — y compris ce qu'elle accepte : un doublon (`{papier,papier}`,
+     `{broyage,broyage}`) passe, comme en base ; un tableau VIDE est refusé,
+     comme en base (la forme `case … else false` de la section 49.5). La
+     démonstration refuse ainsi ce que la base refuserait, avec le même nom.
+     Elles n'ont pas à vérifier la forme d'un tableau à deux dimensions :
+     un élément qui est lui-même une liste n'est dans aucune liste fermée. */
+  devis_dechets_cout_check: (d) => (!present(d.dechetsCoutCentimes)
+    || (entier(d.dechetsCoutCentimes) && d.dechetsCoutCentimes >= 1 && d.dechetsCoutCentimes <= COUT_DECHETS_MAX)
+    ? null : 'dechetsCoutCentimes'),
+  devis_dechets_flux_check: (d) => (!present(d.dechetsFlux) || fluxRecevable(d.dechetsFlux) ? null : 'dechetsFlux'),
+  devis_dechets_lieux_check: (d) => (!present(d.dechetsLieux) || lieuxRecevables(d.dechetsLieux) ? null : 'dechetsLieux'),
+  devis_dechets_quantite_check: (d) => (!present(d.dechetsQuantiteMilliemes)
+    || (entier(d.dechetsQuantiteMilliemes) && d.dechetsQuantiteMilliemes >= 1
+      && d.dechetsQuantiteMilliemes <= QUANTITE_DECHETS_MAX)
+    ? null : 'dechetsQuantiteMilliemes'),
+  devis_dechets_sans_depot_check: (d) => (!present(d.dechetsSansDepot) || d.dechetsSansDepot === true
+    ? null : 'dechetsSansDepot'),
+  devis_dechets_sur_place_check: (d) => (!present(d.dechetsSurPlace) || surPlaceRecevable(d.dechetsSurPlace)
+    ? null : 'dechetsSurPlace'),
+  devis_dechets_unite_check: (d) => (!present(d.dechetsUnite) || UNITES_DECHETS.some((u) => u.cle === d.dechetsUnite)
+    ? null : 'dechetsUnite'),
   devis_delai_check: (d) => (!present(d.delaiExecution) || longueur(d.delaiExecution) <= LONGUEURS.delaiExecution
     ? null : 'delaiExecution'),
   devis_lieu_adresse_check: (d) => (!present(d.lieuAdresse) || longueur(d.lieuAdresse) <= LONGUEURS.lieuAdresse
@@ -1870,6 +1928,19 @@ export function rowToDevis(d) {
        `null` (pas dit), 0 (gratuit) ou un montant (payant). Un `bigint`
        arrive en nombre ; `nombreOuNul` garde le 0, qui n'est PAS un vide. */
     coutDevisCentimes: nombreOuNul(d.cout_devis_centimes),
+    /* 2b-5 (49.4 sexies) : les déchets du chantier, relus tels que la base
+       les garde — `null` compris (vide de valeur = rien de dit). Les trois
+       listes arrivent en tableaux (PostgREST rend un `text[]` et un `uuid[]`
+       en tableaux JSON, les identifiants en minuscules) ; deux `bigint`
+       arrivent en nombres. */
+    dechetsConcerne: d.dechets_concerne ?? null,
+    dechetsQuantiteMilliemes: nombreOuNul(d.dechets_quantite_milliemes),
+    dechetsUnite: d.dechets_unite ?? null,
+    dechetsFlux: d.dechets_flux ?? null,
+    dechetsSurPlace: d.dechets_sur_place ?? null,
+    dechetsLieux: d.dechets_lieux ?? null,
+    dechetsSansDepot: d.dechets_sans_depot ?? null,
+    dechetsCoutCentimes: nombreOuNul(d.dechets_cout_centimes),
     generation: nombreOuNul(d.generation),
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
@@ -2456,6 +2527,15 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
   devis_acompte_nature_check: 'La nature de l’acompte n’a pas pu être enregistrée.',
   devis_acompte_une_forme_check: 'L’acompte n’a pas pu être enregistré.',
   devis_cout_check: 'Le prix du devis lui-même n’a pas pu être enregistré.',
+  /* 2b-5 : les sept contraintes des déchets du chantier (carte « Déchets
+     du chantier »), chacune nommant SON champ. */
+  devis_dechets_cout_check: 'Le coût estimé des déchets n’a pas pu être enregistré.',
+  devis_dechets_flux_check: 'Les déchets triés n’ont pas pu être enregistrés.',
+  devis_dechets_lieux_check: 'Les lieux de dépôt des déchets n’ont pas pu être enregistrés.',
+  devis_dechets_quantite_check: 'La quantité estimée des déchets n’a pas pu être enregistrée.',
+  devis_dechets_sans_depot_check: 'La réponse « Aucun dépôt » n’a pas pu être enregistrée.',
+  devis_dechets_sur_place_check: 'Ce qui reste sur le chantier n’a pas pu être enregistré.',
+  devis_dechets_unite_check: 'L’unité des déchets n’a pas pu être enregistrée.',
   devis_delai_check: 'Le délai d’exécution n’a pas pu être enregistré.',
   devis_lieu_adresse_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_lieu_code_postal_check: 'Le lieu des travaux n’a pas pu être enregistré.',
@@ -2482,15 +2562,17 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
  * en base, c'est lui qui n'a pas pu être enregistré ; après, c'est un CHAMP
  * — celui que nomme la contrainte refusée, ou, quand on ne sait pas lequel
  * (une coupure de réseau), tous ceux de l'en-tête : « l'objet, le lieu, le
- * délai, « À quel titre ? », « Le chantier » ou les conditions » (2b-3, E2 :
- * « À quel titre ? » manquait depuis 2b-2, et « Le chantier » gagne une
- * colonne).
+ * délai, « À quel titre ? », « Le chantier », les déchets ou les
+ * conditions » (2b-3, E2 : « À quel titre ? » manquait depuis 2b-2, et « Le
+ * chantier » gagne une colonne ; 2b-5 : la carte « Déchets du chantier »
+ * écrit aussi l'en-tête — sans « les déchets », une coupure pendant son
+ * enregistrement aurait nommé tout SAUF ce que l'artisan venait de toucher).
  */
 export function phraseEchecDuDevis({ enBase = false, erreur = null, retenue = null } = {}) {
   if (!enBase) return 'Le brouillon n’a pas pu être enregistré.';
   const p = ECHEC_PAR_CONTRAINTE[contrainteDuDevis(erreur)]
-    || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai, « À quel titre ? », « Le chantier » '
-      + 'ou les conditions.';
+    || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai, « À quel titre ? », « Le chantier », '
+      + 'les déchets ou les conditions.';
   /* CE QUI RESTE TENU À PART (relecture finale, ÉCRAN-F1) : une autre
      écriture de l'en-tête a échoué depuis (une coupure) — la réduction que
      le plafond a refusée n'est toujours pas en base, et la phrase le dit
@@ -3722,9 +3804,16 @@ const CLES_DU_GESTE = Object.freeze({
  * elle, ne revibre que quand on quitte SON champ.
  */
 export function vibrerPourLaCarte(geste, cles, deja = null) {
+  return vibrerSelon(CLES_DU_GESTE, geste, cles, deja);
+}
+
+/* LA RÈGLE, écrite UNE fois, pour les deux cartes plein écran qui ont des
+   champs tapés (« Conditions », lot 2a ; « Déchets », 2b-5) : chacune a SA
+   table des gestes, la règle est la même. */
+function vibrerSelon(table, geste, cles, deja) {
   const liste = Array.isArray(cles) ? cles : [];
   if (Array.isArray(deja) && liste.some((k) => !deja.includes(k))) return true;
-  const visees = CLES_DU_GESTE[geste];
+  const visees = table[geste];
   if (!visees) return false;
   return liste.some((k) => visees.includes(k));
 }
@@ -3873,9 +3962,11 @@ export function avertissementDelai(texte) {
 export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus']);
 
 /**
- * LES SEIZE MOTIFS DU DEVIS, SUR ONZE RANGS (annexe B.2 du cahier 2b, A.1 du
- * cahier 2b-2, et A.1 du cahier 2b-3 : le rang 10, « à la signature », et le
- * rang 11, l'attestation décennale — trois clés EXCLUSIVES, comme le rang 1),
+ * LES DIX-NEUF MOTIFS DU DEVIS, SUR TREIZE RANGS (annexe B.2 du cahier 2b, A.1
+ * du cahier 2b-2, et A.1 du cahier 2b-3 : le rang 10, « à la signature », et le
+ * rang 11, l'attestation décennale — trois clés EXCLUSIVES, comme le rang 1 ;
+ * A.1 du cahier 2b-4 : le rang 12, le prix du devis lui-même ; A.1 du cahier
+ * 2b-5 : le rang 13, les déchets du chantier, deux clés EXCLUSIVES),
  * recopiés OCTET POUR OCTET de la fonction de la base : le
  * rang (l'ordre de la liste), la nature, la phrase. Le rang 1 porte DEUX clés,
  * exclusives (2b-2) : sans client, `devis_client` ; avec un client mais sans
@@ -4057,6 +4148,33 @@ export const MOTIFS_DEVIS = Object.freeze({
     nature: 'prudence',
     phrase: 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une '
       + 'réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.',
+  }),
+  /* 2b-5 (décision Q4 = 1 du 17/11, réponses P1 à P6 du 21/11) — le rang 13,
+     au plus UNE de ces deux clés : la réponse à « S’agit-il de travaux sur un
+     bâtiment, ou de jardinage ? » n'est pas « Non », et une des quatre
+     rubriques que la loi demande manque (la quantité et son unité, le tri,
+     un lieu de dépôt — ou « Aucun dépôt » —, le coût ; code de
+     l'environnement, L. 541-21-2-3 I et D. 541-45-1 I). Réponse VIDE : une
+     PRUDENCE, Opus ne sait pas si ce devis relève de la loi (le précédent de
+     la décennale sans réponse) ; réponse « Oui » : LA LOI, sur le modèle
+     « puisque » de l'attestation décennale. PAS une règle d'Opus : elle ne
+     finit donc pas par « pour tous vos devis ». Aucun montant, aucune
+     quantité dans la phrase (l'amende vit dans l'aide de la carte,
+     `AMENDE_DES_DECHETS`). 199 et 186 caractères ; octet pour octet celles
+     de la base (annexe A.1). LA RÈGLE est `motifDesDechets`, plus bas : UNE
+     écriture, que le résumé de la rangée et la rubrique visée par le point
+     lisent aussi (`rubriquesDesDechets`). */
+  devis_dechets: Object.freeze({
+    rang: 13,
+    nature: 'prudence',
+    phrase: 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
+      + 'rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.',
+  }),
+  devis_dechets_rubriques: Object.freeze({
+    rang: 13,
+    nature: 'loi',
+    phrase: 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
+      + 'rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».',
   }),
 });
 
@@ -4392,7 +4510,12 @@ export function etatDeLAttestation(assurances, jour = jourDuTelephone(), { proId
  * `emetteur_incomplet()` (« cle: phrase », dans son ordre), et, depuis
  * 2b-3, les assurances de l'entreprise (`assurances`, aux noms de la base)
  * et le jour où l'on juge l'attestation (`jour`, celui du TÉLÉPHONE par
- * défaut ; la base juge au jour de Paris).
+ * défaut ; la base juge au jour de Paris). Depuis 2b-5, `lieux` : les lieux
+ * de dépôt de l'entreprise, des OBJETS `{ id, proId }` (ou les lignes de la
+ * base, `{ id, pro_id, … }`) — le miroir ne compte que ceux du devis
+ * (`proId`), comme `l.pro_id = v_pro` dans la base. `undefined` = pas
+ * transmis : comme si aucun lieu n'existait (seuls la démonstration et
+ * `cas-remise.json` les passent).
  *
  * Sortie : `[{ rang, cle, phrase, nature, ligneId }]`, rangée comme la
  * base — le rang croissant, puis, pour les lignes fautives, l'ordre des
@@ -4413,7 +4536,7 @@ export function etatDeLAttestation(assurances, jour = jourDuTelephone(), { proId
  * x` n'est pas vrai) : la base en porte toujours un (`not null default 0`).
  */
 export function motifsDeRemise({
-  devis = null, lignes = [], regime = null, motifsEmetteur = [], assurances = [], jour = jourDuTelephone(),
+  devis = null, lignes = [], regime = null, motifsEmetteur = [], assurances = [], jour = jourDuTelephone(), lieux = undefined,
 } = {}) {
   const d = nettoyerDevis(devis || {});
   const sortie = [];
@@ -4470,6 +4593,12 @@ export function motifsDeRemise({
      pareil ; le motif ne lit ni la réponse « à quel titre », ni les tarifs
      (la porte étroite, T6). */
   if (!present(d.coutDevisCentimes)) motif('devis_cout');
+  /* 2b-5, rang 13 : les déchets du chantier — `motifDesDechets`, LA règle,
+     écrite une fois (la même que le résumé de la rangée « Déchets »). Une
+     liste de lieux pas transmise (`undefined`) ne prouve aucun lieu : un
+     lieu choisi n'y est alors jamais compté, comme si aucun n'existait. */
+  const cleDechets = motifDesDechets(d, lieux);
+  if (cleDechets) motif(cleDechets);
 
   /* Les motifs de l'entreprise : le rang garde sa position d'ORIGINE
      (`100 + position`), PUIS le filtre de la réponse valable — un trou,
@@ -4561,6 +4690,15 @@ export const ENDROIT_DU_MOTIF = Object.freeze({
   /* 2b-4 : la carte « Conditions », SUR le bloc « Le devis lui-même :
      gratuit ou payant ? » (le champ `cout`, le DERNIER de la carte). */
   devis_cout: Object.freeze({ endroit: 'conditions', champ: 'cout' }),
+  /* 2b-5 : la carte « Déchets ». UN SEUL bouton (« Compléter les déchets »,
+     T8) : `devis_dechets` l'ouvre EN HAUT, sur la question — la sortie
+     naturelle d'une réponse vide est de répondre, comme la décennale sans
+     réponse ; `devis_dechets_rubriques` l'ouvre sur la PREMIÈRE rubrique qui
+     manque, en haut à défaut (`rubriqueDuPoint`, plus bas). Aucun second
+     bouton : la porte vers « Mes lieux de dépôt » vit DANS la carte (T25),
+     et `secondeActionDuPoint` ne change pas. */
+  devis_dechets: Object.freeze({ endroit: 'dechets' }),
+  devis_dechets_rubriques: Object.freeze({ endroit: 'dechets' }),
 });
 
 /**
@@ -5055,12 +5193,19 @@ export function phraseDesMentionsParticulier(reponseVue) {
  * restent : ce sont les étapes 2b-5 et 2b-6. Ni chiffre, ni date, ni
  * « lot », ni « le prix du devis ». Copiée en toutes lettres dans
  * `verifier-devis` (B8) et `mesure-devis` : les trois changent ensemble.
+ *
+ * 2b-5 (annexe A.6, décision T18) : « les déchets de chantier » SORT — le
+ * rang 13 demande désormais la quantité, le tri, les lieux et le coût. Ce
+ * qu'Opus ne vérifie pas des déchets ENTRE, à sa place : « si vos lieux de
+ * dépôt acceptent ces déchets » (la loi demande de s'assurer que le
+ * repreneur est autorisé ; Opus ne le sait pas). TOUJOURS SEPT faits : il
+ * vient en DERNIER, et le « et » se déplace devant lui.
  */
 export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
-  + 'vraiment, si ce devis relève des services à la personne, les déchets de chantier, le label RGE pour des '
-  + 'travaux d’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du '
-  + 'client), et si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier '
-  + 's’ouvrira).';
+  + 'vraiment, si ce devis relève des services à la personne, le label RGE pour des travaux d’énergie, les '
+  + 'conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre '
+  + 'attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux '
+  + 'de dépôt acceptent ces déchets.';
 
 /** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
 export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
@@ -5657,6 +5802,9 @@ export const NOM_DES_SECTIONS = Object.freeze({
   contact: 'Pour vous joindre',
   tva: 'TVA',
   assurances: 'Assurances',
+  /* 2b-5 : la section des lieux de dépôt des déchets — la porte « Mes lieux
+     de dépôt » de la carte « Déchets » y mène (`ouvrirMonEntreprise('lieux')`). */
+  lieux: 'Vos lieux de dépôt des déchets',
   mediateur: 'Médiateur de la consommation',
   garanties: 'Garanties',
   conditions: 'Vos conditions',
@@ -5737,6 +5885,9 @@ export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = (
          geste, en 33 caractères (annexe A.1). */
       if (e.champ === 'cout') return seul('Choisir : devis gratuit ou payant');
       return seul('Corriger dans les conditions');
+    /* 2b-5 (annexe A.1) : un seul bouton, pour les deux clés du rang 13 ;
+       ce qu'il ouvre, `rubriqueDuPoint` le dit. */
+    case 'dechets': return seul(LES_DECHETS.bouton);
     case 'entreprise': {
       if (!e.section) return null;
       const libelle = 'Compléter dans « Mon entreprise »';
@@ -5926,6 +6077,13 @@ export const CHAMPS_DU_CHANTIER = Object.freeze(['chantierNeufConso', 'chantierN
  *     façon (`ENTETE_PAS_ENCORE_ENREGISTRE`).
  * Une valeur `undefined` ne dit rien ; `null` et une valeur absente de la
  * base se valent.
+ *
+ * DEPUIS 2b-5, LA COMPARAISON EST `memeValeur` (T4) : les déchets triés, ce
+ * qui reste sur le chantier et les lieux sont des LISTES, et une liste
+ * revenue à sa valeur confirmée par un tableau NEUF n'est pas « en route ».
+ * Avec `Object.is`, la rangée « Déchets » disait « — enregistrement… »
+ * pendant qu'un AUTRE champ partait (mesuré, CTL-3) : la file, elle, ne
+ * renvoyait rien des déchets. Les deux comparent de la même façon.
  */
 export function etatDesChampsDuDevis(entrees, champs) {
   const e = (Array.isArray(entrees) ? entrees : []).find((x) => x && x.cle === 'devis');
@@ -5937,7 +6095,7 @@ export function etatDesChampsDuDevis(entrees, champs) {
     const v = e.voulu[c];
     if (v === undefined) return false;
     const conf = e.confirme && e.confirme[c] !== undefined ? e.confirme[c] : null;
-    return !Object.is(v ?? null, conf ?? null);
+    return !memeValeur(v ?? null, conf ?? null);
   });
   if (!differe) return rien;
   return { enRoute: e.etat === 'en_cours', enEchec: e.etat === 'echec', local: e.etat === 'locale' };
@@ -6242,4 +6400,676 @@ export const GABARITS_DU_CHANTIER = Object.freeze([
   'Décennale : oui (par défaut)',
   'Décennale : oui',
   'Décennale : non',
+].flatMap((t) => ['', SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC].map((suffixe) => `${t}${suffixe}`)));
+
+/* ================================================================== */
+/*  LES DÉCHETS DU CHANTIER (lot 2b, étape 2b-5, cahier §3.2)          */
+/* ================================================================== */
+/*
+ * CE QUE LA LOI DEMANDE (code de l'environnement, L. 541-21-2-3 I et
+ * D. 541-45-1 I) : sur tout devis de travaux de construction, de
+ * rénovation ou de démolition d'un bâtiment, et sur tout devis de
+ * jardinage, quel que soit le client, quatre informations — une estimation
+ * de la QUANTITÉ de déchets, le TRI (les déchets collectés à part), les
+ * LIEUX où l'entreprise prévoit de les déposer (raison sociale, adresse,
+ * type d'installation), et une estimation des COÛTS. Il suffit qu'une seule
+ * manque pour exposer à une amende administrative.
+ *
+ * CE QU'OPUS EN FAIT (décision Q4 = 1 du 17/11, réponses P1 à P6 du 21/11) :
+ * une carte « Déchets du chantier » par devis, qui range des FAITS FERMÉS,
+ * chacun dans les mots des textes — jamais une phrase qui tire une
+ * conclusion de droit (T20) ; les lieux, rangés une fois dans « Mon
+ * entreprise » et choisis dans chaque devis ; un point au rang 13 de « Pour
+ * le remettre » tant qu'une rubrique manque. Rien n'est imprimé avant 2c.
+ *
+ * TROIS RÈGLES, et aucune n'est cosmétique :
+ *   - RIEN N'EST COCHÉ, CHOISI NI REMPLI SANS UN APPUI (« Opus propose,
+ *     l'artisan confirme ») : ni l'unité, ni un déchet, ni un lieu — même
+ *     s'il n'y en a qu'un —, ni la réponse à la question. `etatInitialDechets`
+ *     ne lit que le devis (T27) ;
+ *   - JAMAIS DE TABLEAU VIDE (T3, T10) : « rien de dit » s'écrit VIDE DE
+ *     VALEUR (`null`). Décocher la dernière case rend `null` ; « aucune
+ *     collecte séparée » est une VALEUR à elle (`aucune`), exclusive des
+ *     autres ; « Aucun dépôt » est une colonne à elle (`dechetsSansDepot`).
+ *     La base refuse un tableau vide (49.5) : une case décochée qui
+ *     l'écrirait finirait en « Non enregistrée » ;
+ *   - LES LIEUX CHOISIS NE S'EFFACENT QUE SOUS LE DOIGT (T10) : la carte
+ *     garde les identifiants TELS QUE LUS, orphelins compris (un lieu retiré
+ *     de « Mon entreprise » laisse le sien) ; ce qu'elle MONTRE est
+ *     l'intersection avec la liste vivante. Le nouveau tableau ne se
+ *     construit que dans l'appui sur une case de lieu, à partir d'une liste
+ *     LUE (`lieuxApresAppui`). Une liste non lue n'est jamais « aucun lieu ».
+ *
+ * LA RÈGLE DU RANG 13 EST ÉCRITE ICI, UNE FOIS (T26) : `rubriquesDesDechets`
+ * dit quelles rubriques sont présentes ; `motifDesDechets` (le miroir de la
+ * base), `resumeDesDechets` (la rangée) et `rubriqueDuPoint` (où le point
+ * ouvre la carte) la lisent. Une seconde écriture finirait par dire autre
+ * chose, et `verifier-devis` la refuse.
+ *
+ * Toutes ces fonctions sont PURES : `node` les fait tourner, la carte
+ * (`DechetsDevis.js`) ne fait que les appeler.
+ */
+
+/** LES BORNES DES CONTRAINTES (49.5), écrites UNE fois de ce côté :
+ *  la quantité, en millièmes de l'unité, de 1 à 99 999 999 (99 999,999 m³ ou
+ *  tonnes — la borne de la quantité d'une ligne) ; le coût, en centimes, de
+ *  1 à 999 999 999 (9 999 999,99 €, jamais 0 : réponse P2) ; 14 sortes de
+ *  déchets au plus (la liste élargie, réponse P4) ; 10 lieux au plus par
+ *  devis (T11). */
+export const QUANTITE_DECHETS_MAX = 99_999_999;
+export const COUT_DECHETS_MAX = 999_999_999;
+export const FLUX_DECHETS_MAX = 14;
+export const LIEUX_DECHETS_MAX = 10;
+
+/** Les deux unités de la quantité (`devis_dechets_unite_check`) : la clé que
+ *  la base garde, et le nom de la pastille. Aucune n'est choisie d'office. */
+export const UNITES_DECHETS = Object.freeze([
+  Object.freeze({ cle: 'm3', pastille: 'm³', nom: 'mètres cubes' }),
+  Object.freeze({ cle: 't', pastille: 'tonnes', nom: 'tonnes' }),
+]);
+
+/** « Aucune collecte séparée » — une VALEUR de `dechetsFlux`, exclusive des
+ *  autres, écrite par sa SEULE pastille (jamais un tableau vide). */
+export const AUCUNE_COLLECTE = 'aucune';
+
+/**
+ * LES DÉCHETS COLLECTÉS À PART, dans l'ORDRE CANONIQUE (annexe A.4, la liste
+ * élargie de la réponse P4) : les huit du décret (papier et carton, métal,
+ * plastique, verre, textiles, bois, fraction minérale, plâtre — D. 543-281),
+ * plus les familles que les textes nomment (menuiseries et vitrages,
+ * membranes bitumineuses, laines minérales — R. 543-289 II —, terres
+ * excavées), les déchets verts et les déchets dangereux.
+ *
+ * LE LIBELLÉ, QUI S'IMPRIMERA, EST SÉPARÉ DE SES EXEMPLES, QUI AIDENT À
+ * L'ÉCRAN (T21) : « Déchets dangereux » s'imprime seul ; « amiante,
+ * solvants… » se lit dessous, à l'écran seulement. Un libellé imprimé
+ * « Déchets dangereux (amiante, …) » se lirait « ce chantier contient de
+ * l'amiante » — `verifier-devis` refuse « amiante » dans un libellé.
+ * La liste est celle de `devis_dechets_flux_check` (plus `aucune`),
+ * comparée par `verifier-devis`.
+ */
+export const FLUX_DECHETS = Object.freeze([
+  Object.freeze({ cle: 'papier', libelle: 'Papier et carton', exemples: null }),
+  Object.freeze({ cle: 'metal', libelle: 'Métal', exemples: null }),
+  Object.freeze({ cle: 'plastique', libelle: 'Plastique', exemples: null }),
+  Object.freeze({ cle: 'verre', libelle: 'Verre', exemples: null }),
+  Object.freeze({ cle: 'textiles', libelle: 'Textiles', exemples: null }),
+  Object.freeze({ cle: 'bois', libelle: 'Bois', exemples: null }),
+  Object.freeze({ cle: 'mineral', libelle: 'Fraction minérale (béton, briques, tuiles et céramiques, pierres)', exemples: null }),
+  Object.freeze({ cle: 'platre', libelle: 'Plâtre', exemples: null }),
+  Object.freeze({ cle: 'menuiseries', libelle: 'Menuiseries et vitrages', exemples: null }),
+  Object.freeze({ cle: 'membranes', libelle: 'Membranes bitumineuses', exemples: null }),
+  Object.freeze({ cle: 'laines', libelle: 'Laines minérales (verre, roche)', exemples: null }),
+  Object.freeze({ cle: 'terres', libelle: 'Terres excavées', exemples: null }),
+  Object.freeze({ cle: 'verts', libelle: 'Déchets verts', exemples: null }),
+  Object.freeze({
+    cle: 'dangereux',
+    libelle: 'Déchets dangereux',
+    exemples: 'Chacun à part, sans les mélanger entre eux : amiante, solvants, peintures qui en contiennent…',
+  }),
+]);
+
+/** CE QUI RESTE SUR LE CHANTIER (T3 bis) — un fait À PART, montré toujours,
+ *  jamais exigé, qui ne complète JAMAIS la rubrique du tri : le broyage n'est
+ *  pas une collecte séparée (la loi pose valorisation sur place et collecte
+ *  séparée comme des alternatives). La liste de
+ *  `devis_dechets_sur_place_check`, dans son ordre. */
+export const SUR_PLACE_DECHETS = Object.freeze([
+  Object.freeze({ cle: 'broyage', libelle: 'Broyage sur le chantier' }),
+  Object.freeze({ cle: 'compostage', libelle: 'Compostage ou paillage sur place' }),
+]);
+
+/** La valeur que l'écran passe à `lieuxApresAppui` pour un appui sur la
+ *  pastille « Aucun dépôt : rien ne quittera le chantier » (réponse P6). */
+export const AUCUN_DEPOT = 'aucun_depot';
+
+/** Les quatre rubriques que la loi demande, dans l'ordre de la carte et du
+ *  résumé. */
+export const RUBRIQUES_DES_DECHETS = Object.freeze(['quantite', 'tri', 'lieu', 'cout']);
+
+/** Les huit champs de l'en-tête que la carte écrit — ce que
+ *  `etatDesChampsDuDevis` regarde pour la rangée « Déchets ». */
+export const CHAMPS_DES_DECHETS = Object.freeze([
+  'dechetsConcerne', 'dechetsQuantiteMilliemes', 'dechetsUnite', 'dechetsFlux', 'dechetsSurPlace', 'dechetsLieux',
+  'dechetsSansDepot', 'dechetsCoutCentimes',
+]);
+
+const CLES_FLUX = Object.freeze([AUCUNE_COLLECTE, ...FLUX_DECHETS.map((f) => f.cle)]);
+const CLES_SUR_PLACE = Object.freeze(SUR_PLACE_DECHETS.map((x) => x.cle));
+
+/* LES MIROIRS DES TROIS CONTRAINTES DE TABLEAU (49.5) — y compris ce que la
+   base ACCEPTE (un doublon passe : le téléphone n'en envoie jamais, et le
+   rang 13 compte les lieux DISTINCTS) et ce qu'elle REFUSE (le tableau vide,
+   par la forme `case … else false`). `validerDevis` les lit. */
+function fluxRecevable(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= FLUX_DECHETS_MAX
+    && v.every((c) => CLES_FLUX.includes(c))
+    && (v.length === 1 || !v.includes(AUCUNE_COLLECTE));
+}
+function surPlaceRecevable(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= CLES_SUR_PLACE.length && v.every((c) => CLES_SUR_PLACE.includes(c));
+}
+function lieuxRecevables(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= LIEUX_DECHETS_MAX
+    && v.every((x) => typeof x === 'string' && x !== '');
+}
+
+/** L'ORDRE CANONIQUE d'une liste de déchets : `aucune`, puis l'ordre de
+ *  `FLUX_DECHETS` ; sans doublon ; une clé inconnue est écartée. Elle peut
+ *  rendre `[]` : c'est `fluxApresAppui` qui ne l'écrit jamais. */
+export function ordonnerFlux(liste) {
+  const vus = new Set(Array.isArray(liste) ? liste : []);
+  return CLES_FLUX.filter((c) => vus.has(c));
+}
+
+/**
+ * CE QU'ÉCRIT UN APPUI dans le bloc du tri — `flux` : la valeur de la carte ;
+ * `cle` : la case touchée, ou `AUCUNE_COLLECTE` pour la pastille.
+ *   - la pastille « Aucune collecte séparée » : allumée, elle s'éteint
+ *     (`null`, rien de dit) ; éteinte, elle s'allume (`['aucune']`) et RETIRE
+ *     les déchets cochés — dans le même geste, et la carte l'annonce
+ *     (`annonceDuTri`, T28) ;
+ *   - une case : elle se coche ou se décoche, la pastille tombe (sans
+ *     annonce : c'est l'objet même de l'appui), l'ordre canonique est remis ;
+ *     la DERNIÈRE case décochée rend `null`, jamais `[]` ;
+ *   - une clé inconnue ne change rien (un tableau vide, que la carte ne
+ *     tient jamais, se rend vide de valeur : aucun chemin ne rend `[]`).
+ * Toujours un tableau NEUF : la carte ne fait jamais `push`.
+ */
+export function fluxApresAppui(flux, cle) {
+  const avant = Array.isArray(flux) ? flux : [];
+  if (cle === AUCUNE_COLLECTE) return avant.includes(AUCUNE_COLLECTE) ? null : [AUCUNE_COLLECTE];
+  if (!FLUX_DECHETS.some((f) => f.cle === cle)) return avant.length ? flux : null;
+  const sans = avant.filter((c) => c !== AUCUNE_COLLECTE);
+  const apres = sans.includes(cle) ? sans.filter((c) => c !== cle) : [...sans, cle];
+  const range = ordonnerFlux(apres);
+  return range.length ? range : null;
+}
+
+/** CE QU'ÉCRIT UN APPUI dans « Sur le chantier » : la case se coche ou se
+ *  décoche, dans l'ordre de `SUR_PLACE_DECHETS` ; la dernière décochée rend
+ *  `null`, jamais `[]` ; une clé inconnue ne change rien (un tableau vide
+ *  se rend vide de valeur). */
+export function surPlaceApresAppui(surPlace, cle) {
+  if (!CLES_SUR_PLACE.includes(cle)) return Array.isArray(surPlace) && surPlace.length ? surPlace : null;
+  const avant = Array.isArray(surPlace) ? surPlace.filter((c) => CLES_SUR_PLACE.includes(c)) : [];
+  const apres = avant.includes(cle) ? avant.filter((c) => c !== cle) : [...avant, cle];
+  const range = CLES_SUR_PLACE.filter((c) => apres.includes(c));
+  return range.length ? range : null;
+}
+
+/* Les identifiants d'une liste de lieux LUE (des objets `{ id, … }`), dans
+   son ordre, sans doublon. */
+const idsDesLieux = (lieuxLus) => [...new Set((Array.isArray(lieuxLus) ? lieuxLus : [])
+  .map((l) => (l && typeof l === 'object' ? l.id : null)).filter((x) => x != null))];
+
+/**
+ * CE QU'ÉCRIT UN APPUI dans le bloc des lieux (T10, réponse P6) — `choix` :
+ * `{ lieux, sansDepot }`, la valeur de la carte ; `lieuxLus` : la liste de
+ * « Mon entreprise » TELLE QU'ELLE EST LUE (ses objets `{ id, … }`), ou
+ * `undefined`/`null` tant qu'elle ne l'est pas ; `id` : le lieu touché, ou
+ * `AUCUN_DEPOT` pour la pastille. Rend `{ lieux, sansDepot }`.
+ *   - LISTE NON LUE : RIEN ne change, identifiants gardés, orphelins
+ *     compris — la carte ne montre d'ailleurs aucune case (T12 bis) ; une
+ *     liste qu'on n'a pas lue n'est jamais « aucun lieu » ;
+ *   - la pastille « Aucun dépôt » : allumée, elle s'éteint ; éteinte, elle
+ *     s'allume et RETIRE les lieux cochés (`lieux: null`), annoncé par la
+ *     carte (`annonceDesLieux`, T28) ;
+ *   - un lieu de la liste : il se coche ou se décoche, la pastille tombe ; le
+ *     tableau se REBÂTIT depuis la liste lue, dans SON ordre — ce qui retire
+ *     d'un seul geste les identifiants orphelins (ils n'ont jamais été
+ *     montrés : leur retrait ne s'annonce pas) ; le dernier décoché rend
+ *     `null`, jamais `[]` ;
+ *   - un identifiant qui n'est pas dans la liste lue ne change rien.
+ * C'est le SEUL endroit où `dechetsLieux` se récrit : jamais à l'ouverture
+ * de la carte, jamais sur un appui ailleurs (un déchet, l'unité, « Non »).
+ */
+export function lieuxApresAppui(choix, lieuxLus, id) {
+  const x = choix && typeof choix === 'object' ? choix : {};
+  const tel = {
+    lieux: Array.isArray(x.lieux) && x.lieux.length ? x.lieux : null,
+    sansDepot: x.sansDepot === true ? true : null,
+  };
+  if (!Array.isArray(lieuxLus)) return tel;
+  if (id === AUCUN_DEPOT) return tel.sansDepot ? { lieux: tel.lieux, sansDepot: null } : { lieux: null, sansDepot: true };
+  const ids = idsDesLieux(lieuxLus);
+  if (!ids.includes(id)) return tel;
+  const choisis = new Set(tel.lieux || []);
+  if (choisis.has(id)) choisis.delete(id); else choisis.add(id);
+  const range = ids.filter((v) => choisis.has(v));
+  return { lieux: range.length ? range : null, sansDepot: null };
+}
+
+/** CE QUE LA CARTE ANNONCE quand la pastille « Aucune collecte séparée »
+ *  vient de retirer des déchets cochés (T28) : « un champ qui change sans
+ *  geste doit s'annoncer ». `null` sinon — décocher une case, ou allumer la
+ *  pastille quand rien n'était coché, ne retire rien qu'on n'ait touché. */
+export function annonceDuTri(avant, apres) {
+  const retire = Array.isArray(avant) && avant.some((c) => c !== AUCUNE_COLLECTE);
+  const pastille = Array.isArray(apres) && apres.length === 1 && apres[0] === AUCUNE_COLLECTE;
+  return retire && pastille ? LES_DECHETS.tri.retires : null;
+}
+
+/** CE QUE LA CARTE ANNONCE quand « Aucun dépôt » vient de retirer des lieux
+ *  cochés ET MONTRÉS : un identifiant orphelin n'a jamais été montré, son
+ *  retrait ne s'annonce pas (T28). `avant`, `apres` : `{ lieux, sansDepot }`. */
+export function annonceDesLieux(avant, apres, lieuxLus) {
+  const ids = idsDesLieux(lieuxLus);
+  const montres = (avant && Array.isArray(avant.lieux) ? avant.lieux : []).filter((v) => ids.includes(v));
+  return montres.length > 0 && apres && apres.sansDepot === true ? LES_DECHETS.lieux.retires : null;
+}
+
+/* L'entreprise d'un lieu : `proId` (la forme de `cas-remise.json`) ou
+   `pro_id` (une ligne de la base, telle que « Mon entreprise » la lit). */
+function entrepriseDuLieu(l) {
+  return l ? (l.proId ?? l.pro_id ?? null) : null;
+}
+
+/**
+ * LES QUATRE RUBRIQUES, PRÉSENTES OU NON — LA règle du rang 13, écrite ICI
+ * UNE FOIS (T26), la même que `motifs_refus_remise()` (49.9). Rend
+ * `{ quantite, tri, lieu, cout }` :
+ *   - `quantite` : la quantité ET son unité ;
+ *   - `tri` : la liste des déchets collectés à part (`['aucune']` compte) —
+ *     ce qui reste sur le chantier n'y compte JAMAIS ;
+ *   - `lieu` : VRAI si « Aucun dépôt », ou si un lieu choisi existe dans
+ *     `lieux` CHEZ L'ENTREPRISE DU DEVIS (le miroir de `l.pro_id = v_pro` :
+ *     un lieu qui ne dit pas son entreprise n'est pas écarté, comme une
+ *     assurance dans `etatDeLAttestation`) ; FAUX si aucun lieu n'est choisi
+ *     (vrai même sans lire la liste), ou si aucun choisi n'est dans la liste
+ *     LUE (des orphelins, le lieu d'un autre) ; `null` — INCONNU — quand des
+ *     lieux sont choisis mais que la liste n'est pas lue (`lieux` n'est pas
+ *     un tableau) : le seul cas où la rangée dit « Lieux de dépôt non lus » ;
+ *   - `cout` : le coût estimé.
+ * Le miroir (`motifDesDechets`) compte un `null` comme absent : une liste
+ * qu'on n'a pas transmise ne prouve aucun lieu.
+ */
+export function rubriquesDesDechets(devis, lieux) {
+  const d = devis || {};
+  const choisis = Array.isArray(d.dechetsLieux) ? d.dechetsLieux.filter((v) => v != null) : [];
+  let lieu;
+  if (d.dechetsSansDepot === true) lieu = true;
+  else if (choisis.length === 0) lieu = false;
+  else if (!Array.isArray(lieux)) lieu = null;
+  else {
+    const pro = d.proId ?? null;
+    lieu = lieux.some((l) => l && l.id != null && choisis.includes(l.id)
+      && (pro == null || entrepriseDuLieu(l) == null || String(entrepriseDuLieu(l)) === String(pro)));
+  }
+  return {
+    quantite: present(d.dechetsQuantiteMilliemes) && present(d.dechetsUnite),
+    tri: Array.isArray(d.dechetsFlux) && d.dechetsFlux.length > 0,
+    lieu,
+    cout: present(d.dechetsCoutCentimes),
+  };
+}
+
+/** La première rubrique qui n'est pas PRÉSENTE (absente, ou inconnue faute
+ *  de liste lue), dans l'ordre de la carte — ou `null` quand les quatre le
+ *  sont. */
+export function premiereRubriqueManquante(devis, lieux) {
+  const r = rubriquesDesDechets(devis, lieux);
+  return RUBRIQUES_DES_DECHETS.find((k) => r[k] !== true) || null;
+}
+
+/**
+ * LE MIROIR DU RANG 13 — la clé, ou `null` : la réponse n'est pas « Non »
+ * (`dechetsConcerne !== false` : vide = « Oui », par prudence) et une
+ * rubrique n'est pas présente → `devis_dechets_rubriques` quand la réponse
+ * est « Oui », `devis_dechets` quand elle est vide. UNE clé au plus.
+ */
+export function motifDesDechets(devis, lieux) {
+  const d = devis || {};
+  if (d.dechetsConcerne === false) return null;
+  const r = rubriquesDesDechets(d, lieux);
+  if (RUBRIQUES_DES_DECHETS.every((k) => r[k] === true)) return null;
+  return d.dechetsConcerne === true ? 'devis_dechets_rubriques' : 'devis_dechets';
+}
+
+/**
+ * OÙ LE POINT DU RANG 13 OUVRE LA CARTE (T8) : `'question'` pour
+ * `devis_dechets` (la réponse est vide : on répond d'abord) ; la première
+ * rubrique qui manque pour `devis_dechets_rubriques`, et `'question'` — en
+ * haut — à défaut (la liste de la base peut être plus récente que celle des
+ * lieux à l'écran) ; `null` pour tout autre point.
+ */
+export function rubriqueDuPoint(point, { devis = null, lieux = undefined } = {}) {
+  const cle = point && typeof point.cle === 'string' ? point.cle : null;
+  if (cle === 'devis_dechets') return 'question';
+  if (cle === 'devis_dechets_rubriques') return premiereRubriqueManquante(devis, lieux) || 'question';
+  return null;
+}
+
+/**
+ * LES TROIS ÉTATS DE LA LISTE DES LIEUX À L'ÉCRAN (T12 bis) — `'lecture'`,
+ * `'echec'`, `'vide'` ou `'lus'`. La liste arrive par la MÊME lecture que le
+ * régime de TVA (`monRegimeEtSaDate`) : son état se déduit du sien.
+ *   - un tableau : `'vide'` s'il n'a aucun lieu, `'lus'` sinon ;
+ *   - le régime en ÉCHEC (`{ echec: true }`) : `'echec'` — « Vos lieux de
+ *     dépôt n'ont pas pu être lus », et « Réessayer » ;
+ *   - le régime LU (franchise, réel, ou non déclaré) mais pas la liste (la
+ *     table absente : un cache de PostgREST pas encore rechargé après la
+ *     migration rend `null`, jamais `[]`) : `'echec'` aussi ;
+ *   - sinon (en lecture, pas encore demandé) : `'lecture'` — rien n'est
+ *     dit, aucune case.
+ * JAMAIS « vide » d'une liste qu'on n'a pas lue : montrer « aucun lieu » à
+ * qui en a inviterait au doublon (la règle de 2b-1).
+ */
+export function etatDesLieux(etatRegime, lieux) {
+  if (Array.isArray(lieux)) return lieux.length ? 'lus' : 'vide';
+  if (etatRegime && typeof etatRegime === 'object' && etatRegime.echec) return 'echec';
+  if (regimeConnu(etatRegime) !== null) return 'echec';
+  return 'lecture';
+}
+
+/** LE LIBELLÉ DU COÛT ESTIMÉ (T16, réponse P2) : « HT » au seul régime réel,
+ *  comme les lignes ; « en euros » sinon — en franchise, non déclaré, en
+ *  lecture ou en échec, on ne nomme pas la taxe (la règle de
+ *  `libellesDesTotaux`, le précédent de la réduction en euros). Le champ
+ *  reste ouvert quel que soit le régime ; un changement de régime ne
+ *  convertit rien. */
+export function libelleDuCout(etatRegime) {
+  return libellesDesTotaux(etatRegime).taxe ? LES_DECHETS.cout.libelleHt : LES_DECHETS.cout.libelleEuros;
+}
+
+/**
+ * L'AMENDE QUE LA LOI PRÉVOIT (L. 541-21-2-3 III ; réponse P3 du 21/11 :
+ * « Oui, cette phrase ») — écrite UNE fois, et seulement dans l'aide de la
+ * carte, jamais dans une phrase du point. La troisième constante de ce
+ * fichier qui écrit « € » (après `AMENDE_DE_LA_LOI` et
+ * `AMENDE_DU_CODE_DE_LA_CONSTRUCTION`), tenue par `verifier-devis` : une
+ * phrase de droit, pas un montant d'un devis. « Personne morale » se dit
+ * « une société » (au juriste, J55). Espaces insécables entre les chiffres
+ * et devant « € » : un montant ne se coupe pas en fin de ligne.
+ */
+export const AMENDE_DES_DECHETS = 'Il suffit qu’une seule de ces informations manque pour exposer à une amende administrative '
+  + 'pouvant aller jusqu’à 3\u00a0000\u00a0€, 15\u00a0000\u00a0€ pour une société.';
+
+/**
+ * LES TEXTES DE LA CARTE « DÉCHETS DU CHANTIER », DE SA RANGÉE ET DE SON
+ * POINT (annexes A.1 à A.3 du cahier 2b-5), mot pour mot. Les questions et
+ * les aides parlent à l'ARTISAN : ce ne sont pas les textes imprimés (2c).
+ * Aucun « vérifié », « agréé », « registre », « bordereau », « brûlage »,
+ * « dispensé », « sans frais » — `verifier-devis` les refuse, avec une seule
+ * exception nommée : « Opus ne peut pas le vérifier », une NÉGATION qui dit
+ * à l'artisan ce qu'Opus ne fait pas.
+ * Espaces insécables entre un nombre et son unité (« 10 m³ », « 40 m² ») :
+ * la règle des aides de ce fichier.
+ */
+export const LES_DECHETS = Object.freeze({
+  titre: 'Déchets du chantier',
+  introduction: 'Ce que deviendront les déchets de ce chantier. Rien ne s’ajoute au total du devis.',
+  /* Le bouton du point, pour les deux clés du rang 13 (annexe A.1). */
+  bouton: 'Compléter les déchets',
+  /* La question (réponse P1 du 21/11), en tête de la carte (T7). « Non » à
+     GAUCHE, comme les trois questions de « Le chantier ». */
+  question: Object.freeze({
+    sousTitre: 'Pour la loi',
+    question: 'S’agit-il de travaux sur un bâtiment, ou de jardinage ?',
+    non: 'Non, ni l’un ni l’autre',
+    ouiParDefaut: 'Oui (par défaut)',
+    oui: 'Oui',
+    aide: 'La loi demande, sur tout devis de construction, de rénovation ou de démolition d’un bâtiment, et sur tout '
+      + 'devis de jardinage, ce que deviendront les déchets — même s’il y en a très peu. Répondez Non seulement si ce '
+      + 'devis n’est ni l’un ni l’autre : une étude ou une fourniture sans pose (ce ne sont pas des travaux), une route ou '
+      + 'un réseau sans rapport avec un bâtiment. Dans le doute (un dépannage, une réparation, une terrasse ou une allée '
+      + 'contre la maison, l’entretien d’espaces verts, un élagage), gardez Oui : c’est le cas le plus sûr.',
+    /* Sous « Non » : les rubriques se taisent, rien n'est effacé. */
+    sousNon: 'Ce devis ne dira rien des déchets. Ce que vous avez déjà écrit est gardé, au cas où vous changeriez d’avis.',
+  }),
+  quantite: Object.freeze({
+    titre: 'Quantité estimée',
+    question: 'Combien de déchets vos travaux produiront-ils, en tout ?',
+    placeholder: 'Quantité',
+    aide: 'Une estimation suffit. Comptez tous les déchets que vos travaux produiront, même très peu.',
+    /* Une quantité sans unité (T23) : dit à la place réservée sous le champ,
+       sans rien refuser — la quantité, elle, s'enregistre. */
+    sansUnite: 'Choisissez m³ ou tonnes.',
+    zero: 'La quantité estimée des déchets doit être positive.',
+  }),
+  tri: Object.freeze({
+    titre: 'Le tri',
+    question: 'Quels déchets partiront à part ?',
+    aucune: 'Aucune collecte séparée',
+    sousAucune: 'Seulement si rien ne partira à part.',
+    aide: 'Le plâtre, les déchets dangereux et les déchets verts triés ne se mélangent pas aux autres. Sur un petit '
+      + 'chantier (moins de 10\u00a0m³ de déchets, ou sans 40\u00a0m² pour les stocker), les règles de tri du décret ne '
+      + 's’appliquent pas ; la loi demande quand même un tri à la source, et le devis doit dire ce que vous faites.',
+    /* Annoncé quand la pastille retire des cases cochées (T28). */
+    retires: 'Les déchets cochés ont été retirés.',
+  }),
+  surPlace: Object.freeze({
+    titre: 'Sur le chantier',
+    question: 'Ce qui y restera, s’il y en a. Facultatif.',
+  }),
+  lieux: Object.freeze({
+    titre: 'Où les déposerez-vous ?',
+    echec: 'Vos lieux de dépôt n’ont pas pu être lus.',
+    reessayer: 'Réessayer',
+    vide: 'Vous n’avez encore aucun lieu de dépôt.',
+    ajouter: 'Ajouter un lieu de dépôt',
+    /* La porte permanente vers « Mon entreprise », section des lieux (T25). */
+    porte: 'Mes lieux de dépôt',
+    aucunDepot: 'Aucun dépôt : rien ne quittera le chantier',
+    sousAucunDepot: 'Seulement si tous les déchets restent sur place, broyés ou compostés.',
+    retires: 'Les lieux cochés ont été retirés.',
+    aide: 'Si vous les remettez à quelqu’un d’autre, la loi vous demande de vous assurer qu’il est autorisé à les '
+      + 'prendre en charge ; Opus ne peut pas le vérifier. Pour votre propre dépôt, nommez aussi, si vous la '
+      + 'connaissez, l’installation où ils finiront.',
+  }),
+  cout: Object.freeze({
+    libelleHt: 'Coût estimé HT',
+    libelleEuros: 'Coût estimé, en euros',
+    question: 'Combien coûteront le tri, le chargement, le transport et le dépôt ?',
+    placeholder: 'Montant',
+    aide: 'Une estimation, qui ne s’ajoute pas au total. Si ce coût est déjà compris dans vos prix, n’ajoutez rien ; '
+      + 's’il ne l’est pas et que vous le faites payer, ajoutez une ligne au devis.',
+    zero: 'Le coût estimé des déchets doit être un montant positif.',
+  }),
+  amende: AMENDE_DES_DECHETS,
+  /* La rangée « Déchets » de la saisie (annexe A.3) : son titre, que le
+     résumé ne répète pas (VoiceOver dit « Titre : résumé. Ouvrir »). */
+  rangee: 'Déchets',
+});
+
+/** Les deux pastilles de la question : « Non, ni l’un ni l’autre » à gauche,
+ *  et « Oui (par défaut) » tant que la réponse est vide — vide = « Oui », par
+ *  prudence —, puis « Oui ». */
+export function pastillesDeLaQuestionDesDechets(valeur) {
+  const q = LES_DECHETS.question;
+  return [q.non, valeur === null || valeur === undefined ? q.ouiParDefaut : q.oui];
+}
+
+/** LA QUANTITÉ TAPÉE : `versMilliemes` (la virgule d'abord, trois décimales
+ *  au plus, cinq chiffres avant la virgule au plus — donc jamais au-delà de
+ *  `QUANTITE_DECHETS_MAX`, la même borne que la quantité d'une ligne), puis
+ *  « jamais 0 » — vide = `null`, sans erreur (rien de dit). */
+export function versQuantiteDesDechets(texte) {
+  const r = versMilliemes(texte);
+  if (!r.ok || r.milliemes === null) return r;
+  if (r.milliemes < 1) return { ok: false, milliemes: null, message: LES_DECHETS.quantite.zero };
+  return r;
+}
+
+/** LE COÛT TAPÉ : `versCentimes`, puis « jamais 0 » (réponse P2 : toujours un
+ *  montant) et la borne de `devis_dechets_cout_check` — vide = `null`, sans
+ *  erreur (rien de dit : c'est le point de « Pour le remettre » qui le dit). */
+export function versCoutDesDechets(texte) {
+  const r = versCentimes(texte);
+  if (!r.ok) return r;
+  if (r.centimes === null) return { ok: true, centimes: null, message: null };
+  if (r.centimes === 0) return { ok: false, centimes: null, message: LES_DECHETS.cout.zero };
+  if (r.centimes > COUT_DECHETS_MAX) {
+    return { ok: false, centimes: null, message: `Le coût estimé des déchets s’écrit jusqu’à ${centimesLisibles(COUT_DECHETS_MAX)}.` };
+  }
+  return r;
+}
+
+/* Un tableau de la base, recopié NEUF — ou `null` (vide de valeur). Un
+   tableau vide n'est pas une réponse : il devient `null` à l'OUVERTURE de la
+   carte (la base n'en garde jamais). */
+const tableauLu = (v) => (Array.isArray(v) && v.length ? [...v] : null);
+
+/**
+ * L'ÉTAT DE LA CARTE À SON OUVERTURE (T23, T27) — `{ concerne, unite, flux,
+ * surPlace, lieux, sansDepot }`, lu dans le DEVIS SEUL : jamais dans les
+ * lieux de « Mon entreprise » (un artisan qui n'en a qu'un ne le voit pas
+ * coché d'office), jamais dans le métier, jamais dans l'origine du devis.
+ * Sur un devis vierge, TOUT est vide, l'unité comprise. Les lieux sont gardés
+ * TELS QUE LUS, orphelins compris (T10).
+ * `textes` : ce que la saisie a GARDÉ d'une carte refusée (`lireDechets` le
+ * rend) — ses `choix` rouvrent la carte comme on l'a laissée.
+ */
+export function etatInitialDechets(devis, textes = null) {
+  const x = devis || {};
+  const etat = {
+    concerne: x.dechetsConcerne === true ? true : (x.dechetsConcerne === false ? false : null),
+    unite: UNITES_DECHETS.some((u) => u.cle === x.dechetsUnite) ? x.dechetsUnite : null,
+    flux: tableauLu(x.dechetsFlux),
+    surPlace: tableauLu(x.dechetsSurPlace),
+    lieux: tableauLu(x.dechetsLieux),
+    sansDepot: x.dechetsSansDepot === true ? true : null,
+  };
+  const garde = textes && typeof textes === 'object' && textes.choix && typeof textes.choix === 'object' ? textes.choix : null;
+  if (garde) {
+    if (garde.concerne === null || typeof garde.concerne === 'boolean') etat.concerne = garde.concerne;
+    if (garde.unite === null || UNITES_DECHETS.some((u) => u.cle === garde.unite)) etat.unite = garde.unite;
+    if (garde.flux === null || Array.isArray(garde.flux)) etat.flux = tableauLu(garde.flux);
+    if (garde.surPlace === null || Array.isArray(garde.surPlace)) etat.surPlace = tableauLu(garde.surPlace);
+    if (garde.lieux === null || Array.isArray(garde.lieux)) etat.lieux = tableauLu(garde.lieux);
+    if (garde.sansDepot === null || garde.sansDepot === true) etat.sansDepot = garde.sansDepot;
+  }
+  return etat;
+}
+
+/**
+ * CE QUE LA CARTE PORTE À CET INSTANT (le modèle exact de `lireConditions`) :
+ * `changements` (ce qui part — les PAIRES entières), `erreurs` (ce qui ne se
+ * lit pas, champ par champ, avec sa phrase : RIEN n'en part), `textes` (ce
+ * qui est tapé, et les `choix` de la carte) et `rappels` (ce qui se dit sans
+ * rien refuser). `tapes` : le texte de chaque champ MONTÉ — `undefined` pour
+ * un champ qui ne l'est pas (sous « Non », les rubriques se taisent : leur
+ * valeur reste, rien n'est effacé).
+ *   - les choix (la réponse, l'unité, les trois listes, « Aucun dépôt »)
+ *     partent TELS QUE LA CARTE LES TIENT : la saisie n'envoie que ce qui
+ *     DIFFÈRE de l'en-tête, par `memeValeur` — rouvrir puis fermer la carte
+ *     n'écrit rien ;
+ *   - la quantité : vide = `null` ; « 0 » = une erreur ; au-delà de la
+ *     borne = une erreur. Avec une quantité sans unité, le rappel « Choisissez
+ *     m³ ou tonnes. » (la quantité, elle, part) ;
+ *   - le coût : vide = `null`, SANS erreur (le point de « Pour le remettre »
+ *     dit ce qui manque) ; « 0 » = une erreur (jamais 0, réponse P2) ;
+ *     au-delà de la borne = une erreur.
+ * AUCUNE normalisation des listes ici : un tableau vide (que les fonctions
+ * d'appui n'écrivent jamais) partirait tel quel, et la base le REFUSERAIT —
+ * un défaut visible, jamais un silence.
+ */
+export function lireDechets({ choix = null, tapes = {}, devis = {} } = {}) {
+  const x = devis || {};
+  const c = choix || etatInitialDechets(x);
+  const t = tapes || {};
+  const changements = {};
+  const erreurs = {};
+  const textes = {};
+  const rappels = {};
+  if (c.concerne !== undefined) changements.dechetsConcerne = c.concerne;
+  if (t.quantite !== undefined) {
+    textes.quantite = t.quantite == null ? '' : String(t.quantite);
+    const r = versQuantiteDesDechets(textes.quantite);
+    if (r.ok) changements.dechetsQuantiteMilliemes = r.milliemes;
+    else erreurs.dechetsQuantiteMilliemes = r.message;
+  }
+  if (c.unite !== undefined) changements.dechetsUnite = c.unite;
+  if (c.flux !== undefined) changements.dechetsFlux = c.flux;
+  if (c.surPlace !== undefined) changements.dechetsSurPlace = c.surPlace;
+  if (c.lieux !== undefined) changements.dechetsLieux = c.lieux;
+  if (c.sansDepot !== undefined) changements.dechetsSansDepot = c.sansDepot;
+  if (t.cout !== undefined) {
+    textes.cout = t.cout == null ? '' : String(t.cout);
+    const r = versCoutDesDechets(textes.cout);
+    if (r.ok) changements.dechetsCoutCentimes = r.centimes;
+    else erreurs.dechetsCoutCentimes = r.message;
+  }
+  const quantite = Object.prototype.hasOwnProperty.call(changements, 'dechetsQuantiteMilliemes')
+    ? changements.dechetsQuantiteMilliemes : x.dechetsQuantiteMilliemes;
+  const unite = Object.prototype.hasOwnProperty.call(changements, 'dechetsUnite') ? changements.dechetsUnite : x.dechetsUnite;
+  if (present(quantite) && !present(unite)) rappels.dechetsUnite = LES_DECHETS.quantite.sansUnite;
+  textes.choix = { ...c };
+  return { changements, erreurs, textes, rappels };
+}
+
+/* Les champs que vise chaque geste de la carte « Déchets » (T23) : on ne
+   vibre que pour le geste qui vise la faute (la règle de `retour.js`). */
+const CLES_DU_GESTE_DES_DECHETS = Object.freeze({
+  concerne: Object.freeze(['dechetsConcerne']),
+  quantite: Object.freeze(['dechetsQuantiteMilliemes', 'dechetsUnite']),
+  unite: Object.freeze(['dechetsQuantiteMilliemes', 'dechetsUnite']),
+  tri: Object.freeze(['dechetsFlux']),
+  surPlace: Object.freeze(['dechetsSurPlace']),
+  lieux: Object.freeze(['dechetsLieux', 'dechetsSansDepot']),
+  cout: Object.freeze(['dechetsCoutCentimes']),
+});
+
+/** VIBRER, OU PAS, pour la carte « Déchets » — la règle de
+ *  `vibrerPourLaCarte`, avec la table des gestes de cette carte. */
+export function vibrerPourLesDechets(geste, cles, deja = null) {
+  return vibrerSelon(CLES_DU_GESTE_DES_DECHETS, geste, cles, deja);
+}
+
+/** Les résumés de la rangée « Déchets » (annexe A.3) : son titre est déjà
+ *  dit par la rangée, le résumé ne le répète pas. */
+const RESUMES_DES_DECHETS = Object.freeze({
+  nonConcernes: 'Non concernés',
+  remplies: 'Les quatre rubriques sont remplies',
+  aCompleter: 'À compléter : ',
+  nonLus: 'Lieux de dépôt non lus',
+});
+const NOMS_DES_RUBRIQUES = Object.freeze({ quantite: 'quantité', tri: 'tri', lieu: 'lieu', cout: 'coût' });
+
+/**
+ * LE RÉSUMÉ DE LA RANGÉE « DÉCHETS » (T24, annexe A.3) — un des DIX-HUIT
+ * résumés, suivi d'un des trois suffixes d'état :
+ *   - « Non concernés » sous « Non » ;
+ *   - « Lieux de dépôt non lus » quand la rubrique des lieux est INCONNUE
+ *     (des lieux choisis, la liste pas lue) — jamais « remplies », jamais
+ *     « à compléter (lieu) » sur une liste qu'on n'a pas lue (T12 bis) ;
+ *   - « Les quatre rubriques sont remplies » ;
+ *   - « À compléter : » suivi de ce qui manque SEULEMENT, dans l'ordre
+ *     quantité, tri, lieu, coût (quinze formes).
+ * Le suffixe : « — pas enregistré » quand un champ de la carte est REFUSÉ
+ * PAR L'ÉCRAN (`refuse` : un « 0 » tapé ne part jamais dans la file, et la
+ * rangée doit le dire — critique ÉCRAN-9 d, corrigée par la contradiction) ;
+ * sinon l'état de l'écriture (`enRoute`, `enEchec`, que
+ * `etatDesChampsDuDevis` calcule sur `CHAMPS_DES_DECHETS`). Les gabarits
+ * (`GABARITS_DES_DECHETS`) comptent les trois : la hauteur ne bouge jamais.
+ * L'état de la liste des lieux se lit dans `lieux` seul — non lue
+ * (`undefined`, `null`), qu'elle soit en lecture ou en échec, le résumé dit
+ * la même chose.
+ */
+export function resumeDesDechets({
+  devis = null, lieux = undefined, enRoute = false, enEchec = false, refuse = false,
+} = {}) {
+  const d = devis || {};
+  const suffixe = refuse ? SUFFIXE_EN_ECHEC : suffixeDEtat({ enRoute, enEchec });
+  if (d.dechetsConcerne === false) return `${RESUMES_DES_DECHETS.nonConcernes}${suffixe}`;
+  const r = rubriquesDesDechets(d, lieux);
+  if (r.lieu === null) return `${RESUMES_DES_DECHETS.nonLus}${suffixe}`;
+  const manquent = RUBRIQUES_DES_DECHETS.filter((k) => r[k] !== true);
+  if (!manquent.length) return `${RESUMES_DES_DECHETS.remplies}${suffixe}`;
+  return `${RESUMES_DES_DECHETS.aCompleter}${manquent.map((k) => NOMS_DES_RUBRIQUES[k]).join(', ')}${suffixe}`;
+}
+
+/* Les quinze listes de ce qui peut manquer (toute partie non vide des quatre
+   rubriques, dans leur ordre). */
+const MANQUES_POSSIBLES = Object.freeze(Array.from({ length: 15 }, (_, i) => i + 1)
+  .map((masque) => RUBRIQUES_DES_DECHETS.filter((_, j) => masque & (1 << j))));
+
+/** LES CINQUANTE-QUATRE GABARITS de la rangée : les dix-huit résumés × les
+ *  trois suffixes (rien, « — enregistrement… », « — pas enregistré ») — la
+ *  règle « garder la grande place » : la rangée ne saute jamais. */
+export const GABARITS_DES_DECHETS = Object.freeze([
+  RESUMES_DES_DECHETS.nonConcernes,
+  RESUMES_DES_DECHETS.remplies,
+  ...MANQUES_POSSIBLES.map((m) => `${RESUMES_DES_DECHETS.aCompleter}${m.map((k) => NOMS_DES_RUBRIQUES[k]).join(', ')}`),
+  RESUMES_DES_DECHETS.nonLus,
 ].flatMap((t) => ['', SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC].map((suffixe) => `${t}${suffixe}`)));
