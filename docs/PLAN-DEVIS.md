@@ -4117,3 +4117,67 @@ vide (M5) ; trois phrases de droit retouchables (D1, D7, D9 dans A-FAIRE).
 **La suite** : **2b-5**, les déchets de chantier ; **2b-6**, le label RGE ;
 puis **2c** (numéro, aperçu au format final, PDF, remise, tri des devis
 remis) ; puis, en lot à part, la signature par le client dans Opus.
+
+### 10.23 L'étape 2b-5 — FAITE le 22/11/2026 : les déchets du chantier, les lieux de dépôt, « Aucun dépôt »
+
+**Sur la vraie base depuis le 22/11/2026 à 12 h 40** (migration
+`lot_2b_5_dechets_du_chantier`, version `20261122114012`) ; essai réel par
+le chemin de l'application : 160 vérifications justes sur 160, contrôlé par
+un second agent (conforme sur le fond). Le cahier :
+`docs/CAHIER-LOT-2B-5.md` ; ce qui est construit et vérifié : CLAUDE.md,
+« Les déchets du chantier, les lieux de dépôt, « Aucun dépôt » — étape
+2b-5 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape 2b-5 ». **Rien
+n'est remis, imprimé ni numéroté** : c'est 2c. **Pas encore essayée sur
+l'iPhone.** Et 2b-4 : le propriétaire a répondu le 21/11 « Oui, ça marche »,
+mais la base ne porte aucune réponse « gratuit ou payant » sur ses
+brouillons.
+
+| question | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| Q4 — la forme (17/11) | **« Lieux rangés + carte »** | les lieux de dépôt rangés une fois dans « Mon entreprise » (une table privée, `emetteur_lieux_depot`), une carte « Déchets » par devis, un point au rang 13 |
+| P1 — la question (21/11) | **« Bâtiment ou jardinage »** | « S’agit-il de travaux sur un bâtiment, ou de jardinage ? », « Oui » tant que rien n'est dit ; la loi vise une activité, pas un lieu |
+| P2 — le coût | **« Toujours un montant, HT »** | `dechets_cout_centimes`, de 1 à 999 999 999, HORS des totaux ; « HT » au seul régime réel |
+| P3 — l'amende | **« Oui, cette phrase »** | `AMENDE_DES_DECHETS` dans l'aide de la carte |
+| P4 — la liste | **« Liste élargie, 14 sortes »** | les huit du décret et six autres familles (menuiseries et vitrages, membranes bitumineuses, laines minérales, terres excavées, déchets verts, déchets dangereux) ; « Aucune collecte séparée » est une valeur à elle |
+| P5 — l'effort de tri | **« La liste suffit »** | aucune colonne de plus ; J58 au juriste |
+| P6 — rien ne quitte le chantier | **« Une pastille « Aucun dépôt » »** | `dechets_sans_depot`, vrai ou vide |
+| DROIT-R2 (21/11, avant la migration) | **« Le signaler »** | « Aucun dépôt » ne remplit la rubrique des lieux que si le tri ne nomme aucune sorte (vide de valeur, ou exactement `{aucune}`) ; une phrase sous la pastille |
+| DROIT-R5 (21/11, avant la migration) | **« Garder « La loi » »** | la nature et les phrases du rang 13 ne bougent pas ; le cas du dépannage au juriste (J51) |
+
+Ce que 2b-6 et 2c doivent savoir :
+
+- **`motifs_refus_remise()` porte 19 clés sur 13 rangs**, signature
+  inchangée ; au plus une clé au rang 13 (`devis_dechets`, par prudence,
+  quand la réponse est vide ; `devis_dechets_rubriques`, la loi, quand elle
+  est « Oui » et qu'une des quatre rubriques manque) ; 512 motifs au plus
+  pour le devis : les gabarits de « Pour le remettre » tiennent. 2b-6
+  prendra le rang 14. **`OP028` reste libre.**
+- **Huit colonnes sur `devis`, sans défaut** : la réponse, la quantité et
+  son unité, le tri (`text[]`), ce qui reste sur le chantier (`text[]`),
+  les lieux (`uuid[]`, sans clé étrangère), « Aucun dépôt », le coût. Jamais
+  de tableau vide : « rien de dit » s'écrit vide de valeur.
+- **Un identifiant de `dechets_lieux` ne prouve aucune appartenance** : tout
+  lecteur filtre par `pro_id`, y compris dans une fonction
+  `security definer` ; **2c COPIERA les lieux DISTINCTS, dans l'ordre, et
+  FIGERA le tableau** ; elle n'imprimera ni ne copiera rien d'un devis
+  « Non ». « Dépôt de votre entreprise » ne s'imprime pas tel quel : une
+  table de libellés imprimés des types d'installation (2c).
+- **La base lit maintenant la table des lieux** pour le devis (une lecture,
+  filtrée par `pro_id = v_pro`) ; elle ne lit toujours ni `tarifs_pro`, ni
+  `clients`, ni `professional_profiles` dans `motifs_refus_remise()`.
+- **La classe de blancs n'a pas été consolidée** : douze copies dans six
+  fonctions SQL et deux constantes JavaScript. La consolider est une refonte
+  de lots finis, à proposer au propriétaire avant.
+- **2b-6 (le RGE) ne lit jamais le badge `rge` de la fiche**, que pose
+  l'administration ; et jamais le RGE comme condition d'un taux de TVA.
+
+**Les questions laissées au propriétaire** : Q5 (la forme du RGE, avant
+2b-6) et Q6 (le mot « artisan » sur un devis imprimé, avant 2c), au cahier
+2b-4, §1.3 bis ; et, de 2b-5 : faut-il annoncer à VoiceOver la phrase sous
+« Aucun dépôt » (R2-2) ? Et, à montrer au propriétaire : la phrase R2-1, écrite par nous
+(« Des déchets partiront à part : choisissez où vous les déposerez. Si en
+fait rien ne quitte le chantier, choisissez « Aucune collecte séparée ». »).
+
+**La suite** : **2b-6**, le label RGE ; puis **2c** (numéro, aperçu au
+format final, PDF, remise, tri des devis remis) ; puis, en lot à part, la
+signature par le client dans Opus.

@@ -11027,8 +11027,8 @@ sur l'iPhone : **2b-1** la liste « Ce qu'il manque pour remettre ce devis » ;
 décision du 09/11 : aucune question, le cas le plus protecteur vaut pour tous
 les devis) ; 2b-3 les lignes (urgence, décennale) ; 2b-4 ce que coûte le
 devis et ce qu'il laisse (devis payant, déchets, RGE) — **redécoupée le 16/11
-(décision Q1)** : 2b-4 le prix du devis lui-même, 2b-5 les déchets, 2b-6 le
-RGE. **Rien n'est remis en
+(décision Q1)** : 2b-4 le prix du devis lui-même, 2b-5 les déchets (faite et
+migrée le 22/11/2026), 2b-6 le RGE. **Rien n'est remis en
 2b** : la liste renseigne, et
 la remise de 2c refusera tant qu'elle n'est pas vide — la MÊME liste, jamais
 une seconde écriture de la règle. Aucun module natif : `git pull` puis
@@ -11238,7 +11238,7 @@ a servi : `docs/CAHIER-LOT-2B-2.md`. Une seule relecture (« Accélérer ») ;
   règle d'Opus**) et `devis_taux_reduit_neuf` (rang 3, une clé par ligne à
   10 % ou 5,5 %, « Par prudence » jusqu'au lot 3). `CONTRAT_B2` : 12 clés sur
   9 rangs (**16 clés sur 11 rangs depuis 2b-3, le 13/11/2026 ; 17 sur 12
-depuis 2b-4, le 17/11**). Pour un
+depuis 2b-4, le 17/11 ; 19 sur 13 depuis 2b-5, le 22/11**). Pour un
   client qui commande pour son entreprise, dans son activité principale, les
   mentions `conso_…` ne comptent plus, sauf les deux adresses (R. 123-237
   reste ouvert), et les rangs gardent leurs TROUS ;
@@ -11517,7 +11517,8 @@ servi : `docs/CAHIER-LOT-2B-3.md`. Une seule relecture (« Accélérer ») ;
 
   Une clé au plus au rang 11. `CONTRAT_B2` : **16 clés sur 11 rangs** ; 510
   motifs au plus pour le devis (17 clés sur 12 rangs et 511 motifs depuis
-  2b-4, le 17/11), toujours trois chiffres : les gabarits de
+  2b-4, le 17/11 ; 19 clés sur 13 rangs et 512 motifs depuis 2b-5, le 22/11),
+  toujours trois chiffres : les gabarits de
   « Pour le remettre » ne bougent pas. **Une attestation valable**, c'est une
   assurance `decennale`, un chemin écrit, et une date de fin au moins égale au
   jour de PARIS (la vraie base est en UTC). Une RC pro ne compte jamais.
@@ -11827,8 +11828,9 @@ numéroté** (2c). Aucun module natif.
   un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en
   est un. » — et son bouton, « Choisir : devis gratuit ou payant », qui ouvre
   « Conditions » sur le bloc. **Ce n'est pas une huitième règle d'Opus**
-  (Q2). `CONTRAT_B2` : **17 clés sur 12 rangs** ; 511 motifs au plus pour le
-  devis, toujours trois chiffres : les gabarits de « Pour le remettre » ne
+  (Q2). `CONTRAT_B2` : **17 clés sur 12 rangs** (19 sur 13 depuis 2b-5, le
+  22/11) ; 511 motifs au plus pour le devis (512 depuis 2b-5), toujours trois
+  chiffres : les gabarits de « Pour le remettre » ne
   bougent pas. Son corps ne nomme toujours ni `tarifs_pro`, ni `clients`, ni
   `professional_profiles` (la porte étroite, cas 14 c ; `emetteur_incomplet()`,
   qu'elle appelle, lit les deux premiers pour ses propres motifs) : la
@@ -12164,6 +12166,492 @@ connecteur refuse un `delete`, et elles expirent d'elles-mêmes.
 
 La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-4 — ce qui reste » ;
 `docs/PLAN-DEVIS.md` 10.22.
+
+### Les déchets du chantier, les lieux de dépôt, « Aucun dépôt » — étape 2b-5 (17-22/11/2026)
+
+Section 46.2 bis et section 49 (49.4 sexies, 49.5, 49.7, 49.9) de
+`schema.sql`, la clé `mes_lieux_de_depot` de `mes_donnees()` ;
+`src/lib/devis.js` (`LES_DECHETS`, `FLUX_DECHETS`, `SUR_PLACE_DECHETS`,
+`rubriquesDesDechets`, `triNommeUneSorte`, `aucunDepotContredit`,
+`fluxApresAppui`, `surPlaceApresAppui`, `lieuxApresAppui`, `etatDesLieux`,
+`libelleDuCout`, `libelleParleDuCout`, `resumeDesDechets`,
+`etatInitialDechets`, `textesInitiauxDesDechets`, `AMENDE_DES_DECHETS`),
+`src/lib/meme-valeur.js` (nouveau), `src/lib/emetteur.js`
+(`TYPES_INSTALLATION`, `validerLieuDepot`, `nettoyerLieuDepot`,
+`libelleDuTypeDeLieu`), `src/components/DechetsDevis.js` et
+`FicheLieuDepot.js` (nouveaux), `FicheEmetteur.js`, `MonEntreprise.js`,
+`SaisieDevisScreen.js`, `OpusApp.js`, `api.js`, `erreurs.js`,
+`file-ecriture.js`, `legal.js`, la démonstration. Commits `48bdef6` (la
+construction), `c0a36ae` (la relecture et ses corrections), `66b2e9b` (la
+règle DROIT-R2) ; le cahier, archivé tel qu'il a servi :
+`docs/CAHIER-LOT-2B-5.md`. Une seule relecture (« Accélérer ») ; **rien
+n'est remis, imprimé ni numéroté** (2c). Aucun module natif.
+
+#### Ce qui est construit
+
+- **« Mon entreprise » → « Vos lieux de dépôt des déchets »**, une section
+  après « Assurances » : une rangée par lieu (raison sociale ; type,
+  commune), « Ajouter un lieu de dépôt », et un formulaire plein écran
+  (`FicheLieuDepot.js`, sur le modèle de `FicheAssurance.js`) : la raison
+  sociale de l'exploitant, l'adresse (`ChampVille type="rue"`), le code
+  postal (pavé numérique), la commune, le type d'installation parmi douze
+  (rien de coché d'office), « Précisez » pour « Autre », « Retirer ce lieu »
+  en deux appuis. En lecture, un bloc les montre ; l'en-tête imprimé ne les
+  imprime pas.
+- **la table `emetteur_lieux_depot`** (46.2 bis), privée :
+  `est_mon_entreprise` des deux côtés, rien pour `anon` (`revoke all`), ni
+  `truncate`, ni `references`, ni `trigger` pour `authenticated` ;
+  `pro_id … on delete cascade`, seule colonne `not null` ; quatre contraintes
+  en `_check` (le code postal, un lieu complet, les longueurs, le type) ; le
+  déclencheur `tient_le_lieu_de_depot()` (`security invoker`) rogne quatre
+  colonnes par la classe de blancs écrite en `chr(n)`, le code postal aux
+  bouts seulement, efface le libellé hors du type « autre », et pose
+  `created_at` par `clock_timestamp()`.
+- **huit colonnes sur `devis`** (49.4 sexies), nullables, SANS défaut :
+  `dechets_concerne` (la réponse ; vide vaut « Oui »),
+  `dechets_quantite_milliemes`, `dechets_unite` (`m3` ou `t`),
+  `dechets_flux` (`text[]` : les déchets qui partiront à part, ou `{aucune}`),
+  `dechets_sur_place` (`text[]` : `broyage`, `compostage`), `dechets_lieux`
+  (`uuid[]`, sans clé étrangère), `dechets_sans_depot` (vrai ou vide, jamais
+  faux), `dechets_cout_centimes` (de 1 à 999 999 999, HORS des totaux) ;
+  sept contraintes `devis_dechets_*_check` ; les huit dans les deux `grant`
+  de 49.7 ; `recalcule_devis()` n'en lit aucune.
+- **dans la saisie, une rangée « Déchets »** entre « Le chantier » et
+  « Conditions », qui ouvre une carte plein écran, « Déchets du chantier »
+  (`DechetsDevis.js`) : la question « S’agit-il de travaux sur un bâtiment,
+  ou de jardinage ? » (« Non, ni l’un ni l’autre » · « Oui (par défaut) ») ;
+  la quantité estimée, en m³ ou en tonnes ; le tri, quatorze sortes de
+  déchets qui partiront à part, ou la pastille « Aucune collecte séparée » ;
+  « Sur le chantier » : le broyage, le compostage ou le paillage ; les lieux :
+  une case par lieu rangé, la pastille « Aucun dépôt : rien ne quittera le
+  chantier », la porte « Mes lieux de dépôt » ; le coût estimé, qui ne
+  s'ajoute pas au total ; l'aide et l'amende. Sous « Non », les rubriques se
+  taisent et ce qui est écrit est gardé.
+- **un point au rang 13** de `motifs_refus_remise()`, signature inchangée,
+  une clé au plus :
+
+  | clé | nature | quand |
+  |---|---|---|
+  | `devis_dechets` | par prudence | la réponse est vide (elle vaut « Oui »), et une des quatre rubriques manque |
+  | `devis_dechets_rubriques` | la loi | la réponse est « Oui », et une rubrique manque |
+
+  Une rubrique manque si la quantité ou son unité est vide ; si le tri est
+  vide de valeur (« Sur le chantier » n'y compte JAMAIS : le broyage n'est
+  pas une collecte séparée) ; si aucun lieu choisi n'existe chez
+  l'entreprise, sauf « Aucun dépôt » avec un tri qui ne nomme aucune sorte
+  (DROIT-R2, ci-dessous) ; si le coût est vide. Rien sous « Non ». Le bouton
+  du point, « Compléter les déchets », ouvre la carte sur la question (réponse
+  vide) ou sur la première rubrique qui manque. La fonction lit la table des
+  lieux une fois, filtrée par `pro_id = v_pro`, et compte les lieux
+  DISTINCTS. `CONTRAT_B2` : **19 clés sur 13 rangs** ; 512 motifs au plus
+  pour le devis, toujours trois chiffres : les gabarits de « Pour le
+  remettre » ne bougent pas.
+- **`memeValeur`** (`src/lib/meme-valeur.js`, qui n'importe rien) : un
+  tableau se compare par sa valeur, dans la file d'écriture, dans la saisie
+  et dans `devis.js`.
+- **l'export RGPD** gagne la clé `mes_lieux_de_depot` (triée
+  `created_at, id`) ; les huit colonnes voyagent avec les devis.
+- **« Pas encore vérifié »** garde sept faits : « si vos lieux de dépôt
+  acceptent ces déchets » y remplace les déchets de chantier.
+- **la démonstration** : un lieu inventé (« Recyclage de démonstration »,
+  cherché absent de Sirene et de la Base Adresse le 21/11) ; « Muret de
+  clôture » et « Terrasse en bois » remplis, « Rénovation salle de bains » à
+  « Oui » avec une rubrique manquante, « Sol du séjour » sans réponse :
+  chaque clé se voit sans `.env`.
+- **Aucune fonction `security definer`, aucun code `OP`** (`OP028` reste
+  libre) ; une table et un déclencheur nouveaux, deux fonctions remplacées
+  (`motifs_refus_remise`, `mes_donnees`). `legal.js` :
+  `VERSION = '2026-11-21'`, et « Ce que nous collectons » nomme les lieux
+  dans la phrase de « Mon entreprise », et, dans celle des devis, « s’il
+  s’agit ou non de travaux sur un bâtiment ou de jardinage, ce que
+  deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé) ».
+
+#### Les décisions du propriétaire
+
+| question | réponse | ce qu'elle a construit |
+|---|---|---|
+| Q4 — la forme (17/11) | « Lieux rangés + carte » | les lieux rangés une fois dans « Mon entreprise », une carte par devis, une question « Oui » tant que rien n'est dit, un point au rang 13, le coût hors du total |
+| P1 — la question (21/11) | « Bâtiment ou jardinage » | « S’agit-il de travaux sur un bâtiment, ou de jardinage ? » : la loi vise une ACTIVITÉ (jardiner, élaguer, entretenir des espaces verts), pas un lieu |
+| P2 — le coût | « Toujours un montant, HT » | jamais 0, hors du total ; « Coût estimé HT » au régime réel, « Coût estimé, en euros » sinon |
+| P3 — l'amende | « Oui, cette phrase » | « Il suffit qu’une seule de ces informations manque pour exposer à une amende administrative pouvant aller jusqu’à 3 000 €, 15 000 € pour une société. » |
+| P4 — la liste | « Liste élargie, 14 sortes » | les huit du décret, plus menuiseries et vitrages, membranes bitumineuses, laines minérales, terres excavées, déchets verts, déchets dangereux ; `devis_dechets_flux_check` de 1 à 14 éléments |
+| P5 — l'effort de tri | « La liste suffit » | aucune colonne de plus ; la question au juriste (J58) |
+| P6 — rien ne quitte le chantier | « Une pastille « Aucun dépôt » » | `dechets_sans_depot`, vrai ou vide ; la pastille retire les lieux cochés, cocher un lieu la retire |
+| DROIT-R2 — « Aucun dépôt » avec des déchets qui partent à part (21/11, avant la migration) | « Le signaler » | « Aucun dépôt » ne remplit la rubrique des lieux que si le tri ne nomme aucune sorte ; une phrase sous la pastille |
+| DROIT-R5 — « La loi » après un « Oui » donné dans le doute | « Garder « La loi » » | la nature et les phrases du rang 13 ne bougent pas ; le cas du dépannage part au juriste (J51) |
+
+Et une question qui n'empêchait rien : 2b-4 a-t-elle été essayée sur
+l'iPhone ? « Oui, ça marche » (21/11). **La base n'en garde aucune trace** :
+relevée par sa forme le 21/11 puis le 22/11, elle ne porte aucune réponse
+« gratuit ou payant », et aucun devis n'y a été modifié depuis le 16/11. Le
+geste de 2b-4 reste donc à faire sur les trois brouillons.
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **« Aucun dépôt » ne remplit la rubrique des lieux que si le tri ne nomme
+> aucune sorte** (DROIT-R2). Opus dit lui-même que la pastille n'est vraie
+> que si tout reste sur place ; or le premier jet comptait « remplies » un
+> devis qui disait à la fois que du bois et du plâtre « partiront à part » et
+> que « rien ne quittera le chantier » (mesuré par la vraie fonction : deux
+> cas de `cas-remise.json` sur 171). La règle, une écriture de chaque côté :
+> `(v_lieux_existants = 0 and not (v_dechets_sans is true and
+> (v_dechets_flux is null or v_dechets_flux = array['aucune']::text[])))`
+> dans 49.9 ; `triNommeUneSorte` dans `devis.js`, lue par le miroir, par
+> `aucunDepotContredit` (la phrase de la carte) et par `annonceDuTri`. Avec un
+> tri vide de valeur et « Aucun dépôt », le lieu est rempli et le point vient
+> du TRI.
+
+> **La phrase de la carte se relit contre la loi, pas contre la règle**
+> (R2-1). Le premier texte proposait « Aucune collecte séparée » « si rien ne
+> partira à part ». Or des déchets qui partent MÉLANGÉS à la déchèterie ne
+> partent pas « à part » : qui suivait la phrase à la lettre rangeait
+> `{aucune}`, gardait « Aucun dépôt », et le point s'éteignait — sur un devis
+> qui dirait « rien ne quittera le chantier » sans aucun point de collecte,
+> quand D. 541-45-1 I 3° demande les points de dépôt de TOUS les déchets,
+> triés ou mélangés. La phrase retenue, sous la pastille tant que la
+> contradiction dure : « Des déchets partiront à part : choisissez où vous
+> les déposerez. Si en fait rien ne quitte le chantier, choisissez « Aucune
+> collecte séparée ». » Sa seconde moitié est conditionnée par « rien ne
+> quitte le chantier », jamais par « rien ne partira à part ». Ce qu'aucun
+> écran ne peut voir reste : un artisan qui choisit de son propre chef les deux
+> pastilles alors que ses déchets partent mélangés (au juriste, avec J31).
+> Et cette phrase est de nous, pas du propriétaire : elle sera montrée au
+> propriétaire.
+
+> **Jamais de tableau vide en base.** Une case décochée fabrique
+> naturellement `[]`, et `[]` aurait affirmé ce que l'artisan n'a pas dit.
+> « Rien de dit » s'écrit vide de valeur ; « aucune collecte séparée » est
+> une valeur à elle (`aucune`, exclusive des autres). Les trois contraintes de
+> tableau s'écrivent `case when array_ndims(x) = 1 and array_lower(x, 1) = 1
+> then … else false end` : `array_ndims('{}')` est vide de valeur, et le
+> `case` refuse le tableau vide, deux dimensions ou une borne basse autre que
+> 1 sous le nom de la contrainte, au lieu d'une erreur en anglais (mesuré sur
+> la vraie base : `'{}'` refusé en 400 · 23514 pour les trois tableaux). Les
+> fonctions d'appui rendent vide de valeur à la dernière case décochée.
+
+> **Un lieu choisi ne s'efface que sous le doigt de l'artisan, sur une liste
+> LUE.** La critique du premier cahier l'a trouvé : un filtre des
+> orphelins posé à l'état initial de la carte partait à CHAQUE appui (un
+> déchet, l'unité, « Non ») et, sur une liste pas encore lue, effaçait tous
+> les lieux choisis. L'état de la carte garde les identifiants tels que lus,
+> orphelins compris ; ce qu'elle MONTRE est l'intersection, calculée au
+> rendu. Un lieu retiré de « Mon entreprise » laisse un identifiant orphelin,
+> ignoré par le rang 13 : le point revient (mesuré sur la vraie base), et
+> l'identifiant ne part qu'au prochain appui sur une case de lieu.
+
+> **Un identifiant de `dechets_lieux` ne prouve aucune appartenance.** Pas de
+> clé étrangère : aucune cascade ne réécrit un devis, ni demain un devis
+> remis. Un client modifié peut y écrire le lieu d'une autre entreprise :
+> accepté, jamais compté, et sans oracle (un identifiant inventé rend la même
+> chose). Le filtre `pro_id = v_pro` du rang 13 sera la SEULE barrière le
+> jour où 2c appellera la liste depuis une fonction `security definer` :
+> l'essai le prouve par une ENVELOPPE `security definer`, parce que sous la
+> RLS, retirer le filtre est une mutation équivalente. Le contrat pour 2c est
+> dans `docs/A-FAIRE.md`.
+
+> **Le trait de soulignement est une lettre de mot**, pour JavaScript comme
+> pour PostgreSQL : `emetteur_lieux_depot` ne contient pas le mot
+> `emetteur`. Une douzaine de listes que la table aurait traversées sans être
+> vue (`PRIVEES`, `PRIVEES_EDGE`, `LISTES`, `TABLES_46`, les alternations des
+> essais 46, cas 26 bis, et 47, cas 14…) ont été élargies EN LE DÉCIDANT. Et
+> le banc a trouvé que l'essai qui prouve la fermeture pouvait être rendu
+> aveugle sans que rien ne le voie (B48, B49 : la table retirée de
+> l'alternation, les essais restaient justes) : `verifier-emetteur` et
+> `verifier-tarifs` relisent désormais ces alternations. Le précédent était
+> `base_postes`, au lot P.
+
+> **Un tableau se compare par sa valeur, à TOUS les endroits où l'on
+> compare.** `Object.is(['bois'], ['bois'])` est faux. Mesuré par la
+> critique du cahier : `memeValeur` posée à deux endroits sur trois, la rangée disait
+> « — enregistrement… » à tort. Une seule écriture, `meme-valeur.js`,
+> importée par la file, par la saisie et par `devis.js` ; une propriété de
+> `verifier-devis` refuse tout `Object.is` sur un champ du devis hors d'elle.
+
+> **« En lecture » n'est pas « en échec »** (ÉCRAN-3, grave). La liste des
+> lieux a quatre états (`etatDesLieux`) : en lecture (rien n'est dit, aucune
+> case), en échec (« Vos lieux de dépôt n’ont pas pu être lus. » et
+> « Réessayer »), vide, lue. Le premier jet disait « n'ont pas pu être lus »
+> pendant une lecture ordinaire, et sa fin posait les cases là où était
+> « Réessayer » : un appui visé sur ce faux bouton décochait un lieu
+> (mesuré). La correction proposée par le relecteur créait une impasse,
+> mesurée par le contradicteur : « Mon entreprise » passe désormais aussi les
+> lieux qu'elle vient de lire. Tant que la liste n'est pas lue, la rangée dit
+> « Lieux de dépôt non lus » — jamais « remplies », jamais « À compléter :
+> lieu ».
+
+> **Le onzième lieu se refuse à l'écran, sur la liste REBÂTIE** (BASE-R1 =
+> ÉCRAN-1, grave). La base refuse plus de dix lieux, et l'écran disait alors
+> « mettez Opus à jour » : faux, et répété par la garde qui bloque la
+> sortie. `lieuxApresAppui` compte la liste rebâtie (l'ordre de la liste lue,
+> sans orphelins), jamais ce que la carte garde — dix identifiants dont trois
+> orphelins laissent passer un huitième lieu —, n'écrit rien, et dit « Dix
+> lieux au plus par devis : décochez-en un pour en choisir un autre. »,
+> annoncé et montré JUSTE SOUS LES CASES : posée sous « Aucun dépôt », la
+> phrase tombait hors de l'écran (mesuré à 393 × 852).
+
+> **Une phrase de droit d'une aide se relit comme le point** (DROIT-R1,
+> DROIT-R4, les deux graves du droit). « Sur le chantier : Facultatif »
+> disait facultative une mention due en jardinage (D. 541-45-1 I 2°) ;
+> l'aide du formulaire d'un lieu appliquait « la loi demande » à tous les
+> travaux sur un bâtiment, quand la loi vise la construction, la rénovation
+> et la démolition — et aucun contrôle ne la tenait. Les deux sont corrigées
+> (`c0a36ae`), et `verifier-emetteur` compare la seconde mot pour mot.
+
+> **La mesure d'une règle se tient comme la règle** (T-C2 de l'épreuve de
+> DROIT-R2 ; le précédent de « `mesure-devis` cherche EXACTEMENT les dix
+> aides »). La section DROIT-R2 de `mesure-devis`
+> et sa copie de la phrase (`PARTENT_A_PART`) n'étaient tenues par rien :
+> neutralisée, ou la phrase changée dans `devis.js` ET dans sa copie, tout
+> passait au vert, mesure comprise. La vérification « g quater » de
+> `verifier-devis` exige la copie ÉGALE à `LES_DECHETS.lieux.partentAPart`,
+> la section appelée au niveau du fichier juste après la précédente, ni
+> `return` ni `||` dans son corps, et ses vérifications de la phrase entière
+> et de la rangée « À compléter : lieu » écrites telles quelles.
+
+> **La parité ne couvre que les états qu'on lui donne** (T-C1). Écrite
+> `not (v_dechets_sans and …)` sans `is true`, la condition laissait
+> `generer-cas-remise --verifier` VERT : le seul état où elle mord — tri
+> `{aucune}`, aucun lieu, « Aucun dépôt » jamais touché — n'était dans aucun
+> des 182 cas, et là `null and vrai` vaut vide de valeur : le point se tait.
+> Les cas 183 et 184 le mettent en défaut, et deux gardes du générateur les
+> exigent. **`is true`, jamais une valeur qui peut manquer sous un `not`** :
+> la leçon du lot 0a, et cette fois la parité seule ne l'aurait pas vue.
+
+> **La classe de blancs n'a PAS été consolidée** (T1). Le plan de 2b-4 la
+> voulait avant 2b-5 ; la consolider aurait réécrit cinq fonctions de quatre
+> lots finis : une refonte, qui demande d'abord l'accord du propriétaire, et
+> qui n'a pas été posée au propriétaire avec les questions du 21/11. Le
+> déclencheur des lieux en porte donc quatre copies de plus, écrites EN
+> LIGNE en `chr(n)`, jamais rangées dans une variable (une classe en variable
+> échappe au compte de `verifier-devis` §17) : **douze copies dans six
+> fonctions**, plus deux constantes JavaScript.
+
+> **La première table créée sur la vraie base depuis M1d n'a PAS reçu
+> MAINTAIN.** C'était le chemin que M1d avait ouvert le 02/11 (MAINTAIN
+> retiré des droits par défaut de `postgres`), et qu'aucune table n'avait
+> encore emprunté. Relevé après : `relacl` =
+> `{postgres=arwdDxtm/postgres,authenticated=arwd/postgres,service_role=arwdDxtm/postgres}`,
+> `maintain_a_retirer = f` : le second appel, prêt et idempotent, n'est pas
+> parti. Le commentaire de 46.2 bis, qui dit que MAINTAIN « part dans un
+> appel À PART », dit donc plus que ce qui s'est passé (A-FAIRE).
+
+> **Une valeur attendue tirée de l'imitation ne connaît pas l'histoire de
+> la vraie base.** Le relevé avant a rendu, pour les droits par défaut de
+> `postgres` sur `public`, une entrée que l'imitation n'a pas : le rôle
+> `postgres`, propriétaire des tables, s'y accorde lui-même `arwdDxtm`. Sans
+> effet — le propriétaire d'une table en
+> a déjà tous les droits —, et ce qui comptait était bien là : aucun `m` chez
+> `anon` ni chez `authenticated`. On lit ce que la cellule DIT, pas seulement
+> si elle est égale à l'attendu.
+
+> **Une migration qui ajoute une table verrouille aussi ce que sa clé
+> étrangère et ses fonctions nomment.** La clé étrangère prend SHARE ROW
+> EXCLUSIVE sur `professional_profiles` : une écriture de fiche en cours fait
+> échouer la migration en 5 s (55P03, rien d'appliqué) — d'où Opus fermé. Et,
+> nouveau par rapport à 2b-4 : recréer `mes_donnees()`, fonction `sql` dont le
+> corps s'analyse à la création, prend ACCESS SHARE sur chaque table qu'elle
+> nomme ; un ACCESS EXCLUSIVE sur `devis_lignes` ou `devis_tva` la bloque
+> donc aussi (seule une autre migration en tient un, jamais l'application).
+> Mesuré sur PostgreSQL 16.
+
+> **Un outil recopié d'un lot à l'autre se relit avant de servir.** Le
+> journal de l'essai de 2b-4 disait « le jeton n'est pas journalisé » ; la
+> copie de sa bibliothèque prise pour 2b-5 ne retirait PAS la session du
+> résumé journalisé. Trouvé et corrigé avant la première requête ; aucun
+> jeton n'est écrit dans les journaux de l'essai.
+
+> **Un compte rendu d'essai se contrôle contre son journal.** Un contrôleur
+> indépendant a relu les 427 requêtes et les 160 vérifications sans faire
+> confiance à leur auteur : conforme sur le fond, et cinq affirmations que le
+> journal ne porte pas — l'heure de début à la seconde, la fin de validité
+> des preuves SIRET, une sonde non journalisée, deux chemins écrits sans leur
+> `&limit=1`, et « tri vide de valeur : le point vient du tri », qui vient du
+> MIROIR et non de la base. La base ne rend que la clé ; sur ce cas, elle ne
+> peut pas montrer si « Aucun dépôt » a rempli le lieu.
+
+Et, plus brièvement : **rien n'est coché d'office**, tenu par trois gardes
+(`etatInitialDechets`, qui ne lit que le devis, jamais les lieux de « Mon
+entreprise », FAIT TOURNER sur un devis vierge — et, au navigateur, la case
+de l'unique lieu de la démonstration reste décochée sur un brouillon neuf ;
+`poser(` appelé seulement depuis un appui, jamais dans un `useEffect` ;
+aucun type d'installation choisi d'office) ; **les valeurs
+pré-remplies** de la carte passent par `textesInitiauxDesDechets`, faite
+tourner sur dix cas (CTL-9) ; **changer d'unité garde la quantité**, et
+**« Non » garde ce qui est écrit** (J38, J33b, deux trous du banc fermés) ;
+**la date d'une version des textes se tient au commit** : aucun contrôle ne
+peut refuser une `VERSION` du lendemain (DROIT-R6).
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve (0 et 0 erreur) ; les
+34 essais, depuis la racine du dépôt, aux comptes attendus : 43 : 0 ·
+46 : 27 · 47 : 18 · 49 : 79 · 49-conditions : 27 (51 valeurs justes) ·
+49-remise : 38 erreurs, 365 valeurs justes, 0 écart, son compte « toutes
+jugées » à `t` (364) · 51d : 23 · suppression de compte : 3 (élargi : une
+fiche émetteur, une assurance, un lieu et une ligne de tarifs posés, puis
+0 de chacun) ; les autres identiques, à des UUID, des OID et des largeurs de
+colonne près. `generer-cas-remise --verifier` : **184 cas**, 0 écart. Les
+56 contrôles (`verifier-devis` 655, `verifier-emetteur` 310,
+`verifier-legal` 268, `verifier-postes` 271, `verifier-lectures` 183,
+`verifier-tarifs` 179), le linter à 32, les paquets iOS et Android lus
+(1 « Exported », 0 « Import stack » chacun, la phrase R2-1 dans les deux
+`.hbc`). `mesure-devis` au navigateur, en démonstration : **1 050 mesures,
+0 en échec** au passage complet (la construction, 37 min), puis ses sections
+2b-5 seules : 113 après la relecture, **132** après DROIT-R2 (dont 18 de la
+section nouvelle ; la rangée garde 56 points à 393 sur quinze états, 72 à
+320).
+
+Les bancs : à la construction, **156 sabotages**, 147 refusés par la
+vérification visée, 3 mutations équivalentes et **6 trous** (B48 et B49,
+l'en-tête qui imprimerait les lieux, changer d'unité qui efface, « Non » qui
+efface, un code postal dont le téléphone retirait les espaces intérieurs),
+fermés dans les
+contrôles (16 sabotages, 16 refusés) ; les corrections de la relecture,
+36 sabotages, 36 refusés ; la règle DROIT-R2, neuf à sa construction, puis
+**34 à son épreuve** : 31 refusés, 3 verts — un même trou, la mesure et sa
+copie de la phrase (T-C2) —, et un trou partiel de la parité (T-C1) ; les
+deux fermés, et leurs sabotages rejoués refusés. Et une matrice indépendante de **896 cas**, jouée
+par la vraie fonction : 0 écart entre la base, le miroir et un oracle écrit à
+part ; contre l'ancienne règle, 60 écarts — elle voyait la différence.
+
+La relecture unique (droit, base, écran, contrôles, un contradicteur par
+angle) : **31 constats**, aucun réfuté entier, **quatre graves**, corrigés
+dans `c0a36ae` (DROIT-R1, DROIT-R4, le onzième lieu, « en lecture » pris
+pour « en échec ») ; deux décisions laissées au propriétaire avant la
+migration (DROIT-R2, DROIT-R5) ; le reste dans `docs/A-FAIRE.md`.
+
+#### La migration
+
+Construite par un script qui PREND chaque morceau dans le `schema.sql` de
+l'arbre, l'imitation étant `1cbf3a8` (identique octet pour octet à
+`3767443`, d'où 2b-4 avait été construite) : elle porte les 54 ordres que
+l'arbre ajoute ou change, comparés ordre par ordre aux deux schémas, sauf
+les douze `drop … if exists` — leurs contraintes et leur politique posées
+SOUS CONDITION (`pg_constraint`, nom ET table ; `pg_policies`) dans des
+blocs `do` —, plus onze ordres rejoués (le `revoke` et les `grant` de 49.7,
+les droits des deux fonctions, le balayage de la section 43) ; **49 640
+octets**, aucun ordre qui commence par `drop`, `delete` ou
+`truncate`, aucune barre oblique inverse, aucun `default` sur une colonne de
+`devis`, `set local lock_timeout = '5s'` en tête ; aucun rattrapage. Simulée
+deux fois sur l'imitation avec données : l'empreinte d'une base neuve au
+schéma de l'arbre, identique (étroite 348 lignes, large 1 398, et l'ordre
+physique des colonnes) ; avant → après, 38 lignes logiques changent (36
+ajoutées, 2 changées : les deux fonctions) et rien d'autre ; aucune ligne
+réécrite, dans aucune des 46 tables ; les essais identiques. La garde md5 a
+refusé dix sabotages sur dix sans rien appliquer ; la contre-épreuve (un
+`default false` glissé, le `revoke` à `anon` retiré, le md5 recalculé) passe
+la garde, et le relevé après la voit. Un second regard indépendant (son
+découpeur, son empreinte large de 1 801 lignes, ses données) a refait la
+preuve : aucun écart bloquant.
+
+**Appliquée le 22/11/2026 à 12 h 40 (heure de Paris)** — migration
+`lot_2b_5_dechets_du_chantier`, version `20261122114012` en UTC —, avec
+l'accord du propriétaire, Opus fermé, en UN appel, sous forme GARDÉE (texte
+de md5 `d80ad8184ad4e9903dc14cc94d3e3f06`, comparé avant d'exécuter ; forme
+gardée de 50 097 octets). **Aucun appel MAINTAIN.** Relevé AVANT, dans la
+nuit (vers 00 h 55, heure de Paris) : 0 requête active, 0 transaction
+ouverte, 0 session illisible, PostgreSQL 17 (170011), 3 devis, 11 lignes,
+4 ventilations, 36 colonnes sur `devis`, la table absente. Relevé APRÈS :
+identique à la simulation, au caractère près, sur les md5 attendus
+(`motifs_refus_remise` `231e7a03…`, son commentaire `692e7e10…`,
+`mes_donnees` `1afb577a…`) ; 44 colonnes et 26 contraintes `check` sur
+`devis` ; 47 tables et 121 fonctions dans `public` ; politiques et
+déclencheurs du devis inchangés ; les comptes, les maxima de `modifie_le` et
+de `generation`, les empreintes `id:xmin` et les `relfilenode` des devis,
+des lignes, des ventilations et des fiches pro, IDENTIQUES à l'avant : rien
+n'a été réécrit, et rien n'a écrit dans ces tables entre les deux relevés.
+
+**Ce que le propriétaire verra** : ses trois brouillons gagnent le point
+« Dites ce que deviendront les déchets… » (« Par prudence ») — la réponse
+naît vide, et le vide vaut « Oui ». Un appui sur « Non » l'éteint, devis par
+devis, ou la carte remplie. Entre la migration et `git pull`, l'application
+d'avant montre ce point sans bouton (déduit de 2b-4, pas mesuré) : rien ne
+casse, rien ne se perd.
+
+**Les avertissements des commits `48bdef6`, `c0a36ae` et `66b2e9b` (« NE PAS
+FAIRE `git pull` AVANT LA MIGRATION 2b-5 ») ne valent plus** : `git pull`,
+puis `npx expo start -c`. Un message de commit ne se récrit pas ; c'est ici
+qu'on le dit.
+
+#### Essayé sur la vraie base
+
+Le 22/11, de 12 h 50 à 12 h 56 (heure de Paris), par le chemin de
+l'application (curl, la clé publiable et le jeton de chaque compte) : deux
+artisans jetables à Brest, un plaquiste A et un électricien B, inscrits sur
+les deux preuves SIRET d'essai déjà en base (SIRET fictifs), le régime réel
+déclaré avant le premier poste, chaque écriture portant un numéro plus grand
+que le précédent — **160 vérifications justes, 0 en échec, 427 requêtes,
+aucune reprise**, aucun OP015 ni OP016, aucun jeton dans les journaux,
+`enregistrer_vues` jamais appelée :
+
+| | résultat |
+|---|---|
+| la table et les huit colonnes lues par l'API juste après la migration | 200 ×2 : ni PGRST205, ni 42703 — le cache de PostgREST les avait apprises |
+| à chaque pas, la liste de la base contre `motifsDeRemise` | **38 comparaisons, identiques au caractère près**, motifs de l'entreprise compris |
+| D1 complet pour les rangs 1 à 12, réponse vide | seul motif du devis : `devis_dechets`, rang 13, « Par prudence », la phrase exacte (199 caractères) |
+| « Non » · « Oui » sans rien | rien · `devis_dechets_rubriques`, « La loi » (186 caractères) |
+| la quantité, le tri, un lieu, le coût, ajoutés un à un | le point reste jusqu'au coût, puis s'éteint |
+| chaque rubrique éteinte puis rallumée (quantité, unité seule, tri, lieu, coût) | le point revient, puis repart |
+| un lieu écrit avec une date de 2001 et des blancs (espace, insécable, largeur nulle) | la date posée par la base, les blancs rognés, le libellé effacé hors « autre » (gardé et rogné pour « autre ») |
+| un code postal faux, un lieu incomplet, un type inconnu, 121 caractères | **400 · 23514** sous leur nom, aucune ligne écrite |
+| B lit · modifie · supprime les lieux de A | `[]` · 204 et **0 ligne** ×2 ; au nom de A : **403 · 42501** |
+| un visiteur, sur la table et sur les colonnes du devis | **401 · 42501**, en lecture et en écriture |
+| **DROIT-R2** : « Aucun dépôt », aucun lieu, tri {bois, plâtre} | **`devis_dechets_rubriques`** — l'ancienne règle n'aurait rien rendu |
+| …tri {aucune} · tri {bois} et un lieu de A | rien · rien |
+| …tri vide de valeur · réponse vide avec {aucune} et « Aucun dépôt » | le point · rien |
+| [LA2, LA1], LA1 écrit en majuscules | relu dans l'ordre écrit, en minuscules |
+| `'{}'` ×3, {aucune, bois}, onze lieux, un élément vide | **400 · 23514** sous leur nom ; le devis identique avant et après |
+| le lieu de B, seul, dans le devis de A | accepté (204), **jamais compté** |
+| A retire un lieu choisi | le point revient ; l'identifiant reste orphelin dans le devis |
+| le coût 0 et 1 000 000 000 ; la quantité 0 ; « kg » ; « Aucun dépôt » faux ; {broyage, broyage, compostage} ; {brulage} ; {amiante} | **400 · 23514** sous leur nom ; les coûts 1 et 999 999 999 acceptés |
+| après chacun des 15 refus d'une écriture du devis | l'horloge, `modifie_le` et les huit colonnes identiques au caractère près |
+| les totaux, relus 9 fois (après chaque écriture du coût, et à la fin) | identiques à la référence : le coût est hors des totaux |
+| B écrit les huit colonnes du devis de A · lit · demande la liste | 204 et 0 ligne · `[]` · **400 OP027**, la phrase d'un devis inventé |
+| l'export de A · de B | `mes_lieux_de_depot` : les deux lieux de A, dans l'ordre de l'écran, identiques aux lignes que l'écran lit ; les huit clés dans `devis_emis` · le seul lieu de B, rien de A |
+
+Ménage par le chemin de l'application (`preparer_suppression_compte`, puis
+`/functions/v1/compte`) ; la reconnexion est refusée pour les deux. Relevé
+ensuite par sa forme, en lecture seule : base revenue à 14 comptes,
+8 fiches pro, 21 publications, 3 devis, 11 lignes, 4 ventilations, 0 lieu
+de dépôt ; aucun compte `@exemple-opus.test`, aucune ligne aux identifiants
+de l'essai (comptes, fiches, fiche émetteur, carnet, devis, lieux, tarifs,
+notifications), aucune entreprise ni aucun SIREN réservé pour les deux SIREN
+d'essai, aucun fichier dans le stockage ; les maxima (`modifie_le`,
+`generation`) et les empreintes `id:xmin` des devis, des lignes, de la
+ventilation et des fiches pro **identiques à l'avant** : les brouillons du
+propriétaire n'ont pas été touchés. Les deux preuves SIRET d'essai restent :
+elles expirent d'elles-mêmes, le connecteur refuse un `delete`.
+
+#### Ce qui n'a PAS été vérifié
+
+- **rien sur l'iPhone** : la carte et le clavier (la quantité, le coût, la
+  virgule du pavé décimal), les quatorze cases au pouce, les pastilles de la
+  question à 320 points, le formulaire d'un lieu (les suggestions de la Base
+  Adresse, le code postal sur le pavé numérique), la porte « Mes lieux de
+  dépôt », la rangée qui ne saute pas, VoiceOver (« coché » ou « checked » ;
+  la phrase R2-1, qui ne s'annonce pas ; la phrase du onzième lieu), Hermes ;
+- **aucun écran sur la vraie base** : la carte, la rangée, la porte,
+  « Mon entreprise », la phrase sous « Aucun dépôt » n'ont tourné qu'en
+  démonstration ; l'essai a reproduit les requêtes à la main, pas la file
+  d'écriture, et a écrit à la main la paire `dechets_lieux` /
+  `dechets_sans_depot` que l'écran écrit d'un geste ;
+- sur la vraie base : **la modification d'un lieu par son titulaire** ;
+  « Sur le chantier » qui ne remplit jamais le tri ; un lieu en double ; les
+  bornes (dix lieux, quatorze sortes, une quantité de 99 999 999) ; un code
+  postal avec une insécable à l'intérieur ; une quantité au-dessus de la
+  borne ; un tableau à deux dimensions ou d'indice autre que 1 ; les
+  longueurs maximales de l'adresse, de la commune et du libellé ; {aucune}
+  sans « Aucun dépôt » ni lieu ; « Non » sur des rubriques à moitié
+  remplies ; le nombre de clés de l'export ; le régime franchise ; un devis
+  venu d'une demande ou d'une urgence ;
+- les suggestions de la vraie Base Adresse dans le formulaire d'un lieu
+  (posées par une route au navigateur) ; PostgreSQL 17 hors de la vraie base ;
+- **le passage complet de `mesure-devis` après la relecture** (seulement ses
+  sections 2b-5) et **le banc complet après R2-1** (seulement X2, X4 et B2) ;
+- la lecture qu'un juriste ferait des phrases de droit, et de la phrase R2-1.
+
+La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-5 — ce qui reste » ;
+`docs/PLAN-DEVIS.md` 10.23.
 
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 

@@ -3949,7 +3949,10 @@ signature ». La liste reste ci-dessous pour mémoire :
   date de fin.
 
 **À essayer sur votre iPhone** (le build de développement, après `git pull`
-et `npx expo start -c`) :
+et `npx expo start -c`) — **votre réponse du 21/11 : « Oui, ça marche »**.
+Mais la base, relevée par sa forme le 21/11 puis le 22/11, ne porte aucune
+réponse « gratuit ou payant » et aucun devis modifié depuis le 16/11 :
+l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
 
 - [ ] « Conditions » : le bloc « Le devis lui-même : gratuit ou payant ? »,
   EN DERNIER sous la retenue, se trouve-t-il bien ? Les deux pastilles se
@@ -4172,8 +4175,12 @@ et `npx expo start -c`) :
 
 **Les étapes suivantes** :
 
-- [ ] **2b-5, les déchets de chantier.** Une question à vous d'abord (Q4,
-  cahier §1.3 bis). La forme recommandée (cahier §8.1) : vos lieux de dépôt
+- [x] **2b-5, les déchets de chantier.** **FAITE : construite le 21/11,
+  migrée le 22/11** (« Après l'étape 2b-5 »). La question y est devenue
+  « S’agit-il de travaux sur un bâtiment, ou de jardinage ? » (votre réponse
+  P1), et la classe de blancs n'a PAS été consolidée avant (T1 du cahier
+  2b-5 : une refonte de lots finis, à vous proposer d'abord). Ce qui était
+  écrit le 17/11 : une question à vous d'abord (Q4, cahier §1.3 bis). La forme recommandée (cahier §8.1) : vos lieux de dépôt
   rangés une fois dans « Mon entreprise », une carte « Déchets » par devis
   (quantité, tris, lieux, coût estimé hors des totaux), et une question « Ces
   travaux produisent-ils des déchets ? », « Oui » tant que rien n'est dit ;
@@ -4216,6 +4223,289 @@ et `npx expo start -c`) :
   `id:xmin`, sessions visibles), joué avant ET après, n'est pas dans le dépôt :
   il vit dans les comptes rendus de la session. À y verser, la prochaine fois
   qu'une migration touche des lignes existantes.
+
+### Après l'étape 2b-5 — ce qui reste (22/11/2026)
+
+> **La migration de 2b-5 est APPLIQUÉE sur la vraie base depuis le
+> 22/11/2026 à 12 h 40**, avec votre accord, Opus fermé (CLAUDE.md, « Les
+> déchets du chantier, les lieux de dépôt, « Aucun dépôt » — étape 2b-5 »).
+> Les avertissements « NE PAS FAIRE `git pull` AVANT LA MIGRATION 2b-5 » des
+> commits `48bdef6`, `c0a36ae` et `66b2e9b` ne valent plus : `git pull`, puis
+> `npx expo start -c`, suffisent (aucun module natif). L'essai sur la vraie
+> base a rendu 160 vérifications justes sur 160, et son contrôle par un
+> second agent l'a jugé conforme sur le fond.
+>
+> **Règle « Accélérer »** : une seule relecture (droit, base, écran,
+> contrôles, un contradicteur par angle). 31 constats, **quatre graves**,
+> corrigés dans `c0a36ae` : « Sur le chantier : Facultatif » (DROIT-R1),
+> l'aide du formulaire d'un lieu (DROIT-R4), le onzième lieu (BASE-R1 =
+> ÉCRAN-1), « en lecture » pris pour « en échec » (ÉCRAN-3). Puis votre
+> décision DROIT-R2, construite dans `66b2e9b`, et éprouvée deux fois. Le
+> reste est ci-dessous. Les noms (DROIT-…, BASE-…, ÉCRAN-…, CTL-…, R2-…,
+> T-C…, B…, J…) viennent des comptes rendus de la session, qui ne sont pas
+> dans le dépôt, et du cahier (`docs/CAHIER-LOT-2B-5.md`).
+
+**Des gestes à vous** :
+
+- [ ] **`git pull`, puis `npx expo start -c`** (le build de développement).
+  Avant, vos trois brouillons montrent le point « Dites ce que deviendront
+  les déchets… » SANS bouton (déduit de 2b-4, pas mesuré) : rien ne casse,
+  la réponse attend la nouvelle version.
+- [ ] **Vos trois brouillons** : ouvrez « Déchets » dans chacun. Répondez
+  « Non, ni l’un ni l’autre » s'il ne s'agit ni de travaux sur un bâtiment
+  ni de jardinage ; sinon, remplissez les quatre rubriques. Vos métiers
+  rendent presque tous vos devis concernés. Opus ne répond pas à votre
+  place.
+- [ ] **Rangez vos lieux de dépôt** dans « Mon entreprise » → « Vos lieux de
+  dépôt des déchets » : la raison sociale de celui qui EXPLOITE le lieu (pas
+  seulement le nom du lieu), son adresse, son type. Rangés une fois, ils se
+  choisissent ensuite dans chaque devis.
+- [ ] **Le geste de 2b-4 n'est pas fait** : vous avez répondu le 21/11 que
+  2b-4 « marche », mais la base, relevée par sa forme le 21/11 puis le 22/11,
+  ne porte aucune réponse « gratuit ou payant » sur vos brouillons, et aucun
+  n'a été modifié depuis le 16/11. Le point « Dites si le devis lui-même est
+  gratuit ou payant » y est donc toujours (« Après l'étape 2b-4 »).
+- [ ] **Relisez la phrase sous « Aucun dépôt »** (R2-1), qui est de nous, pas
+  de vous : « Des déchets partiront à part : choisissez où vous les
+  déposerez. Si en fait rien ne quitte le chantier, choisissez « Aucune
+  collecte séparée ». » Elle s'affiche quand « Aucun dépôt » est choisi
+  alors que le tri nomme des déchets qui partiront à part.
+- [ ] **À décider (R2-2 = D1)** : sur l'iPhone, VoiceOver n'entend pas cette
+  phrase paraître, et elle peut naître hors de l'écran (mesuré au
+  navigateur : y = 1 481 pour une fenêtre de 852, la case touchée à
+  y = 551). Faut-il l'annoncer, comme la phrase du onzième lieu, ou la
+  rangée « À compléter : lieu » et le point « La loi » suffisent-ils ?
+
+**À essayer sur votre iPhone** (le build de développement, après `git pull`
+et `npx expo start -c`) :
+
+- [ ] la carte « Déchets du chantier » et le clavier : la quantité et le coût
+  sur le pavé décimal (la virgule), le champ du coût tout en bas de la carte
+  — le clavier le cache-t-il ?
+- [ ] les quatorze cases du tri et les cases des lieux au pouce ; les deux
+  pastilles de la question (« Non, ni l’un ni l’autre » · « Oui (par
+  défaut) ») sur un petit écran (une seule rangée à 320 points au
+  navigateur) ;
+- [ ] « Aucune collecte séparée » et « Aucun dépôt », qui retirent ce qui
+  était coché : la phrase annoncée se comprend-elle ? Et une case décochée
+  fait remonter la pastille du dessous de 2 points (55 → 53 au navigateur,
+  antérieur à l'étape) : est-ce visible ?
+- [ ] « Sur le chantier » (le broyage, le compostage ou le paillage), et sa
+  phrase pour le jardinage ;
+- [ ] le formulaire d'un lieu : l'adresse et ses suggestions (la vraie Base
+  Adresse, jamais essayée ici), le code postal sur le pavé numérique,
+  « Retirer ce lieu » en deux appuis ;
+- [ ] la porte « Mes lieux de dépôt » depuis la carte, et le retour ;
+- [ ] la rangée « Déchets » entre « Le chantier » et « Conditions » : ne
+  saute-t-elle jamais (56 points à 393 au navigateur, quel que soit son
+  état) ?
+- [ ] un onzième lieu coché : la phrase « Dix lieux au plus par devis… »
+  sous les cases, la vibration, l'annonce ;
+- [ ] VoiceOver : les cases sont des interrupteurs (`Interrupteur`, rôle
+  `switch`) ; et, sur le témoin (la case de la déclaration de TVA, rôle
+  `checkbox`), VoiceOver dit-il « coché » ou « checked » ? Et la virgule
+  d'une rangée de lieu (« Déchèterie professionnelle, Lambesc »), et le
+  libellé parlé du coût (« Coût estimé HT des déchets »).
+
+**Au juriste, avant 2c** :
+
+- [ ] **J51, élargie par votre décision DROIT-R5** (« Garder « La loi » ») :
+  un artisan qui suit l'aide « Dans le doute (un dépannage, une réparation…),
+  gardez Oui » voit le point passer de « Par prudence » à « La loi —
+  … puisque vous avez répondu « Oui » ». Or « Oui » répond à une question
+  plus large que la loi, à dessein ; pour un dépannage, rien n'a changé en
+  droit entre les deux états. La question : « travaux sur un bâtiment »
+  peut-il rester la question, et la nature « La loi » sur un « Oui » ? Si
+  la réponse est non : la nature « prudence » pour les deux clés, la phrase
+  sans son « puisque » (49.9, `MOTIFS_DEVIS`, `cas-remise.json`, les
+  longueurs des gabarits).
+- [ ] **J31, avec la phrase R2-1** : des déchets qui partent MÉLANGÉS à la
+  déchèterie, sous « Aucune collecte séparée » ET « Aucun dépôt » choisis par
+  l'artisan : le devis dirait « rien ne quittera le chantier » sans point de
+  collecte, et Opus ne peut pas le voir. Et un devis sans point de collecte
+  (le client qui garde ses déchets, le réemploi sur place, tout broyé ou
+  composté) est-il complet ?
+- [ ] **J26, avec DROIT-R10** : l'exception du IV de L. 541-21-2-3 (les
+  travaux soumis au diagnostic de L. 111-10-4 du code de la construction)
+  n'est pas proposée ; l'aide ne dit plus « tout devis », pour ne pas
+  promettre qu'il n'y en a pas.
+- [ ] **Le reste de la liste du cahier** (`docs/CAHIER-LOT-2B-5.md`, §1.5) :
+  J26 à J36 (du cahier 2b-4) ; J29 (le coût : un montant à part, HT ou TTC,
+  face aux arrêtés de 1987 et de 2017) ; J32 (petit chantier, « aucune
+  collecte séparée », les biodéchets) ; J52 (déchets dangereux et repérage
+  amiante) ; J53 (les options comptent-elles) ; J54 (les listes de types et
+  de déchets, dont les familles de R. 543-289 II et les terres) ; J55
+  (« 15 000 € pour une société ») ; J56 (une rubrique imprimée à partir de
+  faits fermés engage-t-elle l'éditeur ?) ; J57 (deux montants hors des
+  totaux sur le même devis) ; J58 (la liste des déchets collectés à part
+  dit-elle « l'effort de tri » ?) ; J59 (la quantité seule, que le I de la
+  loi ne nomme pas, est-elle sanctionnée ?) ; J60 (un lieu tenu par un
+  entrepreneur individuel porte le nom d'une personne).
+
+**Défauts connus, non corrigés — l'écran** :
+
+- [ ] **R2-2 = D1** — la phrase sous « Aucun dépôt » ne s'annonce pas sur
+  iPhone (ci-dessus, à décider). Parade, si vous la voulez : l'annoncer par
+  `retour.annoncer()` quand `aucunDepotContredit` passe de faux à vrai sous
+  un appui (dans `toucherDechet` et `toucherAucunDepot`), sur le modèle du
+  plafond.
+- [ ] **R2-3** — `aucunDepotContredit` ne regarde pas les lieux choisis : un
+  devis que la base porte avec un lieu existant ET « Aucun dépôt » montre la
+  phrase sous une case cochée, quand la rangée dit la rubrique remplie.
+  L'application ne fabrique jamais cet état (un client modifié, une écriture
+  directe). Parade : ne montrer la phrase que si
+  `rubriquesDesDechets(...).lieu === false`.
+- [ ] **ÉCRAN-4** — quand la liste des lieux arrive, les cases se posent là
+  où étaient « Réessayer » et la porte ; deux chemins restent (« Réessayer »
+  puis un second appui après la réponse ; une réponse tardive après les 8 s
+  d'`avecDelai`). Un choix de mise en page : une ligne fixe au-dessus des
+  cases (texte à valider), ou la rangée de boutons en premier.
+- [ ] **ÉCRAN-2 (avec ÉCRAN-4)** — « Aucun dépôt » enregistré n'est pas
+  montré quand la liste est en lecture ou en échec : la montrer choisie et
+  inactive, hors de la place des cases.
+- [ ] **ÉCRAN-3, les restes** — le commentaire de 2b-4 dans `OpusApp.js`
+  (« aucun `surEmetteur` ne vient après la fermeture ») est faux, mesuré ;
+  les assurances ne sont pas reposées par `recevoirEmetteur` (sans effet
+  aujourd'hui : elles sont gardées) — c'est M3 de 2b-4, toujours ouvert.
+- [ ] **T12** — une erreur de la seule lecture des lieux fait tomber la
+  lecture entière du régime et des assurances (le chemin choisi en 2b-4 pour
+  les assurances).
+- [ ] **T16** — un changement de régime de TVA ne convertit pas un coût des
+  déchets déjà écrit (« HT » au régime réel, « en euros » sinon).
+- [ ] **BASE-12** — un lieu ajouté dont la réponse se perd peut être envoyé
+  deux fois (l'identifiant est choisi par la base, comme pour une
+  assurance) : le doublon se voit et se retire.
+- [ ] **Un lieu belge ou suisse** (code postal à quatre chiffres) est
+  refusé ; **un lieu-dit ou une zone d'activités** n'est pas proposé par le
+  champ d'adresse (la Base Adresse les rend comme lieux-dits, écartés) :
+  l'aide dit de taper l'adresse telle qu'elle est.
+- [ ] **D2** — les 1 002 guillemets de `devis.js` ont des espaces ordinaires :
+  un guillemet peut rester seul en fin de ligne (le défaut corrigé dans
+  `annonces.js` le 26/10). Un lot de typographie à part, s'il est voulu.
+- [ ] **CTL-6, un choix** — la règle des mots interdits (« agréé »…) ne
+  s'étend pas au formulaire d'un lieu ni à la section des lieux de
+  `FicheEmetteur.js`.
+
+**Défauts connus, non corrigés — la base et les contrôles** :
+
+- [ ] **Le commentaire de 46.2 bis** (`schema.sql`) dit que MAINTAIN « part
+  dans un appel À PART » de la migration : sur la vraie base, l'appel n'était
+  pas nécessaire et n'est pas parti (second regard, écart 2). Une phrase à
+  aligner, sans migration.
+- [ ] **CTL-1 et CTL-2, la part de `npm run verifier`** : un texte ou un
+  champ caché sous `{false && …}` ou sous une condition de trop n'est vu que
+  par `mesure-devis`, à la main (prouvé : trois sabotages, aucun vu par
+  `npm run verifier`). Parade : étendre la pile de 45 d de `verifier-devis`
+  (et celle de `verifier-emetteur`) aux accolades du JSX.
+- [ ] **Deux commentaires de `verifier-devis.mjs`** (lignes 1524 et 9049)
+  citent « L. 541-9-1 », là où tout le reste du dépôt cite
+  L. 541-21-2-3 : trouvé en écrivant cette section ; un commentaire, à
+  aligner.
+- [ ] **Un commentaire de `src/lib/devis.js`** (ligne 5441, au-dessus de
+  `LE_PLUS_LARGE_EN_TROIS_CHIFFRES`) dit encore « 511 au plus depuis 2b-4 :
+  un motif pour chacun des rangs 1, 2, 4 à 12 » : depuis 2b-5, c'est 512,
+  rangs 1, 2, 4 à 13. Toujours trois chiffres, donc rien de faux à l'écran ;
+  trouvé à la relecture de la documentation, à aligner.
+- [ ] **`verifier-tva.mjs:1538`** ne nomme pas `emetteur_lieux_depot` dans son
+  alternation ; la porte est fermée deux fois ailleurs (la vérification
+  suivante du même contrôle, et `PRIVEES_EDGE` de `verifier-legal`). À
+  élargir le jour où l'on y repasse.
+- [ ] **La classe de blancs, toujours pas consolidée** (T1) : **douze copies
+  dans six fonctions SQL** (`tient_les_tarifs`, `tient_les_tarifs_publics`,
+  `tient_le_devis`, `tient_la_ligne_de_devis`, `tient_le_poste`,
+  `tient_le_lieu_de_depot`), plus deux constantes JavaScript
+  (`BLANCS_TARIFS`, `BLANCS`) ; `verifier-devis` §17 les compare. La
+  consolider est une refonte de cinq lots finis : à vous proposer d'abord.
+- [ ] **Les seules gardes de 2b-5 que `npm run verifier` ne joue pas**
+  (relecture des contrôles) : l'amende cachée, une case de lieu qui
+  afficherait l'adresse, la démonstration qui retirerait tous les lieux ne
+  sont vues que par `mesure-devis`. C'est §2.3, et `mesure-devis` à la
+  main. Trois autres, que la relecture trouvait au même endroit, sont
+  tenues depuis ses corrections : la clé des lieux en `restrict` (CTL-8) et
+  le déclencheur sur l'insertion seule (CTL-7), par `verifier-emetteur` ;
+  les valeurs pré-remplies fausses (CTL-9), par `verifier-devis` (h bis).
+
+**Pour 2c — ce que 2b-5 lui laisse** :
+
+- [ ] **Le contrat de `devis.dechets_lieux`** (T2, BASE-R2) : *un identifiant
+  de `dechets_lieux` ne prouve aucune appartenance ; tout lecteur filtre par
+  `pro_id`, y compris dans une fonction `security definer` ; la remise
+  COPIERA les lieux DISTINCTS, dans l'ordre, et FIGERA le tableau*. Modèle :
+  le cas 26 c de l'essai 49-remise (l'enveloppe `security definer`). Sur la
+  vraie base, le lieu d'une autre entreprise écrit dans un devis est accepté
+  et jamais compté ; un lieu retiré laisse un identifiant orphelin.
+- [ ] **Le refus de remise lit la MÊME liste**, rang 13 compris ; **rien
+  d'un devis « Non »** n'est imprimé ni copié.
+- [ ] **La phrase imprimée** des déchets s'écrit en 2c, à partir des faits
+  fermés, et se relit (J56) ; **une table de libellés IMPRIMÉS des types
+  d'installation** (DROIT-R9 (3)) : « Dépôt de votre entreprise » se lit
+  juste à l'écran, ne s'imprime pas tel quel.
+- [ ] **Le coût** : comment il est facturé (compris dans les prix, une
+  ligne, rien) — la loi sur l'affichage des prix peut l'exiger (J29) ; deux
+  montants hors des totaux sur le même devis (J57).
+- [ ] **Ce que 2b-5 ne fait pas** (cahier §8) : aucun texte libre (le client
+  qui garde une partie des déchets, un dépôt intermédiaire) ; ni l'exception
+  du diagnostic (J26), ni une question « dépannage » (J27) ; aucune
+  proposition du coût depuis une ligne « Évacuation » ; les bordereaux de
+  dépôt.
+
+**Les étapes suivantes** :
+
+- [ ] **2b-6, le label RGE.** Une question à vous d'abord (Q5, cahier 2b-4,
+  §1.3 bis). Un motif au rang 14 ; jamais le badge `rge` de la fiche, que pose
+  l'administration ; jamais le RGE comme condition d'un taux de TVA.
+- [ ] **Puis 2c** (numéro, aperçu au format final, PDF, remise, tri des devis
+  remis) ; la question du mot « artisan » sur un devis imprimé (Q6) avant.
+
+**Ce que l'essai sur la vraie base n'a pas joué** :
+
+- [x] **le relevé de la base après le ménage**, par sa forme (22/11) :
+  14 comptes, 8 fiches pro, 21 publications, 3 devis, 11 lignes,
+  4 ventilations, 0 lieu de dépôt, aucun compte `@exemple-opus.test`, aucune
+  ligne aux identifiants de l'essai, aucun fichier, les maxima et les
+  empreintes `id:xmin` des devis réels identiques à l'avant ;
+- [ ] aucun écran sur la vraie base (la carte, la rangée, « Mon entreprise »,
+  la phrase sous « Aucun dépôt ») ; la file d'écriture elle-même, et la paire
+  `dechets_lieux` / `dechets_sans_depot` écrite d'un seul geste ;
+- [ ] la modification d'un lieu par son titulaire (le déclencheur garde-t-il
+  `created_at` et rogne-t-il les blancs à la modification ? seulement par
+  les essais locaux) ;
+- [ ] « Sur le chantier » qui ne remplit jamais le tri ; un lieu en double ;
+  les bornes (dix lieux, quatorze sortes, une quantité de 99 999 999) ; un
+  code postal avec une insécable à l'intérieur ; le régime franchise ; un
+  devis venu d'une demande ou d'une urgence ;
+- [ ] **six cas de la règle, relevés par le contrôle de l'essai** : une
+  quantité au-dessus de la borne (100 000 000) ; un tableau à deux
+  dimensions ou dont l'indice ne commence pas à 1 ; les longueurs maximales
+  de l'adresse (200), de la commune (100) et du libellé (80) ; le tri
+  {aucune} sans « Aucun dépôt » ni lieu (le point doit rester) ; « Non » sur
+  des rubriques à moitié remplies ; le nombre de clés de l'export (18). Tous
+  tenus par les essais locaux et `cas-remise.json`.
+
+**Contrôles et méthode** :
+
+- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+  comptes à relire après 2b-5 sont le 43 (0), le 46 (27), le 47 (18), le 49
+  (79), le 49-conditions (27, 51 valeurs justes), le 49-remise (38 erreurs,
+  365 valeurs justes, son compte `t` sur 364), le 51d (23) et la suppression
+  de compte (3) ; la parité, par
+  `node scripts/generer-cas-remise.mjs --verifier` (184 cas). Ils se jouent
+  depuis la RACINE du dépôt.
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 1 050 mesures au
+  passage complet de la construction (37 min) ; après la relecture et
+  DROIT-R2, seules ses sections 2b-5 ont été rejouées (132).
+- [ ] **Le banc complet n'a pas été rejoué** après la phrase R2-1 (seulement
+  X2, X4 et B2), ni après les corrections de la relecture (seulement leurs
+  36 sabotages).
+- [ ] **Un outil d'essai recopié d'un lot à l'autre se relit** : la copie de
+  la bibliothèque de 2b-4 ne retirait pas la session du résumé journalisé
+  (corrigé avant la première requête). Et le relevé complémentaire d'une
+  migration n'est toujours pas dans le dépôt.
+- [ ] **Le compte rendu de l'essai porte cinq affirmations que son journal
+  ne porte pas** (l'heure de début à la seconde, la fin de validité des
+  preuves SIRET, une sonde non journalisée, deux chemins sans leur
+  `&limit=1`, et « tri vide de valeur : le point vient du tri », qui vient
+  du miroir) : rien de faux, mais à faire journaliser la prochaine fois.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
