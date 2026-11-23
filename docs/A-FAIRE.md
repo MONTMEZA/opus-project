@@ -4247,24 +4247,26 @@ l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
 
 **Des gestes à vous** :
 
-- [ ] **`git pull`, puis `npx expo start -c`** (le build de développement).
-  Avant, vos trois brouillons montrent le point « Dites ce que deviendront
-  les déchets… » SANS bouton (déduit de 2b-4, pas mesuré) : rien ne casse,
-  la réponse attend la nouvelle version.
-- [ ] **Vos trois brouillons** : ouvrez « Déchets » dans chacun. Répondez
+- [x] **`git pull`, puis `npx expo start -c`** (le build de développement) —
+  **fait** : vous avez essayé 2b-5 sur votre iPhone le 23/11 (« jai tester
+  sur mon iphone et tous fonctionne corectement »).
+- [ ] **Vos trois brouillons — UN est fait** (relevé le 23/11 au soir) : les
+  quatre rubriques remplies, plus de point au rang 13. **Les deux autres
+  gardent le point.** Ouvrez « Déchets » dans chacun. Répondez
   « Non, ni l’un ni l’autre » s'il ne s'agit ni de travaux sur un bâtiment
   ni de jardinage ; sinon, remplissez les quatre rubriques. Vos métiers
   rendent presque tous vos devis concernés. Opus ne répond pas à votre
   place.
-- [ ] **Rangez vos lieux de dépôt** dans « Mon entreprise » → « Vos lieux de
+- [x] **Rangez vos lieux de dépôt** — **un lieu est rangé** (une déchèterie
+  publique, le 23/11). D'autres s'ajoutent quand il le faut, dans « Mon
+  entreprise » → « Vos lieux de
   dépôt des déchets » : la raison sociale de celui qui EXPLOITE le lieu (pas
   seulement le nom du lieu), son adresse, son type. Rangés une fois, ils se
   choisissent ensuite dans chaque devis.
-- [ ] **Le geste de 2b-4 n'est pas fait** : vous avez répondu le 21/11 que
-  2b-4 « marche », mais la base, relevée par sa forme le 21/11 puis le 22/11,
-  ne porte aucune réponse « gratuit ou payant » sur vos brouillons, et aucun
-  n'a été modifié depuis le 16/11. Le point « Dites si le devis lui-même est
-  gratuit ou payant » y est donc toujours (« Après l'étape 2b-4 »).
+- [ ] **Le geste de 2b-4 est fait sur UN brouillon sur trois** : relevé le
+  23/11 au soir, celui des déchets porte « gratuit ». Les deux autres n'ont
+  toujours pas de réponse « gratuit ou payant », et gardent ce point
+  (« Après l'étape 2b-4 »).
 - [ ] **Relisez la phrase sous « Aucun dépôt »** (R2-1), qui est de nous, pas
   de vous : « Des déchets partiront à part : choisissez où vous les
   déposerez. Si en fait rien ne quitte le chantier, choisissez « Aucune
@@ -4276,8 +4278,9 @@ l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
   y = 551). Faut-il l'annoncer, comme la phrase du onzième lieu, ou la
   rangée « À compléter : lieu » et le point « La loi » suffisent-ils ?
 
-**À essayer sur votre iPhone** (le build de développement, après `git pull`
-et `npx expo start -c`) :
+**À essayer sur votre iPhone, en détail** — vous l'avez essayé en bloc le
+23/11, et la base montre un lieu rangé et un devis aux quatre rubriques
+remplies ; ce qu'elle ne peut pas montrer reste ici :
 
 - [ ] la carte « Déchets du chantier » et le clavier : la quantité et le coût
   sur le pavé décimal (la virgule), le champ du coût tout en bas de la carte

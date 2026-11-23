@@ -4127,10 +4127,11 @@ un second agent (conforme sur le fond). Le cahier :
 `docs/CAHIER-LOT-2B-5.md` ; ce qui est construit et vérifié : CLAUDE.md,
 « Les déchets du chantier, les lieux de dépôt, « Aucun dépôt » — étape
 2b-5 » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape 2b-5 ». **Rien
-n'est remis, imprimé ni numéroté** : c'est 2c. **Pas encore essayée sur
-l'iPhone.** Et 2b-4 : le propriétaire a répondu le 21/11 « Oui, ça marche »,
-mais la base ne porte aucune réponse « gratuit ou payant » sur ses
-brouillons.
+n'est remis, imprimé ni numéroté** : c'est 2c. **Essayée sur l'iPhone le
+23/11/2026** par le propriétaire (« tous fonctionne corectement ») : la base
+montre un premier lieu de dépôt rangé et un brouillon aux quatre rubriques
+remplies, qui porte aussi « gratuit » — le premier geste de 2b-4 en base
+(les deux autres brouillons n'ont encore ni l'un ni l'autre).
 
 | question | réponse du propriétaire | ce qu'elle change au plan |
 |---|---|---|

@@ -12284,7 +12284,10 @@ Et une question qui n'empêchait rien : 2b-4 a-t-elle été essayée sur
 l'iPhone ? « Oui, ça marche » (21/11). **La base n'en garde aucune trace** :
 relevée par sa forme le 21/11 puis le 22/11, elle ne porte aucune réponse
 « gratuit ou payant », et aucun devis n'y a été modifié depuis le 16/11. Le
-geste de 2b-4 reste donc à faire sur les trois brouillons.
+geste de 2b-4 restait donc à faire sur les trois brouillons. **Relevé le
+23/11 au soir : il est fait sur UN des trois**, celui où les déchets ont été
+remplis (« gratuit », écrit par le vrai téléphone) ; les deux autres n'ont
+toujours pas de réponse.
 
 #### Ce qu'il ne faut pas redécouvrir
 
@@ -12622,17 +12625,56 @@ ventilation et des fiches pro **identiques à l'avant** : les brouillons du
 propriétaire n'ont pas été touchés. Les deux preuves SIRET d'essai restent :
 elles expirent d'elles-mêmes, le connecteur refuse un `delete`.
 
+#### ESSAYÉ SUR L'IPHONE le 23/11/2026
+
+Par le propriétaire, sur son compte principal, dans le build de
+développement : « jai tester sur mon iphone et tous fonctionne
+corectement ». Sans détailler les questions de `docs/A-FAIRE.md`.
+
+Ce que la base en dit, relevé par la FORME seulement (aucun nom, aucune
+adresse, aucun prix lu) :
+
+- **un lieu de dépôt rangé**, le premier de la vraie base : une déchèterie
+  publique, sans libellé (le libellé n'existe que pour le type « autre »),
+  créé le 23/11 à 22 h 34 (heure de Paris), date posée par la base. Le
+  formulaire d'un lieu, la table, sa RLS et son déclencheur sont donc passés
+  par le vrai téléphone ;
+- **un des trois brouillons modifié**, à 22 h 37 : une quantité en tonnes,
+  entière ; un tri qui nomme UNE sorte de déchets (pas « Aucune collecte
+  séparée ») ; un lieu choisi, qui existe et appartient à la même
+  entreprise (aucun identifiant orphelin) ; un coût estimé. Rien « sur le
+  chantier », pas « Aucun dépôt ». La question « bâtiment ou jardinage »
+  n'a pas reçu de réponse : elle vaut donc « Oui », par prudence ;
+- **ce devis n'a donc plus de point au rang 13** : réponse vide et quatre
+  rubriques remplies. C'est DÉDUIT de la règle, pas lu : le rôle de lecture
+  n'a pas le droit d'appeler `motifs_refus_remise` (42501, voulu). Les deux
+  autres brouillons, intacts, gardent le point « Par prudence » ;
+- **le même devis porte « gratuit »** (le prix du devis lui-même, 2b-4) :
+  c'est le premier geste de 2b-4 qu'on retrouve en base ;
+- 3 devis, 11 lignes, une seule entreprise : rien d'autre n'a bougé.
+
+Ce que ces lignes ne prouvent PAS : **la phrase sous « Aucun dépôt »**
+(R2-1 — « Aucun dépôt » n'a jamais été coché, elle n'a pas pu s'afficher) ;
+**la virgule du pavé décimal** (la quantité est entière, et un coût en
+centimes ne dit pas s'il a été tapé avec une virgule) ; **« Non, ni l’un ni
+l’autre »** ; « Sur le chantier » ; le onzième lieu ; VoiceOver ; le
+clavier sous le champ du coût ; les suggestions de la vraie Base Adresse
+(rien ne dit si l'adresse a été choisie dans une suggestion ou tapée).
+
 #### Ce qui n'a PAS été vérifié
 
-- **rien sur l'iPhone** : la carte et le clavier (la quantité, le coût, la
+- **le détail du toucher sur l'iPhone** (essayé en bloc le 23/11, ci-dessus) :
+  la carte et le clavier (la quantité, le coût, la
   virgule du pavé décimal), les quatorze cases au pouce, les pastilles de la
   question à 320 points, le formulaire d'un lieu (les suggestions de la Base
   Adresse, le code postal sur le pavé numérique), la porte « Mes lieux de
   dépôt », la rangée qui ne saute pas, VoiceOver (« coché » ou « checked » ;
   la phrase R2-1, qui ne s'annonce pas ; la phrase du onzième lieu), Hermes ;
-- **aucun écran sur la vraie base** : la carte, la rangée, la porte,
-  « Mon entreprise », la phrase sous « Aucun dépôt » n'ont tourné qu'en
-  démonstration ; l'essai a reproduit les requêtes à la main, pas la file
+- **aucun écran sur la vraie base au navigateur** : la carte, la rangée, la
+  porte, « Mon entreprise », la phrase sous « Aucun dépôt » n'y ont tourné
+  qu'en démonstration — le propriétaire, lui, s'est servi des quatre
+  premiers sur la vraie base le 23/11 (ci-dessus), jamais de la phrase ;
+  l'essai a reproduit les requêtes à la main, pas la file
   d'écriture, et a écrit à la main la paire `dechets_lieux` /
   `dechets_sans_depot` que l'écran écrit d'un geste ;
 - sur la vraie base : **la modification d'un lieu par son titulaire** ;
