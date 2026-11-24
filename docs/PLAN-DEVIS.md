@@ -3204,7 +3204,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier devait s'y trancher avant (10.6) : c'est fait, aucune.
-- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, dont 2b-1 FAITE le 08/11 et 2b-2 FAITE le 10/11 — voir 10.18 et 10.20 ; 2b-3, 2b-4 et 2c restent)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, puis en six le 16/11 (2b-4 redécoupée), toutes FAITES : 2b-1 le 08/11, 2b-2 le 10/11, 2b-3 le 13/11, 2b-4 le 17/11, 2b-5 le 22/11, 2b-6 le 24/11 — voir 10.18 et 10.20 à 10.24 ; 2c reste)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
 
@@ -4182,3 +4182,84 @@ fait rien ne quitte le chantier, choisissez « Aucune collecte séparée ». »)
 **La suite** : **2b-6**, le label RGE ; puis **2c** (numéro, aperçu au
 format final, PDF, remise, tri des devis remis) ; puis, en lot à part, la
 signature par le client dans Opus.
+
+### 10.24 L'étape 2b-6 — FAITE le 24/11/2026 : le label RGE, les signes de qualité, les sous-traitants
+
+**Sur la vraie base depuis le 24/11/2026**, en deux parties gardées par leur
+empreinte (`lot_2b_6_partie_1_labels_sous_traitants`, version
+`20261124204021`, à 21 h 40 ; `lot_2b_6_partie_2_energie_du_devis`, version
+`20261124204401`, à 21 h 44), sans appel MAINTAIN ; essai réel par le chemin
+de l'application : 235 vérifications justes sur 235, contrôlé par un second
+agent (fidèle au journal). Le cahier : `docs/CAHIER-LOT-2B-6.md` ; ce qui
+est construit et vérifié : CLAUDE.md, « Le label RGE, les signes de qualité,
+les sous-traitants — étape 2b-6 » ; ce qui reste : `docs/A-FAIRE.md`,
+« Après l'étape 2b-6 ». **Rien n'est remis, imprimé ni numéroté** : c'est
+2c. **Pas encore essayée sur l'iPhone** (24/11 au soir) : ses trois
+brouillons portent désormais le point du rang 14, « Par prudence ».
+
+| question | réponse du propriétaire | ce qu'elle change au plan |
+|---|---|---|
+| Q5 — la forme (posée avec 2b-4, tranchée le 23/11) | **« Deux questions par devis »** | une question sur les travaux, une sur la sous-traitance, montrées à titre privé, pour une association, une copropriété ou une société civile, et quand « À quel titre ? » est vide ; un point au rang 14 ; jamais le badge `rge` ; jamais le RGE comme condition d'un taux de TVA |
+| P1 (23/11) | **« Une liste à cocher »** | une liste fermée de catégories, plus « Aucun de ces travaux » (exclusive) ; les mêmes clés pour un signe de qualité |
+| P3 (23/11) | **« Rangés une fois »** | « Vos sous-traitants » dans « Mon entreprise » (une table privée, `emetteur_sous_traitants`), cochés sur le devis : un `uuid[]` sans clé étrangère |
+| P11 (24/11) | **« Sur chaque devis »** | `devis.energie_sans_label`, une liste : la déclaration ne vaut que pour les travaux qu'elle nomme |
+| P12 | **« Les 17, plus ces 2 »** | dix-neuf clés : les dix-sept du décret n° 2014-812, puis le photovoltaïque et le désembouage, par prudence |
+| P13 | **« Oui, dans Opus »** | le justificatif d'un sous-traitant rangé dans `documents`, exigé pour qu'un sous-traitant labellisé soit complet |
+| P14 | **« Les deux »** | l'amende dans la carte ET la phrase de « Ce qui est interdit » des CGU |
+| DROIT6-2 (24/11, après la relecture) | **« Plus tard »** | pas de quatrième clé : `devis_energie_mentions` dit encore « la loi » pour le label du photovoltaïque ou du désembouage quand la sous-traitance manque aussi |
+| DROIT6-3, DROIT6-6, ÉCRAN-6, ÉCRAN-4 | **« Oui, les quatre »** | la phrase sous « Aucun de ces travaux » (« écrivez-le sur le devis, par exemple dans une réserve ») ; « ou ses travaux réalisés » dans l'avis du label ; la phrase du second appui de « Retirer ce signe de qualité » ; « Chaque choix s’enregistre aussitôt. » pour la carte Énergie |
+| ÉCRAN-7 | **« 3 travaux couverts »** | la rangée d'un signe dit « 1 travail couvert » ou « N travaux couverts » |
+| ÉPR-1 (24/11, au soir) | **« pourront »** | « Les brouillons dont il était le seul à porter des travaux pourront vous redemander si vous détenez un label pour ces travaux. » |
+
+Ce que 2c doit savoir :
+
+- **`motifs_refus_remise()` porte 22 clés sur 14 rangs**, signature
+  inchangée ; au plus une clé au rang 14 (`devis_energie`, par prudence, quand
+  les travaux ne sont pas dits ; `devis_energie_mentions`, la loi, à titre
+  privé ; `devis_energie_mentions_prudence`, par prudence) ; rien sous
+  « Aucun de ces travaux » ni pour les deux réponses « entreprise » ; 513
+  motifs au plus pour le devis : les gabarits de « Pour le remettre »
+  tiennent. **`OP028` reste libre.**
+- **Quatre colonnes sur `devis`, sans défaut** : les travaux (`text[]`, ou
+  `{aucun}`), les travaux déclarés sans label (`text[]`), la réponse à la
+  sous-traitance, les sous-traitants choisis (`uuid[]`, sans clé étrangère,
+  dix au plus). Jamais de tableau vide : « rien de dit » s'écrit vide de
+  valeur. `recalcule_devis()` n'en lit aucune.
+- **Deux tables privées de la section 46** : `emetteur_labels` (46.2 ter, la
+  date de fin obligatoire, le certificat dans `documents`) et
+  `emetteur_sous_traitants` (46.2 quater, le SIRET obligatoire, les champs du
+  label effacés hors « Oui »). Un travail est couvert quand un signe le
+  porte, que son certificat est joint et que sa fin est au moins le jour de
+  Paris ; un signe valable SANS certificat empêche la déclaration de taire le
+  point ; quand un signe expire, une déclaration posée avant pour ce travail
+  reprend effet (écrit, voulu).
+- **Un identifiant de `energie_sous_traitants` ne prouve aucune
+  appartenance** : tout lecteur filtre par `pro_id`, y compris dans une
+  fonction `security definer` ; **2c COPIERA les sous-traitants DISTINCTS,
+  dans l'ordre, et FIGERA leur identité, leur label et leur justificatif**
+  (J70). Ce qui s'imprime — « détient un signe de qualité … délivré par … »,
+  l'annexe des certificats et des justificatifs, l'identité des
+  sous-traitants — s'écrit en 2c et se relit au juriste.
+- **La phrase des conséquences sur les aides** (L. 224-114 I) n'est pas
+  écrite : une exception à « Opus ne compose aucune de ces mentions », ou un
+  texte de l'artisan — à décider avec le propriétaire avant 2c (J43, J75).
+- **La base lit maintenant les deux tables** pour le devis (une lecture
+  chacune, filtrée par `pro_id = v_pro`) ; elle ne lit toujours ni
+  `tarifs_pro`, ni `clients`, ni `professional_profiles` dans
+  `motifs_refus_remise()`, ni le badge `rge`.
+- **2027** : la certification « entreprise principale » (01/01/2027) demandera
+  une colonne de nature sur `emetteur_labels` ; l'« attestation chantier »
+  (01/03/2027), un justificatif propre à un devis.
+- **La classe de blancs n'a pas été consolidée** : seize copies dans huit
+  fonctions SQL et deux constantes JavaScript.
+
+**Les questions laissées au propriétaire** : Q6 (le mot « artisan » sur un
+devis imprimé, avant 2c) ; DROIT6-2 (« Plus tard ») ; la phrase des
+conséquences (avant 2c). Et, à lui montrer : les textes écrits par nous
+(les trois aides bornées « Pour un client qui commande à titre privé », la
+phrase « Ce que cela change pour ses aides, Opus ne l’écrit pas encore. »,
+les dix-sept textes composés de « Mon entreprise », les deux phrases de
+« Vos documents professionnels »).
+
+**La suite** : **2c** (numéro, aperçu au format final, PDF, remise, tri des
+devis remis) ; puis, en lot à part, la signature par le client dans Opus.

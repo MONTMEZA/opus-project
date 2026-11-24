@@ -4153,7 +4153,10 @@ l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
   date de création de l'entreprise (la preuve SIRET la range-t-elle ? À
   VÉRIFIER) ;
 - [ ] la sous-traitance (pour le RGE, son omission rend le contrat nul ; pour
-  les déchets, J34) : Opus ne la modélise pas encore ;
+  les déchets, J34) : Opus ne la modélise pas encore — **pour le RGE, elle
+  l'est depuis 2b-6, le 24/11** (« Vos sous-traitants » dans « Mon
+  entreprise », et la question « Sous-traitance » de la carte « Énergie et
+  label RGE ») ; pour les déchets, toujours pas ;
 - [ ] une date de début des travaux : écartée, l'avis s'en passe ;
 - [ ] la main-d'œuvre hors établissement (close au lot 1) et un devis gratuit
   par exception quand les tarifs disent payant (voulu) : rien à faire.
@@ -4189,7 +4192,11 @@ l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
   ajoute des colonnes de texte. `motifs_refus_remise` lirait une table de
   plus (le cas 14 c s'ouvre en le décidant). Jamais « registre des déchets »
   dans une phrase. Vos métiers rendent presque tous vos devis concernés.
-- [ ] **2b-6, le label RGE.** Une question à vous d'abord (Q5). La forme
+- [x] **2b-6, le label RGE.** **FAITE : construite et migrée le 24/11**
+  (« Après l'étape 2b-6 ») : deux questions par devis (votre réponse Q5), une
+  liste à cocher (P1), vos sous-traitants rangés une fois (P3), la
+  déclaration « je ne détiens pas de label » sur chaque devis (P11). Ce qui
+  était écrit le 17/11 : une question à vous d'abord (Q5). La forme
   recommandée (cahier §8.2) : deux questions par devis pour un particulier ou
   une association (« Ces travaux portent-ils sur l'énergie d'un logement ? »,
   et la sous-traitance), votre label dans « Mon entreprise » — **jamais le
@@ -4454,9 +4461,11 @@ remplies ; ce qu'elle ne peut pas montrer reste ici :
 
 **Les étapes suivantes** :
 
-- [ ] **2b-6, le label RGE.** Une question à vous d'abord (Q5, cahier 2b-4,
-  §1.3 bis). Un motif au rang 14 ; jamais le badge `rge` de la fiche, que pose
-  l'administration ; jamais le RGE comme condition d'un taux de TVA.
+- [x] **2b-6, le label RGE.** **FAITE : construite et migrée le 24/11**
+  (« Après l'étape 2b-6 »). Ce qui était écrit le 22/11 : une question à
+  vous d'abord (Q5, cahier 2b-4, §1.3 bis). Un motif au rang 14 ; jamais le
+  badge `rge` de la fiche, que pose l'administration ; jamais le RGE comme
+  condition d'un taux de TVA.
 - [ ] **Puis 2c** (numéro, aperçu au format final, PDF, remise, tri des devis
   remis) ; la question du mot « artisan » sur un devis imprimé (Q6) avant.
 
@@ -4509,6 +4518,328 @@ remplies ; ce qu'elle ne peut pas montrer reste ici :
   preuves SIRET, une sonde non journalisée, deux chemins sans leur
   `&limit=1`, et « tri vide de valeur : le point vient du tri », qui vient
   du miroir) : rien de faux, mais à faire journaliser la prochaine fois.
+
+### Après l'étape 2b-6 — ce qui reste (24/11/2026)
+
+> **La migration de 2b-6 est APPLIQUÉE sur la vraie base depuis le
+> 24/11/2026**, avec votre accord (« Oui, Opus est fermé »), en deux parties
+> gardées par leur empreinte : `lot_2b_6_partie_1_labels_sous_traitants` à
+> 21 h 40 et `lot_2b_6_partie_2_energie_du_devis` à 21 h 44 (CLAUDE.md,
+> « Le label RGE, les signes de qualité, les sous-traitants — étape 2b-6 »).
+> Les avertissements « NE PAS FAIRE `git pull` AVANT LA MIGRATION 2b-6 » des
+> commits `45f80bc`, `c3e3801` et `b919d13` ne valent plus : `git pull`,
+> puis `npx expo start -c`, suffisent (aucun module natif). L'essai sur la
+> vraie base a rendu 235 vérifications justes sur 235, et son contrôle par un
+> second agent l'a jugé fidèle au journal.
+>
+> **Règle « Accélérer »** : une seule relecture (droit, base, écran,
+> contrôles, un contradicteur par angle). 35 constats, **trois graves**,
+> corrigés dans `c3e3801` : l'amende du label posée sous la sous-traitance
+> (DROIT6-1), trois aides qui disaient « la loi demande » sans dire pour qui
+> (DROIT6-5), la carte qui montrait l'ANCIENNE liste après une écriture dans
+> « Mon entreprise » (ÉCRAN-1). Puis vos décisions du 24/11 (les quatre
+> phrases, « 3 travaux couverts », construites dans `b919d13` et éprouvées ;
+> « pourront », dans `e1338f0`). Le reste est ci-dessous. Les noms
+> (DROIT6-…, BASE-R…, ÉCRAN-…, CTL6-…, ÉPR-…, S…, E…, J…) viennent des
+> comptes rendus de la session, qui ne sont pas dans le dépôt, et du cahier
+> (`docs/CAHIER-LOT-2B-6.md`).
+
+**Des gestes à vous** :
+
+- [ ] **`git pull`, puis `npx expo start -c`** (le build de développement ;
+  aucun module natif, rien à reconstruire).
+- [ ] **Vos trois brouillons gagnent le point du rang 14** (relevé avant la
+  migration : 3, et 3 après) : « Dites quels travaux d’énergie de la liste ce
+  devis comporte, ou « Aucun de ces travaux »… », « Par prudence ». Ouvrez
+  « Énergie (label RGE) » dans chacun : « Aucun de ces travaux » l'éteint ;
+  sinon, cochez les travaux, dites votre label (ou que vous n'en détenez pas,
+  travail par travail) et la sous-traitance. Opus ne répond pas à votre
+  place. Les gestes de 2b-4 et de 2b-5 restent à faire sur deux de ces
+  brouillons (« Après l'étape 2b-5 »).
+- [ ] **Rangez vos signes de qualité** dans « Mon entreprise » → « Vos signes
+  de qualité (label RGE) », si vous en détenez : l'organisme, l'intitulé tel
+  qu'il figure sur le certificat, les travaux couverts, la date de fin, et le
+  certificat joint. Sans certificat, un signe ne couvre rien. **Et vos
+  sous-traitants**, s'il y en a : leur nom, leur SIRET, leur label ou non, et
+  leur justificatif. Rien de cela ne s'affiche sur votre fiche publique.
+- [ ] **Relisez les textes écrits par nous, pas par vous** : les trois aides
+  bornées par la relecture (DROIT6-5 : « Pour un client qui commande à titre
+  privé, la loi demande… », sous « Sous-traitance » et dans les deux
+  « Joindre ») ; « Ce que cela change pour ses aides, Opus ne l’écrit pas
+  encore. », sous la case « Je ne détiens pas… » et sous « Non » d'un
+  sous-traitant (DROIT6-8) ; l'aide des travaux, « même fait par un
+  sous-traitant » (DROIT6-11) ; les dix-sept textes de « Mon entreprise »
+  composés à la construction (placeholders, « non lus », messages) ; et, dans
+  les textes légaux, les deux phrases de « Vos documents professionnels »
+  (DROIT6-4) et la phrase sur les sous-traitants de « Les clients que vous
+  enregistrez » (DROIT6-11).
+- [x] **ÉPR-1 — la phrase du second appui de « Retirer ce signe de
+  qualité »** : couverte par votre décision « pourront ». Elle disait
+  « vous redemanderont », faux pour un brouillon qui portait déjà « Je ne
+  détiens pas de label » pour ce travail (la déclaration reprend effet), ou
+  dont le client commande pour son entreprise.
+
+**À décider** :
+
+- [ ] **DROIT6-2 — « Plus tard »** (votre réponse du 24/11) : quand seule la
+  sous-traitance manque et que le travail est le photovoltaïque ou le
+  désembouage, le point dit « la loi le demande » pour le label aussi. La
+  forme proposée : une quatrième clé (« Dites si une autre entreprise fera
+  tout ou partie de ce devis : la loi le demande pour un client qui commande
+  à titre privé. ») — elle change la base (49.9), le miroir, `CONTRAT_B2`
+  (23 clés), et la phrase est à vous. À écarter : tout passer en « Par
+  prudence ».
+
+**À essayer sur votre iPhone** (les huit questions du cahier, §7, plus ce
+que la relecture et vos phrases ont ajouté) :
+
+- [ ] **la carte** « Énergie et label RGE » : « Aucun de ces travaux »
+  visible à l'ouverture, en tête ; les dix-neuf cases au pouce, lisibles à
+  320 points ; au repos, « Chaque choix s’enregistre aussitôt. » ;
+- [ ] **la rangée « Énergie (label RGE) »**, entre « Déchets » et
+  « Conditions » : ne saute-t-elle jamais (56 points à 393 au navigateur,
+  quel que soit son état) ?
+- [ ] **la case « Je ne détiens pas de label RGE pour ces travaux »** sous le
+  BON travail ; et l'amende, désormais sous « Votre label RGE », avant
+  « Sous-traitance » ;
+- [ ] **le formulaire d'un signe de qualité** : le calendrier et ses flèches
+  « année », « Joindre le certificat » par la Photothèque, l'Appareil photo
+  et Fichiers ; la ligne « 1 travail couvert » ou « N travaux couverts » de
+  sa rangée ;
+- [ ] **le formulaire d'un sous-traitant** : le pavé numérique du SIRET, une
+  clé fausse refusée (« Ce numéro SIRET n’est pas valable : relisez ses
+  quatorze chiffres. »), les phrases sous « Non » ;
+- [ ] **les deux portes vers « Mon entreprise »** (« Mes signes de
+  qualité », « Mes sous-traitants »), et le retour : la liste à jour TOUT DE
+  SUITE (c'était le défaut grave ÉCRAN-1) ;
+- [ ] **VoiceOver** : les cases (« coché » en français, ou « checked » ?),
+  le nom de chaque case « Je ne détiens pas… — <le travail> », l'annonce de
+  « Aucun », la phrase du plafond ; et le second appui de « Retirer ce signe
+  de qualité » : le bouton change de nom sans être ANNONCÉ, comme pour un
+  lieu ou un sous-traitant — l'entend-on sans balayer ?
+- [ ] **vos trois brouillons** : le point « Par prudence », éteint par
+  « Aucun de ces travaux ».
+
+**Au juriste, avant 2c** (le cahier, §1.5 ; rien ne sort avant 2c) :
+
+- [ ] **J37** — le déclencheur : la catégorie de travaux, ou une aide
+  envisagée ? Quelles aides comptent (décret n° 2014-812, fiches CEE,
+  délibérations de l'Anah, obligation d'achat du photovoltaïque) ? Les
+  parties communes d'un immeuble d'habitation sont-elles « afférentes à des
+  logements » ?
+- [ ] **J39** — (a) hors d'une aide, l'identité seule des sous-traitants se
+  dit-elle ? (b) une sous-traitance décidée APRÈS la signature rend-elle le
+  contrat nul ? (c) raison sociale et SIRET suffisent-ils, et quelle identité
+  pour un sous-traitant d'un autre pays de l'Union, sans SIRET ? (d) la
+  sous-traitance d'une partie qui n'est pas un travail d'énergie, dans un
+  contrat qui en comporte.
+- [ ] **J40** (la nullité : relative ou absolue, les restitutions, après
+  les travaux) ; **J41** (association, SCI, syndicat de copropriétaires ;
+  l'entrepreneur individuel chez lui ; le bailleur personne physique) ;
+  **J43** et **J75** (la phrase des conséquences sur les aides : Opus peut-il
+  la composer, ou l'artisan doit-il l'écrire ?) ; **J44** (l'obligation
+  d'achat du photovoltaïque, une « aide financière » ?) ; **J45** (un
+  justificatif d'organisme « conventionné et accrédité » ; l'attestation
+  chantier de 2027).
+- [ ] **J72** — le champ de L. 224-115 I, sans condition d'aide :
+  calorifugeage, régulation posée seule, raccordement à un réseau de
+  chaleur ; l'audit énergétique de la prime. Avec la phrase sous « Aucun de
+  ces travaux » (DROIT6-3, décidée par vous : « écrivez-le sur le devis, par
+  exemple dans une réserve »).
+- [ ] **J73** — le 17° : un devis qui réunit plusieurs catégories doit-il
+  dire quelque chose du signe « offre globale » ?
+- [ ] **J74** — le désembouage : la qualification d'entretien de BAR-SE-108
+  est-elle « un label ou un signe de qualité » ? Avec **DROIT6-9** (l'exemple
+  « Une qualification d’entretien de chauffage compte : rangez-la dans vos
+  signes de qualité. ») et **DROIT6-10** (le 4° du décret, « ou de production
+  d'eau chaude sanitaire », recopié plus étroit ; la correction proposée par
+  la relecture est fausse : deux cases pour un même appareil).
+- [ ] **J38, J42, J46, J47, J48** (inchangées), **J61 à J67**, **J68 à
+  J70**, **J71** (un artisan labellisé qui sous-traite la même catégorie à
+  un non-labellisé).
+
+**Défauts connus, non corrigés — l'écran** :
+
+- [ ] **ÉCRAN-1, le cousin** — les ASSURANCES ne remontent pas à la saisie
+  après une écriture dans « Mon entreprise » (M3 de 2b-4) ; les lieux, les
+  signes et les sous-traitants, si.
+- [ ] **ÉCRAN-5** — une erreur de la SEULE lecture des signes ou des
+  sous-traitants fait tomber toute la lecture du régime (T12 de 2b-5, à
+  étendre) ; une table absente, elle, rend « non lus ».
+- [ ] **Un reste du correctif de l'épreuve (déduit, pas éprouvé)** : une
+  carte qui cacherait sa ligne d'état AU REPOS sous une condition passerait
+  encore `npm run verifier` ; seule la section « phrases du propriétaire »
+  de `mesure-devis` la verrait, et `mesure-devis` n'est pas dans
+  `npm run verifier`.
+- [ ] **Le message vert d'un enregistrement** reste affiché en rouvrant un
+  formulaire de « Mon entreprise » (le comportement des lieux, repris) :
+  noté, pas changé.
+- [ ] **L'avis d'échéance n'existe que pour VOTRE label** : un avis jumeau
+  pour le label d'un sous-traitant choisi (DROIT-20).
+- [ ] **Le badge public « Certification RGE »** et ses quatre défauts connus
+  (il ne s'éteint ni au retrait, ni à la date passée, ni au remplacement de
+  la pièce ; un pro vérifié n'est jamais revu), et les trois fiches de
+  l'ancienne démonstration qui l'affichent sans pièce dans la vraie base
+  (DROIT-21) : hors de 2b-6, et vous avez décidé le 26/10 de ne pas toucher
+  à ces fiches.
+- [ ] **L'état « Expirée le … » des assurances** est ambigu d'un jour,
+  comme l'était le premier jet de celui des signes (DROIT-16).
+- [ ] **La ré-acceptation des CGU** : toujours absente, alors que `VERSION`
+  a encore changé (`'2026-11-24'`), et que « Ce qui est interdit » gagne une
+  phrase qui engage (P14 : « … le compte peut être fermé »). Sans effet tant
+  que `STATUT` vaut `'essai'` ; à organiser avant l'ouverture au public, avec
+  le préavis de quinze jours du règlement 2019/1150 (le commentaire de
+  `VERSION`, `src/data/legal.js`).
+
+**Défauts connus, non corrigés — la base et les contrôles** :
+
+- [ ] **BASE-R1** — une borne commune aux trois dates de fin
+  (`emetteur_labels`, `emetteur_sous_traitants`, `emetteur_assurances`),
+  par exemple entre 2000 et 2999 : `'infinity'` passe, la base le compte
+  valable, l'écran expiré avec une date vide. Pour les assurances, relever
+  d'abord la FORME des lignes de la vraie base.
+- [ ] **BASE-R2** — aucune liste fermée des droits pour `clients` et les
+  autres tables qu'aucun contrôle ne tient (`DROITS_46` le fait pour les six
+  tables de la section 46). L'autre moitié est faite : au relevé après la
+  migration, `relacl` des deux tables a été lu en valeur absolue.
+- [ ] **BASE-R4** — la fonction `compte` ne retire que les 1 000 premiers
+  fichiers d'un espace et tait une erreur de liste : paginer, rendre l'erreur
+  comme une erreur, une raison propre si un plafond reste ; vérifier la
+  limite de `remove()`. Avant que `STATUT` quitte `'essai'` (un
+  redéploiement).
+- [ ] **Le fichier d'un tiers devenu orphelin** : le justificatif d'un
+  sous-traitant passé à « Non », ou retiré, reste dans `documents` jusqu'à
+  la suppression du compte (BASE-7 ; les textes le disent).
+- [ ] **Un sous-traitant d'un autre pays de l'Union, sans SIRET**, ne peut
+  pas être rangé (T19 ; J39 c).
+- [ ] **CTL6-5** — faire tourner les quatre fonctions d'état
+  (`etatDuLabel`, `libelleEtatDuLabel`, `etatDuSousTraitant`,
+  `libelleEtatDuSousTraitant`) dans deux fuseaux, de part et d'autre de
+  minuit (le modèle de `verifier-tarifs` 49).
+- [ ] **CTL6-8** — juger EN SQL les dix-huit refus de l'essai 46 (la forme
+  de 49-remise, sans `savepoint`, une seule cause par refus), et décider pour
+  les huit noms plus anciens (lots 0a et T).
+- [ ] **CTL6-13 et ÉPR-6 — deux contrôles qui dépendent du temps** :
+  « j ter » a rougi une fois, jamais reproduit (38 + 23 passages, 270 tours
+  d'un harnais) ; « j bis. la MARQUE DU RENVOI » (de 2b-1) attend de vraies
+  millisecondes (`f.attendre(300)`, `(400)`) et a rougi une fois sur
+  environ 54 passages sous la charge du banc, vert seul. Une horloge
+  simulée, ou des marges élargies ; et tout banc garde la sortie ENTIÈRE de
+  chaque passage.
+- [ ] **Un doublon dans `energie_travaux`** : la contrainte l'accepte, le
+  miroir dédoublonne ; joué à part (la base et le miroir rendent la même
+  chose, 4 cas sur 4), mais aucun cas de `cas-remise.json` ne le tient.
+- [ ] **Le cas 23 de l'essai 49-conditions** ne porte toujours pas
+  `cout_devis_centimes` (2b-4) : 31 colonnes, pas 32 — à décider (cela
+  change aussi la copie de `verifier-devis`).
+- [ ] **Un commentaire de `src/lib/devis.js`** (au-dessus de
+  `LE_PLUS_LARGE_EN_TROIS_CHIFFRES`) dit encore « 511 au plus depuis 2b-4 :
+  un motif pour chacun des rangs 1, 2, 4 à 12 » : depuis 2b-6, c'est 513,
+  rangs 1, 2, 4 à 14 (le commentaire de 49.9, lui, dit 513). Toujours trois
+  chiffres ; à aligner.
+- [ ] **`verifier-tva.mjs`** (vers la ligne 1538) ne nomme dans son
+  alternation ni `emetteur_lieux_depot`, ni `emetteur_labels`, ni
+  `emetteur_sous_traitants` ; la vérification qui suit (aucune autre table
+  que trois) ferme la porte. À élargir le jour où l'on y repasse.
+- [ ] **La classe de blancs, toujours pas consolidée** (T15) : **seize
+  copies dans huit fonctions SQL**, plus deux constantes JavaScript. La
+  consolider est une refonte de lots finis : à vous proposer d'abord.
+
+**Pour 2c — ce que 2b-6 lui laisse** :
+
+- [ ] **Le contrat de `devis.energie_sous_traitants`** (le même que celui
+  des lieux de dépôt) : *un identifiant de ce tableau ne prouve aucune
+  appartenance ; tout lecteur filtre par `pro_id`, y compris dans une
+  fonction `security definer` ; la remise COPIERA les sous-traitants
+  DISTINCTS, dans l'ordre, et FIGERA leur identité, leur label et leur
+  justificatif tels qu'ils étaient* (J70). Modèle : le cas 27 de l'essai
+  49-remise. Sur la vraie base, le sous-traitant d'une autre entreprise
+  écrit dans un devis est accepté et jamais compté.
+- [ ] **Le refus de remise lit la MÊME liste**, rang 14 compris ; et la
+  remise figera le jour de Paris (l'écran juge un signe au jour du
+  téléphone).
+- [ ] **Ce qui s'imprime s'écrit en 2c, et se relit** : la phrase « détient
+  un signe de qualité … délivré par … », l'annexe du certificat et des
+  justificatifs, l'identité des sous-traitants sur le document.
+- [ ] **La phrase des conséquences** (L. 224-114 I) : une conclusion de
+  droit qui dépend de la situation du client. La doctrine est « Opus ne
+  compose aucune de ces mentions » ; celle-ci serait une exception, ou un
+  texte que l'artisan écrit : **à décider avec vous avant 2c**, avec J43 et
+  J75.
+- [ ] **2027** : le 01/01/2027, la certification « entreprise principale »
+  d'une entreprise qui sous-traite des travaux aidés se rangera dans vos
+  signes de qualité, mais il faudra une colonne de NATURE (qualification,
+  certification, entreprise principale), par une migration ; le 01/03/2027
+  naît l'« attestation chantier », un justificatif propre à un devis (J66).
+- [ ] **Ce que 2b-6 ne fait pas** (cahier §8) : aucune lecture de l'annuaire
+  RGE de l'ADEME (une fonction Edge, un lot à part) ; aucune proposition
+  tirée des lignes (« laine de verre 200 mm » ne coche rien) ; rien sur la
+  prospection (L. 223-8) ni sur la publicité (L. 122-26).
+
+**Les étapes suivantes** :
+
+- [x] **2b-6, le label RGE.** **FAITE : construite le 24/11, migrée le
+  24/11** (CLAUDE.md, « Le label RGE, les signes de qualité, les
+  sous-traitants — étape 2b-6 »).
+- [ ] **Puis 2c** (numéro, aperçu au format final, PDF, remise, tri des devis
+  remis) ; la question du mot « artisan » sur un devis imprimé (Q6) avant ;
+  puis, en lot à part, la signature par le client dans Opus.
+
+**Ce que l'essai sur la vraie base n'a pas joué** :
+
+- [x] **le relevé de la base après le ménage**, par sa forme (24/11, vers
+  22 h 10) : aucune ligne aux identifiants de l'essai, 0 signe de qualité et
+  0 sous-traitant dans toute la base, 0 objet sous leurs dossiers du
+  stockage (les deux PDF partis), les SIREN d'essai non réservés, base
+  revenue à 14 comptes / 8 fiches pro / 21 publications / 3 devis /
+  11 lignes / 4 ventilations / 1 lieu, les empreintes et les maxima des
+  devis du propriétaire identiques à l'avant ;
+- [ ] **aucun écran sur la vraie base** (la carte, la rangée, « Mon
+  entreprise », les deux formulaires) ; la file d'écriture elle-même ; une
+  PDF envoyée par `envoyerFichier` (elle l'a été par `curl`) ;
+- [ ] **un seul fuseau**, et pas le passage de minuit entre deux lectures ;
+- [ ] **la barrière d'un appel `security definer`** : seulement en local
+  (cas 27 de l'essai 49-remise, cas 34 de l'essai 46) ;
+- [ ] un tableau à deux dimensions ou de borne basse autre que 1 ; un
+  doublon dans `energie_travaux` ou `energie_sans_label` ; une date
+  `'infinity'` ; l'ordre des sous-traitants dans le devis ; le label d'un
+  sous-traitant qui couvre AUTRE CHOSE que les travaux du devis ; le chemin
+  d'un justificatif suivi d'une espace (seulement celui d'un certificat) ;
+  le régime franchise ; un devis venu d'une demande ou d'une urgence ; l'avis
+  du label ;
+- [ ] **trois points relevés par le contrôle de l'essai** : la borne de 19
+  travaux n'est pas isolée (le refus de « vingt éléments » mêle `aucun` aux
+  dix-neuf, ce qu'une autre clause refuse déjà ; l'acceptation à 19, elle,
+  est dans le journal) ; le SIRET « 000 480 090 00013 » que le protocole
+  imposait n'est aucun des deux SIRET fictifs du même protocole (ses
+  chiffres font `00048009000013` ; cherché dans le répertoire Sirene avant
+  l'envoi, 0 résultat, hors journal) — **un protocole qui écrit un numéro
+  avec ses espaces se relit en chiffres** ; et l'égalité « au caractère
+  près » des 46 comparaisons n'est pas dans le journal (seulement le booléen
+  du script) — **la prochaine fois, journaliser l'empreinte sha256 des deux
+  listes**, ou les listes elles-mêmes, et les heures.
+
+**Contrôles et méthode** :
+
+- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+  comptes à relire après 2b-6 sont le 43 (0), le 46 (45), le 47 (18), le 49
+  (79), le 49-conditions (27), le 49-remise (53 erreurs, 472 valeurs, son
+  compte « toutes jugées » à `t`), le 51d (23) et la suppression de compte
+  (3) ; la parité, par `node scripts/generer-cas-remise.mjs --verifier`
+  (237 cas). Ils se jouent depuis la RACINE du dépôt.
+- [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 1 157 mesures
+  au passage complet de la construction ; après la relecture, seules ses
+  sections 2b-6 (97), puis 110 après vos phrases ; après « pourront », aucune
+  source ne dit qu'il ait tourné. Et il ne mesure pas les deux formulaires
+  de « Mon entreprise » (mesurés à part à la construction, 48 justes, hors
+  du dépôt) : à y ajouter.
+- [ ] **Le banc complet n'a pas été rejoué** après les corrections de la
+  relecture (seulement leurs 37 sabotages), ni après les correctifs de
+  l'épreuve (seulement les 10 concernés, contre deux contrôles).
+- [x] **L'archive du cahier** (`docs/CAHIER-LOT-2B-6.md`) : l'ordre de A.3
+  et les textes de A.5 changés y sont dits tels qu'ils sont dans le code.
+- [ ] **Le relevé complémentaire d'une migration** n'est toujours pas dans le
+  dépôt : il vit dans les comptes rendus de la session.
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 

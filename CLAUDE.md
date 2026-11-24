@@ -11028,8 +11028,8 @@ décision du 09/11 : aucune question, le cas le plus protecteur vaut pour tous
 les devis) ; 2b-3 les lignes (urgence, décennale) ; 2b-4 ce que coûte le
 devis et ce qu'il laisse (devis payant, déchets, RGE) — **redécoupée le 16/11
 (décision Q1)** : 2b-4 le prix du devis lui-même, 2b-5 les déchets (faite et
-migrée le 22/11/2026), 2b-6 le RGE. **Rien n'est remis en
-2b** : la liste renseigne, et
+migrée le 22/11/2026), 2b-6 le RGE (faite et migrée le 24/11/2026). **Rien
+n'est remis en 2b** : la liste renseigne, et
 la remise de 2c refusera tant qu'elle n'est pas vide — la MÊME liste, jamais
 une seconde écriture de la règle. Aucun module natif : `git pull` puis
 `npx expo start -c`.
@@ -11238,7 +11238,8 @@ a servi : `docs/CAHIER-LOT-2B-2.md`. Une seule relecture (« Accélérer ») ;
   règle d'Opus**) et `devis_taux_reduit_neuf` (rang 3, une clé par ligne à
   10 % ou 5,5 %, « Par prudence » jusqu'au lot 3). `CONTRAT_B2` : 12 clés sur
   9 rangs (**16 clés sur 11 rangs depuis 2b-3, le 13/11/2026 ; 17 sur 12
-depuis 2b-4, le 17/11 ; 19 sur 13 depuis 2b-5, le 22/11**). Pour un
+depuis 2b-4, le 17/11 ; 19 sur 13 depuis 2b-5, le 22/11 ; 22 sur 14 depuis
+2b-6, le 24/11**). Pour un
   client qui commande pour son entreprise, dans son activité principale, les
   mentions `conso_…` ne comptent plus, sauf les deux adresses (R. 123-237
   reste ouvert), et les rangs gardent leurs TROUS ;
@@ -11517,7 +11518,8 @@ servi : `docs/CAHIER-LOT-2B-3.md`. Une seule relecture (« Accélérer ») ;
 
   Une clé au plus au rang 11. `CONTRAT_B2` : **16 clés sur 11 rangs** ; 510
   motifs au plus pour le devis (17 clés sur 12 rangs et 511 motifs depuis
-  2b-4, le 17/11 ; 19 clés sur 13 rangs et 512 motifs depuis 2b-5, le 22/11),
+  2b-4, le 17/11 ; 19 clés sur 13 rangs et 512 motifs depuis 2b-5, le 22/11 ;
+  22 clés sur 14 rangs et 513 motifs depuis 2b-6, le 24/11),
   toujours trois chiffres : les gabarits de
   « Pour le remettre » ne bougent pas. **Une attestation valable**, c'est une
   assurance `decennale`, un chemin écrit, et une date de fin au moins égale au
@@ -11829,7 +11831,8 @@ numéroté** (2c). Aucun module natif.
   est un. » — et son bouton, « Choisir : devis gratuit ou payant », qui ouvre
   « Conditions » sur le bloc. **Ce n'est pas une huitième règle d'Opus**
   (Q2). `CONTRAT_B2` : **17 clés sur 12 rangs** (19 sur 13 depuis 2b-5, le
-  22/11) ; 511 motifs au plus pour le devis (512 depuis 2b-5), toujours trois
+  22/11 ; 22 sur 14 depuis 2b-6, le 24/11) ; 511 motifs au plus pour le devis
+  (512 depuis 2b-5, 513 depuis 2b-6), toujours trois
   chiffres : les gabarits de « Pour le remettre » ne
   bougent pas. Son corps ne nomme toujours ni `tarifs_pro`, ni `clients`, ni
   `professional_profiles` (la porte étroite, cas 14 c ; `emetteur_incomplet()`,
@@ -12244,15 +12247,19 @@ n'est remis, imprimé ni numéroté** (2c). Aucun module natif.
   vide) ou sur la première rubrique qui manque. La fonction lit la table des
   lieux une fois, filtrée par `pro_id = v_pro`, et compte les lieux
   DISTINCTS. `CONTRAT_B2` : **19 clés sur 13 rangs** ; 512 motifs au plus
-  pour le devis, toujours trois chiffres : les gabarits de « Pour le
-  remettre » ne bougent pas.
+  pour le devis (22 clés sur 14 rangs et 513 motifs depuis 2b-6, le 24/11),
+  toujours trois chiffres : les gabarits de « Pour le remettre » ne bougent
+  pas.
 - **`memeValeur`** (`src/lib/meme-valeur.js`, qui n'importe rien) : un
   tableau se compare par sa valeur, dans la file d'écriture, dans la saisie
   et dans `devis.js`.
 - **l'export RGPD** gagne la clé `mes_lieux_de_depot` (triée
   `created_at, id`) ; les huit colonnes voyagent avec les devis.
 - **« Pas encore vérifié »** garde sept faits : « si vos lieux de dépôt
-  acceptent ces déchets » y remplace les déchets de chantier.
+  acceptent ces déchets » y remplace les déchets de chantier (depuis 2b-6,
+  « le label RGE pour des travaux d’énergie » y est remplacé par « si les
+  labels RGE déclarés, les vôtres et ceux de vos sous-traitants, existent,
+  couvrent ces travaux et sont toujours en vigueur » : toujours sept faits).
 - **la démonstration** : un lieu inventé (« Recyclage de démonstration »,
   cherché absent de Sirene et de la Base Adresse le 21/11) ; « Muret de
   clôture » et « Terrasse en bois » remplis, « Rénovation salle de bains » à
@@ -12694,6 +12701,641 @@ clavier sous le champ du coût ; les suggestions de la vraie Base Adresse
 
 La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-5 — ce qui reste » ;
 `docs/PLAN-DEVIS.md` 10.23.
+
+### Le label RGE, les signes de qualité, les sous-traitants — étape 2b-6 (23-24/11/2026)
+
+Sections 46.2 ter et 46.2 quater, et section 49 (49.4 septies, 49.5, 49.7,
+49.9) de `schema.sql`, les clés `mes_signes_de_qualite` et
+`mes_sous_traitants` de `mes_donnees()` ; `src/data/travaux-energie.js`
+(nouveau, n'importe rien : `TRAVAUX_ENERGIE`, les dix-neuf clés) ;
+`src/lib/devis.js` (`LE_LABEL`, le rang 14 de `MOTIFS_DEVIS`,
+`etatsDesTravaux`, `rubriquesDeLEnergie`, `motifDeLEnergie`,
+`rubriqueDeLEnergieDuPoint`, `declarationMontree`, `finDuLabel`,
+`phraseDuTravail`, `introductionDeLEnergie`, `travauxApresAppui`,
+`sansLabelApresAppui`, `sousTraitantsApresAppui`, `sousTraitantComplet`,
+`energieConcerne`, `etatInitialEnergie`, `resumeDeLEnergie`,
+`AMENDE_DU_LABEL`, `AMENDE_DE_LA_SOUS_TRAITANCE`,
+`CARTE_AU_REPOS_SANS_CHAMP`), `src/lib/emetteur.js`
+(`TEXTES_SIGNES_DE_QUALITE`, `TEXTES_SOUS_TRAITANTS`, `validerLabel`,
+`validerSousTraitant`, `etatDuLabel`, `libelleEtatDuLabel`,
+`travauxCouvertsDuLabel`, `etatDuSousTraitant`,
+`libelleEtatDuSousTraitant`), `src/lib/formats.js` (`anneeDecalee`),
+`src/components/EnergieDevis.js`, `FicheLabel.js` et `FicheSousTraitant.js`
+(nouveaux), `Calendrier.js` (la prop `annees`), `ui.js` (le `nom` d'un
+`Interrupteur`), `FicheEmetteur.js`, `MonEntreprise.js`,
+`SaisieDevisScreen.js`, `OpusApp.js`, `api.js`, `erreurs.js`,
+`file-ecriture.js`, `meme-valeur.js`, `legal.js`, la démonstration. Commits
+`45f80bc` (la construction), `c3e3801` (la relecture et ses corrections),
+`b919d13` (les phrases du 24/11 et « N travaux couverts »), `e1338f0` (la
+migration appliquée, et « pourront ») ; le cahier, archivé tel qu'il a
+servi : `docs/CAHIER-LOT-2B-6.md`. Une seule relecture (« Accélérer ») ;
+**rien n'est remis, imprimé ni numéroté** (2c). Aucun module natif.
+
+#### Ce qui est construit
+
+- **« Mon entreprise » → « Vos signes de qualité (label RGE) »**, une
+  section après « Vos lieux de dépôt des déchets » : une rangée par signe
+  (son intitulé, puis « 1 travail couvert » ou « N travaux couverts », puis
+  l'organisme, puis son état : « Valable jusqu’au … », « Certificat non
+  joint · valable jusqu’au … » ou « Fin de validité dépassée (valable
+  jusqu’au …) »), « Ajouter un signe de qualité », et un formulaire plein
+  écran (`FicheLabel.js`) : l'organisme qui l'a délivré, l'intitulé, le
+  numéro du certificat (facultatif), les travaux couverts (les dix-neuf
+  cases), la date de fin (OBLIGATOIRE, au calendrier, avec deux flèches
+  « année » de 44 points sur leur propre rangée : une date à quatre ans
+  demandait une quarantaine d'appuis), « Joindre le certificat » (dans
+  `documents`), la phrase de la pratique commerciale trompeuse, et
+  « Retirer ce signe de qualité » en deux appuis. La section dit « rien ne
+  s’affiche sur votre fiche publique » : le badge « Certification RGE » de
+  « Modifier mon profil » n'est pas touché.
+- **« Mon entreprise » → « Vos sous-traitants »**, juste après : le nom ou
+  la raison sociale, le SIRET (quatorze chiffres, OBLIGATOIRE, pavé
+  numérique ; une clé de Luhn fausse est refusée à l'écran, pas par la
+  base, à cause de La Poste), « Détient-il un label RGE ? » (« Non » ·
+  « Oui », rien de choisi), et sous « Oui » ses travaux couverts, sa date de
+  fin et « Joindre son justificatif » ; sous « Non », « Le devis le dira à
+  votre client. Ce que cela change pour ses aides, Opus ne l’écrit pas
+  encore. », et, si un label était rangé, « En enregistrant, son label et son
+  justificatif seront retirés de cette fiche. ». Un sous-traitant est une
+  AUTRE ENTREPRISE, jamais un compte Opus, jamais `professional_partners`.
+- **Deux tables PRIVÉES** : `emetteur_labels` (46.2 ter : organisme,
+  intitulé, numéro, `categories`, `valide_jusquau`, `justificatif_chemin`)
+  et `emetteur_sous_traitants` (46.2 quater : `raison_sociale`, `siret`,
+  `label_detient`, `label_categories`, `label_valide_jusquau`,
+  `label_justificatif_chemin`). Le modèle est `emetteur_lieux_depot` (2b-5)
+  pièce par pièce : `pro_id … on delete cascade` seule colonne `not null`
+  avec l'identifiant, une politique `for all` par
+  `est_mon_entreprise(pro_id)` des deux côtés, rien pour `anon`
+  (`revoke all`), ni `truncate`, ni `references`, ni `trigger` pour
+  `authenticated`, aucune politique pour l'administration. **Neuf
+  contraintes** en `_check` (quatre pour les signes : les catégories, le
+  chemin, la croisée `emetteur_label_complet_check`, les longueurs ; cinq
+  pour les sous-traitants : les mêmes, plus le SIRET). Deux déclencheurs
+  `security invoker` (`tient_le_label()`, `tient_le_sous_traitant()`) :
+  rognage par la classe de blancs écrite en `chr(n)`, le chemin par la
+  petite classe, le SIRET réduit à ses chiffres, les champs du label d'un
+  sous-traitant EFFACÉS hors « Oui », `created_at` posé par la base à
+  l'insertion puis gardé.
+- **Quatre colonnes sur `devis`** (49.4 septies), nullables, SANS défaut :
+  `energie_travaux` (`text[]` : les dix-neuf clés, ou `{aucun}`, exclusif ;
+  vide de valeur = rien de dit), `energie_sans_label` (`text[]` : les
+  travaux pour lesquels l'artisan DÉCLARE, sur CE devis, ne pas détenir de
+  label), `energie_sous_traitance` (vide, « Non », « Oui »),
+  `energie_sous_traitants` (`uuid[]`, sans clé étrangère, dix au plus).
+  Trois contraintes `devis_energie_*_check` (29 contraintes `check` sur
+  `devis` au lieu de 26) ; les quatre dans les deux `grant` de 49.7 ;
+  `recalcule_devis()` n'en lit aucune. Jamais de tableau vide en base.
+- **Les dix-neuf clés** : les dix-sept catégories du décret n° 2014-812,
+  dans son ordre, puis `photovoltaique` et `desembouage`, comptées « Par
+  prudence » (décision P12). Les MÊMES clés, dans le même ordre, dans
+  `TRAVAUX_ENERGIE`, dans les deux contraintes de catégories et dans les
+  deux de `devis` (travaux, déclaration) ; les contrôles les comparent.
+- **Dans la saisie, une rangée « Énergie (label RGE) »** entre « Déchets »
+  et « Conditions », huit résumés × trois états = 24 gabarits, qui ne saute
+  jamais (56 points à 393 sur treize états, 72 à 320 sur deux : mesuré au
+  navigateur). Elle ouvre une carte plein écran, « Énergie et label RGE »
+  (`EnergieDevis.js`) : l'introduction selon la réponse « à quel titre »
+  VALABLE ; « Pour les droits de votre client » ; la question « Quels
+  travaux d’économies d’énergie ou d’énergie renouvelable ce devis
+  comporte-t-il ? », la pastille « Aucun de ces travaux » EN TÊTE, puis les
+  dix-neuf cases ; puis, seulement avec un travail coché, « Votre label
+  RGE » : sous chaque travail son état (`phraseDuTravail` : déclaré dans
+  « Mon entreprise », sans certificat, expiré, absent), et sous un travail
+  expiré ou absent la case « Je ne détiens pas de label RGE pour ces
+  travaux » ; la porte « Mes signes de qualité » ; l'amende du label ; puis
+  « Sous-traitance » : « Une autre entreprise fera-t-elle une partie, ou la
+  totalité, des travaux de ce devis ? » (« Non » · « Oui »), sous « Oui » les
+  cases des sous-traitants rangés, la porte « Mes sous-traitants », la
+  phrase du plafond ; l'aide, puis la nullité, sans amende. Au repos, sa
+  ligne d'état dit « Chaque choix s’enregistre aussitôt. » (elle n'a aucun
+  champ à taper ; « Conditions » et « Déchets » gardent « Chaque champ
+  s’enregistre quand vous le quittez. »). Montrée pour un client à titre
+  privé, pour une association, une copropriété ou une société civile, et
+  quand « À quel titre ? » est vide ; pour les deux réponses « entreprise »,
+  une seule phrase, et ce qui était écrit est gardé.
+- **Un point au rang 14** de `motifs_refus_remise()`, signature inchangée,
+  une clé au plus :
+
+  | clé | nature | quand |
+  |---|---|---|
+  | `devis_energie` | par prudence | les travaux ne sont pas dits (vide de valeur) |
+  | `devis_energie_mentions` | la loi | à titre privé, et ce qui manque touche un travail du décret (ni couvert ni déclaré, ou porté par un signe valable SANS certificat) ou la sous-traitance (pas de réponse, « Oui » sans sous-traitant choisi chez l'entreprise, ou un choisi incomplet) |
+  | `devis_energie_mentions_prudence` | par prudence | une association, une copropriété, une société civile, une réponse « à quel titre » vide — ou, à titre privé, quand seules les deux lignes de prudence manquent de label |
+
+  Rien sous « Aucun de ces travaux », rien pour les deux réponses
+  « entreprise » (L. 224-114 vit dans une section que L. 221-3 n'étend pas
+  aux petites entreprises). **Un travail est couvert** quand un signe rangé
+  le porte, que son certificat est joint et que sa date de fin est au moins
+  le jour de PARIS ; la base lit les deux tables UNE fois chacune, filtrées
+  par `pro_id = v_pro`, et compte les sous-traitants DISTINCTS ; un
+  identifiant orphelin ou d'une autre entreprise n'est jamais compté. **Un
+  sous-traitant est complet** quand la question de son label a une
+  réponse : « Non », ou « Oui » avec des travaux, une date au moins égale au
+  jour de Paris et son justificatif joint (décision P13). Le bouton du point,
+  « Compléter : énergie et label RGE », ouvre la carte sur la question
+  (`devis_energie`) ou sur la première rubrique qui manque. Les trois
+  phrases font 188, 187 et 194 caractères. `CONTRAT_B2` : **22 clés sur
+  14 rangs** ; 513 motifs au plus pour le devis, toujours trois chiffres :
+  les gabarits de « Pour le remettre » ne bougent pas.
+- **Un avis sous « À vérifier »**, `avis_label_echeance`, jumeau de celui de
+  l'attestation décennale (il suit l'écran, jamais la liste sûre) : « Votre
+  signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est
+  signé, ou ses travaux réalisés, après cette date sans que vous l’ayez
+  renouvelé, votre client peut perdre des aides : renouvelez-le à temps. »
+  La fin qui parle est le MINIMUM, sur les travaux cochés et couverts, de la
+  fin la plus TARDIVE qui couvre chacun ; l'horizon est celui de
+  l'attestation (la validité, plus trente jours quand le délai est EXACTEMENT
+  celui par défaut).
+- **Les deux listes arrivent à la saisie par la lecture unique** du régime
+  (`monRegimeEtSaDate`, qui lit `monEmetteurSupabase`), et une table absente
+  rend `null` (« non lus »), jamais `[]` ; **chaque écriture de « Mon entreprise » fait remonter la
+  NOUVELLE liste** (ÉCRAN-1, plus bas).
+- **« À quel titre ? »** : sous « À titre privé, pour lui-même », « Y compris
+  un artisan ou un commerçant pour son propre logement. » ; sous la petite
+  entreprise, « … sauf celles du label RGE, que la loi ne lui étend pas. »
+- **L'export RGPD** gagne `mes_signes_de_qualite` et `mes_sous_traitants`
+  (triées `created_at, id`) ; les quatre colonnes voyagent avec
+  `devis_emis`.
+- **« Pas encore vérifié »** garde sept faits : « le label RGE pour des
+  travaux d’énergie » en sort ; « si les labels RGE déclarés, les vôtres et
+  ceux de vos sous-traitants, existent, couvrent ces travaux et sont toujours
+  en vigueur » y entre.
+- **Les textes légaux** : `VERSION = '2026-11-24'`. « Ce que nous
+  collectons » nomme les signes de qualité et les sous-traitants dans la
+  phrase de « Mon entreprise », et les faits de l'énergie dans celle des
+  devis ; « Vos documents professionnels » dit en deux phrases à quoi
+  servent les pièces du profil (le badge, une demande de compte
+  professionnel) et celles de « Mon entreprise » (accompagner les devis) ;
+  « Combien de temps » dit qu'un certificat, un justificatif ou une
+  attestation retiré d'une fiche reste dans l'espace privé jusqu'à la
+  suppression du compte ; « Les clients que vous enregistrez » dit, dans ses
+  deux branches, ce qui vaut pour les données d'une autre entreprise ; et
+  « Ce qui est interdit » gagne la phrase P14 : « Déclarer dans « Mon
+  entreprise » un signe de qualité que son entreprise ne détient pas, ou
+  pour des travaux qu’il ne couvre pas : le compte peut être fermé. »
+- **La démonstration** : un signe (« Label de démonstration — isolation des
+  murs »), un sous-traitant (« Isolations de démonstration », SIRET fictif à
+  cinq zéros en tête, cherché absent du répertoire Sirene), et un cinquième
+  devis, « Isolation des combles et des murs », à titre privé, complet aux
+  rangs 1 à 13 : `devis_energie_mentions` et l'avis du label s'y voient sans
+  `.env`.
+- **Aucune fonction `security definer`, aucun code `OP`** (`OP028` reste
+  libre) ; deux tables, deux déclencheurs et trois contraintes de `devis`
+  nouveaux, deux fonctions remplacées (`motifs_refus_remise`,
+  `mes_donnees`). **Aucun rattrapage** : les colonnes naissent vides,
+  c'est-à-dire dans le cas le plus protecteur.
+
+#### Les décisions du propriétaire
+
+| question | réponse | ce qu'elle a construit |
+|---|---|---|
+| Q5 — la forme (posée avec 2b-4, tranchée le 23/11) | « Deux questions par devis » | une question sur les travaux et une sur la sous-traitance, montrées à titre privé, pour une association, une copropriété ou une société civile, et quand « À quel titre ? » est vide ; le label rangé une fois dans « Mon entreprise » ; jamais le badge public `rge` ; un point au rang 14 ; jamais le RGE comme condition d'un taux de TVA |
+| P1 (23/11, le soir) | « Une liste à cocher » | une liste fermée de catégories, plus « Aucun de ces travaux » (exclusive) ; les MÊMES clés pour le label |
+| P3 (23/11, le soir) | « Rangés une fois » | « Vos sous-traitants » dans « Mon entreprise », cochés sur le devis comme les lieux de dépôt : un `uuid[]` sans clé étrangère, filtré par `pro_id` |
+| P11 — « je n'ai pas de label pour ces travaux » : où ? (24/11) | « Sur chaque devis » | `devis.energie_sans_label`, une case par travail coché que ses signes ne couvrent pas ; rien sur `emetteur` |
+| P12 — la liste | « Les 17, plus ces 2 » | dix-neuf clés : le photovoltaïque et le désembouage « Par prudence » quand eux seuls manquent ; une phrase sous « Aucun de ces travaux » sur la sous-traitance d'AUTRES travaux d'énergie |
+| P13 — le justificatif d'un sous-traitant | « Oui, dans Opus » | rangé dans `documents`, exigé pour qu'un sous-traitant qui a un label soit complet ; les textes disent que l'administration le lit et qu'il reste jusqu'à la suppression du compte |
+| P14 — deux phrases qui engagent | « Les deux » | l'amende dans la carte (et la nullité, sans montant, pour la sous-traitance) ; la phrase de « Ce qui est interdit » |
+| DROIT6-2 — une quatrième clé « La loi » quand seule la sous-traitance manque (24/11, après la relecture) | « Plus tard » | rien : la phrase de `devis_energie_mentions` dit encore « la loi » pour le label du photovoltaïque ou du désembouage quand la sous-traitance manque aussi |
+| les quatre phrases de la relecture (DROIT6-3, DROIT6-6, ÉCRAN-6, ÉCRAN-4) | « Oui, les quatre » | sous « Aucun » : « Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie ou d’énergie renouvelable de ce devis, écrivez-le sur le devis, par exemple dans une réserve : la loi peut le demander. » ; la seconde phrase de l'avis du label dit « ou ses travaux réalisés » (sa règle ne change pas) ; la phrase du second appui de « Retirer ce signe de qualité » ; « Chaque choix s’enregistre aussitôt. » pour la carte Énergie |
+| ÉCRAN-7 — la rangée d'un signe | « 3 travaux couverts » | `travauxCouvertsDuLabel` : « 1 travail couvert », « N travaux couverts » ; rien pour une liste vide ou une clé inconnue |
+| ÉPR-1 — la phrase du second appui, après l'épreuve (24/11, au soir) | « pourront » | « Les brouillons dont il était le seul à porter des travaux pourront vous redemander si vous détenez un label pour ces travaux. » (elle disait « vous redemanderont ») |
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **Une déclaration ne vaut que pour ce qu'elle NOMME.** Le cahier v1 posait
+> « je ne détiens pas de label » en booléen par devis
+> (`energie_sans_label boolean`) : il s'étendait tout seul à un travail
+> coché après coup, à un label expiré, à un label retiré (critiques BASE-1
+> et ÉCRAN-1, mesuré trois fois). C'est une LISTE par devis, une case par
+> travail non couvert, qui nomme ce travail ; et « une fois pour toutes,
+> dans « Mon entreprise » », l'autre réponse possible à P11, aurait fait
+> d'un label oublié un « ne détient pas » imprimé (décision P11 : « Sur
+> chaque devis »). Et elle ne tait JAMAIS le point d'un travail porté par un
+> signe valable SANS certificat : on ne déclare pas ne pas détenir ce qu'on a
+> dit détenir — on joint le certificat, ou on retire le signe. La leçon de
+> `pour_qui_client` (2b-2), étendue.
+
+> **Une phrase de droit se juge à sa PLACE autant qu'à ses mots** (DROIT6-1,
+> grave). L'amende de 15 000 € / 75 000 € était posée à la FIN de la carte,
+> juste sous l'aide de la sous-traitance : « sans ces informations » y
+> renvoyait aux sous-traitants. Or L. 242-51 ne punit d'une amende que le
+> manquement à L. 224-114, le label ; L. 224-115, la sous-traitance, n'a que
+> la nullité. L'ordre venait de l'annexe A.3 du cahier, la construction l'a
+> suivi, et **deux contrôles verrouillaient l'ordre fautif** (`verifier-devis`
+> « d. » et `mesure-devis`) : un contrôle qui fige une forme fige aussi son
+> défaut. L'amende vit désormais sous « Votre label RGE », après la porte
+> « Mes signes de qualité », avant « Sous-traitance » ; ses mots n'ont pas
+> changé (P14), et « d. » exige les deux blocs EXACTS et consécutifs.
+
+> **« La loi demande » se dit POUR QUI** (DROIT6-5, relevé de moyen à grave
+> par la contradiction). Trois aides le disaient tout court : celle de la
+> sous-traitance, et les deux « Joindre » (le certificat d'un signe, le
+> justificatif d'un sous-traitant). Pour une association, la carte disait
+> en tête « la loi ne prévoit peut-être pas ces mentions », et plus bas, sur
+> le MÊME écran, « La loi demande de nommer… ». C'est la forme exacte de
+> DROIT-R4 (2b-5). Elles commencent par « Pour un client qui commande à titre
+> privé ».
+
+> **Une écriture dans « Mon entreprise » fait remonter la NOUVELLE liste**
+> (ÉCRAN-1, grave). La fermeture relance une lecture, qui GARDE les listes
+> pendant qu'elle tourne : la carte rouverte montrait la liste d'AVANT —
+> la case « Je ne détiens pas de label RGE pour ces travaux » sous un travail
+> qu'un signe venait de couvrir, une case de sous-traitant cochée pour un
+> sous-traitant retiré. Un appui écrivait une déclaration fausse, de celles
+> que 2c imprimera. **En démonstration la fenêtre est invisible** (la
+> lecture rend sans attendre) : seule une lecture RETENUE
+> (`window.__opusRegime.retenir`) l'a montrée. Les six écritures de
+> `MonEntreprise.js` — un lieu, un signe, un sous-traitant, enregistrés ou
+> retirés — passent la liste neuve à `surEmetteur` avant la vibration de
+> réussite. Le même chemin existait pour les lieux de dépôt depuis 2b-5 ; il
+> est fermé aussi. Le cousin, les ASSURANCES (M3 de 2b-4), reste ouvert.
+
+> **Un texte TAPÉ ne passe jamais par le second argument chaîne de
+> `replace`** (ÉCRAN-3) : un intitulé contenant « $' », « $& », « $` »,
+> « $$ » ou « {fin} » cassait la phrase de la carte et celle de l'avis. Un
+> seul passage, par une FONCTION de remplacement.
+
+> **Plusieurs cases du même libellé portent chacune leur nom pour
+> VoiceOver** (ÉCRAN-2) : `Interrupteur` prend un `nom` facultatif, et la
+> case dit « Je ne détiens pas de label RGE pour ces travaux — <le
+> travail> » ; le libellé affiché ne change pas, l'aide reste derrière.
+
+> **Le label RGE ne touche jamais la TVA, ni le badge public, et cela se
+> tient par des PROPRIÉTÉS** (CTL6-3, CTL6-4). Aucune condition de
+> qualification n'existe pour les taux de 10 % et de 5,5 % de la rénovation
+> énergétique : le rang 3, `recalcule_devis()` et `tient_la_ligne_de_devis()`
+> ne nomment rien de 2b-6, et `verifier-devis` tient une liste FERMÉE des
+> appels de `tauxProposes` et `cleDuTauxDeLaLigne`, arguments compris — la
+> détection d'alias proposée par la relecture ne voyait pas deux des
+> sabotages (mesuré par la contradiction). Et aucun des blocs d'`api.js` qui
+> nomment les signes ou les sous-traitants ne nomme `rge`, `rge_url`… ;
+> `verifier-postes` FAIT TOURNER les lectures avec le badge posé, et exige
+> des listes identiques.
+
+> **Une liste de fichiers écrite à la main se compare à `git ls-files`**
+> (S44 du banc) : `EnergieDevis.js` retiré de `FICHIERS_DU_MODULE`, la règle
+> « un an ⇒ opposition » ne le lisait plus, et rien ne rougissait. Huit
+> fichiers manquaient déjà. Et les textes composés par la construction (dix-
+> sept dans « Mon entreprise ») se figent TELS QUELS, avec leur source, et
+> se montrent au propriétaire (S27) ; une égalité stricte sur un tableau se
+> cherche aussi par ses ALIAS (C4) ; les dix-neuf libellés se figent mot pour
+> mot (X37).
+
+> **Une garde de vocabulaire par RACINE refuse aussi le mot juste.** Trois
+> gardes « certifi » (`verifier-legal`, `verifier-tva`) refusaient
+> « certificat », que les textes doivent écrire : elles permettent
+> désormais `certificats?` en mot entier, et rien d'autre. Jamais
+> « certifié », « agréé » (L. 121-4 4°), « vérifié », « garanti » dans un
+> texte de 2b-6 ; un signe de qualité est « déclaré dans « Mon
+> entreprise » », jamais « couvert par » : Opus ne le vérifie pas.
+
+> **Un contrôle qui vérifie qu'une carte PASSE le bon paramètre ne vérifie
+> pas ce qu'elle REND** (ÉPR-2, l'épreuve des phrases du 24/11). La carte
+> Énergie qui rendait l'ancienne phrase en dur, `sansChampTape: true`
+> gardé, passait `npm run verifier` ; « Chaque choix… » affiché PENDANT une
+> écriture passait aussi la section de mesure du constructeur. ÉCRAN-4 exige
+> désormais que chacune des trois cartes rende `{etat.texte}` une fois, et
+> n'écrive ni l'une ni l'autre constante. **Et la section de mesure se
+> tient comme la règle** (ÉPR-3, la leçon T-C2 de 2b-5, refaite) : un
+> `return` conditionnel, un `if` qui la saute, un `|| true`, une copie
+> raccourcie passaient les 54 contrôles ; « r. » exige ses copies ÉGALES aux
+> constantes, sa place, et ses vérifications écrites telles quelles. Deux
+> trous de plus : la rangée en lecture groupée sous un nom qui tait le
+> nombre (E30), et le singulier « 1 travail couvert » composé à la main, que
+> `/travaux? couverts?/` ne voit pas (E41). Huit trous sur 42 sabotages,
+> fermés par quatre vérifications.
+
+> **Une phrase qui annonce un effet se relit contre CHAQUE état** (ÉPR-1).
+> « Les brouillons dont il était le seul à porter des travaux vous
+> redemanderont… » était fausse pour quatre brouillons sur douze rejoués par
+> le miroir : une déclaration « Je ne détiens pas » cochée AVANT que le signe
+> ne couvre le travail reprend effet (et quand le signe était sans
+> certificat, le retrait fait même TAIRE le point) ; un client « pour son
+> entreprise » ou une petite entreprise hors de son activité ne redemande
+> rien. Décision du propriétaire : « pourront ».
+
+> **Une date que l'écran ne sait pas lire n'est pas une date valable**
+> (BASE-R1, mineur) : `'infinity'` passe la contrainte d'un signe, comme
+> celle d'une assurance ; la base le compte valable, l'écran (qui ne lit
+> qu'une année à quatre chiffres) le compte expiré, avec une date vide. Seul
+> un client modifié l'écrit. Une borne commune aux trois dates de fin
+> (signes, sous-traitants, assurances) est à poser (A-FAIRE).
+
+> **Une migration découpée se garde par son ORDRE.** Le texte complet
+> faisait 60 728 octets, 61 185 sous forme gardée en un bloc : au-dessus du
+> plus gros envoi déjà passé (60 145, 2b-2), qui n'est pas une limite connue
+> mais le plus gros essayé. D'où deux parties, chacune un seul `do` gardé
+> par le md5 de son texte : la partie 1 (les deux tables) ; la partie 2 (les
+> colonnes, les contraintes, 49.7, les deux fonctions), qui commence par une
+> **garde d'ordre** — elle refuse tout si les tables, les politiques, les
+> contraintes et les déclencheurs de la partie 1 manquent. Sans cette garde,
+> PostgreSQL la refuserait quand même (`mes_donnees()` ne se crée pas :
+> deux barrières). **Le relevé ENTRE les deux décide** : s'il s'écarte de
+> l'attendu, on n'envoie pas la partie 2 — la partie 1 seule ne gêne pas
+> l'application d'avant, qui ignore les deux tables.
+
+> **Deux parties, deux verrous** (mesurés, PostgreSQL 16). La partie 1 tient
+> SHARE ROW EXCLUSIVE sur `professional_profiles` (les deux clés
+> étrangères) : une ÉCRITURE de fiche en cours la bloque. La partie 2 tient
+> ACCESS EXCLUSIVE sur `devis` et ACCESS SHARE sur 34 tables (l'analyse de
+> `mes_donnees()`) : une LECTURE ou une écriture de devis la bloque, et un
+> ACCESS EXCLUSIVE sur `devis_lignes` ou `emetteur_labels` ; une écriture de
+> fiche, non. 55P03 en 5 s, rien d'appliqué, renvoyer le même texte. Et
+> **même un essai refusé gêne l'application** : une lecture de devis arrivée
+> derrière la migration qui attend son verrou attend aussi (servie au bout
+> de 4,87 s, second regard). Opus fermé pour tout compte, celui du frère
+> compris, et le relevé complémentaire juste avant CHAQUE partie.
+
+> **MAINTAIN, toujours inutile** : les deux tables sont nées sans lui
+> (`{postgres=arwdDxtm/postgres,authenticated=arwd/postgres,service_role=arwdDxtm/postgres}`,
+> lu en VALEUR ABSOLUE), comme la table de 2b-5 : M1d l'a retiré des droits
+> par défaut de `postgres` le 02/11. L'appel à part, prêt et idempotent,
+> n'est pas parti (`*_maintain_a_retirer = f`).
+
+> **Un protocole d'essai se relit contre la règle écrite.** La tâche
+> attendait, après avoir passé un signe à une date passée, « le point
+> revient ». Sur la vraie base il NE revient PAS, et c'est la règle : la
+> déclaration « Je ne détiens pas de label » posée juste avant pour ce
+> travail était encore là, et un label à date passée n'est plus détenu —
+> **la déclaration reprend effet** (49.4 septies, « le cas rare, écrit et non
+> corrigé » ; l'avis du label prévient avant l'échéance). L'essai a ajouté
+> un pas (la déclaration retirée, le point revient ; la date du jour de
+> Paris l'éteint). Et le SIRET « 000 480 090 00013 » que le protocole
+> imposait pour un sous-traitant n'est AUCUN des deux SIRET fictifs du même
+> protocole : ses chiffres font `00048009000013`, pas `00004800900013`. Il a
+> été cherché dans le répertoire Sirene avant l'envoi (0 résultat, sonde
+> hors journal). **Un numéro écrit avec ses espaces se relit en chiffres.**
+
+> **Une égalité « au caractère près » qui ne se relit pas dans le journal ne
+> prouve qu'un booléen.** Le contrôle de l'essai l'a jugé fidèle, mais les
+> 46 comparaisons base = miroir n'y laissent que `detail: ""` : ni la liste
+> de la base, ni celle du miroir. Il en a rejoué huit sans la base, toutes
+> justes. **La prochaine fois, journaliser l'empreinte (sha256) des deux
+> listes**, ou les listes. Même famille : « état du travail :
+> `sans_certificat` » est écrit au compte rendu sans être mesuré nulle part,
+> et plusieurs heures du compte rendu ne sont portées par aucun fichier.
+
+Et, plus brièvement :
+
+- **le photovoltaïque et le désembouage** sont des lignes de PRUDENCE : le
+  signe du désembouage (fiche CEE BAR-SE-108) est une qualification
+  d'entretien, pas un label RGE au sens strict ; Opus le range quand même
+  dans les signes de qualité (P12, J74) ;
+- **la sous-traitance n'a pas la condition d'aide** (L. 224-115 I) : d'où
+  « La loi » même pour le photovoltaïque quand elle manque (DROIT6-2,
+  « Plus tard »), et la phrase sous « Aucun de ces travaux » ;
+- **la classe de blancs n'est toujours pas consolidée** : seize copies dans
+  huit fonctions SQL, plus deux constantes JavaScript (`verifier-devis` §17
+  les compare) ;
+- **le trait de soulignement est une lettre de mot** : `emetteur_labels` et
+  `emetteur_sous_traitants` ne contiennent pas `emetteur` ; elles sont
+  entrées EN LE DÉCIDANT dans chaque liste fermée de la section 46, et
+  `verifier-emetteur` tient la liste FERMÉE des droits de ses six tables
+  (`DROITS_46` : dix `revoke`, aucun `grant`) ;
+- **une correction proposée se fait tourner sur le code juste ET sur le
+  code saboté** (la méthode de la contradiction des contrôles) : deux
+  corrections de la relecture ne tenaient pas telles qu'écrites (CTL6-3,
+  CTL6-8) ;
+- **un serveur Metro lancé avec `CI=1` ne surveille pas les fichiers** :
+  une passe « corrigée » a d'abord tourné sur l'ancien paquet. On relit le
+  paquet servi avant chaque mesure ;
+- **un contrôle qui attend de vraies millisecondes** (« j bis », de 2b-1)
+  a rougi une fois sur environ 54 passages, sous la charge du banc ; vert
+  seul. Famille de CTL6-13 (« j ter », rougi une fois, jamais reproduit en
+  38 + 23 passages) : on garde la sortie ENTIÈRE de chaque passage.
+
+#### Vérifié, et comment
+
+`schema.sql` rejoué deux fois sur une base neuve (0 et 0 erreur) ; les
+34 essais, depuis la racine du dépôt, aux comptes attendus : 43 : 0 ·
+46 : 45 (dix-huit de plus qu'avant 2b-6) · 47 : 18 · 49 : 79 ·
+49-conditions : 27 · 49-remise : 53 erreurs, 472 valeurs, son compte
+« toutes jugées » à `t` · 51d : 23 · suppression de compte : 3 (l'en-tête
+en annonçait quatre : corrigé, BASE-R3) ; les autres identiques.
+`generer-cas-remise --verifier` : **237 cas** (235 à la construction, 236
+après « combler », 237 avec le cas T9 de la relecture), 0 écart. Les
+56 contrôles (`verifier-devis` 708, `verifier-emetteur` 351,
+`verifier-legal` 291, `verifier-postes` 272, `verifier-lectures` 185,
+`verifier-tarifs` 179, relevés à `e1338f0`), le linter à 32, les paquets iOS
+et Android lus (1 « Exported », 0 « Import stack », les phrases du 24/11
+de `b919d13` dans les deux `.hbc`), puis reconstruits à `e1338f0`, la
+documentation écrite : 1 « Exported », 0 « Import stack » chacun, et les
+cinq phrases du 24/11, « pourront » compris, dans les deux `.hbc` (cherchées
+en UTF-16, comme le stocke Hermes). `mesure-devis` au
+navigateur, en démonstration :
+**1 157 mesures, 0 en échec** au passage complet de la construction, puis
+ses sections 2b-6 seules : 97 après la relecture, **110** après les phrases
+du 24/11.
+
+Les bancs : à la construction, **111 sabotages**, 102 refusés par la
+vérification visée, 4 par une autre, **5 trous** (S27, S44, S44c, C4,
+X37), fermés par « combler » avec trois trous partiels (S9b, X26, S31) :
+ses 23 sabotages, 23 refusés. La relecture unique (droit, base, écran,
+contrôles, un contradicteur par angle) : **35 constats** (11, 4, 7, 13),
+aucun réfuté entier, **trois graves** (DROIT6-1, DROIT6-5, ÉCRAN-1),
+corrigés dans `c3e3801` ; ses corrections, 37 sabotages, 37 refusés. Les
+phrases du 24/11 : 20 sabotages, 20 refusés ; leur épreuve, 42 sabotages,
+34 refusés, **8 trous** fermés par quatre vérifications, les 10 concernés
+rejoués et refusés. « pourront » : l'ancienne phrase remise est refusée par
+`verifier-emetteur`, et les 56 contrôles passent.
+
+#### La migration
+
+Construite par un script qui PREND chaque morceau dans le `schema.sql` de
+`c3e3801` (md5 `19f3bbab233ac03f9d14c4ee97674039`, identique à celui de
+`e1338f0`), l'imitation de la vraie base étant `c753b2a` (md5
+`0a9599698954c1cbdc99abcdf88d28c1`, identique octet pour octet à
+`66b2e9b`, d'où 2b-5 avait été construite) : les 59 ordres que la cible
+ajoute ou change, comparés ordre par ordre ; les cinq retirés en sont les
+anciennes versions ; les quatorze `drop … if exists` ne partent pas, leurs
+douze contraintes et leurs deux politiques posées SOUS CONDITION
+(`pg_constraint`, nom ET table ; `pg_policies`) dans des blocs `do` ; le
+`revoke` de 49.7 et ses six `grant` rejoués ; le balayage de la section 43
+en dernier dans chaque partie. Aucun ordre qui commence par `drop`,
+`delete` ou `truncate`, aucune barre oblique inverse, aucun `default` sur
+une colonne de `devis`, `set local lock_timeout = '5s'` en tête de chaque
+partie, aucun rattrapage.
+
+| partie | ce qu'elle porte | texte | forme gardée |
+|---|---|---|---|
+| 1 | les deux tables (index, RLS, neuf contraintes, deux fonctions et leurs déclencheurs, deux politiques, les `revoke`, les commentaires), puis le balayage | 11 771 o, md5 `e5c29e8a648a2b9e137631f9303028c9` | 12 239 o |
+| 2 | la garde d'ordre ; les quatre colonnes et leurs commentaires ; leurs trois contraintes ; 49.7 ; `motifs_refus_remise` ; `mes_donnees()` ; le balayage et le `revoke` de `recalcule_chantier` | 50 282 o, md5 `276ce8a4620cfcb1e4c034ee80cb437d` | 50 750 o |
+
+Simulée deux fois sur une imitation avec données : l'empreinte d'une base
+neuve au schéma de `c3e3801`, identique (étroite 398 lignes, large 1 468,
+l'ordre physique des colonnes, et `pg_dump --schema-only`) ; avant → après,
+52 lignes logiques changent (50 ajoutées, 2 changées : `motifs_refus_remise`
+→ `dfb2f516…`, `mes_donnees` → `fa981eb8…`) et rien d'autre ; aucune ligne
+réécrite, dans aucune table d'aucun schéma ; les essais identiques. La
+garde a refusé 13 sabotages sans rien appliquer, la garde d'ordre la partie
+2 envoyée seule ; les trois contre-épreuves (un `default false`, le
+`revoke` à `anon` retiré, un `grant truncate` après le `revoke`, md5
+recalculés) passent la garde, et le relevé après les voit. Un second regard
+indépendant (son découpeur, sa propre empreinte large de 1 639 lignes, ses
+données : sept devis aux réponses variées) a refait la preuve : aucun écart
+bloquant.
+
+**Appliquée le 24/11/2026**, avec l'accord du propriétaire (« Oui, Opus est
+fermé »), en DEUX appels gardés : `lot_2b_6_partie_1_labels_sous_traitants`
+à 21 h 40 (heure de Paris, version `20261124204021` en UTC), puis
+`lot_2b_6_partie_2_energie_du_devis` à 21 h 44 (version `20261124204401`).
+**Aucun appel MAINTAIN.** Relevé AVANT, par le connecteur de lecture :
+toutes les valeurs attendues ; PostgreSQL 17 (170011) ; aucun `m` chez
+`anon` ni `authenticated` dans les droits par défaut de `postgres` ; 3 devis,
+11 lignes, 4 ventilations, 1 lieu ; `devis_qui_gagneront_le_rang_14 = 3` ;
+juste avant chaque partie, 0 requête active, 0 transaction ouverte,
+0 session illisible, un rôle qui voit toutes les sessions. ENTRE-DEUX :
+49 tables et 123 fonctions dans `public` (47 et 121 avant), les deux tables
+présentes, tout le reste identique. APRÈS : identique à la simulation, au
+caractère près — les droits des deux tables en valeur absolue, sans entrée
+`anon` ; 9 et 9 colonnes, 6 et 7 contraintes validées ; deux fonctions
+`security invoker` exécutables par `postgres` et `service_role` seuls ; 48
+colonnes et 29 contraintes `check` sur `devis`, 0 défaut, 0 valeur manquante
+posée ; aucune fonction de déclencheur appelable par `anon` ou
+`authenticated` ; `devis_avec_le_rang_14 = 3`. Le relevé complémentaire,
+avant et après : les empreintes `id:xmin`, les `relfilenode`, les maxima de
+`modifie_le` et de `generation`, les droits de table et les droits de colonne
+hors énergie, IDENTIQUES — aucune ligne réécrite. Les conseillers de sécurité
+et de performance de Supabase : aucune alerte sur les deux tables ni sur
+`motifs_refus_remise` ; les alertes restantes sont les anciennes.
+
+**Ce que le propriétaire verra** : ses trois brouillons gagnent le point
+« Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de
+ces travaux »… » (« Par prudence ») — la liste naît vide. Un appui sur
+« Aucun de ces travaux » l'éteint, devis par devis, ou la carte remplie.
+Entre la migration et `git pull`, l'application d'avant montre ce point sans
+bouton (lu dans le code de `c753b2a`, pas vu à l'écran) : rien ne casse,
+rien ne se perd.
+
+**Les avertissements des commits `45f80bc`, `c3e3801` et `b919d13` (« NE PAS
+FAIRE `git pull` AVANT LA MIGRATION 2b-6 ») ne valent plus** : `git pull`,
+puis `npx expo start -c` ; aucun module natif. Ce que ces messages disent
+qu'un `git pull` avant la migration aurait cassé — « « Mon entreprise » et
+la saisie d'un devis ne se chargent plus » (`45f80bc`), « cette version ne
+peut pas lire « Mon entreprise » ni la saisie d'un devis » (`c3e3801`) —
+est **DÉDUIT, pas mesuré** (`b919d13` le dit lui-même) ; et le code le
+contredit en partie : une table absente rend ses listes « non lues »
+(`tableAbsente`, `api.js`) sans faire tomber la lecture (S31,
+`verifier-postes`). Ce qui aurait échoué, c'est l'écriture des quatre
+colonnes, et celle d'un signe de qualité ou d'un sous-traitant dans une
+table absente (déduit). Un message de commit ne se récrit pas ; c'est ici
+qu'on le dit.
+
+#### Essayé sur la vraie base
+
+Le 24/11, de 21 h 52 à 22 h 05 environ (heure de Paris : le journal porte
+la création des comptes à 20 h 52 UTC et le ménage à 21 h 04 UTC), par le
+chemin de l'application (curl, la clé publiable et le jeton de chaque
+compte) : deux artisans jetables à Brest, un plaquiste A et un électricien
+B, inscrits sur les deux preuves SIRET d'essai déjà en base (SIRET
+fictifs), un particulier P ; le régime réel déclaré avant le premier poste ;
+chaque écriture de devis portant un numéro en millisecondes ; le miroir
+lancé à l'heure de Paris — **235 vérifications justes, 0 en échec,
+677 requêtes, aucune reprise**, aucun OP015 ni OP016, aucun jeton dans les
+journaux, `enregistrer_vues` jamais appelée :
+
+| | résultat |
+|---|---|
+| les deux tables et les quatre colonnes lues par l'API juste après la migration | 200 ×3 : ni PGRST205, ni 42P01, ni 42703 |
+| à chaque pas, la liste de la base contre `motifsDeRemise`, nourri de ce que l'application relit | **46 comparaisons, identiques** (le script le dit ; le journal ne garde que son booléen) |
+| D1 complet pour les rangs 1 à 13, travaux pas dits | seul motif du devis : `devis_energie`, rang 14, « Par prudence », la phrase exacte (188 caractères) |
+| `{aucun}` · `{chaudiere}`, rien d'autre | rien · `devis_energie_mentions`, « La loi » (187 caractères) |
+| un signe sans certificat, puis la déclaration | **le point RESTE** |
+| une vraie PDF dans `documents`, jointe (chemin suivi d'une espace) | le chemin rangé rogné ; le point part ; B ne lit pas le fichier |
+| la fin du signe à hier, la déclaration encore là · déclaration retirée · fin au jour de Paris | rien (la déclaration reprend effet) · le point revient · rien |
+| un travail non couvert déclaré, puis un autre travail coché | rien, puis le point revient |
+| un second signe rangé, puis retiré | rien, puis le point revient |
+| le photovoltaïque seul, sous-traitance « Non » | `devis_energie_mentions_prudence` (194 caractères) |
+| sous-traitance « Oui » sans choix · un sous-traitant au label pas dit · « Oui » sans justificatif | `devis_energie_mentions` ×3 ; « Non », ou le justificatif joint : rien |
+| son SIRET « 000 480 090 00013 », des blancs, une date de 2001 | rangé `00048009000013`, nom rogné, champs du label effacés (label pas dit), `created_at` posé par la base |
+| la date de son label à hier · `[SA1, SA1]` · un incomplet parmi deux | le point · rien (compté une fois) · le point |
+| le sous-traitant de B, seul, dans le devis de A · un identifiant inventé | accepté (204), **jamais compté** · jamais compté |
+| un sous-traitant choisi, puis retiré · puis « Non » | le point revient, l'identifiant reste orphelin · le point se tait |
+| une association · travaux pas dits | `devis_energie_mentions_prudence` · `devis_energie` |
+| « pour son entreprise » · hors de son activité principale | rien au rang 14 |
+| « à quel titre » vidé | `devis_pour_qui` au rang 1 et `devis_energie_mentions_prudence` au rang 14 |
+| 12 écritures fautives du devis, 27 sur les deux tables | **400 · 23514**, chacune sous le nom de sa contrainte ; l'horloge, `modifie_le` et les colonnes, ou la liste de A, identiques avant et après |
+| les bornes : dix-neuf travaux, dix sous-traitants | acceptées |
+| B lit · modifie · supprime les signes et les sous-traitants de A | `[]` ×4 · 204 et **0 ligne** ×4 ; au nom de A : **403 · 42501** |
+| B écrit les colonnes du devis de A · demande sa liste | 204 et 0 ligne · **400 OP027** |
+| P (particulier) lit · range un signe | `[]` · **403** ; un visiteur : **401 · 42501** ×6 |
+| un signe et un sous-traitant renvoyés en modification avec une date de 2001 | l'ancienne date gardée |
+| les totaux, relus 7 fois | identiques à la référence : les colonnes sont hors des totaux |
+| l'export de A · de B · de P | ses signes et ses sous-traitants, dans l'ordre de l'écran, et les quatre colonnes dans `devis_emis` · les siens seuls · les deux clés, vides |
+
+Ménage par le chemin de l'application (`preparer_suppression_compte`, puis
+`/functions/v1/compte`, qui dit avoir retiré les deux PDF de `documents`) ;
+la reconnexion est refusée pour les trois. Relevé ensuite par sa forme, en
+lecture seule, vers 22 h 10 : aucune ligne aux identifiants de l'essai, 0
+compte `@exemple-opus.test`, 0 signe de qualité et 0 sous-traitant dans
+toute la base, 0 objet sous leurs dossiers du stockage, les deux SIREN
+d'essai non réservés ; base revenue à 14 comptes, 8 fiches pro,
+21 publications, 3 devis, 11 lignes, 4 ventilations, 1 lieu ; les empreintes
+`id:xmin` des devis, des lignes et des fiches pro, et les maxima de
+`modifie_le` et de `generation` des devis, **identiques au relevé d'avant la
+migration** : les brouillons du propriétaire n'ont pas été touchés. Les deux
+preuves SIRET d'essai restent : elles expirent d'elles-mêmes, le connecteur
+refuse un `delete`.
+
+Le compte rendu a été contrôlé par un second agent contre le journal :
+**fidèle**, mais l'égalité « au caractère près » des 46 comparaisons,
+l'« état du travail », plusieurs heures, le numéro croissant de chaque
+écriture (tenu par le code du script, et indirectement par l'absence
+d'OP015 et d'OP016) et le retrait réel des fichiers n'y sont pas portés
+(le retrait, depuis, l'est par le relevé de l'orchestrateur) ; et
+le refus de « vingt éléments » ne prouve pas la borne de 19 travaux, puisque
+`aucun` y est mêlé à d'autres clés (l'acceptation à 19, elle, est dans le
+journal).
+
+#### PAS ENCORE ESSAYÉ SUR L'IPHONE
+
+À la date du 24/11 au soir, rien de 2b-6 n'a été vu sur un téléphone : les
+huit questions du cahier (§7) sont dans `docs/A-FAIRE.md`, « Après l'étape
+2b-6 ».
+
+#### Ce qui n'a PAS été vérifié
+
+- **rien sur l'iPhone** : la carte et ses dix-neuf cases au pouce à 320
+  points, « Aucun de ces travaux » visible à l'ouverture, la rangée qui ne
+  saute pas, la case sous le bon travail, les deux formulaires (le
+  calendrier et ses flèches « année », « Joindre le certificat » par la
+  Photothèque, l'Appareil photo et Fichiers, le pavé numérique du SIRET, une
+  clé fausse refusée), les portes vers « Mon entreprise » et le retour,
+  VoiceOver (« coché » ou « checked », le nom des cases, l'annonce de
+  « Aucun », la phrase du plafond, le second appui de « Retirer », qui ne
+  s'annonce pas), Yoga, Hermes ;
+- **aucun écran sur la vraie base** : tout l'essai passe par `curl` ; la
+  file d'écriture n'a pas tourné (ses requêtes reproduites à la main), et la
+  PDF a été envoyée par `curl`, pas par `envoyerFichier` ;
+- **`mesure-devis` ne mesure pas les deux formulaires de « Mon
+  entreprise »** (SIRET à clé fausse, flèches « année », certificat,
+  « Non » qui annonce le retrait) : mesurés à part pendant la construction
+  (48 justes), hors du dépôt, pas rejouables ;
+- **un seul fuseau** : un téléphone hors de l'heure de Paris, et le passage
+  de minuit entre deux lectures ;
+- **la seule barrière d'un appel `security definer`** (le filtre `pro_id`
+  du rang 14 quand 2c l'appellera) : prouvée en local seulement, par le
+  cas 27 de l'essai 49-remise et le cas 34 de l'essai 46 (l'export) ;
+- sur la vraie base : un tableau à deux dimensions ou de borne basse autre
+  que 1, un doublon dans `energie_travaux` ou `energie_sans_label`, une date
+  `'infinity'`, l'ordre des sous-traitants dans le devis, un sous-traitant
+  dont le label couvre AUTRE CHOSE que les travaux du devis (la règle ne
+  les compare pas, à dessein), le chemin du justificatif suivi d'une espace
+  (seulement celui du certificat), la borne de 19 travaux isolée, le régime
+  franchise, un devis venu d'une demande ou d'une urgence, l'avis du label
+  (calculé au téléphone) ;
+- PostgreSQL 17 pour les verrous (mesurés en 16 seulement) ;
+- **le passage complet de `mesure-devis` après la relecture** (seulement
+  ses sections 2b-6), **le banc complet après les corrections** (seulement
+  leurs sabotages), et, après « pourront », rien d'autre que les 56
+  contrôles, un sabotage et les deux paquets reconstruits : `mesure-devis`
+  n'a pas tourné ;
+- la lecture qu'un juriste ferait des phrases de droit (J37 à J48, J61 à
+  J75).
+
+La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-6 — ce qui reste » ;
+`docs/PLAN-DEVIS.md` 10.24.
 
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 
