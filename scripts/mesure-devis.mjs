@@ -9609,7 +9609,7 @@ const SOUS_AUCUN_ST = 'Même alors, si une autre entreprise fait une partie de t
 const ANCIEN_SOUS_AUCUN_ST = 'dites-le à votre client';
 const REPOS_CHOIX = 'Chaque choix s’enregistre aussitôt.';
 const REPOS_CHAMP = 'Chaque champ s’enregistre quand vous le quittez.';
-const RETRAIT_SIGNE_COUTE = 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si vous détenez un label '
+const RETRAIT_SIGNE_COUTE = 'Les brouillons dont il était le seul à porter des travaux pourront vous redemander si vous détenez un label '
   + 'pour ces travaux.';
 const ST_DEMO = 'Isolations de démonstration';
 const SIRET_ST_DEMO = '000 004 960 00019';

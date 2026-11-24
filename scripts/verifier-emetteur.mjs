@@ -3337,7 +3337,7 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       ['retirer', 'A.5', 'Retirer ce signe de qualité'],
       /* DÉCISION DU PROPRIÉTAIRE, 24/11/2026 (relecture ÉCRAN-6), mot pour mot :
          ce que perdent les brouillons, au second appui de « Retirer ». */
-      ['retirerCoute', 'propriétaire 24/11', 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si '
+      ['retirerCoute', 'propriétaire 24/11', 'Les brouillons dont il était le seul à porter des travaux pourront vous redemander si '
         + 'vous détenez un label pour ces travaux.'],
     ];
     const A5_SOUS_TRAITANTS = [

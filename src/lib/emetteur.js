@@ -2092,8 +2092,11 @@ export const TEXTES_SIGNES_DE_QUALITE = Object.freeze({
      sous-traitant (« Les brouillons qui le citent le perdront. ») : un
      brouillon ne perd le label que si ce signe était le SEUL à porter ses
      travaux, et le point demande de DIRE si l'on en détient un, pas d'en
-     avoir un. */
-  retirerCoute: 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si vous détenez un label '
+     avoir un. « pourront », et non « vous redemanderont » : décision du
+     propriétaire du 24/11, après l'épreuve (ÉPR-1) — un brouillon qui
+     portait déjà « Je ne détiens pas de label » pour ce travail, ou dont
+     le client commande pour son entreprise, ne redemande rien. */
+  retirerCoute: 'Les brouillons dont il était le seul à porter des travaux pourront vous redemander si vous détenez un label '
     + 'pour ces travaux.',
 });
 
