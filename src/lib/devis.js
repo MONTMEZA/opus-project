@@ -3806,6 +3806,13 @@ export function libellesDesConditions(etatRegime, nature = null) {
 
 /** La ligne d'état de la carte quand rien ne se passe. */
 export const CARTE_AU_REPOS = 'Chaque champ s’enregistre quand vous le quittez.';
+/** …et celle d'une carte SANS AUCUN CHAMP À TAPER, dont chaque appui écrit
+ *  aussitôt — la carte « Énergie et label RGE », et elle seule aujourd'hui
+ *  (décision du propriétaire du 24/11/2026, relecture 2b-6, ÉCRAN-4) : sous
+ *  elle, « Chaque champ s’enregistre quand vous le quittez. » promettait un
+ *  geste qui n'existe pas. « Conditions » et « Déchets » ont des champs
+ *  tapés (`onBlur`) : elles gardent `CARTE_AU_REPOS`. */
+export const CARTE_AU_REPOS_SANS_CHAMP = 'Chaque choix s’enregistre aussitôt.';
 
 /**
  * LA LIGNE D'ÉTAT DE LA CARTE, sous sa barre (relecture ÉCRAN-2 du lot 2a) :
@@ -3813,16 +3820,19 @@ export const CARTE_AU_REPOS = 'Chaque champ s’enregistre quand vous le quittez
  * tout ce qui disait l'écriture — l'envoi en cours, l'échec, « Réessayer »,
  * « Relire ». Une écriture ratée se lisait « Ramenée à … ».
  * `{ ton: 'neutre' | 'echec', texte, action: 'reessayer' | 'relire' | null }`.
+ * `sansChampTape` (faux par défaut) ne change QUE la phrase au repos :
+ * `CARTE_AU_REPOS_SANS_CHAMP` pour une carte où rien ne se tape (ÉCRAN-4) ;
+ * l'envoi, l'échec et les totaux disent la même chose partout.
  */
 export function ligneDEtatDeLaCarte({
-  echec = null, reessayable = false, enCours = false, totauxIllisibles = false,
+  echec = null, reessayable = false, enCours = false, totauxIllisibles = false, sansChampTape = false,
 } = {}) {
   if (echec) return { ton: 'echec', texte: String(echec), action: reessayable ? 'reessayer' : null };
   if (totauxIllisibles) {
     return { ton: 'echec', texte: 'Les totaux n’ont pas pu être relus : ceux-ci peuvent dater.', action: 'relire' };
   }
   if (enCours) return { ton: 'neutre', texte: 'Enregistrement en cours…', action: null };
-  return { ton: 'neutre', texte: CARTE_AU_REPOS, action: null };
+  return { ton: 'neutre', texte: sansChampTape === true ? CARTE_AU_REPOS_SANS_CHAMP : CARTE_AU_REPOS, action: null };
 }
 
 /* Les champs que vise chaque geste de la carte. */
@@ -5052,10 +5062,16 @@ export const AVIS_DU_DEVIS = Object.freeze({
   /* 2b-6 (annexe A.6, T31) — le signe de qualité qui couvre un travail coché
      finit avant que ce devis puisse être signé : le jumeau de
      `avis_attestation_echeance`. `{intitule}` et `{fin}` se remplissent dans
-     `avisDuDevis`, depuis `finDuLabel`. */
+     `avisDuDevis`, depuis `finDuLabel`.
+     SA SECONDE PHRASE est celle du propriétaire, du 24/11/2026 (relecture
+     2b-6, DROIT6-6) : l'avis sonne ou se tait selon le délai d'exécution
+     (les trente jours de `finDuLabel`), et ne parlait que de la SIGNATURE
+     — or MaPrimeRénov' regarde la date des TRAVAUX. La règle qui le fait
+     sonner ne change PAS ; un délai écrit à la main (« Fin mars ») n'est
+     toujours pas lu. */
   avis_label_echeance:
-    'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé après cette date sans '
-    + 'que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.',
+    'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé, ou ses travaux réalisés, '
+    + 'après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.',
   avis_franchise_plafond: `Ce devis atteint à lui seul {montant}. ${SUITE_AVIS_FRANCHISE}`,
   avis_franchise_plafond_options: `Avec ses options, ce devis atteint {montant}. ${SUITE_AVIS_FRANCHISE}`,
 });
@@ -7914,9 +7930,16 @@ export const LE_LABEL = Object.freeze({
     aucun: 'Aucun de ces travaux',
     sousAucun: 'Seulement si ce devis ne comporte aucun des travaux ci-dessous.',
     /* P12 = 1 : la sous-traitance d'AUTRES travaux d'économies d'énergie
-       (L. 224-115 I ne pose pas la condition d'aide, DROIT-6). */
-    sousAucunSousTraitance: 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie de ce '
-      + 'devis, dites-le à votre client : la loi peut le demander.',
+       (L. 224-115 I ne pose pas la condition d'aide, DROIT-6).
+       RÉCRITE par la décision du propriétaire du 24/11/2026 (relecture
+       2b-6, DROIT6-3) : L. 224-115 III veut ces informations « dans le
+       contrat » — « dites-le à votre client » se contentait de l'oral —, et
+       L. 224-115 I vise aussi l'énergie renouvelable. Une ligne « Réserve »
+       du devis porte déjà un texte libre : c'est la place que la phrase
+       nomme. Mot pour mot, sa phrase à lui. */
+    sousAucunSousTraitance: 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie ou '
+      + 'd’énergie renouvelable de ce devis, écrivez-le sur le devis, par exemple dans une réserve : la loi peut le '
+      + 'demander.',
     /* « Ce que ce devis comporte, même fait par un sous-traitant » (relecture
        DROIT6-11, c) : la question et la loi visent les travaux du CONTRAT,
        sous-traités compris. « Ce que vous ferez » laissait un artisan qui

@@ -9600,6 +9600,17 @@ const AMENDE_ST = 'Pour un client qui commande à titre privé, sans ces informa
 /* L'aide de la sous-traitance, BORNÉE à titre privé (relecture DROIT6-5). */
 const AIDE_ST = 'Pour un client qui commande à titre privé, la loi demande de nommer, avant la signature, chaque entreprise qui fera '
   + 'une partie des travaux de ce devis, et de dire si elle détient un label RGE.';
+/* LES PHRASES DU PROPRIÉTAIRE, du 24/11/2026 (après la relecture de 2b-6),
+   mot pour mot : sous « Aucun de ces travaux » (DROIT6-3), la ligne d'état
+   au repos d'une carte sans champ tapé (ÉCRAN-4) et celle d'une carte à
+   champs, le second appui de « Retirer ce signe de qualité » (ÉCRAN-6). */
+const SOUS_AUCUN_ST = 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie ou d’énergie '
+  + 'renouvelable de ce devis, écrivez-le sur le devis, par exemple dans une réserve : la loi peut le demander.';
+const ANCIEN_SOUS_AUCUN_ST = 'dites-le à votre client';
+const REPOS_CHOIX = 'Chaque choix s’enregistre aussitôt.';
+const REPOS_CHAMP = 'Chaque champ s’enregistre quand vous le quittez.';
+const RETRAIT_SIGNE_COUTE = 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si vous détenez un label '
+  + 'pour ces travaux.';
 const ST_DEMO = 'Isolations de démonstration';
 const SIRET_ST_DEMO = '000 004 960 00019';
 const TITRE_SIGNES_ME = 'Vos signes de qualité (label RGE)';
@@ -9845,8 +9856,10 @@ await section('2b-6 : « Isolation des combles et des murs » — le point « La
   const fiche = await signesEtSousTraitantsDemo();
   const signe = fiche.labels[0];
   const COUVERT = `Déclaré dans « Mon entreprise » : ${signe.intitule}, valable jusqu’au ${jjmmaaaa(signe.valide_jusquau)}`;
+  /* La seconde phrase : celle du propriétaire, du 24/11/2026 (DROIT6-6). */
   const AVIS_LABEL = `Votre signe de qualité « ${signe.intitule} » est valable jusqu’au ${jjmmaaaa(signe.valide_jusquau)}. Si ce devis est `
-    + 'signé après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+    + 'signé, ou ses travaux réalisés, après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : '
+    + 'renouvelez-le à temps.';
   await allerAMesDevis();
   await ouvrirLeDevis('Isolation des combles et des murs');
   await ouvrirLaListe();
@@ -9963,7 +9976,7 @@ await section('2b-6 : la carte « Énergie et label RGE » sur un brouillon NEUF
       (await parLibelle(RETOUR_ENERGIE_DEVIS).count()) === 1 && t0.includes('‹ Devis') && t0.includes(INTRO_ENERGIE)
         && t0.includes(SOUS_TITRE_ENERGIE) && t0.includes(QUESTION_ENERGIE)
         && t0.includes('Seulement si ce devis ne comporte aucun des travaux ci-dessous.')
-        && t0.includes('Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie de ce devis, dites-le à votre client : la loi peut le demander.'));
+        && t0.includes(SOUS_AUCUN_ST));
     }
     await jugerLEnergie(`la carte « Énergie », à ${l}`);
     await capture(`2b6-carte-${l}`);
@@ -10395,6 +10408,156 @@ await section('2b-6 : un client qui commande pour son entreprise — « Sans obj
   await page.setViewportSize({ width: 393, height: 852 });
   await attendre(400);
   await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : les phrases du propriétaire du 24/11 — sous « Aucun de ces travaux », la ligne d’état au repos de la carte « Énergie » (et celle de « Conditions »), « N travaux couverts » dans « Mon entreprise », en lecture et en édition, et le second appui de « Retirer ce signe de qualité » (DROIT6-3, ÉCRAN-4, ÉCRAN-6, ÉCRAN-7)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  const fiche = await signesEtSousTraitantsDemo();
+  const signe = fiche.labels[0];
+  /* Le nombre ATTENDU, compté ICI sur la donnée lue (jamais par la fonction
+     de l'application), et écrit en toutes lettres : le signe de
+     démonstration porte UN travail. */
+  exiger(!!signe && Array.isArray(signe.categories) && new Set(signe.categories).size === 1,
+    `le signe de démonstration « ${signe && signe.intitule} » porte UN travail (${JSON.stringify(signe && signe.categories)})`);
+
+  /* 1. LA CARTE « ÉNERGIE », à titre privé : la phrase sous « Aucun »
+        (DROIT6-3), et au repos « Chaque choix s’enregistre aussitôt. »
+        (ÉCRAN-4) — l'ouvrir et la fermer n'écrit rien. */
+  await allerAMesDevis();
+  await ouvrirLeDevis('Isolation des combles et des murs');
+  await ecrituresEnRepos();
+  const e0 = await ecrituresDemo();
+  await ouvrirLEnergie();
+  await jusqua(async () => (await texteLu()).includes(REPOS_CHOIX), 4000);
+  const tE = await texteLu();
+  const iAucun = tE.indexOf(`\n${AUCUN_TRAVAUX}\n`);
+  const iSousAucun = tE.indexOf(SOUS_AUCUN_ST);
+  verifier('la carte « Énergie » : sous « Aucun de ces travaux », la phrase du propriétaire, ENTIÈRE (« ou d’énergie renouvelable », '
+    + '« écrivez-le sur le devis, par exemple dans une réserve »), une fois, et plus « dites-le à votre client » (DROIT6-3)',
+  iAucun >= 0 && iSousAucun > iAucun && tE.split(SOUS_AUCUN_ST).length === 2 && !tE.includes(ANCIEN_SOUS_AUCUN_ST),
+    tE.slice(Math.max(0, iAucun), iAucun + 400));
+  const iEtat = tE.indexOf(REPOS_CHOIX);
+  const iIntro = tE.indexOf(INTRO_ENERGIE);
+  verifier(`…au repos, sa ligne d’état dit « ${REPOS_CHOIX} », sous la barre et AVANT l’introduction — jamais « ${REPOS_CHAMP} » (ÉCRAN-4)`,
+    iEtat >= 0 && iIntro > iEtat && tE.split(REPOS_CHOIX).length === 2 && !tE.includes(REPOS_CHAMP),
+    tE.slice(0, Math.max(0, iIntro) + 40));
+  await capture('2b6-phrases-energie');
+  await fermerLEnergie();
+  verifier(`…ouverte puis fermée sans un appui : aucune écriture (${(await ecrituresDemo()) - e0})`, (await ecrituresDemo()) - e0 === 0);
+
+  /* 2. « CONDITIONS », une carte À CHAMPS TAPÉS : elle garde « Chaque champ
+        s’enregistre quand vous le quittez. ». */
+  await ouvrirConditionsDuDevis();
+  await jusqua(async () => (await texteLu()).includes(REPOS_CHAMP), 4000);
+  const tC = await texteLu();
+  verifier(`« Conditions », une carte à champs tapés, garde « ${REPOS_CHAMP} » au repos, jamais « ${REPOS_CHOIX} »`,
+    tC.split(REPOS_CHAMP).length === 2 && !tC.includes(REPOS_CHOIX), tC.slice(0, 200));
+  await fermerConditionsDevis();
+  await quitterLaSaisie();
+
+  /* 3. « MON ENTREPRISE », EN LECTURE : sous l'intitulé du signe, sa ligne
+        « 1 travail couvert », puis l'organisme et l'état (ÉCRAN-7). */
+  const ouvrirMonEntreprise = async () => {
+    await toucher(page.getByRole('tab', { name: 'Profil' }));
+    await attendre(900);
+    await toucher(parLibelle('Mon entreprise : identité et informations de devis'));
+    await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+    await jusqua(async () => (await texteLu()).includes(signe.intitule), 6000);
+    await attendre(400);
+  };
+  const fermerMonEntreprise = async () => {
+    await toucher(parLibelle('Fermer « Mon entreprise »'));
+    await attendre(500);
+    /* Rien n'a été changé : si la fiche demande quand même, on quitte. */
+    if ((await bouton('Quitter sans enregistrer').count()) > 0) await toucher(bouton('Quitter sans enregistrer'));
+    await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+    await attendre(400);
+  };
+  const rangeeLue = (attendu) => `\n${signe.intitule}\n${attendu}\n${signe.organisme}\n`;
+  await ouvrirMonEntreprise();
+  const tLec = await texteLu();
+  verifier(`« Mon entreprise », EN LECTURE : « ${signe.intitule} », puis « 1 travail couvert » sur SA ligne, puis l’organisme (ÉCRAN-7)`,
+    tLec.includes(rangeeLue('1 travail couvert')) && tLec.indexOf(TITRE_SIGNES_ME) >= 0
+    && tLec.indexOf(rangeeLue('1 travail couvert')) > tLec.indexOf(TITRE_SIGNES_ME),
+    tLec.slice(Math.max(0, tLec.indexOf(signe.intitule) - 10), tLec.indexOf(signe.intitule) + 160));
+
+  /* 4. EN ÉDITION : la même ligne, et le nom que lit VoiceOver la dit à la
+        même place (« intitulé, 1 travail couvert, organisme, état. Modifier
+        ce signe de qualité »). */
+  await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+  const rangeeSigne = page.getByRole('button', { name: new RegExp(`^${echapper(signe.intitule)}, `) }).first();
+  await rangeeSigne.waitFor({ timeout: 6000 });
+  await rangeeSigne.scrollIntoViewIfNeeded();
+  await attendre(400);
+  const nomEd = net(await rangeeSigne.getAttribute('aria-label'));
+  const texteEd = net(await rangeeSigne.innerText());
+  verifier(`…EN ÉDITION, la rangée : « 1 travail couvert » sous l’intitulé, et dans son nom à la même place (« ${nomEd} »)`,
+    nomEd.startsWith(`${signe.intitule}, 1 travail couvert, ${signe.organisme}, `) && nomEd.endsWith('. Modifier ce signe de qualité')
+    && texteEd.startsWith(`${signe.intitule}\n1 travail couvert\n${signe.organisme}\n`), JSON.stringify(texteEd));
+  await capture('2b6-phrases-signe-edition');
+
+  /* 5. LE SECOND APPUI DE « RETIRER CE SIGNE DE QUALITÉ », SANS CONFIRMER
+        (ÉCRAN-6) : la phrase du propriétaire à l'écran, et dans le nom du
+        bouton ; puis « Annuler » — rien n'est retiré. */
+  await toucher(rangeeSigne);
+  await page.getByText('Un signe de qualité (label RGE)', { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(500);
+  const avantRetrait = await texteLu();
+  verifier('le formulaire du signe : avant tout appui sur « Retirer », la phrase des brouillons n’est PAS dite',
+    !avantRetrait.includes(RETRAIT_SIGNE_COUTE) && (await bouton('Retirer ce signe de qualité').count()) === 1);
+  await toucher(bouton('Retirer ce signe de qualité'));
+  await attendre(400);
+  const apresRetrait = await texteLu();
+  const NOM_CONFIRMER = `Confirmer le retrait de ce signe de qualité. ${RETRAIT_SIGNE_COUTE}`;
+  verifier('…au PREMIER appui (le second reste à faire) : « Confirmer le retrait », la phrase du propriétaire ENTIÈRE à l’écran, une '
+    + 'fois, et le nom du bouton la dit (ÉCRAN-6)',
+  apresRetrait.split(RETRAIT_SIGNE_COUTE).length === 2 && (await bouton(NOM_CONFIRMER).count()) === 1
+    && (await bouton('Retirer ce signe de qualité').count()) === 0,
+    apresRetrait.slice(Math.max(0, apresRetrait.indexOf('Confirmer le retrait') - 10), apresRetrait.indexOf('Confirmer le retrait') + 200));
+  await capture('2b6-phrases-retirer-second-appui');
+  await toucher(bouton('Annuler'));
+  await jusqua(async () => (await page.getByText('Un signe de qualité (label RGE)', { exact: true }).count()) === 0, 4000);
+  await attendre(400);
+  const fApres = await signesEtSousTraitantsDemo();
+  verifier('…« Annuler » : rien n’est retiré, le signe de démonstration est IDENTIQUE', JSON.stringify(fApres) === JSON.stringify(fiche));
+  await fermerMonEntreprise();
+
+  /* 6. LE PLURIEL ET LES DOUBLONS, au navigateur : le signe posé par la porte
+        de l'application avec deux travaux, dont l'un écrit DEUX fois (la
+        base les laisse passer) → « 2 travaux couverts », en lecture et en
+        édition ; puis RENDU tel qu'il était. */
+  const autre = signe.categories[0] === 'isolation_combles' ? 'ventilation' : 'isolation_combles';
+  await page.evaluate(async ([g, a]) => {
+    const api = window.__opusModule('src/lib/api.js');
+    await api.enregistrerLabel({ organisme: g.organisme, intitule: g.intitule, reference: g.reference,
+      categories: [...g.categories, a, ...g.categories], valide_jusquau: g.valide_jusquau, justificatif_chemin: g.justificatif_chemin }, g.id);
+  }, [signe, autre]);
+  const f2 = await signesEtSousTraitantsDemo();
+  exiger(f2.labels[0].categories.length === 3 && new Set(f2.labels[0].categories).size === 2,
+    `le signe porte trois catégories, dont deux distinctes (${JSON.stringify(f2.labels[0].categories)})`);
+  await ouvrirMonEntreprise();
+  const tLec2 = await texteLu();
+  await toucher(bouton(/^(Compléter|Modifier) mes informations de devis$/));
+  await rangeeSigne.waitFor({ timeout: 6000 });
+  await rangeeSigne.scrollIntoViewIfNeeded();
+  await attendre(400);
+  const nomEd2 = net(await rangeeSigne.getAttribute('aria-label'));
+  verifier(`deux travaux, dont un doublé : « 2 travaux couverts », en lecture ET en édition (« ${nomEd2} »)`,
+    tLec2.includes(rangeeLue('2 travaux couverts')) && nomEd2.startsWith(`${signe.intitule}, 2 travaux couverts, ${signe.organisme}, `)
+    && !tLec2.includes('3 travaux couverts'));
+  await fermerMonEntreprise();
+  await page.evaluate(async (g) => {
+    const api = window.__opusModule('src/lib/api.js');
+    await api.enregistrerLabel({ organisme: g.organisme, intitule: g.intitule, reference: g.reference, categories: g.categories,
+      valide_jusquau: g.valide_jusquau, justificatif_chemin: g.justificatif_chemin }, g.id);
+  }, signe);
+  const f3 = await signesEtSousTraitantsDemo();
+  exiger(JSON.stringify(f3) === JSON.stringify(fiche), 'le signe de démonstration est rendu à l’identique');
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });

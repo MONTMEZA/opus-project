@@ -6975,6 +6975,58 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
       && /etat\.action === 'relire'[\s\S]{0,200}onPress=\{onRelireTotaux\}/.test(carte),
     `${n(rangVol.aDire)} ; ${json(etats.map((e) => e.action))}`);
 
+    /* LA PHRASE AU REPOS DÉPEND DE LA CARTE (décision du propriétaire du
+       24/11/2026, relecture 2b-6, ÉCRAN-4) — FAITE TOURNER : « Chaque champ
+       s’enregistre quand vous le quittez. » sous la carte « Énergie et label
+       RGE », qui n'a AUCUN champ à taper (chaque pastille, chaque case écrit
+       aussitôt), promettait un geste qui n'existe pas. `sansChampTape: true`
+       rend « Chaque choix s’enregistre aussitôt. » au repos, et RIEN d'autre
+       ne change (l'envoi, l'échec, les totaux) ; seul `true` le fait.
+       LA LISTE DES CARTES EST FERMÉE, relevée par `git ls-files` : une carte
+       qui appelle `ligneDEtatDeLaCarte` passe `sansChampTape: true` si et
+       seulement si elle n'a aucun champ tapé (ni `ChampLocal`, ni `Field`,
+       ni `TextInput`, ni `onBlur`). « Conditions » et « Déchets » ont des
+       champs tapés : elles gardent l'ancienne phrase. */
+    const reposChamp = D.ligneDEtatDeLaCarte({});
+    const reposChoix = D.ligneDEtatDeLaCarte({ sansChampTape: true });
+    const choixAutres = [D.ligneDEtatDeLaCarte({ sansChampTape: true, enCours: true }),
+      D.ligneDEtatDeLaCarte({ sansChampTape: true, echec: 'x', reessayable: true }),
+      D.ligneDEtatDeLaCarte({ sansChampTape: true, totauxIllisibles: true })];
+    const pasVrai = ['oui', 1, null, undefined, false].map((v) => D.ligneDEtatDeLaCarte({ sansChampTape: v }).texte);
+    const appelsDeLaLigne = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
+      .stdout.split('\n').filter((f) => f.endsWith('.js') && f !== 'src/lib/devis.js')
+      .map((f) => [f, sansCommentairesJs(lire(f))]).filter(([, c]) => /\bligneDEtatDeLaCarte\s*\(/.test(c));
+    const fautesDeLaLigne = appelsDeLaLigne.filter(([, c]) => {
+      const a = appels(c, 'ligneDEtatDeLaCarte');
+      const tape = /<ChampLocal\b|<Field\b|<TextInput\b|\bonBlur\s*=/.test(c);
+      const dit = a.length === 1 && /\bsansChampTape: true\b/.test(a[0]);
+      /* …ET LA CARTE REND CETTE LIGNE TELLE QUELLE (épreuve des phrases du
+         24/11, E22, E23) : `etat.texte` lu UNE fois, dans la balise de la
+         ligne d'état, et aucune des phrases de la ligne écrite en dur dans la
+         carte. Sans elle, l'ancienne phrase rendue en dur sous `sansChampTape:
+         true`, ou « Chaque choix… » PENDANT une écriture, restaient verts. */
+      const rendu = sansEspaces(c).split("<Text style={etat.ton === 'echec' ? s.etatEchec : s.etatTexte}>{etat.texte}</Text>").length === 2
+        && (c.match(/\betat\.texte\b/g) || []).length === 1 && !c.includes(D.CARTE_AU_REPOS) && !c.includes(D.CARTE_AU_REPOS_SANS_CHAMP)
+        && !/Enregistrement en cours/.test(c);
+      return a.length !== 1 || tape === dit || /\bsansChampTape\b/.test(a[0].replace(/\bsansChampTape: true\b/, '')) || !rendu;
+    }).map(([f]) => f);
+    verifier('ÉCRAN-4 (décision du propriétaire du 24/11/2026) : la ligne d’état AU REPOS, FAITE TOURNER — « Chaque champ s’enregistre '
+      + 'quand vous le quittez. » par défaut, « Chaque choix s’enregistre aussitôt. » avec `sansChampTape: true` et SEULEMENT `true`, '
+      + 'l’envoi, l’échec et les totaux inchangés ; la liste FERMÉE des cartes : « Énergie et label RGE » (aucun champ tapé) la passe, '
+      + '« Conditions » et « Déchets » (des champs tapés) non ; chacune REND la ligne par `etat.texte`, une fois, sans phrase en dur',
+    D.CARTE_AU_REPOS === 'Chaque champ s’enregistre quand vous le quittez.'
+      && D.CARTE_AU_REPOS_SANS_CHAMP === 'Chaque choix s’enregistre aussitôt.'
+      && json(reposChamp) === json({ ton: 'neutre', texte: D.CARTE_AU_REPOS, action: null })
+      && json(reposChoix) === json({ ton: 'neutre', texte: D.CARTE_AU_REPOS_SANS_CHAMP, action: null })
+      && choixAutres[0].texte === 'Enregistrement en cours…' && choixAutres[1].ton === 'echec' && choixAutres[1].action === 'reessayer'
+      && choixAutres[2].action === 'relire' && pasVrai.every((t) => t === D.CARTE_AU_REPOS)
+      && json(appelsDeLaLigne.map(([f]) => f).sort())
+        === json(['src/components/ConditionsDevis.js', 'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js'])
+      && fautesDeLaLigne.length === 0
+      && /\bsansChampTape: true\b/.test((appelsDeLaLigne.find(([f]) => f === 'src/components/EnergieDevis.js') || ['', ''])[1]),
+    `${json([reposChamp.texte, reposChoix.texte])} ; cartes : ${appelsDeLaLigne.map(([f]) => f.replace('src/components/', '')).join(', ')} ; `
+      + `fautives : ${fautesDeLaLigne.join(', ') || 'aucune'}`);
+
     /* CONTRE-VÉRIFICATION d'ÉCRAN-2 (mesurée au navigateur) : le pourcentage
        venait de la demande relue, mais la NATURE et la RETENUE venaient
        encore du devis de l'écran — après une écriture ratée, la rangée
@@ -9499,9 +9551,13 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
          fin, avant que le devis ait des chances d'être signé — `{intitule}`
          et `{fin}` se remplissent dans `avisDuDevis` (section « Le lot
          2b-6 »). L'aide ne promet aucune aide publique : elle dit qu'elle
-         peut se PERDRE. */
-      avis_label_echeance: 'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé après cette '
-        + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.',
+         peut se PERDRE. SA SECONDE PHRASE est celle du propriétaire, du
+         24/11/2026 (relecture 2b-6, DROIT6-6) : « signé, ou ses travaux
+         réalisés » — l'avis sonne selon le délai d'exécution, et parlait de la
+         seule signature. La règle qui le fait sonner ne change pas. */
+      avis_label_echeance: 'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé, ou ses '
+        + 'travaux réalisés, après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le '
+        + 'à temps.',
       avis_franchise_plafond: 'Ce devis atteint à lui seul {montant}. En franchise de TVA, les travaux comptent en principe comme des '
         + 'prestations de services : au-delà de 41 250,00 € sur une même année civile, la franchise cesse à partir '
         + 'du jour du dépassement ; au-delà de 37 500,00 €, vous n’y avez plus droit à partir du 1er janvier '
@@ -15051,8 +15107,9 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
   const deux = [L('a', ['isolation_combles'], '2026-12-10'), L('b', ['isolation_combles'], '2027-06-30', 'p/b.pdf', 'p', 'Plus tard')];
   const avis46 = (etat, labels = proche) => D.avisDuDevis({ devis: { ...COMPLET46, ...COMBLES, objet: 'Isolation' }, etat, labels,
     jour: '2026-11-24' }).filter((a) => a.cle === 'avis_label_echeance').map((a) => a.phrase);
-  const PHRASE_AVIS46 = 'Votre signe de qualité « Qualif d’essai » est valable jusqu’au 10/12/2026. Si ce devis est signé après cette '
-    + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+  /* La seconde phrase : celle du propriétaire, du 24/11/2026 (DROIT6-6). */
+  const PHRASE_AVIS46 = 'Votre signe de qualité « Qualif d’essai » est valable jusqu’au 10/12/2026. Si ce devis est signé, ou ses '
+    + 'travaux réalisés, après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
   verifier('g. `finDuLabel` et l’avis `avis_label_echeance`, FAITS TOURNER : une fin avant l’horizon (30 jours de validité) → l’avis, '
     + 'son intitulé et sa date ; au-delà, ou ÉGALE à l’horizon → rien ; le délai par défaut ajoute trente jours ; deux signes sur le '
     + 'même travail → le plus TARDIF (ÉCRAN-7) ; « pour son entreprise », « Aucun », sans validité, une liste pas lue, rien de couvert '
@@ -15082,8 +15139,8 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     labels: proche, jour: '2026-11-24', reponseVue: null }).filter((a) => a.cle === 'avis_label_echeance');
   const INTITULE_DOLLAR = "A$'B $& $` $$ {fin}";
   const avisDollar = avis46('liste', [L('a', ['isolation_combles'], '2026-12-10', 'p/a.pdf', 'p', INTITULE_DOLLAR)]);
-  const PHRASE_DOLLAR = `Votre signe de qualité « ${INTITULE_DOLLAR} » est valable jusqu’au 10/12/2026. Si ce devis est signé après cette `
-    + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+  const PHRASE_DOLLAR = `Votre signe de qualité « ${INTITULE_DOLLAR} » est valable jusqu’au 10/12/2026. Si ce devis est signé, ou ses `
+    + 'travaux réalisés, après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
   verifier('…deux travaux couverts par deux signes de fins différentes → la fin la plus PROCHE, dans les deux ordres (CTL6-9) ; un '
     + 'client « pour son entreprise » à l’écran, `reponseVue: null` → aucun avis (CTL6-11) ; un intitulé qui contient « $’ », « $& », '
     + '« $` », « $$ » et « {fin} » s’écrit TEL QUEL dans l’avis (ÉCRAN-3)',
@@ -15222,7 +15279,10 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
         corrigés (DROIT6-5 : l'aide de la sous-traitance bornée à titre
         privé ; DROIT6-8 : la seconde phrase de l'aide de la case ;
         DROIT6-11 c : « ce que ce devis comporte, même fait par un
-        sous-traitant »). Changer un texte de la carte se DÉCIDE ici. */
+        sous-traitant ») — et « propriétaire 24/11 » pour celui que le
+        propriétaire a récrit après la relecture (DROIT6-3 : « écrivez-le
+        sur le devis, par exemple dans une réserve », et l'énergie
+        renouvelable). Changer un texte de la carte se DÉCIDE ici. */
   const A3_LE_LABEL = [
     ['titre', 'A.3', 'Énergie et label RGE'],
     ['rangee', 'A.4', 'Énergie (label RGE)'],
@@ -15238,8 +15298,10 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     ['travaux.question', 'A.3', 'Quels travaux d’économies d’énergie ou d’énergie renouvelable ce devis comporte-t-il ?'],
     ['travaux.aucun', 'A.3', 'Aucun de ces travaux'],
     ['travaux.sousAucun', 'A.3', 'Seulement si ce devis ne comporte aucun des travaux ci-dessous.'],
-    ['travaux.sousAucunSousTraitance', 'A.3', 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie '
-      + 'de ce devis, dites-le à votre client : la loi peut le demander.'],
+    /* DÉCISION DU PROPRIÉTAIRE, 24/11/2026 (relecture DROIT6-3), mot pour mot. */
+    ['travaux.sousAucunSousTraitance', 'propriétaire 24/11', 'Même alors, si une autre entreprise fait une partie de travaux '
+      + 'd’économies d’énergie ou d’énergie renouvelable de ce devis, écrivez-le sur le devis, par exemple dans une réserve : la loi '
+      + 'peut le demander.'],
     ['travaux.aide', 'relecture', 'Cochez ce que ce devis comporte dans un logement, même fait par un sous-traitant, même une petite '
       + 'partie : un doublage isolé, une VMC, une fenêtre. Les deux dernières lignes sont comptées par prudence. Dans le doute, '
       + 'cochez : c’est le cas le plus sûr.'],
@@ -15282,12 +15344,13 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
   const clesNiv = [Object.keys(D.LE_LABEL).length, Object.keys(D.LE_LABEL.travaux || {}).length, Object.keys(D.LE_LABEL.label || {}).length,
     Object.keys(D.LE_LABEL.sousTraitance || {}).length];
   verifier(`j bis. la carte ENTIÈRE, MOT POUR MOT et dans l’ordre : les ${A3_LE_LABEL.length} textes de \`LE_LABEL\` (A.3, A.4, A.1, P14, `
-    + 'et les trois que la relecture a corrigés), et le nombre de clés de chaque niveau (13 · travaux 6 · label 11 · sous-traitance '
-    + '12) ; chaque objet GELÉ (relecture CTL6-1)',
+    + 'les trois que la relecture a corrigés, et celui que le propriétaire a récrit le 24/11 — DROIT6-3), et le nombre de clés de '
+    + 'chaque niveau (13 · travaux 6 · label 11 · sous-traitance 12) ; chaque objet GELÉ (relecture CTL6-1)',
   ecartsLL.length === 0 && egal(clesNiv, [13, 6, 11, 12]) && Object.isFrozen(D.LE_LABEL) && Object.isFrozen(D.LE_LABEL.travaux)
     && Object.isFrozen(D.LE_LABEL.label) && Object.isFrozen(D.LE_LABEL.sousTraitance)
     && A3_LE_LABEL.filter(([, src]) => src === 'relecture').length === 3
-    && A3_LE_LABEL.every(([, src]) => ['A.1', 'A.3', 'A.4', 'P14', 'relecture'].includes(src)),
+    && A3_LE_LABEL.filter(([, src]) => src === 'propriétaire 24/11').length === 1
+    && A3_LE_LABEL.every(([, src]) => ['A.1', 'A.3', 'A.4', 'P14', 'relecture', 'propriétaire 24/11'].includes(src)),
   ecartsLL.map((k) => `${k} : « ${(vusLL.find(([c]) => c === k) || [])[1]} »`).join(' | ') || `${json(clesNiv)}`);
   /* …et ce que la carte DIT, FAIT TOURNER : `phraseDuTravail` sur ses quatre
         états (et rien pour un état inconnu), un intitulé qui contient « $' »
@@ -16056,6 +16119,64 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
     + 'passe `labels={mesLabels}` et `sousTraitants={mesSousTraitants}` à la saisie, et les oublie sur un échec de la lecture',
   CEd.includes('<View style={s.ecran} accessibilityViewIsModal>') && OAe.includes('labels={mesLabels}')
     && OAe.includes('sousTraitants={mesSousTraitants}') && OAe.includes('setMesLabels(undefined)') && OAe.includes('setMesSousTraitants(undefined)'));
+
+  /* r. LA SECTION DE `mesure-devis` QUI MESURE LES PHRASES DU PROPRIÉTAIRE DU
+        24/11 TOURNE, ET ELLE CHERCHE LES PHRASES DU CODE (épreuve des phrases
+        du 24/11, banc E36 à E40 : la leçon de « g quater » et de N42 du lot 2a,
+        appliquée à cette section). Rien ne la tenait : neutralisée par un
+        `return`, rendue conditionnelle, une vérification affaiblie par un
+        `||`, ou une copie raccourcie, `npm run verifier` restait vert — et la
+        mesure n'y est pas. Or c'est elle SEULE qui voit, au navigateur, la
+        ligne d'état au repos de la carte « Énergie » rendue autrement que par
+        `etat.texte`, et l'ordre de lecture de « N travaux couverts ». On tient :
+        ses quatre copies en toutes lettres ÉGALES aux constantes du code ; la
+        section appelée telle quelle, au niveau du fichier, juste après la
+        précédente et juste avant celle des hauteurs ; ni `return` ni `||` dans
+        son corps ; ses dix `verifier(` et ses vérifications décisives écrites
+        telles quelles. */
+  {
+    const M47 = sansCommentairesJs(lire('scripts/mesure-devis.mjs'));
+    const copieDe = (nom) => {
+      const i = M47.indexOf(`\nconst ${nom} = `);
+      if (i < 0) return null;
+      return [...M47.slice(i, M47.indexOf(';\n', i)).matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((x) => x[1]).join('');
+    };
+    const TITRE_P = "await section('2b-6 : les phrases du propriétaire du 24/11";
+    const TITRE_H = "await section('2b-6 : la hauteur de la rangée « Énergie (label RGE) »";
+    const iP = M47.indexOf(TITRE_P);
+    const finP = iP > 0 ? M47.indexOf('\n});\n', iP) : -1;
+    const iH = M47.indexOf(TITRE_H);
+    const finPrec = iP > 0 ? M47.lastIndexOf('\n});\n', iP) : -1;
+    const avantP = finPrec >= 0 ? M47.slice(finPrec + 5, iP).trim() : 'absente';
+    const apresP = finP > 0 && iH > finP ? M47.slice(finP + 5, iH).trim() : 'absente';
+    const corpsP = iP > 0 && finP > iP ? M47.slice(iP, finP) : '';
+    const platP = sansEspaces(corpsP);
+    const COPIES_P = [['SOUS_AUCUN_ST', D.LE_LABEL.travaux.sousAucunSousTraitance], ['REPOS_CHOIX', D.CARTE_AU_REPOS_SANS_CHAMP],
+      ['REPOS_CHAMP', D.CARTE_AU_REPOS], ['RETRAIT_SIGNE_COUTE', E && E.TEXTES_SIGNES_DE_QUALITE.retirerCoute],
+      ['ANCIEN_SOUS_AUCUN_ST', 'dites-le à votre client']];
+    const fausses = COPIES_P.filter(([nom, attendu]) => !attendu || copieDe(nom) !== attendu).map(([nom]) => nom);
+    const VERIFS_P = [
+      'iAucun >= 0 && iSousAucun > iAucun && tE.split(SOUS_AUCUN_ST).length === 2 && !tE.includes(ANCIEN_SOUS_AUCUN_ST)',
+      'iEtat >= 0 && iIntro > iEtat && tE.split(REPOS_CHOIX).length === 2 && !tE.includes(REPOS_CHAMP)',
+      'tC.split(REPOS_CHAMP).length === 2 && !tC.includes(REPOS_CHOIX)',
+      "tLec.includes(rangeeLue('1 travail couvert'))",
+      "nomEd.startsWith(`${signe.intitule}, 1 travail couvert, ${signe.organisme}, `) && nomEd.endsWith('. Modifier ce signe de qualité')",
+      "!avantRetrait.includes(RETRAIT_SIGNE_COUTE) && (await bouton('Retirer ce signe de qualité').count()) === 1",
+      'const NOM_CONFIRMER = `Confirmer le retrait de ce signe de qualité. ${RETRAIT_SIGNE_COUTE}`;',
+      'apresRetrait.split(RETRAIT_SIGNE_COUTE).length === 2 && (await bouton(NOM_CONFIRMER).count()) === 1',
+      "tLec2.includes(rangeeLue('2 travaux couverts')) && nomEd2.startsWith(`${signe.intitule}, 2 travaux couverts, ${signe.organisme}, `)",
+    ];
+    const absentesP = VERIFS_P.filter((v) => !platP.includes(sansEspaces(v)));
+    verifier('r. les phrases du propriétaire du 24/11 : `mesure-devis` les cherche à l’écran EXACTEMENT comme le code les écrit (ses '
+      + 'copies `SOUS_AUCUN_ST`, `REPOS_CHOIX`, `REPOS_CHAMP`, `RETRAIT_SIGNE_COUTE` égales aux constantes), et sa section TOURNE — '
+      + 'appelée telle quelle, au niveau du fichier, entre la précédente et celle des hauteurs, sans `return` ni `||`, ses dix '
+      + 'vérifications et les décisives écrites telles quelles (épreuve des phrases, E36 à E40)',
+    fausses.length === 0 && iP > 0 && M47.split(TITRE_P).length === 2 && M47[iP - 1] === '\n' && avantP === '' && apresP === ''
+      && corpsP.length > 5000 && !/\breturn\b/.test(corpsP) && !/\|\|/.test(corpsP)
+      && (corpsP.match(/\bverifier\(/g) || []).length === 10 && absentesP.length === 0,
+    `copies fausses : ${fausses.join(', ') || 'aucune'} ; section ${iP > 0} ; avant ${json(avantP.slice(0, 80))} ; après `
+      + `${json(apresP.slice(0, 80))} ; vérifications absentes : ${absentesP.length}`);
+  }
 }
 
 console.log('');

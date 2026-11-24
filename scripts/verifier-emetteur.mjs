@@ -3241,7 +3241,8 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       + '`libelleEtatDuLabel` et `libelleEtatDuSousTraitant`, sur leur propre ligne ; aucun écran ne recompose un état à la main ; le '
       + 'sous-traitant montre son SIRET (ÉCRAN-11)',
     /const etatLu = libelleEtatDuLabel\(g\);/.test(secL) && /<Text style=\{s\.optionAide\}>\{etatLu\}<\/Text>/.test(secL)
-      && /accessibilityLabel=\{`\$\{g\.intitule\}, \$\{g\.organisme\}, \$\{etatLu\}\. \$\{TEXTES_SIGNES_DE_QUALITE\.modifier\}`\}/.test(secL)
+      && /accessibilityLabel=\{`\$\{g\.intitule\}, \$\{couverts \? `\$\{couverts\}, ` : ''\}\$\{g\.organisme\}, \$\{etatLu\}\. `\s*\+ TEXTES_SIGNES_DE_QUALITE\.modifier\}/
+        .test(secL)
       && /const etatLu = libelleEtatDuSousTraitant\(st\);/.test(secS) && /const siretLu = siretDuSousTraitant\(st\);/.test(secS)
       && /<Text style=\{s\.optionAide\}>\{etatLu\}<\/Text>/.test(secS) && /\{siretLu\}/.test(secS)
       && /libelleEtatDuLabel\(g\)/.test(lectureL) && /libelleEtatDuSousTraitant\(st\)/.test(lectureS)
@@ -3278,7 +3279,7 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
         && p.length > 0 && !/\d/.test(p))
       && /const X = TEXTES_SIGNES_DE_QUALITE;/.test(fg) && /const X = TEXTES_SOUS_TRAITANTS;/.test(fs)
       && ['formulaire', 'trompeuse', 'organisme', 'intitule', 'reference', 'travaux', 'travauxAide', 'fin', 'finAide', 'joindre',
-        'joindreAide'].every((k) => fg.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fg.includes(`: X.${k}}`))
+        'joindreAide', 'retirerCoute'].every((k) => fg.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fg.includes(`: X.${k}}`))
       && ['formulaire', 'tiers', 'nom', 'siret', 'detient', 'non', 'oui', 'retraitDuLabel', 'travaux', 'fin', 'joindre', 'joindreAide',
         'retirerCoute'].every((k) => fs.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fs.includes(`: X.${k}}`)),
     `FicheLabel : ${phG.join(', ')} | ${enDurs(fg).join(', ')} ; FicheSousTraitant : ${phS.join(', ')} | ${enDurs(fs).join(', ')}`);
@@ -3296,7 +3297,8 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
        brouillons qui le citent le perdront. »). Ils sont FIGÉS tels qu'ils
        sont, et SONT À MONTRER AU PROPRIÉTAIRE : un texte composé sans lui
        n'est pas une décision à lui. Les changer se décide, ici et dans
-       `emetteur.js`, dans le même lot. */
+       `emetteur.js`, dans le même lot. « propriétaire 24/11 » : écrit par
+       lui, après la relecture (ÉCRAN-6, la phrase du second appui). */
     const A5_SIGNES_DE_QUALITE = [
       ['section', 'A.5', 'Vos signes de qualité (label RGE)'],
       ['phrase', 'A.5', 'Les signes de qualité que vous détenez, avec leur certificat. Opus s’en sert pour vos devis de '
@@ -3333,6 +3335,10 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
         + 'déclarez que ceux que vous détenez, pour les travaux qu’ils couvrent.'],
       ['enregistrer', 'composé', 'Enregistrer ce signe de qualité'],
       ['retirer', 'A.5', 'Retirer ce signe de qualité'],
+      /* DÉCISION DU PROPRIÉTAIRE, 24/11/2026 (relecture ÉCRAN-6), mot pour mot :
+         ce que perdent les brouillons, au second appui de « Retirer ». */
+      ['retirerCoute', 'propriétaire 24/11', 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si '
+        + 'vous détenez un label pour ces travaux.'],
     ];
     const A5_SOUS_TRAITANTS = [
       ['section', 'A.5', 'Vos sous-traitants'],
@@ -3382,11 +3388,14 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     verifier('…les textes des deux sections et des deux formulaires (`TEXTES_SIGNES_DE_QUALITE`, `TEXTES_SOUS_TRAITANTS`), MOT POUR MOT '
       + `et dans l’ordre : l’annexe A.5 du cahier 2b-6 (A.3 pour trois d’entre eux), ${composesA5} textes composés par la construction, `
       + 'figés tels quels et À MONTRER AU PROPRIÉTAIRE (banc 2b-6, S27), et les deux aides des pièces BORNÉES à titre privé par la '
-      + 'relecture (DROIT6-5), et la phrase sous « Non » d’un sous-traitant (DROIT6-8)',
+      + 'relecture (DROIT6-5), et la phrase sous « Non » d’un sous-traitant (DROIT6-8), et la phrase du second appui de « Retirer ce '
+      + 'signe de qualité », écrite par le propriétaire le 24/11 (ÉCRAN-6)',
     !!E && Object.isFrozen(TL) && Object.isFrozen(TS) && ecartsA5.length === 0
-      && A5_SIGNES_DE_QUALITE.length === 26 && A5_SOUS_TRAITANTS.length === 29
-      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].every(([, src]) => ['A.5', 'A.3', 'composé', 'relecture'].includes(src))
-      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].filter(([, src]) => src === 'relecture').length === 3,
+      && A5_SIGNES_DE_QUALITE.length === 27 && A5_SOUS_TRAITANTS.length === 29
+      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].every(([, src]) => ['A.5', 'A.3', 'composé', 'relecture', 'propriétaire 24/11']
+        .includes(src))
+      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].filter(([, src]) => src === 'relecture').length === 3
+      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].filter(([, src]) => src === 'propriétaire 24/11').length === 1,
     ecartsA5.map((k) => {
       const [nom, cle] = k.split('.');
       const o = nom === 'TEXTES_SIGNES_DE_QUALITE' ? TL : TS;
@@ -3424,6 +3433,71 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     verifier('…ce que dit la ligne d’un signe de qualité et d’un sous-traitant dans « Mon entreprise », FAIT TOURNER sur ses onze états '
       + '(`libelleEtatDuLabel`, `libelleEtatDuSousTraitant`), en toutes lettres : jamais « Valable » sans le certificat (relecture CTL6-2)',
     !!E && ETATS_A5.length === 11 && ecartsEtats.length === 0, ecartsEtats.join(' | ') || '11 états');
+    /* « N TRAVAUX COUVERTS » (décision du propriétaire du 24/11/2026,
+       relecture ÉCRAN-7) : la rangée d'un signe ne disait pas ce qu'il
+       couvre. Le NOMBRE, pas les libellés — FAIT TOURNER : zéro, une, deux,
+       des doublons (la base les laisse passer, ils ne comptent qu'une fois),
+       les dix-neuf, une catégorie inconnue, ce qui n'est pas une liste. Hors
+       d'une liste de 1 à 19 clés CONNUES, `null` : la ligne se tait plutôt
+       que de dire un nombre faux (aucune catégorie, la base ne la range pas ;
+       une clé inconnue, une application en retard compterait trop peu). */
+    const TC = E ? E.travauxCouvertsDuLabel : () => 'absente';
+    const CLES_19_TC = (await import('../src/data/travaux-energie.js')).TRAVAUX_ENERGIE.map((t) => t.cle);
+    const SORTIES_TC = [
+      ['un travail', TC({ categories: ['fenetres'] }), '1 travail couvert'],
+      ['deux travaux', TC({ categories: ['fenetres', 'ventilation'] }), '2 travaux couverts'],
+      ['trois, dans le désordre', TC({ categories: ['isolation_combles', 'chaudiere', 'desembouage'] }), '3 travaux couverts'],
+      ['un doublon (deux fois la même)', TC({ categories: ['fenetres', 'fenetres'] }), '1 travail couvert'],
+      ['deux et un doublon', TC({ categories: ['fenetres', 'ventilation', 'fenetres'] }), '2 travaux couverts'],
+      ['les dix-neuf', TC({ categories: CLES_19_TC }), '19 travaux couverts'],
+      ['les dix-neuf, doublés', TC({ categories: [...CLES_19_TC, ...CLES_19_TC] }), '19 travaux couverts'],
+      ['zéro (liste vide)', TC({ categories: [] }), null],
+      ['zéro (`null`)', TC({ categories: null }), null],
+      ['zéro (absente)', TC({}), null],
+      ['un signe absent', TC(null), null],
+      ['pas une liste', TC({ categories: 'fenetres' }), null],
+      ['une clé inconnue seule', TC({ categories: ['photovoltaique_v2'] }), null],
+      ['une clé inconnue parmi des connues', TC({ categories: ['fenetres', 'ventilation', 'inconnue'] }), null],
+      ['« aucun » (la clé du devis, pas d’un signe)', TC({ categories: ['aucun'] }), null],
+      ['un élément vide', TC({ categories: ['fenetres', null] }), null],
+      ['un élément qui n’est pas une chaîne', TC({ categories: ['fenetres', 7] }), null],
+    ];
+    const ecartsTC = SORTIES_TC.filter(([, vu, attendu]) => vu !== attendu).map(([n, vu]) => `${n} : ${JSON.stringify(vu)}`);
+    verifier('« N travaux couverts », FAIT TOURNER (`travauxCouvertsDuLabel`, décision du propriétaire du 24/11, ÉCRAN-7) : « 1 travail '
+      + 'couvert », « 2 travaux couverts »… « 19 travaux couverts », les DISTINCTES seulement ; `null` (rien ne s’écrit) pour zéro, une '
+      + 'clé inconnue, ce qui n’est pas une liste — jamais un nombre faux',
+    !!E && typeof E.travauxCouvertsDuLabel === 'function' && CLES_19_TC.length === 19 && SORTIES_TC.length === 17
+      && ecartsTC.length === 0, ecartsTC.join(' | ') || `${SORTIES_TC.length} cas`);
+    /* …ET LES DEUX RANGÉES L'ÉCRIVENT, sur SA ligne, juste sous l'intitulé
+       — en lecture comme en édition —, et en édition dans le nom que lit
+       VoiceOver, à la même place : une seule écriture (la fonction),
+       jamais « travaux couverts » composé à la main dans l'écran, et la
+       ligne d'état (ETATS_A5) intacte, juste après l'organisme. */
+    const LIGNE_TC = '{!!couverts && <Text style={s.optionAide}>{couverts}</Text>}';
+    const rangeesTC = [
+      /* EN LECTURE, la rangée N'EST PAS UN GROUPE (épreuve des phrases du 24/11,
+         E30) : sa vue s'ouvre telle quelle, juste avant l'intitulé — un
+         `accessible` et un nom posés là feraient lire à VoiceOver ce nom
+         SEUL, sans « N travaux couverts ». */
+      ['lecture', lectureL, '<View key={String(g.id)} style={s.lieuLu}> <Text style={s.optionLibelle}>{g.intitule}</Text>', '<Text style={s.optionAide}>{g.organisme}</Text>',
+        '<Text style={s.optionAide}>{libelleEtatDuLabel(g)}</Text>'],
+      ['édition', secL, '<Text style={s.optionLibelle}>{g.intitule}</Text>',
+        '<Text style={s.optionAide} numberOfLines={2}>{g.organisme}</Text>', '<Text style={s.optionAide}>{etatLu}</Text>'],
+    ].filter(([, c, intitule, organisme, etat]) => {
+      const x = c.replace(/\s+/g, ' ');
+      const suite = [intitule, LIGNE_TC, organisme, etat].join(' ');
+      return !(x.split('const couverts = travauxCouvertsDuLabel(g);').length === 2 && x.split(suite).length === 2
+        && x.split(LIGNE_TC).length === 2);
+    }).map(([n]) => n);
+    /* « travail couvert » aussi (épreuve des phrases du 24/11, E41) : le
+       singulier composé à la main échappait à `travaux? couverts?`. */
+    const faitMain = [fe, me].some((c) => /trava(?:il|ux?) couverts?/i.test(c.replace(/TEXTES_[A-Z_]+\.\w+/g, '')));
+    verifier('…les DEUX rangées d’un signe (lecture ET édition) écrivent « N travaux couverts » sur SA ligne, juste sous l’intitulé, '
+      + 'avant l’organisme et l’état (`travauxCouvertsDuLabel(g)`, une fois chacune) ; en édition, le nom lu par VoiceOver le dit à la '
+      + 'même place ; aucun écran ne le compose à la main',
+    rangeesTC.length === 0 && !faitMain
+      && /import \{[^}]*\btravauxCouvertsDuLabel\b[^}]*\} from '\.\.\/lib\/emetteur';/.test(fe),
+    `rangées fautives : ${rangeesTC.join(', ') || 'aucune'} ; composé à la main : ${faitMain}`);
     /* CHAQUE CHAMP PORTE LA LONGUEUR DE SA COLONNE (CTL-11 de 2b-5), et le
        SIRET 17 caractères : quatorze chiffres et les trois espaces que
        `formaterSiret` pose. */
@@ -3530,6 +3604,28 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
         .test(corps(c, 'const retirer = async () => {')) && /onOccupe\(oui\)/.test(c))
       && /\{confirmeRetrait && <Text style=\{s\.aide\}>\{X\.retirerCoute\}<\/Text>\}/.test(fs),
     'une ligne qui pointerait un fichier pas encore arrivé serait un lien mort ; un double appui enverrait deux suppressions');
+    /* …ET LE SECOND APPUI DIT CE QU'IL COÛTE, dans les DEUX formulaires,
+       sous la même garde (décision du propriétaire du 24/11/2026, relecture
+       ÉCRAN-6, pour le signe de qualité) : sous `{!!label && (` ou
+       `{!!sousTraitant && (`, le bouton dit `Confirmer le retrait de ce …
+       ${X.retirerCoute}` à VoiceOver, puis la phrase s'écrit à l'écran,
+       sous `confirmeRetrait`, juste après le bouton — une fois. */
+    const blocRetrait = (c, garde) => {
+      const x = c.replace(/\s+/g, ' ');
+      const i = x.indexOf(`{!!${garde} && ( <> <Pressable onPress={retirer}`);
+      const fin = i >= 0 ? x.indexOf('</> )}', i) : -1;
+      return fin > i ? x.slice(i, fin + 6) : '';
+    };
+    const retraitsDits = [[fg, 'label', 'signe de qualité'], [fs, 'sousTraitant', 'sous-traitant']].filter(([c, garde, nom]) => {
+      const b = blocRetrait(c, garde);
+      return b.includes(`? \`Confirmer le retrait de ce ${nom}. \${X.retirerCoute}\``)
+        && b.endsWith('</Pressable> {confirmeRetrait && <Text style={s.aide}>{X.retirerCoute}</Text>} </> )}')
+        && c.split('X.retirerCoute').length === 3;
+    });
+    verifier('…le SECOND appui de « Retirer » dit ce que perdent les brouillons, dans les DEUX formulaires et sous la même garde : le '
+      + 'nom du bouton (« Confirmer le retrait de ce signe de qualité. » / « … de ce sous-traitant. » et `X.retirerCoute`), puis la '
+      + 'phrase à l’écran, juste après, sous `confirmeRetrait` (ÉCRAN-6, décision du propriétaire du 24/11)',
+    retraitsDits.length === 2, `formulaires conformes : ${retraitsDits.map(([, g]) => g).join(', ') || 'aucun'}`);
     /* LA NOUVELLE LISTE REMONTE À LA SAISIE APRÈS CHAQUE ÉCRITURE RÉUSSIE
        (relecture ÉCRAN-1 de 2b-6, 24/11/2026) : sans elle, la carte
        « Énergie et label RGE » (et « Déchets ») montrait l'ANCIENNE liste

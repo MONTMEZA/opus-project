@@ -289,24 +289,32 @@ const FicheLabel = forwardRef(function FicheLabel({
       />
       <BtnMini outline label="Annuler" onPress={onAnnuler} style={s.cible} />
 
-      {/* RETIRER DEMANDE DEUX APPUIS, et le second le DIT. Le certificat,
-          lui, reste dans l'espace privé : aucun client ne retire un fichier
-          de `documents` (lot S-a) — il part avec le compte. */}
+      {/* RETIRER DEMANDE DEUX APPUIS, et le second DIT ce qu'il coûte
+          (`X.retirerCoute`, la phrase du propriétaire du 24/11/2026,
+          relecture 2b-6, ÉCRAN-6), à l'écran ET dans le nom du bouton, comme
+          le lieu et le sous-traitant : un brouillon dont ce signe était le
+          seul à porter des travaux redemandera si l'on détient un label.
+          Aucun devis n'est récrit. Le certificat, lui, reste dans l'espace
+          privé : aucun client ne retire un fichier de `documents` (lot S-a)
+          — il part avec le compte. */}
       {!!label && (
-        <Pressable
-          onPress={retirer}
-          disabled={occupe}
-          accessibilityRole="button"
-          accessibilityLabel={confirmeRetrait
-            ? 'Confirmer le retrait de ce signe de qualité'
-            : X.retirer}
-          style={({ pressed }) => [s.retirer, confirmeRetrait && s.retirerConfirme, pressed && APPUI.plein]}
-        >
-          <Trash size={15} color={confirmeRetrait ? surFond(C.bad) : C.bad} />
-          <Text style={[s.retirerTexte, confirmeRetrait && s.retirerTexteConfirme]}>
-            {confirmeRetrait ? 'Confirmer le retrait' : X.retirer}
-          </Text>
-        </Pressable>
+        <>
+          <Pressable
+            onPress={retirer}
+            disabled={occupe}
+            accessibilityRole="button"
+            accessibilityLabel={confirmeRetrait
+              ? `Confirmer le retrait de ce signe de qualité. ${X.retirerCoute}`
+              : X.retirer}
+            style={({ pressed }) => [s.retirer, confirmeRetrait && s.retirerConfirme, pressed && APPUI.plein]}
+          >
+            <Trash size={15} color={confirmeRetrait ? surFond(C.bad) : C.bad} />
+            <Text style={[s.retirerTexte, confirmeRetrait && s.retirerTexteConfirme]}>
+              {confirmeRetrait ? 'Confirmer le retrait' : X.retirer}
+            </Text>
+          </Pressable>
+          {confirmeRetrait && <Text style={s.aide}>{X.retirerCoute}</Text>}
+        </>
       )}
     </View>
   );

@@ -238,10 +238,17 @@ const EnergieDevis = forwardRef(function EnergieDevis({
   const etatSousTraitants = etatDesLieux(regime, sousTraitants);
   const sousTraitantsMontres = Array.isArray(sousTraitants) ? sousTraitants : [];
   const choisis = Array.isArray(c.sousTraitants) ? c.sousTraitants : [];
+  /* `sansChampTape` (décision du propriétaire du 24/11/2026, relecture 2b-6,
+     ÉCRAN-4) : cette carte n'a AUCUN champ à taper — chaque pastille et
+     chaque case écrivent aussitôt —, et « Chaque champ s’enregistre quand
+     vous le quittez. » y promettait un geste qui n'existe pas. Au repos elle
+     dit « Chaque choix s’enregistre aussitôt. » ; « Conditions » et
+     « Déchets », qui ont des champs tapés, gardent l'autre phrase. */
   const etat = ligneDEtatDeLaCarte({
     echec: etatEcriture && etatEcriture.echec,
     reessayable: !!(etatEcriture && etatEcriture.reessayable),
     enCours: !!(etatEcriture && etatEcriture.enCours),
+    sansChampTape: true,
   });
 
   return (

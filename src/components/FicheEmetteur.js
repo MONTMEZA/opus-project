@@ -61,6 +61,7 @@ import {
   parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance, attestationJointe,
   libelleDuTypeDeLieu,
   TEXTES_SIGNES_DE_QUALITE, TEXTES_SOUS_TRAITANTS, libelleEtatDuLabel, libelleEtatDuSousTraitant, siretDuSousTraitant,
+  travauxCouvertsDuLabel,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
@@ -330,8 +331,10 @@ export function LieuxDeDepotEnLecture({ lieux = null, onModifier, onReessayer })
  * VOS SIGNES DE QUALITÉ ET VOS SOUS-TRAITANTS, EN LECTURE (étape 2b-6,
  * cahier §3.6 et annexe A.5) — les deux blocs que « Mon entreprise » montre
  * avant d'entrer en édition, sur le modèle EXACT de `LieuxDeDepotEnLecture`.
- * Ils MONTRENT chaque ligne (son intitulé ou son nom ; dessous, son état,
- * par la MÊME fonction que la rangée de l'édition : `libelleEtatDuLabel`,
+ * Ils MONTRENT chaque ligne (son intitulé ou son nom ; pour un signe, juste
+ * dessous, « N travaux couverts » — `travauxCouvertsDuLabel`, décision du
+ * propriétaire du 24/11/2026, ÉCRAN-7 — ; dessous, son état, par la MÊME
+ * fonction que la rangée de l'édition : `libelleEtatDuLabel`,
  * `libelleEtatDuSousTraitant`) ; vides, ils le disent ; NON LUS, ils le
  * disent, avec « Réessayer » — jamais « aucun signe de qualité » d'une liste
  * qu'on n'a pas lue (T24). L'en-tête imprimé (`ApercuEntete`) ne les imprime
@@ -356,13 +359,22 @@ export function SignesDeQualiteEnLecture({ labels = null, onModifier, onReessaye
         </>
       )}
       {lus && labels.length === 0 && <Text style={s.texteBloc}>{X.vide}</Text>}
-      {lus && labels.map((g) => (
-        <View key={String(g.id)} style={s.lieuLu}>
-          <Text style={s.optionLibelle}>{g.intitule}</Text>
-          <Text style={s.optionAide}>{g.organisme}</Text>
-          <Text style={s.optionAide}>{libelleEtatDuLabel(g)}</Text>
-        </View>
-      ))}
+      {/* « N TRAVAUX COUVERTS », SA LIGNE À ELLE, juste sous l'intitulé (décision
+          du propriétaire du 24/11/2026, relecture 2b-6, ÉCRAN-7) : une seule
+          écriture, `travauxCouvertsDuLabel` — `null` (rien ne s'écrit)
+          plutôt qu'un nombre faux. Comme ses voisines, une ligne de texte que
+          VoiceOver lit dans l'ordre. */}
+      {lus && labels.map((g) => {
+        const couverts = travauxCouvertsDuLabel(g);
+        return (
+          <View key={String(g.id)} style={s.lieuLu}>
+            <Text style={s.optionLibelle}>{g.intitule}</Text>
+            {!!couverts && <Text style={s.optionAide}>{couverts}</Text>}
+            <Text style={s.optionAide}>{g.organisme}</Text>
+            <Text style={s.optionAide}>{libelleEtatDuLabel(g)}</Text>
+          </View>
+        );
+      })}
       {lus && (
         <Pressable
           onPress={onModifier}
@@ -1095,9 +1107,11 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
       {/* 7 ter. — VOS SIGNES DE QUALITÉ (label RGE) (étape 2b-6, cahier §3.6 et
           annexe A.5) : rangés une fois ici, retrouvés ensuite par la carte
           « Énergie et label RGE » de chaque devis, travail par travail. Sur
-          le modèle des lieux : une rangée par signe (son intitulé ; son
-          organisme ; SON ÉTAT, sur sa propre ligne, par
-          `libelleEtatDuLabel` — la même règle que la carte du devis, tenue
+          le modèle des lieux : une rangée par signe (son intitulé ; le
+          NOMBRE de travaux qu'il couvre, « 1 travail couvert », « 3 travaux
+          couverts », par `travauxCouvertsDuLabel` — décision du propriétaire
+          du 24/11/2026, ÉCRAN-7 — ; son organisme ; SON ÉTAT, sur sa propre
+          ligne, par `libelleEtatDuLabel` — la même règle que la carte du devis, tenue
           ensemble par `verifier-emetteur`, CTL-8 ; un chevron), puis
           « Ajouter un signe de qualité ». Chacun s'écrit À PART de
           « Enregistrer mes informations de devis », par son propre formulaire
@@ -1114,16 +1128,22 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
             {labels.length === 0 && <Aide>{TEXTES_SIGNES_DE_QUALITE.vide}</Aide>}
             {labels.map((g) => {
               const etatLu = libelleEtatDuLabel(g);
+              /* « N travaux couverts » (ÉCRAN-7, décision du 24/11/2026) :
+                 sa ligne à elle, sous l'intitulé, et dans le nom que
+                 VoiceOver lit, à la même place ; tue quand elle est `null`. */
+              const couverts = travauxCouvertsDuLabel(g);
               return (
                 <Pressable
                   key={String(g.id)}
                   onPress={() => onOuvrirLabel(g)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${g.intitule}, ${g.organisme}, ${etatLu}. ${TEXTES_SIGNES_DE_QUALITE.modifier}`}
+                  accessibilityLabel={`${g.intitule}, ${couverts ? `${couverts}, ` : ''}${g.organisme}, ${etatLu}. `
+                    + TEXTES_SIGNES_DE_QUALITE.modifier}
                   style={({ pressed }) => [s.assurance, pressed && APPUI.discret]}
                 >
                   <View style={s.optionTexte}>
                     <Text style={s.optionLibelle}>{g.intitule}</Text>
+                    {!!couverts && <Text style={s.optionAide}>{couverts}</Text>}
                     <Text style={s.optionAide} numberOfLines={2}>{g.organisme}</Text>
                     <Text style={s.optionAide}>{etatLu}</Text>
                   </View>

@@ -1925,6 +1925,34 @@ export function libelleEtatDuLabel(label, jour = jourLocal(new Date())) {
 }
 
 /**
+ * COMBIEN DE TRAVAUX UN SIGNE DE QUALITÉ COUVRE, sur SA ligne dans « Mon
+ * entreprise » — « 1 travail couvert », « 3 travaux couverts » (décision du
+ * propriétaire du 24/11/2026, relecture 2b-6, ÉCRAN-7 : le NOMBRE, pas les
+ * libellés — les dix-neuf joints font plus de mille caractères). Une ligne
+ * À ELLE, sous l'intitulé : la ligne d'état (`libelleEtatDuLabel`) ne change
+ * pas.
+ * Les catégories DISTINCTES de la liste fermée (`TRAVAUX_ENERGIE`) — un
+ * doublon, que la base laisse passer, ne compte qu'une fois. Et `null`, la
+ * ligne se TAIT, dans tout autre cas, parce qu'un nombre faux ne doit
+ * jamais s'afficher :
+ *   - aucune catégorie (`null`, pas une liste, une liste vide) : la base ne
+ *     range pas un signe sans travaux (`emetteur_label_complet_check`), et
+ *     le formulaire ne l'envoie pas — « 0 travail couvert » serait faux sur
+ *     un signe qu'on n'aurait pas lu en entier ;
+ *   - une catégorie INCONNUE de cette version d'Opus (une clé ajoutée
+ *     demain à la liste, lue par une application en retard ; la base la
+ *     refuse aujourd'hui, `emetteur_label_categories_check`) : compter les
+ *     seules connues dirait MOINS que le signe ne couvre.
+ */
+export function travauxCouvertsDuLabel(label) {
+  const liste = label ? label.categories : null;
+  if (!Array.isArray(liste) || liste.length === 0) return null;
+  if (!liste.every((c) => typeof c === 'string' && CLES_DES_TRAVAUX.includes(c))) return null;
+  const n = new Set(liste).size;
+  return n > 1 ? `${n} travaux couverts` : '1 travail couvert';
+}
+
+/**
  * L'ÉTAT D'UN SOUS-TRAITANT, sur SA ligne dans « Mon entreprise » (annexe
  * A.5) — `'detient'`, `'justificatif'`, `'expire'`, `'non'` ou `'a_dire'`,
  * au jour LOCAL :
@@ -2059,6 +2087,14 @@ export const TEXTES_SIGNES_DE_QUALITE = Object.freeze({
     + 'que ceux que vous détenez, pour les travaux qu’ils couvrent.',
   enregistrer: 'Enregistrer ce signe de qualité',
   retirer: 'Retirer ce signe de qualité',
+  /* Au SECOND appui de « Retirer » — la phrase du propriétaire, du
+     24/11/2026 (relecture 2b-6, ÉCRAN-6), sur le modèle du lieu et du
+     sous-traitant (« Les brouillons qui le citent le perdront. ») : un
+     brouillon ne perd le label que si ce signe était le SEUL à porter ses
+     travaux, et le point demande de DIRE si l'on en détient un, pas d'en
+     avoir un. */
+  retirerCoute: 'Les brouillons dont il était le seul à porter des travaux vous redemanderont si vous détenez un label '
+    + 'pour ces travaux.',
 });
 
 export const TEXTES_SOUS_TRAITANTS = Object.freeze({
