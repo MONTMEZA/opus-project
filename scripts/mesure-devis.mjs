@@ -9597,6 +9597,9 @@ const RELIRE_ST = 'Relire vos sous-traitants';
 const AMENDE_LABEL = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul, et votre entreprise '
   + 's’expose à une amende administrative pouvant aller jusqu’à 15 000 €, 75 000 € pour une société.';
 const AMENDE_ST = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.';
+/* L'aide de la sous-traitance, BORNÉE à titre privé (relecture DROIT6-5). */
+const AIDE_ST = 'Pour un client qui commande à titre privé, la loi demande de nommer, avant la signature, chaque entreprise qui fera '
+  + 'une partie des travaux de ce devis, et de dire si elle détient un label RGE.';
 const ST_DEMO = 'Isolations de démonstration';
 const SIRET_ST_DEMO = '000 004 960 00019';
 const TITRE_SIGNES_ME = 'Vos signes de qualité (label RGE)';
@@ -9870,8 +9873,26 @@ await section('2b-6 : « Isolation des combles et des murs » — le point « La
     + '« Oui », aucun choisi',
   (await caseEnergie(DECLARATION_LABEL).count()) === 1 && !(await coche(caseEnergie(DECLARATION_LABEL).first()))
     && !(await choisie(pastilleEnergie('Sous-traitance : Non'))) && !(await choisie(pastilleEnergie('Sous-traitance : Oui'))));
-  verifier('l’amende du label et celle de la sous-traitance (sans amende), ENTIÈRES, à la fin',
-    t.includes(AMENDE_LABEL) && t.includes(AMENDE_ST) && t.indexOf(AMENDE_ST) > t.indexOf(AMENDE_LABEL));
+  /* RELECTURE DROIT6-1 : CHACUNE SOUS SA RUBRIQUE. Posée à la fin, après
+     l'aide de la sous-traitance, l'amende du label se lisait comme la
+     sanction de la sous-traitance, que la loi ne punit que de nullité. */
+  const iTitreLabel = t.indexOf(`\n${TITRE_LABEL}\n`);
+  const iPorteSignes = t.indexOf('\nMes signes de qualité\n', iTitreLabel);
+  const iTitreST = t.indexOf(`\n${TITRE_SOUS_TRAITANCE}\n`, iTitreLabel);
+  const iAmendeLabel = t.indexOf(AMENDE_LABEL);
+  const iAideST = t.indexOf(AIDE_ST);
+  const iAmendeST = t.indexOf(AMENDE_ST, iTitreST);
+  verifier('l’amende du label, ENTIÈRE, SOUS « Votre label RGE » — après « Mes signes de qualité », AVANT « Sous-traitance » ; la nullité '
+    + 'de la sous-traitance (sans amende), ENTIÈRE, juste APRÈS l’aide de la sous-traitance, bornée à titre privé — chacune sous sa '
+    + 'rubrique (relecture DROIT6-1, DROIT6-5)',
+  iTitreLabel >= 0 && iPorteSignes > iTitreLabel && iAmendeLabel > iPorteSignes && iTitreST > iAmendeLabel
+    && iAideST > iTitreST && iAmendeST > iAideST && t.split(AMENDE_LABEL).length === 2,
+    JSON.stringify({ iTitreLabel, iPorteSignes, iAmendeLabel, iTitreST, iAideST, iAmendeST }));
+  /* RELECTURE ÉCRAN-2 : la case dit pour QUEL travail, et garde son aide. */
+  const nomsCases = await caseEnergie(DECLARATION_LABEL).evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`…la case « Je ne détiens pas… » NOMME son travail pour VoiceOver, et garde son aide (${JSON.stringify(nomsCases)})`,
+    nomsCases.length === 1 && nomsCases[0].startsWith(`${DECLARATION_LABEL} — Isolation des combles perdus. Cochez seulement si c’est vrai`)
+    && nomsCases[0].endsWith('Opus ne l’écrit pas encore.'));
   await capture('2b6-isolation-carte');
   /* La case touchée, puis décochée : rien ne reste écrit. */
   const e0 = await ecrituresDemo();
@@ -9974,6 +9995,21 @@ await section('2b-6 : la carte « Énergie et label RGE » sur un brouillon NEUF
     + '« Je ne détiens pas… » — un travail déclaré dans « Mon entreprise » n’en a pas',
   !!d2 && JSON.stringify(d2.travaux) === '["ventilation","isolation_exterieur"]' && (await caseEnergie(DECLARATION_LABEL).count()) === 1
     && (await texteLu()).includes('Déclaré dans « Mon entreprise » : '));
+  /* RELECTURE ÉCRAN-2 : DEUX cases « Je ne détiens pas… », DEUX noms —
+     chacun dit pour QUEL travail, et garde l'aide. Le travail ajouté pour
+     la mesure est retiré aussitôt. */
+  await toucher(caseEnergie('Pompe à chaleur pour le chauffage').first());
+  await attendre(PAUSE_DEMO + 400);
+  const nomsDeux = await caseEnergie(DECLARATION_LABEL).evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
+  verifier(`deux travaux sans signe : DEUX cases, DEUX noms différents, chacun avec son travail et l’aide (${JSON.stringify(nomsDeux)})`,
+    nomsDeux.length === 2 && nomsDeux[0] !== nomsDeux[1]
+    && nomsDeux.some((n) => n.startsWith(`${DECLARATION_LABEL} — Pompe à chaleur pour le chauffage. Cochez seulement`))
+    && nomsDeux.some((n) => n.startsWith(`${DECLARATION_LABEL} — Ventilation mécanique. Cochez seulement`)));
+  await toucher(caseEnergie('Pompe à chaleur pour le chauffage').first());
+  await attendre(PAUSE_DEMO + 400);
+  const d2b = await energieEnBase(OBJET_ENERGIE);
+  exiger(!!d2b && JSON.stringify(d2b.travaux) === '["ventilation","isolation_exterieur"]',
+    `la pompe à chaleur retirée : la base revient à « ventilation, isolation des murs » (${JSON.stringify(d2b && d2b.travaux)})`);
   await fermerLEnergie();
   verifier(`la rangée : « ${libelleEnergie(RESUMES_ENERGIE.deux)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.deux), await resumeEnergie());
   await noterHauteurEnergie(393, 'neuf : label, sous-traitance');
@@ -10201,6 +10237,127 @@ await section('2b-6 : dix sous-traitants au plus par devis — le onzième n’�
     const api = window.__opusModule('src/lib/api.js');
     for (const id of ids) await api.retirerSousTraitant(id);
   }, ajoutes);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+/* RELECTURE ÉCRAN-1 DE 2b-6 (24/11/2026) : CE QUI VIENT D'ÊTRE RANGÉ DANS
+   « MON ENTREPRISE » SE VOIT DANS LA CARTE DÈS LA FERMETURE — sans attendre
+   la relecture qui la suit (`lireRegime`, discrète, GARDE les listes
+   pendant qu'elle lit). Mesuré AVANT la correction : pendant toute cette
+   relecture (jusqu'à 8 s sur la vraie base), la carte montrait l'ANCIENNE
+   liste — « Aucun de vos signes de qualité ne porte ces travaux » et la
+   case « Je ne détiens pas… » sous un travail qu'un signe venait de
+   couvrir ; un sous-traitant retiré encore coché. La réponse de la
+   relecture est RETENUE (`__opusRegime.retenir`), la carte et la rangée
+   sont lues AVANT de la relâcher, puis après. Deux écritures par la VRAIE
+   porte de l'application : le signe de démonstration MODIFIÉ (il porte
+   aussi les combles), puis rendu ; un sous-traitant d'essai RETIRÉ. */
+const sousLeTravail = async (libelle) => {
+  const t = await texteLu();
+  const j = t.indexOf(`\n${TITRE_LABEL}\n`);
+  if (j < 0) return null;
+  const i = t.indexOf(`\n${libelle}\n`, j);
+  return i < 0 ? null : t.slice(i, i + 230);
+};
+await section('2b-6 : ce qui vient d’être rangé dans « Mon entreprise » se voit dans la carte DÈS la fermeture, la relecture retenue — un signe modifié, un sous-traitant retiré (relecture ÉCRAN-1)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  const fiche = await signesEtSousTraitantsDemo();
+  const signe = fiche.labels[0];
+  exiger(!!signe && !signe.categories.includes('isolation_combles'), 'le signe de démonstration ne porte pas les combles');
+
+  /* 1. LE SIGNE MODIFIÉ PAR LA PORTE : il porte désormais les combles. */
+  await allerAMesDevis();
+  await ouvrirLeDevis('Isolation des combles et des murs');
+  await ouvrirLEnergie();
+  const avant = await sousLeTravail('Isolation des combles perdus');
+  verifier('avant : sous les combles, « Aucun de vos signes de qualité ne porte ces travaux. » et UNE case « Je ne détiens pas… »',
+    (avant || '').includes(ABSENT_LABEL) && (await caseEnergie(DECLARATION_LABEL).count()) === 1, JSON.stringify(avant));
+  await toucher(parLibelle(PORTE_SIGNES));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  await toucher(page.getByRole('button', { name: new RegExp(`^${echapper(signe.intitule)}, `) }).first());
+  await page.getByText('Un signe de qualité (label RGE)', { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(500);
+  await toucher(page.locator('[aria-modal="true"]').last().getByRole('switch', { name: /^Isolation des combles perdus/ }).first());
+  await attendre(300);
+  await toucher(bouton('Enregistrer ce signe de qualité'));
+  await jusqua(async () => (await bouton('Ajouter un signe de qualité').count()) === 1, 6000);
+  await attendre(700);
+  const f2 = await signesEtSousTraitantsDemo();
+  exiger(f2.labels[0].categories.includes('isolation_combles'), 'le signe enregistré par la porte porte les combles');
+  await page.evaluate(() => { window.__opusRegime.retenir = true; window.__opusRegime.retenues = []; });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await attendre(400);
+  const retenues1 = await page.evaluate(() => window.__opusRegime.retenues.length);
+  const pendant = await sousLeTravail('Isolation des combles perdus');
+  const casesPendant = await caseEnergie(DECLARATION_LABEL).count();
+  const rangeePendant = await resumeEnergie();
+  verifier(`PENDANT la relecture retenue (${retenues1}) : sous les combles, « Déclaré dans « Mon entreprise » : ${signe.intitule}… », AUCUNE `
+    + `case « Je ne détiens pas… » (${casesPendant}), et la rangée « ${libelleEnergie(RESUMES_ENERGIE.st)} » (${rangeePendant})`,
+  retenues1 >= 1 && (pendant || '').includes(`Déclaré dans « Mon entreprise » : ${signe.intitule}`) && casesPendant === 0
+    && rangeePendant === libelleEnergie(RESUMES_ENERGIE.st), JSON.stringify(pendant));
+  await capture('2b6-ecran1-signe-pendant');
+  await page.evaluate(() => { window.__opusRegime.retenir = false; window.__opusRegime.retenues.splice(0).forEach((f) => f()); });
+  await attendre(800);
+  const apres = await sousLeTravail('Isolation des combles perdus');
+  verifier('…la relecture relâchée : toujours « Déclaré dans « Mon entreprise » », toujours aucune case',
+    (apres || '').includes('Déclaré dans « Mon entreprise »') && (await caseEnergie(DECLARATION_LABEL).count()) === 0);
+  await fermerLEnergie(RETOUR_ENERGIE_DEVIS);
+  /* Le signe est RENDU tel qu'il était (l'invariant de la fin le compare). */
+  await page.evaluate(async (g) => {
+    const api = window.__opusModule('src/lib/api.js');
+    await api.enregistrerLabel({ organisme: g.organisme, intitule: g.intitule, reference: g.reference, categories: g.categories,
+      valide_jusquau: g.valide_jusquau, justificatif_chemin: g.justificatif_chemin }, g.id);
+  }, signe);
+  const f3 = await signesEtSousTraitantsDemo();
+  exiger(JSON.stringify(f3.labels) === JSON.stringify(fiche.labels), 'le signe de démonstration est rendu à l’identique');
+  await quitterLaSaisie();
+
+  /* 2. UN SOUS-TRAITANT RETIRÉ PAR LA PORTE, sur le brouillon de mesure (sa
+        sous-traitance dit « Oui »). */
+  const NOM_ST = 'Sous-traitant relecture';
+  const idST = await page.evaluate(async (nom) => {
+    const api = window.__opusModule('src/lib/api.js');
+    const pose = await api.enregistrerSousTraitant({ raison_sociale: nom, siret: '00000496000019', label_detient: false });
+    return pose.id;
+  }, NOM_ST);
+  exiger(!!idST, 'un sous-traitant d’essai rangé par la porte de l’application');
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  await ouvrirLEnergie();
+  verifier(`avant : la case « ${NOM_ST} » est dans la carte`, (await caseEnergie(NOM_ST).count()) === 1);
+  await toucher(parLibelle(PORTE_ST));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  await toucher(page.getByRole('button', { name: new RegExp(`^${echapper(NOM_ST)}, `) }).first());
+  await page.getByText('Un sous-traitant', { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(500);
+  await toucher(bouton(/^Retirer ce sous-traitant/));
+  await attendre(300);
+  await toucher(bouton(/^Confirmer le retrait de ce sous-traitant/));
+  await jusqua(async () => (await texteLu()).includes('Sous-traitant retiré.'), 6000);
+  await attendre(600);
+  const fST = await signesEtSousTraitantsDemo();
+  exiger(!fST.sousTraitants.some((x) => String(x.id) === String(idST)), 'le sous-traitant d’essai est retiré par la porte');
+  await page.evaluate(() => { window.__opusRegime.retenir = true; window.__opusRegime.retenues = []; });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await attendre(400);
+  const retenues2 = await page.evaluate(() => window.__opusRegime.retenues.length);
+  const casePendant = await caseEnergie(NOM_ST).count();
+  verifier(`PENDANT la relecture retenue (${retenues2}) : la case du sous-traitant RETIRÉ n’est plus dans la carte (${casePendant}), celle `
+    + `de « ${ST_DEMO} » y est toujours`,
+  retenues2 >= 1 && casePendant === 0 && (await caseEnergie(ST_DEMO).count()) === 1);
+  await page.evaluate(() => { window.__opusRegime.retenir = false; window.__opusRegime.retenues.splice(0).forEach((f) => f()); });
+  await attendre(800);
+  verifier('…la relecture relâchée : toujours pas de case pour le sous-traitant retiré', (await caseEnergie(NOM_ST).count()) === 0);
+  await fermerLEnergie();
+  await quitterLaSaisie();
   await page.setViewportSize(tailleAvant);
   await attendre(400);
 });

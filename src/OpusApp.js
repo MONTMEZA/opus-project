@@ -4078,9 +4078,15 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      jusqu'au … » se TAIT (`avisDuDevis`). GARDÉES pendant une relecture,
      REMPLACÉES à la réponse, et REMISES à `undefined` sur un échec : un avis
      d'échéance calculé sur des assurances qu'on n'a pas pu relire ne doit pas
-     rester (critique ÉCRAN-19). `recevoirEmetteur` n'y touche PAS : la
-     fermeture de « Mon entreprise » relit (`lireRegime`), et cette lecture
-     est la dernière — aucun `surEmetteur` ne vient après la fermeture. */
+     rester (critique ÉCRAN-19). `recevoirEmetteur` n'y touche PAS : « Mon
+     entreprise » ne fait remonter que la fiche et ses trois listes (lieux,
+     signes de qualité, sous-traitants), jamais les assurances, que la
+     fermeture RELIT (`lireRegime`). Ce n'est donc PAS « la dernière
+     lecture » : la lecture de « Mon entreprise » peut répondre après sa
+     fermeture (mesuré en 2b-5), et ses écritures réussies remontent leur
+     liste avant (relecture ÉCRAN-1 de 2b-6). Une date de fin d'attestation
+     changée là garde son ancienne valeur dans la saisie le temps de la
+     relecture — un cousin connu, à `docs/A-FAIRE.md`. */
   const [mesAssurances, setMesAssurances] = useState(undefined);
   /* MES LIEUX DE DÉPÔT DES DÉCHETS (2b-5, cahier T12 et T12 bis), lus par la
      MÊME lecture que le régime et les assurances (`monRegimeEtSaDate`) —

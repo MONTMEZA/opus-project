@@ -3556,7 +3556,7 @@ console.log('\nÉtape 2b-6 — le label RGE et les sous-traitants : les textes e
   const histoire2b6 = finHist6 < 0 ? '' : plat(sourceLegal2b6.slice(iHist6, finHist6));
   const ATTENDUS_HISTOIRE = ['vos signes de qualité', 'vos sous-traitants', 'ne pas détenir de label RGE',
     'si une autre entreprise fera une partie ou la totalité', 'DES PIÈCES DE TIERS', '« Combien de temps »',
-    '« Les clients que vous enregistrez »', "la garantie reste limitée au carnet et aux devis", '« Ce qui est interdit »',
+    '« Les clients que vous enregistrez »', 'elle dit elle-même ce qui vaut', 'DROIT6-11', '« Ce qui est interdit »',
     "RIEN D'AUTRE", "« Ce que les autres voient de vous » ne change pas d'un mot", '« Vos tarifs et vos prix » non plus',
     'LA MÊME LIMITE', 'ré-accepter', '2019/1150'];
   verifier('le bloc d’historique de 2b-6 nomme les faits (signes de qualité, sous-traitants, l’énergie des devis, les pièces de tiers, les sous-traitants dans « Les clients », l’interdiction), « RIEN D’AUTRE » et la limite connue',
@@ -3694,7 +3694,13 @@ console.log('\nÉtape 2b-6 — le label RGE et les sous-traitants : les textes e
      accompagner vos devis. */
   verifier('« Vos documents professionnels » range dans l’espace PRIVÉ les certificats de vos signes de qualité et les justificatifs de vos sous-traitants, et leur donne la finalité de l’attestation : accompagner vos devis',
     documents.includes('l’attestation d’assurance, les certificats de vos signes de qualité et les justificatifs de vos sous-traitants sont rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus seulement')
-    && documents.includes('pour l’attestation d’assurance, les certificats et les justificatifs que vous joignez dans « Mon entreprise », à accompagner vos devis.'),
+    /* Relecture DROIT6-4 : DEUX phrases de finalité, celle des pièces du
+       profil (le badge, une demande d'ouverture) et celle des pièces de
+       « Mon entreprise » (vos devis) — une énumération collective prêtait
+       au justificatif d'un sous-traitant une finalité qu'il n'a pas. */
+    && documents.includes('Les pièces de votre profil (le Kbis ou l’extrait d’immatriculation, l’attestation d’assurance) servent au contrôle du badge vérifié et à l’examen d’une demande d’ouverture de compte professionnel')
+    && documents.includes('L’attestation d’assurance, les certificats de vos signes de qualité et les justificatifs de vos sous-traitants que vous joignez dans « Mon entreprise » servent à accompagner vos devis.')
+    && !/certificats[^.]*badge|justificatifs de vos sous-traitants[^.]*badge/.test(documents),
     documents.slice(0, 200));
 
   /* « COMBIEN DE TEMPS » : une pièce retirée d'une fiche reste (aucun
@@ -3710,8 +3716,13 @@ console.log('\nÉtape 2b-6 — le label RGE et les sous-traitants : les textes e
      porte la garantie, la phrase vient APRÈS elle, la garantie ne nomme
      pas les sous-traitants, et la phrase qui suit la dit limitée au carnet
      et aux devis (la contradiction de DROIT-11). */
-  const PHRASE_ST = 'Il en va de même de vos sous-traitants : leur nom, leur numéro SIRET et leur justificatif concernent une autre entreprise, qui n’a souvent pas de compte Opus.';
-  const LIMITE = 'Mais la garantie qui précède ne vaut que pour votre carnet et vos devis : le justificatif d’un sous-traitant, comme vos autres documents professionnels, est aussi lisible par l’administration d’Opus.';
+  /* Relecture DROIT6-11 (24/11/2026) : la phrase ne dit plus « il en va de
+     même » (qui se lisait comme l'extension de la garantie, puis la retirait
+     EN ENTIER) ; elle dit pièce par pièce ce qui vaut. Et la branche du
+     contrat a SA forme, à la troisième personne. */
+  const PHRASE_ST = 'Le nom, le numéro SIRET et le justificatif d’une entreprise à qui vous sous-traitez des travaux concernent cette autre entreprise, qui n’a souvent pas de compte Opus : vous en êtes là aussi le responsable du traitement.';
+  const LIMITE = 'Son nom et son numéro SIRET ne sont lisibles que de vous ; son justificatif, comme vos autres documents professionnels, l’est aussi de l’administration d’Opus, et reste dans votre espace privé jusqu’à la suppression de votre compte.';
+  const PHRASE_ST_CONTRAT = 'Le nom, le numéro SIRET et le justificatif d’une entreprise à qui l’artisan sous-traite des travaux concernent cette autre entreprise, qui n’a souvent pas de compte Opus.';
   const autreBranche = await (async () => {
     const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
@@ -3730,18 +3741,25 @@ console.log('\nÉtape 2b-6 — le label RGE et les sous-traitants : les textes e
       rmSync(dossier, { recursive: true, force: true });
     }
   })();
-  verifier('« Les clients que vous enregistrez » nomme les sous-traitants, mot pour mot, dans ses DEUX branches (avec et sans contrat de sous-traitance)',
-    clients.includes(PHRASE_ST) && autreBranche.length > 0 && autreBranche.includes(PHRASE_ST),
+  /* Chaque branche porte SA forme, et la branche à la troisième personne ne
+     dit jamais « vos sous-traitants » (relecture DROIT6-11, b) ; aucune ne
+     dit « il en va de même » (a). */
+  const brancheDuContrat = [clients, autreBranche].find((t) => t.includes('L’artisan en est le responsable')) || '';
+  const brancheAffichee = [clients, autreBranche].find((t) => t.includes('Ce qui est déjà garanti')) || '';
+  verifier('« Les clients que vous enregistrez » nomme les entreprises à qui l’artisan sous-traite, mot pour mot, dans ses DEUX branches (avec et sans contrat de sous-traitance), chacune à SA personne, et jamais « il en va de même »',
+    autreBranche.length > 0 && brancheAffichee.includes(PHRASE_ST) && brancheDuContrat.includes(PHRASE_ST_CONTRAT)
+    && !/vos sous-traitants|il en va de même de vos/i.test(brancheDuContrat)
+    && ![clients, autreBranche].some((t) => /Il en va de même de vos sous-traitants/.test(t)),
     autreBranche.length === 0 ? 'l’autre branche n’a pas pu être lue (le drapeau `contratSousTraitance` est introuvable)'
-      : `attendu dans les deux : « ${PHRASE_ST} »`);
+      : `attendu : « ${PHRASE_ST} » (branche affichée) et « ${PHRASE_ST_CONTRAT} » (branche du contrat)`);
   const avecGarantie = [clients, autreBranche].find((t) => t.includes('Ce qui est déjà garanti')) || '';
   const iGarantie = avecGarantie.indexOf('Ce qui est déjà garanti');
   const iFinGarantie = avecGarantie.indexOf('ni dans l’espace d’administration', iGarantie);
   const iPhraseSt = avecGarantie.indexOf(PHRASE_ST);
   const garantie = iGarantie < 0 || iPhraseSt < 0 ? '' : avecGarantie.slice(iGarantie, iPhraseSt);
-  verifier('…et, dans la branche qui porte la garantie, la phrase vient APRÈS « … ni dans l’espace d’administration », la garantie ne nomme aucun sous-traitant, et la phrase suivante la dit limitée au carnet et aux devis — le justificatif est lisible par l’administration',
+  verifier('…et, dans la branche qui porte la garantie, la phrase vient APRÈS « … ni dans l’espace d’administration », la garantie ne nomme aucun sous-traitant, et la phrase suivante dit pièce par pièce ce qui vaut : le nom et le SIRET lisibles de l’artisan seul, le justificatif aussi de l’administration, gardé jusqu’à la suppression du compte (relecture DROIT6-11)',
     iGarantie >= 0 && iFinGarantie > iGarantie && iPhraseSt > iFinGarantie
-    && !/vos sous-traitants|d’un sous-traitant|leur justificatif/.test(garantie)
+    && !/vos sous-traitants|d’un sous-traitant|leur justificatif|sous-traitez/.test(garantie)
     && avecGarantie.indexOf(LIMITE) > iPhraseSt
     && avecGarantie.slice(iPhraseSt, avecGarantie.indexOf(LIMITE)).indexOf('\n') < 0,
     iGarantie < 0 ? 'aucune branche ne porte « Ce qui est déjà garanti » : ce contrôle a perdu sa cible'

@@ -240,6 +240,10 @@ const FicheSousTraitant = forwardRef(function FicheSousTraitant({
       </View>
       {sous('label_detient')}
       {detient === false && avaitUnLabel && <Text style={s.avis}>{X.retraitDuLabel}</Text>}
+      {/* Sous « Non », ce qu'Opus ne fait PAS encore (relecture DROIT6-8) :
+          L. 224-115 II demande aussi de dire au client ce que l'absence de
+          label d'un sous-traitant change pour ses aides. */}
+      {detient === false && <Text style={s.aide}>{X.nonAide}</Text>}
 
       {detient === true && (
         <>

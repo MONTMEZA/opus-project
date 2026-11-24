@@ -2015,6 +2015,9 @@ export function categoriesApresAppui(liste, cle) {
  *     règle d'Opus, c'est une phrase qui dit de cocher les deux ;
  *   - la pratique commerciale trompeuse (DROIT-16, les mots de L. 121-4 2°) ;
  *   - une page de l'annuaire RGE n'est pas délivrée par l'organisme (DROIT-16) ;
+ *   - « La loi demande », dans les deux aides des pièces, est BORNÉ au
+ *     client qui commande à titre privé (relecture DROIT6-5) :
+ *     L. 224-114 et L. 224-115 ne visent que le consommateur ;
  *   - le justificatif d'un sous-traitant se FOURNIT au client (DROIT-16),
  *     et ce sont des données d'une AUTRE entreprise, rangées sous la
  *     responsabilité de l'artisan, qui partent avec SON compte (DROIT-11) ;
@@ -2047,8 +2050,9 @@ export const TEXTES_SIGNES_DE_QUALITE = Object.freeze({
   fin: 'Valable jusqu’au',
   finAide: 'La date de fin de validité écrite sur votre certificat ; sans date, demandez-la à l’organisme.',
   joindre: 'Joindre le certificat',
-  joindreAide: 'Le certificat ou la décision que l’organisme vous a remis. La loi demande de le joindre au devis ; une '
-    + 'page de l’annuaire RGE n’est pas délivrée par l’organisme et n’en tient pas lieu.',
+  joindreAide: 'Le certificat ou la décision que l’organisme vous a remis. Pour un client qui commande à titre privé, la '
+    + 'loi demande de le joindre au devis ; une page de l’annuaire RGE n’est pas délivrée par l’organisme et n’en tient '
+    + 'pas lieu.',
   joint: 'Certificat joint',
   voir: 'Voir le certificat',
   trompeuse: 'Afficher un signe de qualité sans l’avoir obtenu est une pratique commerciale trompeuse : ne déclarez '
@@ -2077,12 +2081,14 @@ export const TEXTES_SOUS_TRAITANTS = Object.freeze({
   detient: 'Détient-il un label RGE ?',
   non: 'Non',
   oui: 'Oui',
+  /* Sous « Non » (relecture DROIT6-8) : ce qu'Opus ne fait pas encore. */
+  nonAide: 'Le devis le dira à votre client. Ce que cela change pour ses aides, Opus ne l’écrit pas encore.',
   retraitDuLabel: 'En enregistrant, son label et son justificatif seront retirés de cette fiche.',
   travaux: 'Travaux couverts',
   fin: 'Valable jusqu’au',
   joindre: 'Joindre son justificatif',
-  joindreAide: 'Le certificat que son organisme lui a remis, et qu’il vous a transmis. La loi demande de le fournir à '
-    + 'votre client avec le devis.',
+  joindreAide: 'Le certificat que son organisme lui a remis, et qu’il vous a transmis. Pour un client qui commande à '
+    + 'titre privé, la loi demande de le fournir avec le devis.',
   joint: 'Justificatif joint',
   voir: 'Voir le justificatif',
   tiers: 'Ces informations concernent une autre entreprise : ne rangez que ce qui sert à vos devis. Retirer un '

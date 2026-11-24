@@ -11488,9 +11488,14 @@ revoke truncate, references, trigger on public.emetteur_lieux_depot from authent
 --      d'échéance de la période de qualification, une certification aussi
 --      (arrêté du 01/12/2015) ; sans date lisible, l'artisan la demande à
 --      l'organisme, et le formulaire le dit. Aucune borne : `'infinity'`
---      passe, comme pour les assurances — seul un client modifié l'écrit, et
---      l'écran n'en affiche rien d'étrange. Une borne commune aux dates de
---      fin, si 2c les imprime, est notée dans `docs/A-FAIRE.md` ;
+--      passe, comme pour les assurances — seul un client modifié l'écrit.
+--      Mais l'écran, lui, ne lit qu'une année à quatre chiffres : il compte
+--      alors ce signe EXPIRÉ (« … portait ces travaux jusqu'au  : »,
+--      une date vide) quand la base le compte valable — mesuré par la
+--      relecture BASE-R1 de 2b-6, et le même écart vaut pour l'attestation
+--      décennale (rang 11). Une borne commune aux TROIS dates de fin (signes,
+--      sous-traitants, assurances) est à poser, et notée dans
+--      `docs/A-FAIRE.md` ;
 --    - LE CERTIFICAT (`justificatif_chemin`), dans l'espace privé
 --      `documents`, UN niveau sous le dossier de l'artisan (la forme de
 --      `emetteur_assurance_chemin_check`). Un signe SANS certificat ne

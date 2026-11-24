@@ -863,8 +863,14 @@ export function Pastille({
  * et `verifier-tarifs` le rejouent).
  *
  * C'est une RANGÉE de 44 points par sa boîte, et un `switch` pour VoiceOver.
+ *
+ * `nom` (facultatif, relecture ÉCRAN-2 de 2b-6) : ce que VoiceOver dit À LA
+ * PLACE du libellé, quand plusieurs cases portent le même — « Je ne détiens
+ * pas de label RGE pour ces travaux — Ventilation mécanique ». L'AIDE est
+ * gardée derrière lui : la remplacer ferait perdre « Cochez seulement si
+ * c'est vrai ». Le libellé AFFICHÉ ne change pas.
  */
-export function Interrupteur({ actif, libelle, aide, onPress, disabled = false }) {
+export function Interrupteur({ actif, libelle, aide, onPress, disabled = false, nom = null }) {
   return (
     <Pressable
       onPress={onPress}
@@ -872,7 +878,7 @@ export function Interrupteur({ actif, libelle, aide, onPress, disabled = false }
       accessibilityRole="switch"
       accessibilityState={{ checked: !!actif, disabled: !!disabled }}
       aria-checked={!!actif}
-      accessibilityLabel={aide ? `${libelle}. ${aide}` : libelle}
+      accessibilityLabel={aide ? `${nom || libelle}. ${aide}` : (nom || libelle)}
       style={({ pressed }) => [
         s.interrupteur, actif && s.interrupteurActif, disabled && { opacity: 0.5 },
         pressed && !disabled && APPUI.discret,

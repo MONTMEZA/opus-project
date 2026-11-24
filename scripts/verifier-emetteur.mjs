@@ -1754,6 +1754,58 @@ if (!E) {
         'Personne d’autre que le titulaire ne lit ces informations : elles ne s’affichent nulle part.');
     }
   }
+  /* LES DROITS DE TABLE DES SIX, UNE LISTE FERMÉE (relecture BASE-R2 de
+     2b-6, 24/11/2026, sur le modèle de `DROITS_DU_DEVIS` de
+     `verifier-devis`) : la vérification ci-dessus prouve que le `revoke`
+     EXISTE, pas que rien ne le DÉFAIT. Un `grant truncate on
+     public.emetteur_sous_traitants to authenticated;` posé APRÈS lui passait
+     les 56 contrôles ET l'essai 46 (le balayage 42 bis le retire en local,
+     mais il n'est pas dans une migration). Chaque `grant` et chaque `revoke`
+     qui nomme une des six tables, lu dans TOUT le schéma, chaînes comprises
+     (casse, blancs, guillemets et `public.` mis à part), est EXACTEMENT dans
+     la liste ci-dessous ; et un ordre FABRIQUÉ (`execute format(…)`) ne vise
+     jamais une table — seulement des fonctions. Un droit de plus se DÉCIDE :
+     la base, l'essai 46 et cette liste, ensemble. */
+  {
+    const canon46 = (texte) => {
+      const x = texte.toLowerCase().replace(/"/g, '').replace(/\s+/g, ' ').trim();
+      const m = /^(grant|revoke)\s+(.+?)\s+on\s+(?:table\s+)?(.+?)\s+(to|from)\s+(.+)$/.exec(x);
+      if (!m) return `illisible : ${x}`;
+      const liste = (t) => t.split(',').map((y) => y.trim().replace(/^public\s*\.\s*/, '')).sort().join(',');
+      return `${m[1]} ${liste(m[2])} on ${liste(m[3])} ${m[4]} ${liste(m[5])}`;
+    };
+    const DROITS_46 = [
+      'revoke all on public.emetteur from anon',
+      'revoke all on public.emetteur_assurances from anon',
+      'revoke all on public.tarifs_pro from anon',
+      'revoke truncate on public.emetteur, public.emetteur_assurances, public.tarifs_pro from authenticated',
+      'revoke all on public.emetteur_lieux_depot from anon',
+      'revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated',
+      'revoke all on public.emetteur_labels from anon',
+      'revoke truncate, references, trigger on public.emetteur_labels from authenticated',
+      'revoke all on public.emetteur_sous_traitants from anon',
+      'revoke truncate, references, trigger on public.emetteur_sous_traitants from authenticated',
+    ].map(canon46).sort();
+    const nomme46 = new RegExp(`\\b(?:${TABLES_46.join('|')})\\b(?!\\s*\\()`, 'i');
+    const ordres46 = [...SCHEMA.matchAll(/\b(grant|revoke)\b([^;']*)/gi)].map((m) => m[0])
+      .filter((t) => /\bon\b/i.test(t) && nomme46.test(t.replace(/^\S+\s+[\s\S]*?\bon\s+/i, 'on ')))
+      .map(canon46).sort();
+    const enTrop46 = ordres46.filter((x, i) => ordres46.indexOf(x) === i
+      && ordres46.filter((y) => y === x).length > DROITS_46.filter((y) => y === x).length);
+    const enMoins46 = DROITS_46.filter((x, i) => DROITS_46.indexOf(x) === i
+      && DROITS_46.filter((y) => y === x).length > ordres46.filter((y) => y === x).length);
+    /* Un ordre fabriqué ne fait que RETIRER : un `revoke … on %s` (le
+       balayage des droits de table) est permis, un `grant` ne vise que des
+       fonctions. */
+    const fabriques = [...SCHEMA.matchAll(/'\s*grant\b[^']*'/gi)].map((m) => m[0])
+      .filter((t) => /%[sI]/.test(t) && !/\bon\s+function\b/i.test(t));
+    verifier(`les droits de table des six tables de la section 46 sont une LISTE FERMÉE : ${ordres46.length} \`grant\` ou \`revoke\` les `
+      + 'nomment dans tout le schéma (chaînes comprises), EXACTEMENT les dix `revoke` attendus, aucun `grant` ; et aucun ordre fabriqué '
+      + '(`execute format`) n’ACCORDE un droit sur une table — il ne fait que retirer (relecture BASE-R2)',
+    ordres46.length === DROITS_46.length && JSON.stringify(ordres46) === JSON.stringify(DROITS_46) && fabriques.length === 0
+      && !ordres46.some((x) => x.startsWith('grant')),
+    `en trop : ${enTrop46.join(' | ') || '—'} ; en moins : ${enMoins46.join(' | ') || '—'} ; fabriqués : ${fabriques.join(' | ') || '—'}`);
+  }
   /* UNE PROPRIÉTÉ, PAS UN NOM (relecture du 18/10/2026). La première
      version ne regardait que les fonctions `admin_*` : une fonction
      `security definer` sous un autre nom, accordée à `anon`, rendait les
@@ -2217,6 +2269,33 @@ console.log('\n4. L’ESSAI SQL — des refus, une donnée qui existe, et les m�
     && /update public\.emetteur set denomination_ei = 'EI' where pro_id = :B;\s*rollback;/.test(essai),
     'Un essai qui ne montre pas le cas qu’il annonce ne prouve rien.');
 
+  /* LE CAS 34 (relecture de 2b-6, banc des sabotages, X26) : l'export des
+     signes de qualité et des sous-traitants, appelé par une ENVELOPPE
+     `security definer` — la RLS ne filtre plus, et seuls les filtres
+     `x.pro_id = auth.uid()` de `mes_donnees()` séparent A de B. Sous la RLS
+     (cas 32 et 33), les retirer passait au vert. L'enveloppe est créée DANS
+     sa transaction, après que A et B ont chacun un signe et un sous-traitant
+     (la donnée existe), et part avec elle ; et chacun ne reçoit que les
+     siens. Cet essai ne se joue qu'à la main : ce contrôle vérifie qu'il est
+     là, entier. */
+  {
+    const cas34 = morceau(essai, '=== 34.', 'enveloppe_export_retiree_attendu_0');
+    const iCreation = cas34.indexOf('create function public.essai_export_enveloppe()');
+    const iRole = cas34.indexOf('set local role authenticated;');
+    verifier('le cas 34 de l’essai 46 (banc X26) : l’export par une ENVELOPPE `security definer` — A et B ont chacun un signe et un '
+      + 'sous-traitant, B ne reçoit rien de A, A rien de B, et l’enveloppe part avec sa transaction',
+    cas34.length > 0 && /^begin;/m.test(cas34) && iCreation > 0 && iRole > iCreation
+      && /security definer/.test(cas34.slice(iCreation, iRole)) && /select public\.mes_donnees\(\)/.test(cas34.slice(iCreation, iRole))
+      && ['signe_de_a_existe_attendu_1', 'signe_de_b_existe_attendu_1', 'sous_traitant_de_a_existe_attendu_1',
+        'sous_traitant_de_b_existe_attendu_1', 'enveloppe_signes_de_b_attendu_1', 'enveloppe_le_signe_de_b_attendu_t',
+        'enveloppe_sous_traitants_de_b_attendu_1', 'enveloppe_le_sous_traitant_de_b_attendu_t', 'enveloppe_rien_de_a_chez_b_attendu_t',
+        'enveloppe_signes_de_a_attendu_1', 'enveloppe_le_signe_de_a_attendu_t', 'enveloppe_sous_traitants_de_a_attendu_1',
+        'enveloppe_le_sous_traitant_de_a_attendu_t', 'enveloppe_rien_de_b_chez_a_attendu_t'].every((a) => cas34.includes(a))
+      && cas34.indexOf('set local request.jwt.claim.sub = :B;') > iRole
+      && /rollback;\s*select count\(\*\) as enveloppe_export_retiree_attendu_0$/.test(cas34),
+    'Sous la RLS, l’export de B rend 0 signe de A même sans le filtre : le bon résultat pour la mauvaise raison.');
+  }
+
   /* LE CAS 26 bis EST LA PREUVE DE LA FERMETURE — et une alternation à qui
      il manque une table le rend AVEUGLE à cette table (le banc des
      sabotages, B48) : l'essai rendrait sa sortie témoin sans plus la
@@ -2273,6 +2352,48 @@ console.log('\n4. L’ESSAI SQL — des refus, une donnée qui existe, et les m�
   const absentes = ATTENDUES.filter((n) => !brut.includes(n) || !MESSAGES_CONTRAINTE[n]);
   verifier('les refus attendus nomment des contraintes qui ont leur phrase',
     absentes.length === 0, absentes.join(', '));
+  /* …ET LES DOUZE PHRASES DE REFUS DE 2b-6, MOT POUR MOT (relecture CTL6-6,
+     24/11/2026) : seule leur EXISTENCE était vérifiée. Or `FicheLabel` et
+     `FicheSousTraitant` les AFFICHENT à chaque refus
+     (`messageDeContrainte`) : « un numéro SIRET fait neuf chiffres » ou
+     « organisme agréé » passaient les 56 contrôles. Annexe A.7 du cahier
+     2b-6 — sauf `emetteur_label_complet_check`, que la relecture DROIT6-7 a
+     corrigée (« ce qu’Opus range pour vos devis », jamais « ce que le devis
+     doit porter » : la date obligatoire est un choix d'Opus). Puis la règle
+     du vocabulaire (T10), comme pour les textes de la carte. */
+  const A7_REFUS = [
+    ['emetteur_label_categories_check', 'A.7', 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.'],
+    ['emetteur_label_chemin_check', 'A.7', 'ce certificat n’est pas rangé dans votre espace : envoyez-le depuis ce formulaire.'],
+    ['emetteur_label_complet_check', 'relecture', 'un signe de qualité s’écrit avec l’organisme qui l’a délivré, son intitulé, les '
+      + 'travaux qu’il couvre et sa date de fin : c’est ce qu’Opus range pour vos devis. Le numéro du certificat, lui, est facultatif.'],
+    ['emetteur_label_longueurs_check', 'A.7', MESSAGES_CONTRAINTE.tarif_frais_texte_check],
+    ['emetteur_sous_traitant_categories_check', 'A.7', 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.'],
+    ['emetteur_sous_traitant_chemin_check', 'A.7', 'ce justificatif n’est pas rangé dans votre espace : envoyez-le depuis ce '
+      + 'formulaire.'],
+    ['emetteur_sous_traitant_complet_check', 'A.7', 'un sous-traitant s’écrit avec son nom ou sa raison sociale et son numéro SIRET ; '
+      + 's’il détient un label RGE, avec les travaux qu’il couvre et sa date de fin.'],
+    ['emetteur_sous_traitant_longueurs_check', 'A.7', MESSAGES_CONTRAINTE.tarif_frais_texte_check],
+    ['emetteur_sous_traitant_siret_check', 'A.7', 'un numéro SIRET fait quatorze chiffres.'],
+    ['devis_energie_travaux_check', 'A.7', 'les travaux d’énergie cochés ne correspondent pas à la liste d’Opus : mettez Opus à jour.'],
+    ['devis_energie_sans_label_check', 'A.7', 'les travaux déclarés sans label ne correspondent pas à la liste d’Opus : mettez Opus à '
+      + 'jour.'],
+    ['devis_energie_sous_traitants_check', 'A.7', 'les sous-traitants de ce devis ne sont pas valables (dix au plus) : mettez Opus à '
+      + 'jour.'],
+  ];
+  const ecartsA7 = A7_REFUS.filter(([n, , t]) => MESSAGES_CONTRAINTE[n] !== t).map(([n]) => `${n} : « ${MESSAGES_CONTRAINTE[n]} »`);
+  const lettreA7 = '[\\p{L}_]';
+  const interditsA7 = [new RegExp(`(?<!${lettreA7})certifi(?:é|ée|és|ées|er)(?!${lettreA7})`, 'iu'), /agr[ée]/iu,
+    new RegExp(`(?<!${lettreA7})v[ée]rifi[ée]e?s?(?!${lettreA7})`, 'iu'), new RegExp(`(?<!${lettreA7})garanti(?!${lettreA7})`, 'iu'),
+    /doit porter/iu];
+  const fautifsA7 = A7_REFUS.map(([n]) => [n, MESSAGES_CONTRAINTE[n] || '']).filter(([, t]) => interditsA7.some((re) => re.test(t)))
+    .map(([n]) => n);
+  verifier('…et les DOUZE phrases de refus de 2b-6 (`emetteur_label_*`, `emetteur_sous_traitant_*`, `devis_energie_*`) MOT POUR MOT : '
+    + 'l’annexe A.7, et la phrase du label complet corrigée par la relecture (DROIT6-7) ; aucune ne dit « certifié », « agréé », '
+    + '« vérifié », « garanti » ni « doit porter » (relecture CTL6-6)',
+  ecartsA7.length === 0 && fautifsA7.length === 0 && A7_REFUS.length === 12
+    && interditsA7[1].test('agréé') && interditsA7[0].test('certifié') && !interditsA7[0].test('certificat')
+    && typeof MESSAGES_CONTRAINTE.tarif_frais_texte_check === 'string' && MESSAGES_CONTRAINTE.tarif_frais_texte_check.length > 20,
+  [...ecartsA7, ...fautifsA7.map((n) => `vocabulaire : ${n}`)].join(' | ') || '12 phrases');
   verifier('les refus de RLS et de droits, table par table, et OP011 lu avec son code',
     TABLES_46.map((t) => `"${t}"`).every((t) => brut.includes(`RLS sur ${t}`))
     && TABLES_46.every((t) => new RegExp(`set local role anon;\\s*select count\\(\\*\\) from public\\.${t};`).test(essai))
@@ -3161,6 +3282,148 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       && ['formulaire', 'tiers', 'nom', 'siret', 'detient', 'non', 'oui', 'retraitDuLabel', 'travaux', 'fin', 'joindre', 'joindreAide',
         'retirerCoute'].every((k) => fs.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fs.includes(`: X.${k}}`)),
     `FicheLabel : ${phG.join(', ')} | ${enDurs(fg).join(', ')} ; FicheSousTraitant : ${phS.join(', ')} | ${enDurs(fs).join(', ')}`);
+    /* LES TEXTES DES DEUX SECTIONS ET DES DEUX FORMULAIRES, MOT POUR MOT
+       (annexe A.5 du cahier 2b-6, et A.3 pour les trois phrases qu'elle y
+       range) — le commentaire d'`emetteur.js` le promettait, et RIEN ne le
+       tenait : le banc des sabotages (S27) a glissé « agréé » dans le texte
+       gris de l'organisme, et ce contrôle restait vert (il ne relisait que
+       la liste des textes gris et l'absence de chiffre). Chaque clé, dans
+       l'ORDRE, avec son texte au caractère près : une clé ajoutée, retirée
+       ou renommée rougit, comme un mot changé.
+       LES TEXTES « composé » ne sont PAS dans le cahier : la construction
+       les a écrits (`construction/mon-entreprise.md`, écart 2 — l'état non
+       lu en édition, les libellés des boutons, deux textes gris, « Les
+       brouillons qui le citent le perdront. »). Ils sont FIGÉS tels qu'ils
+       sont, et SONT À MONTRER AU PROPRIÉTAIRE : un texte composé sans lui
+       n'est pas une décision à lui. Les changer se décide, ici et dans
+       `emetteur.js`, dans le même lot. */
+    const A5_SIGNES_DE_QUALITE = [
+      ['section', 'A.5', 'Vos signes de qualité (label RGE)'],
+      ['phrase', 'A.5', 'Les signes de qualité que vous détenez, avec leur certificat. Opus s’en sert pour vos devis de '
+        + 'travaux d’économies d’énergie ; rien ne s’affiche sur votre fiche publique.'],
+      ['vide', 'A.5', 'Vous n’avez déclaré aucun signe de qualité. Vos devis de travaux d’économies d’énergie vous le '
+        + 'demanderont.'],
+      ['nonLus', 'A.3', 'Vos signes de qualité n’ont pas pu être lus.'],
+      ['nonLusEdition', 'composé', 'Vos signes de qualité n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : fermez « '
+        + 'Mon entreprise », puis rouvrez-la pour réessayer.'],
+      ['ajouter', 'A.5', 'Ajouter un signe de qualité'],
+      ['modifier', 'composé', 'Modifier ce signe de qualité'],
+      ['modifierLesMiens', 'composé', 'Modifier mes signes de qualité'],
+      ['declarerLesMiens', 'composé', 'Déclarer mes signes de qualité'],
+      ['formulaire', 'A.5', 'Un signe de qualité (label RGE)'],
+      ['organisme', 'A.5', 'Organisme qui l’a délivré'],
+      ['organismePlaceholder', 'A.5', 'Nom de l’organisme'],
+      ['intitule', 'A.5', 'Intitulé'],
+      ['intitulePlaceholder', 'A.5', 'Tel qu’il figure sur votre certificat'],
+      ['reference', 'A.5', 'Numéro du certificat (facultatif)'],
+      ['travaux', 'A.5', 'Travaux couverts'],
+      ['travauxAide', 'A.5', 'Cochez les travaux que votre certificat nomme. Une qualification pour un appareil au bois relié '
+        + 'au chauffage central vaut aussi pour un poêle ou un insert indépendant, et une pompe à chaleur '
+        + 'de chauffage pour un chauffe-eau thermodynamique : cochez-les aussi.'],
+      ['fin', 'A.5', 'Valable jusqu’au'],
+      ['finAide', 'A.5', 'La date de fin de validité écrite sur votre certificat ; sans date, demandez-la à l’organisme.'],
+      ['joindre', 'A.5', 'Joindre le certificat'],
+      /* A.5, BORNÉE à titre privé par la relecture DROIT6-5 (24/11) : L. 224-114 ne vise que le consommateur. */
+      ['joindreAide', 'relecture', 'Le certificat ou la décision que l’organisme vous a remis. Pour un client qui commande '
+        + 'à titre privé, la loi demande de le joindre au devis ; une page de l’annuaire RGE n’est pas délivrée par '
+        + 'l’organisme et n’en tient pas lieu.'],
+      ['joint', 'composé', 'Certificat joint'],
+      ['voir', 'composé', 'Voir le certificat'],
+      ['trompeuse', 'A.5', 'Afficher un signe de qualité sans l’avoir obtenu est une pratique commerciale trompeuse : ne '
+        + 'déclarez que ceux que vous détenez, pour les travaux qu’ils couvrent.'],
+      ['enregistrer', 'composé', 'Enregistrer ce signe de qualité'],
+      ['retirer', 'A.5', 'Retirer ce signe de qualité'],
+    ];
+    const A5_SOUS_TRAITANTS = [
+      ['section', 'A.5', 'Vos sous-traitants'],
+      ['phrase', 'A.5', 'Les entreprises qui font une partie, ou la totalité, de vos travaux. Rangées ici une fois, '
+        + 'elles se choisissent ensuite dans vos devis de travaux d’économies d’énergie.'],
+      ['vide', 'A.3', 'Vous n’avez encore aucun sous-traitant.'],
+      ['nonLus', 'A.3', 'Vos sous-traitants n’ont pas pu être lus.'],
+      ['nonLusEdition', 'composé', 'Vos sous-traitants n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : fermez « Mon '
+        + 'entreprise », puis rouvrez-la pour réessayer.'],
+      ['ajouter', 'A.5', 'Ajouter un sous-traitant'],
+      ['modifier', 'composé', 'Modifier ce sous-traitant'],
+      ['modifierLesMiens', 'composé', 'Modifier mes sous-traitants'],
+      ['declarerLesMiens', 'composé', 'Déclarer mes sous-traitants'],
+      ['formulaire', 'A.5', 'Un sous-traitant'],
+      ['nom', 'A.5', 'Nom ou raison sociale'],
+      ['nomPlaceholder', 'composé', 'Le nom de l’entreprise'],
+      ['siret', 'A.5', 'Numéro SIRET'],
+      ['siretPlaceholder', 'composé', 'Quatorze chiffres'],
+      ['detient', 'A.5', 'Détient-il un label RGE ?'],
+      ['non', 'A.5', 'Non'],
+      ['oui', 'A.5', 'Oui'],
+      ['nonAide', 'relecture', 'Le devis le dira à votre client. Ce que cela change pour ses aides, Opus ne l’écrit pas encore.'],
+      ['retraitDuLabel', 'A.5', 'En enregistrant, son label et son justificatif seront retirés de cette fiche.'],
+      ['travaux', 'A.5', 'Travaux couverts'],
+      ['fin', 'A.5', 'Valable jusqu’au'],
+      ['joindre', 'A.5', 'Joindre son justificatif'],
+      /* A.5, BORNÉE à titre privé par la relecture DROIT6-5 (24/11) : L. 224-115 ne vise que le consommateur. */
+      ['joindreAide', 'relecture', 'Le certificat que son organisme lui a remis, et qu’il vous a transmis. Pour un client '
+        + 'qui commande à titre privé, la loi demande de le fournir avec le devis.'],
+      ['joint', 'composé', 'Justificatif joint'],
+      ['voir', 'composé', 'Voir le justificatif'],
+      ['tiers', 'A.5', 'Ces informations concernent une autre entreprise : ne rangez que ce qui sert à vos devis. '
+        + 'Retirer un sous-traitant ne retire pas son justificatif de votre espace : il part avec votre '
+        + 'compte.'],
+      ['enregistrer', 'composé', 'Enregistrer ce sous-traitant'],
+      ['retirer', 'A.5', 'Retirer ce sous-traitant'],
+      ['retirerCoute', 'composé', 'Les brouillons qui le citent le perdront.'],
+    ];
+    const ecartsA5 = [['TEXTES_SIGNES_DE_QUALITE', TL, A5_SIGNES_DE_QUALITE], ['TEXTES_SOUS_TRAITANTS', TS, A5_SOUS_TRAITANTS]]
+      .flatMap(([nom, objet, attendu]) => {
+        const cles = Object.keys(objet || {});
+        const ecarts = attendu.filter(([k, , texte], i) => cles[i] !== k || objet[k] !== texte).map(([k]) => `${nom}.${k}`);
+        if (cles.length !== attendu.length) ecarts.push(`${nom} : ${cles.length} clés au lieu de ${attendu.length}`);
+        return ecarts;
+      });
+    const composesA5 = [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].filter(([, src]) => src === 'composé').length;
+    verifier('…les textes des deux sections et des deux formulaires (`TEXTES_SIGNES_DE_QUALITE`, `TEXTES_SOUS_TRAITANTS`), MOT POUR MOT '
+      + `et dans l’ordre : l’annexe A.5 du cahier 2b-6 (A.3 pour trois d’entre eux), ${composesA5} textes composés par la construction, `
+      + 'figés tels quels et À MONTRER AU PROPRIÉTAIRE (banc 2b-6, S27), et les deux aides des pièces BORNÉES à titre privé par la '
+      + 'relecture (DROIT6-5), et la phrase sous « Non » d’un sous-traitant (DROIT6-8)',
+    !!E && Object.isFrozen(TL) && Object.isFrozen(TS) && ecartsA5.length === 0
+      && A5_SIGNES_DE_QUALITE.length === 26 && A5_SOUS_TRAITANTS.length === 29
+      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].every(([, src]) => ['A.5', 'A.3', 'composé', 'relecture'].includes(src))
+      && [...A5_SIGNES_DE_QUALITE, ...A5_SOUS_TRAITANTS].filter(([, src]) => src === 'relecture').length === 3,
+    ecartsA5.map((k) => {
+      const [nom, cle] = k.split('.');
+      const o = nom === 'TEXTES_SIGNES_DE_QUALITE' ? TL : TS;
+      return cle && o ? `${k} : « ${o[cle]} »` : k;
+    }).join(' | ') || `${A5_SIGNES_DE_QUALITE.length + A5_SOUS_TRAITANTS.length} textes`);
+    /* …ET CE QUE DIT LA LIGNE D'UN SIGNE OU D'UN SOUS-TRAITANT, FAIT TOURNER
+       (relecture CTL6-2, 24/11/2026) : la phrase d'état n'était figée
+       nulle part, et une branche `sans_certificat` qui rendait « Valable
+       jusqu’au … » passait les 56 contrôles — le défaut E1 de 2b-3, une
+       rangée « Valable » sous un point qui demande la pièce. Onze sorties,
+       écrites en toutes lettres (annexe A.5). */
+    const JOUR_A5 = '2026-11-24';
+    const sigA5 = (plus) => E.libelleEtatDuLabel({ categories: ['fenetres'], valide_jusquau: '2999-01-01', justificatif_chemin: 'p/x.pdf',
+      ...plus }, JOUR_A5);
+    const stA5 = (plus) => E.libelleEtatDuSousTraitant({ raison_sociale: 'S', siret: '00004960000019', ...plus }, JOUR_A5);
+    const ETATS_A5 = [
+      ['signe valable', sigA5({}), 'Valable jusqu’au 01/01/2999'],
+      ['signe sans certificat', sigA5({ justificatif_chemin: null }), 'Certificat non joint · valable jusqu’au 01/01/2999'],
+      ['signe expiré, avec sa date', sigA5({ valide_jusquau: '2001-01-01' }), 'Fin de validité dépassée (valable jusqu’au 01/01/2001)'],
+      ['signe sans date', sigA5({ valide_jusquau: null }), 'Fin de validité dépassée'],
+      ['signe expiré ET sans certificat', sigA5({ valide_jusquau: '2001-01-01', justificatif_chemin: null }),
+        'Fin de validité dépassée (valable jusqu’au 01/01/2001)'],
+      ['sous-traitant qui détient', stA5({ label_detient: true, label_categories: ['fenetres'], label_valide_jusquau: '2999-01-01',
+        label_justificatif_chemin: 'p/j.pdf' }), 'Détient un label RGE · valable jusqu’au 01/01/2999'],
+      ['justificatif non joint', stA5({ label_detient: true, label_categories: ['fenetres'], label_valide_jusquau: '2999-01-01' }),
+        'Label RGE déclaré · justificatif non joint'],
+      ['label expiré, avec sa date', stA5({ label_detient: true, label_categories: ['fenetres'], label_valide_jusquau: '2001-01-01',
+        label_justificatif_chemin: 'p/j.pdf' }), 'Label RGE : fin de validité dépassée (valable jusqu’au 01/01/2001)'],
+      ['label sans date', stA5({ label_detient: true, label_categories: ['fenetres'], label_justificatif_chemin: 'p/j.pdf' }),
+        'Label RGE : fin de validité dépassée'],
+      ['ne détient pas', stA5({ label_detient: false }), 'Ne détient pas de label RGE'],
+      ['à dire', stA5({ label_detient: null }), 'Label RGE : à dire'],
+    ];
+    const ecartsEtats = ETATS_A5.filter(([, vu, attendu]) => vu !== attendu).map(([n, vu]) => `${n} : « ${vu} »`);
+    verifier('…ce que dit la ligne d’un signe de qualité et d’un sous-traitant dans « Mon entreprise », FAIT TOURNER sur ses onze états '
+      + '(`libelleEtatDuLabel`, `libelleEtatDuSousTraitant`), en toutes lettres : jamais « Valable » sans le certificat (relecture CTL6-2)',
+    !!E && ETATS_A5.length === 11 && ecartsEtats.length === 0, ecartsEtats.join(' | ') || '11 états');
     /* CHAQUE CHAMP PORTE LA LONGUEUR DE SA COLONNE (CTL-11 de 2b-5), et le
        SIRET 17 caractères : quatorze chiffres et les trois espaces que
        `formaterSiret` pose. */
@@ -3223,6 +3486,9 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       && /label_valide_jusquau: oui \? valideJusquau \|\| null : null,/.test(lireS)
       && /label_justificatif_chemin: oui \? chemin \|\| null : null,/.test(lireS)
       && /\{detient === false && avaitUnLabel && <Text style=\{s\.avis\}>\{X\.retraitDuLabel\}<\/Text>\}/.test(fs)
+      /* Relecture DROIT6-8 : sous « Non », ce qu'Opus ne fait pas encore
+         (ce que l'absence de label change pour les aides du client). */
+      && /\{detient === false && <Text style=\{s\.aide\}>\{X\.nonAide\}<\/Text>\}/.test(fs)
       && /const avaitUnLabel = reponseDe\(sousTraitant\) === true;/.test(fs)
       && /\{detient === true && \(/.test(fs) && /await onEnregistrer\(v, detient === true \? fichier : null\);/.test(fs)
       && /if \(doc && valeurs\.label_detient === true\) chemin = await api\.envoyerJustificatif\(doc\);/.test(me)
@@ -3264,6 +3530,39 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
         .test(corps(c, 'const retirer = async () => {')) && /onOccupe\(oui\)/.test(c))
       && /\{confirmeRetrait && <Text style=\{s\.aide\}>\{X\.retirerCoute\}<\/Text>\}/.test(fs),
     'une ligne qui pointerait un fichier pas encore arrivé serait un lien mort ; un double appui enverrait deux suppressions');
+    /* LA NOUVELLE LISTE REMONTE À LA SAISIE APRÈS CHAQUE ÉCRITURE RÉUSSIE
+       (relecture ÉCRAN-1 de 2b-6, 24/11/2026) : sans elle, la carte
+       « Énergie et label RGE » (et « Déchets ») montrait l'ANCIENNE liste
+       pendant toute la relecture qui suit la fermeture — et un appui sur la
+       case « Je ne détiens pas… » y écrivait une déclaration sous un
+       travail qu'un signe venait de couvrir. Les SIX écritures (enregistrer
+       et retirer un lieu, un signe, un sous-traitant) : la liste calculée
+       par `avecLaLigne` ou `sansLaLigne` depuis l'état du rendu, la liste
+       de la fenêtre par la MÊME règle, puis `surEmetteur` avec SA clé, AVANT
+       `retour.reussite()` — jamais dans la fonction de mise à jour de
+       `setDonnees`. */
+    const ecritures6 = [
+      ['const enregistrerLieu = async (valeurs) => {', 'lieux', 'avecLaLigne', 'pose, existant'],
+      ['const retirerLieu = async (l) => {', 'lieux', 'sansLaLigne', 'l.id'],
+      ['const enregistrerLabel = async (valeurs, doc) => {', 'labels', 'avecLaLigne', 'pose, existant'],
+      ['const retirerLabel = async (g) => {', 'labels', 'sansLaLigne', 'g.id'],
+      ['const enregistrerSousTraitant = async (valeurs, doc) => {', 'sousTraitants', 'avecLaLigne', 'pose, existant'],
+      ['const retirerSousTraitant = async (st) => {', 'sousTraitants', 'sansLaLigne', 'st.id'],
+    ];
+    const remontees = ecritures6.filter(([decl, cle, f, args]) => {
+      const c = corps(me, decl).replace(/\s+/g, ' ');
+      const a = `const ${cle} = ${f}(donnees.${cle}, ${args});`;
+      const b = `setDonnees((d) => ({ ...d, ${cle}: ${f}(d.${cle}, ${args}) }));`;
+      const r = `if (surEmetteur) surEmetteur(donnees.emetteur || null, { ${cle} });`;
+      const ia = c.indexOf(a); const ib = c.indexOf(b); const ir = c.indexOf(r); const iok = c.indexOf('retour.reussite();');
+      return !(ia >= 0 && ib > ia && ir > ib && iok > ir && c.split('surEmetteur(').length === 2);
+    }).map(([decl]) => decl);
+    verifier('`MonEntreprise` : chacune des SIX écritures (lieu, signe de qualité, sous-traitant ; enregistrer, retirer) fait REMONTER la '
+      + 'nouvelle liste à la saisie (`surEmetteur(donnees.emetteur || null, { <liste> })`), calculée par `avecLaLigne` ou `sansLaLigne`, '
+      + 'après `setDonnees` et avant `retour.reussite()` (relecture ÉCRAN-1)',
+    remontees.length === 0
+      && /const avecLaLigne = \(liste, pose, existant\) => \{/.test(me) && /const sansLaLigne = \(liste, id\) => /.test(me),
+    remontees.join(' | ') || 'les six');
     /* LES DEUX MODES, LE BROUILLON, « QUITTER SANS ENREGISTRER ». */
     verifier('`MonEntreprise` : les modes `label` et `sousTraitant` montent leur formulaire, gardent le brouillon, demandent avant de '
       + 'quitter, et reviennent sur LEUR section ; `FICHE_EN_LECTURE` les tient NON LUS (`null`)',

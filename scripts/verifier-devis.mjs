@@ -1212,7 +1212,32 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
     /* 2b-5 : la carte « Déchets du chantier » — une carte du module, lue
        comme les autres ; 2b-6 (cahier §2.8 bis) : la carte « Énergie et label
        RGE », de même. */
-    'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js'];
+    'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js',
+    /* 2b-6, relecture (banc des sabotages, S44 et S44c) : la liste était
+       écrite à la main, et rien ne disait qu'elle était COMPLÈTE — retirer
+       la carte « Énergie et label RGE » de la liste, puis y écrire « un an »
+       sans « opposition », passait au vert. Et elle ne l'était déjà pas :
+       huit fichiers qui importent `../lib/devis` (2b-1, 2b-2, le lot P, le
+       carnet de clients, « Pour moi ») n'y étaient pas. Ils y entrent, et la
+       liste est désormais comparée au RELEVÉ de `git ls-files` (plus bas). */
+    'src/components/ChantierDevis.js', 'src/components/PourRemettre.js', 'src/components/FeuilleAQuelTitre.js',
+    'src/components/FeuilleChantierNeuf.js', 'src/components/FeuillePoste.js', 'src/components/FeuilleAjoutPoste.js',
+    'src/components/FicheClient.js', 'src/screens/DemandesRecuesScreen.js'];
+  /* LA LISTE EST COMPLÈTE : tout fichier de `src/components` et de
+     `src/screens` dont le nom finit par `Devis.js`, ou qui importe
+     `../lib/devis`, y est — relevé par `git ls-files` (les fichiers suivis,
+     et ceux qui ne le sont pas encore mais ne sont pas ignorés : un écran
+     neuf compte dès qu'il existe), jamais écrit à la main. */
+  const releveModule = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src/components', 'src/screens'],
+    { cwd: RACINE, encoding: 'utf8' });
+  const ecransDuModule = (releveModule.status === 0 ? releveModule.stdout : '').split('\n').filter((f) => /\.js$/.test(f))
+    .filter((f) => /Devis\.js$/.test(f) || modulesDe(sansCommentairesJs(lire(f))).some((m) => /^\.\.\/lib\/devis(?:\.js)?$/.test(m)));
+  const oubliesDuModule = ecransDuModule.filter((f) => !FICHIERS_DU_MODULE.includes(f));
+  verifier('la liste des fichiers du module (`FICHIERS_DU_MODULE`) est COMPLÈTE : tout écran ou composant dont le nom finit par '
+    + '`Devis.js`, ou qui importe `../lib/devis`, y est — relevé par `git ls-files`, jamais écrit à la main (banc 2b-6, S44)',
+  releveModule.status === 0 && ecransDuModule.length >= 17 && oubliesDuModule.length === 0
+    && ecransDuModule.includes('src/components/EnergieDevis.js') && ecransDuModule.includes('src/screens/SaisieDevisScreen.js'),
+  oubliesDuModule.length ? `absents de la liste : ${oubliesDuModule.join(', ')}` : `${ecransDuModule.length} fichiers relevés`);
   const UN_AN = /(?<![\p{L}\d])un an(?![\p{L}])/u;
   const phrasesDe = (src) => {
     const recousu = sansCommentairesJs(src).replace(/(['"`])\s*\+\s*(['"`])/g, '');
@@ -1225,8 +1250,15 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
   const exportees = Object.values(D).flatMap((v) => (typeof v === 'string' ? [v] : (v && typeof v === 'object' ? Object.values(v) : [])))
     .filter((v) => typeof v === 'string').map((p) => ({ f: 'devis.js (export)', p }));
   const sansReserve = [...phrasesModule, ...exportees].filter(({ p }) => UN_AN.test(p) && !/opposition/.test(p));
-  const ecransLus = FICHIERS_DU_MODULE.filter((f) => /screens|components/.test(f))
-    .every((f) => phrasesDe(lire(f)).length > 3);
+  /* Chaque écran relu rend PLUS DE TROIS chaînes (une garde contre un
+     lecteur qui ne lirait plus rien) — les petites feuilles comprises, qui
+     tirent leurs phrases des constantes de `devis.js` (lues plus haut, par
+     `exportees`) : mesuré le 24/11, la plus petite, `FeuilleChantierNeuf`,
+     en rend 7, et `FeuilleAQuelTitre` 8. La borne ne bouge pas pour les
+     autres. */
+  const chainesParEcran = FICHIERS_DU_MODULE.filter((f) => /screens|components/.test(f))
+    .map((f) => [f, phrasesDe(lire(f)).length]);
+  const ecransLus = chainesParEcran.length >= 17 && chainesParEcran.every(([, n]) => n > 3);
   verifier('toute phrase du module — ses ÉCRANS compris, attributs JSX et texte entre balises — qui dit « un an » dit aussi '
     + '« opposition » : jamais la durée sans sa réserve',
     phrasesModule.length > 300 && ecransLus && sansReserve.length === 0 && UN_AN.test(D.PHRASE_RETENUE)
@@ -1236,7 +1268,8 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
        les exports (`exportees`) et affichée telle quelle par la carte. */
     && UN_AN.test(D.AIDE_RETENUE)
     && /aide=\{AIDE_RETENUE\}/.test(sansCommentairesJs(lire('src/components/ConditionsDevis.js'))),
-    sansReserve.map(({ f, p }) => `${f} : « ${p.slice(0, 90)} »`).join(' | ') || `${phrasesModule.length} phrases lues`);
+    sansReserve.map(({ f, p }) => `${f} : « ${p.slice(0, 90)} »`).join(' | ')
+    || `${phrasesModule.length} phrases lues ; écrans peu lus : ${chainesParEcran.filter(([, n]) => n <= 3).map(([f]) => f).join(', ') || 'aucun'}`);
   /* Et, depuis la relecture CONTROLES-11 du lot 2a : la caution est
      « personnelle et solidaire » (art. 1er al. 4), et l'opposition se notifie
      AU CONSIGNATAIRE (ou à la caution), par lettre recommandée (art. 2) —
@@ -6845,12 +6878,14 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     const cadresFautifs = cadres.filter(([, c]) => !c || CACHE_I.test(c)).map(([n]) => n);
     const directe = /<View style=\{s\.interrupteurTexte\}>\s*<Text style=\{s\.interrupteurLibelle\}>\{libelle\}<\/Text>\s*\{!!aide && \(?\s*<Text style=\{s\.interrupteurAide\}>\{aide\}<\/Text>\s*\)?\s*\}\s*<\/View>/.test(corpsI);
     verifier('`Interrupteur` (ui.js) écrit l’aide ENTIÈRE, telle quelle : `{!!aide && <Text style={s.interrupteurAide}>{aide}</Text>}`, '
-      + 'une seule fois, jamais transformée (`aide.…`, `aide[…]`, `aide +`) ; VoiceOver la lit (`${libelle}. ${aide}`) ; son style ne '
+      + 'une seule fois, jamais transformée (`aide.…`, `aide[…]`, `aide +`) ; VoiceOver la lit (`${nom || libelle}. ${aide}`) ; son style ne '
       + `la cache pas et se lit sur le fond (${ratioI.toFixed(2)} : 1, 4,5 au moins)`,
     corpsI.length > 100 && enfants.length === 1 && enfants[0] === '<Text style={s.interrupteurAide}>{aide}</Text>'
       && /\{!!aide && \(?\s*<Text style=\{s\.interrupteurAide\}>\{aide\}<\/Text>\s*\)?\s*\}/.test(corpsI)
-      && !/\baide\s*(?:\?\.|\.|\[|\+)/.test(corpsI.replace(/aide \? `\$\{libelle\}\. \$\{aide\}` : libelle/, ''))
-      && /accessibilityLabel=\{aide \? `\$\{libelle\}\. \$\{aide\}` : libelle\}/.test(corpsI)
+      && !/\baide\s*(?:\?\.|\.|\[|\+)/.test(corpsI.replace(/aide \? `\$\{nom \|\| libelle\}\. \$\{aide\}` : \(nom \|\| libelle\)/, ''))
+      /* `nom` (relecture ÉCRAN-2) remplace le LIBELLÉ pour VoiceOver, jamais l'aide. */
+      && /accessibilityLabel=\{aide \? `\$\{nom \|\| libelle\}\. \$\{aide\}` : \(nom \|\| libelle\)\}/.test(corpsI)
+      && /export function Interrupteur\({ actif, libelle, aide, onPress, disabled = false, nom = null }\)/.test(UIsrc)
       && styleI.length > 10 && !/\.\.\./.test(styleI)
       && !/\b(display|opacity|height|maxHeight|width|position|overflow|transform)\s*:|transparent|fontSize:\s*0\b/.test(styleI)
       && ratioI >= 4.5 && directe && cadresFautifs.length === 0,
@@ -9950,16 +9985,30 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      et les bornes), comptées par le rôle « base » (son compte rendu, §2 :
      471 annoncées, 472 colonnes jugées par son juge, 0 écart) ; le compte
      est désormais le cas 28. Les 159 variables des refus (114 et les 45 du
-     cas 27) déclarées d'avance. */
-  verifier('…il ANNONCE ses 471 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
-    + '288 avec le cas 25 de 2b-4, 361 avec le cas 26 de 2b-5, 364 avec DROIT-R2, et les cent sept du cas 27 de 2b-6), les COMPTE '
+     cas 27) déclarées d'avance.
+     2b-6, relecture (banc des sabotages, S9b) : 472 valeurs — une de plus
+     au cas 27 a, « 29 bis » (une petite entreprise HORS de son activité,
+     les travaux PAS DITS : aucun motif du rang 14) ; aucun refus de plus. */
+  verifier('…il ANNONCE ses 472 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
+    + '288 avec le cas 25 de 2b-4, 361 avec le cas 26 de 2b-5, 364 avec DROIT-R2, les cent sept du cas 27 de 2b-6, et le « 29 bis » de '
+    + 'sa relecture), les COMPTE '
     + '(chaque valeur passe par `pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre '
     + 'compte ; les 159 variables des refus sont déclarées d’avance (un cas retiré laisse un `f`, pas une autre erreur)',
-  valeursAnnoncees === 471 && /JUGE EXACTEMENT 471 VALEURS/.test(brutE)
+  valeursAnnoncees === 472 && /JUGE EXACTEMENT 472 VALEURS/.test(brutE)
     && /create temporary sequence essai_valeurs;/.test(essE)
     && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
     && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
-    && aliasJuges === enveloppes + 1 && declarees,
+    && aliasJuges === enveloppes + 1 && declarees
+    /* S9b : le « 29 bis » est LÀ — une petite entreprise hors de son
+       activité, les travaux PAS DITS (la réponse posée SEULE : les travaux
+       sont restés vides depuis le pas précédent), et la liste ne dit rien. */
+    && (() => {
+      const i36 = essE.indexOf("update public.devis set pour_qui = 'professionnel', energie_travaux = null, generation = 36 where id = :D1;");
+      const i37 = essE.indexOf("update public.devis set pour_qui = 'professionnel_hors_activite', generation = 37 where id = :D1;");
+      return i36 >= 0 && i37 > i36 && (essE.slice(i36 + 10, i37).match(/\bupdate\b/g) || []).length === 0
+        && /^update public\.devis set pour_qui = 'professionnel_hors_activite', generation = 37 where id = :D1;\s*execute liste\(:D1, '—'\);/
+          .test(essE.slice(i37));
+    })(),
   `${aliasJuges} colonne(s) jugée(s), ${enveloppes} enveloppée(s), annonce ${valeursAnnoncees}, déclarées d’avance : ${declarees}`);
   /* …ET IL ÉPROUVE CE QUE LA RELECTURE DE 2b-1 A CHANGÉ — pas seulement son
      compte (banc indépendant, 05/11/2026 au soir) : le cas 3 a ramené à
@@ -12276,7 +12325,12 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
      défaut est `jourDuTelephone()`. */
   const fichiersJour = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
     .stdout.split('\n').filter((f) => /\.js$/.test(f));
-  const JUGES = ['motifsDeRemise', 'etatDeLAttestation', 'etatDeLAssurance'];
+  /* 2b-6, relecture CTL6-5 : les quatre fonctions d'état de « Mon
+     entreprise » (un signe de qualité, un sous-traitant) jugent elles aussi
+     au jour LOCAL — passé au jour d'UTC, une ligne dirait « Valable » un
+     signe expiré la veille, de minuit à 1 ou 2 h. */
+  const JUGES = ['motifsDeRemise', 'etatDeLAttestation', 'etatDeLAssurance', 'etatDuLabel', 'libelleEtatDuLabel', 'etatDuSousTraitant',
+    'libelleEtatDuSousTraitant'];
   const appelsJuges = [];
   for (const f of fichiersJour) {
     const src = sansCommentairesJs(lireSiExiste(f) || '');
@@ -12298,6 +12352,10 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   const interne = 'etatDeLAttestation(assurances, jour, { proId: d.proId ?? null })';
   const fautifsJour = appelsJuges.filter((a) => {
     if (a.f === 'src/lib/devis.js' && a.texte === interne) return false;
+    /* …et les deux appels INTERNES d'`emetteur.js` : chaque libellé passe à
+       son état SON propre paramètre `jour`, dont le défaut est
+       `jourLocal(new Date())` (tenu plus bas). */
+    if (a.f === 'src/lib/emetteur.js' && ['etatDuLabel(label, jour)', 'etatDuSousTraitant(st, jour)'].includes(a.texte)) return false;
     const sansPermis = a.texte.replace(/\bjourDuTelephone\s*\(\s*\)/g, '').replace(/\bjourLocal\s*\(/g, '');
     return /toISOString|getUTC|Date\.UTC|\.(slice|substring|substr)\(\s*0\s*,\s*10\s*\)/.test(a.texte) || /\bjour\b/.test(sansPermis);
   });
@@ -12305,7 +12363,8 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   const defautsEm = sansEspaces(sansCommentairesJs(lire('src/lib/emetteur.js')));
   verifier('i bis. le jour qui juge l’attestation décennale n’est JAMAIS celui d’UTC, chez AUCUN appelant : `motifsDeRemise`, '
     + '`etatDeLAttestation` et `etatDeLAssurance` gardent leur défaut (`jourDuTelephone()`, `jourLocal(…)`), et aucun appel dans `src/` '
-    + 'ne leur passe un jour calculé (banc des textes, S21)',
+    + 'ne leur passe un jour calculé (banc des textes, S21) — ni aux quatre fonctions d’état d’un signe de qualité et d’un sous-traitant '
+    + '(relecture CTL6-5)',
   appelsJuges.length >= 3 && appelsJuges.some((a) => a.f === 'src/lib/api.js' && a.nom === 'motifsDeRemise')
     && fautifsJour.length === 0
     /* 2b-5 : un paramètre de plus APRÈS le jour (`lieux`, sans valeur par
@@ -12313,7 +12372,12 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
        les lieux (`labels`, `sousTraitants`, sans valeur calculée non plus). */
     && /assurances = \[\], jour = jourDuTelephone\(\), lieux = undefined, labels = undefined, sousTraitants = undefined, \} = \{\}\) \{/.test(defauts)
     && /export function etatDeLAttestation\(assurances, jour = jourDuTelephone\(\), \{ proId = null \} = \{\}\) \{/.test(defauts)
-    && /export function etatDeLAssurance\(a, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm),
+    && /export function etatDeLAssurance\(a, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm)
+    && /export function etatDuLabel\(label, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm)
+    && /export function libelleEtatDuLabel\(label, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm)
+    && /export function etatDuSousTraitant\(st, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm)
+    && /export function libelleEtatDuSousTraitant\(st, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm)
+    && appelsJuges.filter((a) => /^(libelleEtatDu|etatDu)/.test(a.nom)).length >= 7,
   `${appelsJuges.length} appel(s) ; fautifs : ${fautifsJour.map((a) => `${a.f} : ${a.texte.slice(0, 140)}`).join(' | ') || '—'}`);
 
   /* S22 — LA MARQUE D'UNE LIGNE NEUVE, CHEZ SON APPELANT : `ligneNeuve` est
@@ -14655,6 +14719,78 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     && /from '\.\.\/data\/travaux-energie\.js';/.test(srcEm46) && !/from '\.\/emetteur\.js'/.test(srcDevis46)
     && !/from '\.\/devis\.js'/.test(srcEm46));
 
+  /* b bis. LES LIBELLÉS, LEURS EXEMPLES ET LEURS AIDES, MOT POUR MOT (annexe
+        A.2 et §3.1 du cahier 2b-6) : le banc des sabotages (X37) a changé
+        « Sonde géothermique d’une pompe à chaleur » en « Forage
+        géothermique », et rien ne rougissait — la vérification « b » ne
+        tenait que les CLÉS, leur forme et le seul libellé du 17°. Or un
+        libellé est ce que l’artisan COCHE, et ce que l’étape 2c IMPRIMERA
+        « pour les catégories de travaux concernés » : il se fige comme une
+        aide de droit. Les dix-neuf libellés sont ceux du cahier, au
+        caractère près. DEUX ÉCARTS au tableau du cahier, voulus et figés
+        ici sous la forme du CODE : les exemples commencent par une
+        MAJUSCULE (choix de la construction, `calcul.md` écart 1 : ils
+        s’affichent comme une phrase sous la case) ; et « (prudence) », dans
+        la colonne des exemples du cahier pour le photovoltaïque et le
+        désembouage, est une NOTE du cahier (la ligne est comptée par
+        prudence, voir `prudence`), pas un texte affiché. L’aide du 17° est
+        celle que le cahier range dans sa colonne des exemples. */
+  const LIBELLES_19 = [
+    ['chaudiere', 'Chaudière à haute performance (condensation, micro-cogénération gaz) et sa régulation',
+      null, null],
+    ['solaire_thermique', 'Chauffage ou eau chaude par capteurs solaires',
+      null, null],
+    ['bois_chaudiere', 'Chaudière ou poêle hydraulique au bois ou à la biomasse (relié au chauffage central ou à l’eau chaude)',
+      null, null],
+    ['bois_poele', 'Poêle, insert ou cuisinière au bois ou à la biomasse, non relié au chauffage central ni à l’eau chaude',
+      null, null],
+    ['pac_chauffage', 'Pompe à chaleur pour le chauffage',
+      null, null],
+    ['pac_eau_chaude', 'Chauffe-eau thermodynamique (pompe à chaleur pour l’eau chaude)',
+      null, null],
+    ['emetteurs_electriques', 'Radiateurs ou autres émetteurs électriques, et leur régulation',
+      'Plancher chauffant électrique, panneau rayonnant', null],
+    ['ventilation', 'Ventilation mécanique',
+      'VMC simple ou double flux', null],
+    ['fenetres', 'Fenêtres, portes-fenêtres, volets isolants, porte d’entrée sur l’extérieur',
+      null, null],
+    ['fenetres_toit', 'Fenêtres de toit',
+      null, null],
+    ['isolation_interieur', 'Isolation par l’intérieur des murs, des rampants de toiture ou des plafonds sous combles',
+      'Doublage ou faux plafond isolé compris', null],
+    ['isolation_exterieur', 'Isolation des murs par l’extérieur',
+      null, null],
+    ['isolation_toiture', 'Isolation d’une toiture-terrasse, ou d’une toiture par l’extérieur',
+      null, null],
+    ['isolation_combles', 'Isolation des combles perdus',
+      null, null],
+    ['isolation_plancher', 'Isolation d’un plancher bas sur local non chauffé',
+      'Cave, garage, vide sanitaire', null],
+    ['geothermie', 'Sonde géothermique d’une pompe à chaleur',
+      'Forage', null],
+    ['renovation_ensemble', 'Rénovation énergétique en « offre globale » (conception, coordination et suivi de tout le projet)',
+      null, 'Ne cochez pas cette ligne parce que le devis réunit plusieurs des travaux ci-dessus : cochez chacun d’eux.'],
+    ['photovoltaique', 'Panneaux solaires photovoltaïques',
+      null, null],
+    ['desembouage', 'Désembouage d’un chauffage central à eau',
+      'Hors installation chauffée par une pompe à chaleur', null],
+  ];
+  const fauxLibelles = CLES_19.filter((cle, i) => {
+    const t = T[i] || {};
+    const [c, libelle, exemples, aide] = LIBELLES_19[i] || [];
+    return t.cle !== cle || c !== cle || t.libelle !== libelle || t.exemples !== exemples || t.aide !== aide;
+  });
+  verifier('b bis. les dix-neuf LIBELLÉS de `TRAVAUX_ENERGIE`, leurs EXEMPLES et leurs AIDES, MOT POUR MOT (annexe A.2, §3.1 du '
+    + 'cahier 2b-6) : ce que l’artisan coche, et ce que le devis imprimera (2c) — un libellé changé se décide, il ne glisse pas',
+  LIBELLES_19.length === 19 && T.length === 19 && fauxLibelles.length === 0
+    && LIBELLES_19.every(([, l, ex, a]) => !/\s{2}|^\s|\s$/.test(l) && (ex === null || /^\p{Lu}/u.test(ex)) && (a === null || /\.$/.test(a))),
+  fauxLibelles.map((cle) => {
+    const t = T[CLES_19.indexOf(cle)] || {};
+    const [, libelle, exemples, aide] = LIBELLES_19[CLES_19.indexOf(cle)] || [];
+    return `${cle} : ${[['libellé', t.libelle, libelle], ['exemples', t.exemples, exemples], ['aide', t.aide, aide]]
+      .filter(([, lu, voulu]) => lu !== voulu).map(([quoi, lu]) => `${quoi} « ${lu} »`).join(', ') || 'la clé'}`;
+  }).join(' | ') || '19 libellés');
+
   /* c. LES APPUIS, FAITS TOURNER (S24, S25, S52) : jamais un tableau vide —
         la dernière case décochée rend `null` ; « Aucun de ces travaux »
         EXCLUSIF et annoncé ; l'ordre canonique ; une clé inconnue ne change
@@ -14861,6 +14997,18 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
       objet: 'Isoler les combles' }, [], []), ['14:devis_energie']],
     ['le rang 14 vient APRÈS le rang 13, AVANT l’entreprise', M46({ dechetsConcerne: null }, [], [],
       { motifsEmetteur: ['identite: Votre nom.'] }), ['13:devis_dechets', '14:devis_energie', '101:identite']],
+    /* Relecture CTL6-12 (P13) : un sous-traitant labellisé, valable, SANS
+       justificatif → la loi. Écrit ici, à la main : un miroir et un
+       `cas-remise.json` changés ENSEMBLE passaient (R42). */
+    ['…« Oui », un sous-traitant labellisé valable SANS justificatif → la loi (P13)', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s1'] }, LA, [ST('s1', { label_detient: true, label_categories: ['isolation_combles'],
+      label_valide_jusquau: '2999-01-01' })]), ['14:devis_energie_mentions']],
+    /* Relecture CTL6-3 (T9) : au régime réel, « Pour la TVA » à Oui, une
+       ligne à 10 % ET un travail d'énergie coché → le motif du rang 3
+       RESTE : le label ne change jamais un taux de TVA. */
+    ['au réel, un chantier neuf pour la TVA, une ligne à 10 % ET un travail d’énergie → le rang 3 reste (T9)',
+      M46({ ...COMBLES, chantierNeufTva: true }, LA, [], { regime: 'reel',
+        lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 1000, ordre: 1 }] }), ['3:devis_taux_reduit_neuf']],
   ];
   const fauxBords46 = bords46.filter(([, vu, attendu]) => !egal(vu, attendu)).map(([nom, vu]) => `${nom} → ${json(vu)}`);
   verifier('f. le miroir du rang 14, à ses bords, écrits ici et FAITS TOURNER : rien de dit → `devis_energie` ; « pour son entreprise » '
@@ -14919,6 +15067,30 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     && egal(avis46('liste'), [PHRASE_AVIS46]) && egal(avis46('chargement'), [PHRASE_AVIS46]) && egal(avis46(null), [PHRASE_AVIS46])
     && egal(avis46('liste', null), []),
   json([FL({}, proche), avis46('chargement')]));
+  /* …ET TROIS CAS QUE LE BANC DE LA RELECTURE A TROUVÉS SANS CONTRÔLE :
+       - CTL6-9 (T31) : DEUX travaux couverts par DEUX signes de fins
+         différentes → la fin la plus PROCHE parle, dans les deux ordres —
+         prendre la plus tardive faisait taire un avis qui devait prévenir ;
+       - CTL6-11 : un client « pour son entreprise » à l'ÉCRAN, la réponse vue
+         par la base passée VIDE (`reponseVue: null`, explicitement) → aucun
+         avis : l'avis suit l'écran, jamais la réponse de la base ;
+       - ÉCRAN-3 : un intitulé TAPÉ qui contient « $' » et « {fin} » s'écrit
+         tel quel dans l'avis — un `replace` par une chaîne l'interprétait. */
+  const deuxFins = [L('a', ['isolation_combles'], '2026-12-10'), L('b', ['ventilation'], '2999-01-01')];
+  const DEUX_TRAVAUX = { energieTravaux: ['isolation_combles', 'ventilation'] };
+  const avisPro = D.avisDuDevis({ devis: { ...COMPLET46, ...COMBLES, objet: 'Isolation', pourQui: 'professionnel' }, etat: 'liste',
+    labels: proche, jour: '2026-11-24', reponseVue: null }).filter((a) => a.cle === 'avis_label_echeance');
+  const INTITULE_DOLLAR = "A$'B $& $` $$ {fin}";
+  const avisDollar = avis46('liste', [L('a', ['isolation_combles'], '2026-12-10', 'p/a.pdf', 'p', INTITULE_DOLLAR)]);
+  const PHRASE_DOLLAR = `Votre signe de qualité « ${INTITULE_DOLLAR} » est valable jusqu’au 10/12/2026. Si ce devis est signé après cette `
+    + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+  verifier('…deux travaux couverts par deux signes de fins différentes → la fin la plus PROCHE, dans les deux ordres (CTL6-9) ; un '
+    + 'client « pour son entreprise » à l’écran, `reponseVue: null` → aucun avis (CTL6-11) ; un intitulé qui contient « $’ », « $& », '
+    + '« $` », « $$ » et « {fin} » s’écrit TEL QUEL dans l’avis (ÉCRAN-3)',
+  egal(FL(DEUX_TRAVAUX, deuxFins), { fin: '2026-12-10', intitule: 'Signe a' })
+    && egal(FL(DEUX_TRAVAUX, [...deuxFins].reverse()), { fin: '2026-12-10', intitule: 'Signe a' })
+    && avisPro.length === 0 && egal(avisDollar, [PHRASE_DOLLAR]),
+  json([FL(DEUX_TRAVAUX, deuxFins), avisPro, avisDollar]));
 
   /* h. RIEN DE COCHÉ D'OFFICE (§3.2, §3.8, CTL-10, S22) : la carte s'ouvre
         sur les QUATRE champs du devis, et rien d'autre — l'origine, l'objet,
@@ -15005,7 +15177,14 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     ...Object.values(PHRASES_14).map(([, , p]) => p), D.AVIS_DU_DEVIS.avis_label_echeance,
     ...T.flatMap((t) => [t.libelle, t.exemples, t.aide].filter(Boolean)), ...ETATS_EM, E.MESSAGE_SIRET_FAUX,
     ...CLES_19.map((c) => E.libelleDuTravail(c)),
+    /* …ET LES TEXTES DES DEUX SECTIONS ET DES DEUX FORMULAIRES DE « MON
+       ENTREPRISE » (annexe A.5) : le banc des sabotages (S27) a glissé
+       « agréé » dans le texte gris de l'organisme, et les deux contrôles
+       restaient verts — la règle du vocabulaire ne lisait que les textes du
+       devis. `verifier-emetteur` les compare en plus mot pour mot. */
+    ...plats(E.TEXTES_SIGNES_DE_QUALITE), ...plats(E.TEXTES_SOUS_TRAITANTS),
   ];
+  const nbTextesEm46 = plats(E.TEXTES_SIGNES_DE_QUALITE).length + plats(E.TEXTES_SOUS_TRAITANTS).length;
   const lettre = '[\\p{L}_]';
   const interdits = [
     new RegExp(`(?<!${lettre})certifi(?:é|ée|és|ées|er)(?!${lettre})`, 'iu'), /agr[ée]/iu,
@@ -15015,21 +15194,130 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
   const fautifs46 = textes46.filter((t) => interdits.some((re) => re.test(t)));
   verifier('j. les amendes MOT POUR MOT — celle du label (L. 242-51 et l’amende administrative, P14 : « Les deux »), espaces INSÉCABLES '
     + 'entre les chiffres et devant « € » ; celle de la sous-traitance SANS amende (DROIT-23) — et sur les '
-    + `${textes46.length} textes de 2b-6, jamais « certifié », « agréé », « vérifié », « garanti », ni « Reconnu garant de `
+    + `${textes46.length} textes de 2b-6 (ceux de « Mon entreprise » compris), jamais « certifié », « agréé », « vérifié », « garanti », ni « Reconnu garant de `
     + 'l’environnement » (T10, CTL-6 ; la frontière de mot écrite pour les lettres accentuées)',
   D.AMENDE_DU_LABEL === AMENDE_ATTENDUE && D.LE_LABEL.amende === D.AMENDE_DU_LABEL
     && D.AMENDE_DE_LA_SOUS_TRAITANCE === 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.'
     && !/€|amende/.test(D.AMENDE_DE_LA_SOUS_TRAITANCE) && !/€|amende/.test(D.LE_LABEL.sousTraitance.aide)
     && textes46.length > 60 && textes46.every((t) => typeof t === 'string' && t.length > 0) && fautifs46.length === 0
+    && nbTextesEm46 >= 50
     && interdits[0].test('certifié') && !interdits[0].test('certificat') && interdits[1].test('agréé') && interdits[2].test('vérifié')
     && interdits[3].test('label garanti') && !interdits[3].test('garantie décennale') && !interdits[2].test('vérifiable'),
-  fautifs46.join(' | ') || `${textes46.length} textes`);
+  fautifs46.join(' | ') || `${textes46.length} textes, dont ${nbTextesEm46} de « Mon entreprise »`);
   /* …ET SES INSÉCABLES SONT ÉCRITES `\u00a0` dans le source de la constante
         — un caractère invisible collé ne se relit pas (CLAUDE.md, lot 1). */
   const sourceAmende = (/export const AMENDE_DU_LABEL = [\s\S]*?;\n/.exec(lire('src/lib/devis.js')) || [''])[0];
   verifier('…et les QUATRE insécables de l’amende du label sont écrites `\\u00a0` dans le source de la constante, aucune collée en '
     + 'caractère invisible',
   (sourceAmende.match(/\\u00a0/g) || []).length === 4 && !/[\u00a0\u202f]/.test(sourceAmende), sourceAmende.slice(0, 120));
+
+  /* j bis. LA CARTE ENTIÈRE, MOT POUR MOT (relecture CTL6-1, 24/11/2026) :
+        les textes de `LE_LABEL` n'étaient tenus que par le vocabulaire — une
+        aide qui promettait « qui gardera ses aides », une aide de la
+        sous-traitance « après la signature », la prudence d'une association
+        retirée passaient les 56 contrôles. Chaque texte est comparé, dans
+        l'ORDRE et avec le nombre de clés de chaque niveau, à l'annexe qui le
+        donne : A.1 (le bouton), A.4 (la rangée), A.3 (le reste), P14 (les
+        amendes) — et « relecture » pour les trois que la relecture a
+        corrigés (DROIT6-5 : l'aide de la sous-traitance bornée à titre
+        privé ; DROIT6-8 : la seconde phrase de l'aide de la case ;
+        DROIT6-11 c : « ce que ce devis comporte, même fait par un
+        sous-traitant »). Changer un texte de la carte se DÉCIDE ici. */
+  const A3_LE_LABEL = [
+    ['titre', 'A.3', 'Énergie et label RGE'],
+    ['rangee', 'A.4', 'Énergie (label RGE)'],
+    ['bouton', 'A.1', 'Compléter : énergie et label RGE'],
+    ['introduction', 'A.3', 'Pour des travaux d’économies d’énergie ou d’énergie renouvelable chez un client qui commande à titre '
+      + 'privé, la loi demande de dire sur le devis si vous détenez un label RGE, et qui fera les travaux.'],
+    ['prudenceAssociation', 'A.3', 'Pour une association, une copropriété ou une société civile, la loi ne prévoit peut-être pas ces '
+      + 'mentions ; Opus les demande, par prudence.'],
+    ['prudenceSansReponse', 'A.3', 'Tant que vous n’avez pas dit à quel titre ce client commande, Opus les demande, par prudence.'],
+    ['entreprise', 'A.3', 'Ce client commande pour son entreprise : la loi ne demande pas ces mentions. Ce que vous avez déjà écrit '
+      + 'est gardé.'],
+    ['sousTitre', 'A.3', 'Pour les droits de votre client'],
+    ['travaux.question', 'A.3', 'Quels travaux d’économies d’énergie ou d’énergie renouvelable ce devis comporte-t-il ?'],
+    ['travaux.aucun', 'A.3', 'Aucun de ces travaux'],
+    ['travaux.sousAucun', 'A.3', 'Seulement si ce devis ne comporte aucun des travaux ci-dessous.'],
+    ['travaux.sousAucunSousTraitance', 'A.3', 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie '
+      + 'de ce devis, dites-le à votre client : la loi peut le demander.'],
+    ['travaux.aide', 'relecture', 'Cochez ce que ce devis comporte dans un logement, même fait par un sous-traitant, même une petite '
+      + 'partie : un doublage isolé, une VMC, une fenêtre. Les deux dernières lignes sont comptées par prudence. Dans le doute, '
+      + 'cochez : c’est le cas le plus sûr.'],
+    ['travaux.retires', 'A.3', 'Les travaux cochés ont été retirés.'],
+    ['label.sousTitre', 'A.3', 'Votre label RGE'],
+    ['label.couvert', 'A.3', 'Déclaré dans « Mon entreprise » : {intitule}, valable jusqu’au {fin}'],
+    ['label.sansCertificat', 'A.3', 'Votre signe de qualité « {intitule} » porte ces travaux, mais son certificat n’est pas joint : '
+      + 'joignez-le dans « Mon entreprise », ou retirez-le si vous ne le détenez plus.'],
+    ['label.expire', 'A.3', 'Votre signe de qualité « {intitule} » portait ces travaux jusqu’au {fin} : renouvelez-le dans « Mon '
+      + 'entreprise » si vous le détenez encore.'],
+    ['label.absent', 'A.3', 'Aucun de vos signes de qualité ne porte ces travaux.'],
+    ['label.declaration', 'A.3', 'Je ne détiens pas de label RGE pour ces travaux'],
+    ['label.aideDeclaration', 'relecture', 'Cochez seulement si c’est vrai : le devis le dira à votre client. Ce que cela change pour '
+      + 'ses aides, Opus ne l’écrit pas encore.'],
+    ['label.echec', 'A.3', 'Vos signes de qualité n’ont pas pu être lus.'],
+    ['label.reessayer', 'A.3', 'Réessayer'],
+    ['label.vide', 'A.3', 'Vous n’avez déclaré aucun signe de qualité.'],
+    ['label.porte', 'A.3', 'Mes signes de qualité'],
+    ['sousTraitance.sousTitre', 'A.3', 'Sous-traitance'],
+    ['sousTraitance.question', 'A.3', 'Une autre entreprise fera-t-elle une partie, ou la totalité, des travaux de ce devis ?'],
+    ['sousTraitance.non', 'A.3', 'Non'],
+    ['sousTraitance.oui', 'A.3', 'Oui'],
+    ['sousTraitance.lesquelles', 'A.3', 'Laquelle, ou lesquelles ?'],
+    ['sousTraitance.echec', 'A.3', 'Vos sous-traitants n’ont pas pu être lus.'],
+    ['sousTraitance.reessayer', 'A.3', 'Réessayer'],
+    ['sousTraitance.vide', 'A.3', 'Vous n’avez encore aucun sous-traitant.'],
+    ['sousTraitance.ajouter', 'A.3', 'Ajouter un sous-traitant'],
+    ['sousTraitance.porte', 'A.3', 'Mes sous-traitants'],
+    ['sousTraitance.plafond', 'A.3', 'Dix sous-traitants au plus par devis : décochez-en un pour en choisir un autre.'],
+    ['sousTraitance.aide', 'relecture', 'Pour un client qui commande à titre privé, la loi demande de nommer, avant la signature, '
+      + 'chaque entreprise qui fera une partie des travaux de ce devis, et de dire si elle détient un label RGE.'],
+    ['amende', 'P14', AMENDE_ATTENDUE],
+    ['amendeSousTraitance', 'P14', 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.'],
+  ];
+  const aplatir = (o, p = '') => Object.entries(o || {}).flatMap(([k, v]) => (typeof v === 'string' ? [[p ? `${p}.${k}` : k, v]]
+    : aplatir(v, p ? `${p}.${k}` : k)));
+  const vusLL = aplatir(D.LE_LABEL);
+  const ecartsLL = A3_LE_LABEL.filter(([k, , t], i) => !vusLL[i] || vusLL[i][0] !== k || vusLL[i][1] !== t).map(([k]) => k);
+  if (vusLL.length !== A3_LE_LABEL.length) ecartsLL.push(`${vusLL.length} textes au lieu de ${A3_LE_LABEL.length}`);
+  const clesNiv = [Object.keys(D.LE_LABEL).length, Object.keys(D.LE_LABEL.travaux || {}).length, Object.keys(D.LE_LABEL.label || {}).length,
+    Object.keys(D.LE_LABEL.sousTraitance || {}).length];
+  verifier(`j bis. la carte ENTIÈRE, MOT POUR MOT et dans l’ordre : les ${A3_LE_LABEL.length} textes de \`LE_LABEL\` (A.3, A.4, A.1, P14, `
+    + 'et les trois que la relecture a corrigés), et le nombre de clés de chaque niveau (13 · travaux 6 · label 11 · sous-traitance '
+    + '12) ; chaque objet GELÉ (relecture CTL6-1)',
+  ecartsLL.length === 0 && egal(clesNiv, [13, 6, 11, 12]) && Object.isFrozen(D.LE_LABEL) && Object.isFrozen(D.LE_LABEL.travaux)
+    && Object.isFrozen(D.LE_LABEL.label) && Object.isFrozen(D.LE_LABEL.sousTraitance)
+    && A3_LE_LABEL.filter(([, src]) => src === 'relecture').length === 3
+    && A3_LE_LABEL.every(([, src]) => ['A.1', 'A.3', 'A.4', 'P14', 'relecture'].includes(src)),
+  ecartsLL.map((k) => `${k} : « ${(vusLL.find(([c]) => c === k) || [])[1]} »`).join(' | ') || `${json(clesNiv)}`);
+  /* …et ce que la carte DIT, FAIT TOURNER : `phraseDuTravail` sur ses quatre
+        états (et rien pour un état inconnu), un intitulé qui contient « $' »
+        et « {fin} » écrit tel quel (ÉCRAN-3) ; `introductionDeLEnergie` sur
+        les cinq réponses « à quel titre » (la petite entreprise hors de son
+        activité principale ne reçoit PAS ces mentions : L. 221-3, T27). */
+  const PT = (etat, intitule = 'Qualibat RGE') => D.phraseDuTravail({ cle: 'isolation_combles', etat, intitule, fin: '2027-01-08' });
+  const LL = D.LE_LABEL;
+  const sortiesPT = {
+    couvert: PT('couvert'), sansCertificat: PT('sans_certificat'), expire: PT('expire'), absent: PT('absent'), inconnu: PT('autre'),
+    couvertDollar: PT('couvert', "A$'B {fin}"), expireDollar: PT('expire', "Q$&$` {intitule}"),
+  };
+  const sortiesIntro = ['consommateur', 'non_professionnel', null, 'professionnel', 'professionnel_hors_activite']
+    .map((v) => D.introductionDeLEnergie(v));
+  verifier('…`phraseDuTravail` FAITE TOURNER sur ses quatre états, en toutes lettres (et rien pour un état inconnu) ; un intitulé tapé '
+    + 'qui contient « $’ », « $& » ou « {fin} » s’écrit TEL QUEL (ÉCRAN-3) ; `introductionDeLEnergie` sur les cinq réponses « à quel '
+    + 'titre » : à titre privé, l’introduction ; une association, l’introduction et la prudence ; sans réponse, l’introduction et la '
+    + 'prudence de la réponse vide ; les deux réponses « entreprise », la seule phrase « entreprise »',
+  sortiesPT.couvert === 'Déclaré dans « Mon entreprise » : Qualibat RGE, valable jusqu’au 08/01/2027'
+    && sortiesPT.sansCertificat === 'Votre signe de qualité « Qualibat RGE » porte ces travaux, mais son certificat n’est pas joint : '
+      + 'joignez-le dans « Mon entreprise », ou retirez-le si vous ne le détenez plus.'
+    && sortiesPT.expire === 'Votre signe de qualité « Qualibat RGE » portait ces travaux jusqu’au 08/01/2027 : renouvelez-le dans « Mon '
+      + 'entreprise » si vous le détenez encore.'
+    && sortiesPT.absent === 'Aucun de vos signes de qualité ne porte ces travaux.' && sortiesPT.inconnu === null
+    && sortiesPT.couvertDollar === "Déclaré dans « Mon entreprise » : A$'B {fin}, valable jusqu’au 08/01/2027"
+    && sortiesPT.expireDollar === 'Votre signe de qualité « Q$&$` {intitule} » portait ces travaux jusqu’au 08/01/2027 : renouvelez-le '
+      + 'dans « Mon entreprise » si vous le détenez encore.'
+    && egal(sortiesIntro, [[LL.introduction], [LL.introduction, LL.prudenceAssociation], [LL.introduction, LL.prudenceSansReponse],
+      [LL.entreprise], [LL.entreprise]]),
+  json({ sortiesPT, sortiesIntro }));
 
   /* k. LA GARDE DU BADGE, CÔTÉ JAVASCRIPT (CTL-5, S43) : le badge public
         « RGE » de la fiche (`rge`, `rgeDeclare`, `rgeExpire`, `rgePath`,
@@ -15071,6 +15359,38 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     && nomsEnvoi.includes('justificatif-sous-traitant') && !nomsEnvoi.some((x) => /rge/i.test(x))
     && BADGE.test('d.rgeDeclare') && BADGE.test('pro.rge') && !BADGE.test('label RGE'),
   `introuvables : ${introuvables.join(', ') || '—'} ; nomment le badge : ${badge46.join(', ') || '—'} ; envois ${json(nomsEnvoi)}`);
+  /* …ET LA PROPRIÉTÉ, pas une liste de noms (relecture CTL6-4, 24/11/2026) :
+        les LECTURES d'`api.js` (`labelsDe`, `sousTraitantsDe`,
+        `monRegimeEtSaDate…`, `motifsRefusRemiseDemo`, `monEmetteurSupabase`)
+        n'étaient pas dans la liste ci-dessus, et `labelsDe` sert aussi le
+        chemin de la vraie base : une ligne qui rendait « joint » un signe
+        sans certificat quand la fiche porte le badge passait les 56
+        contrôles. AUCUN bloc de premier niveau d'`api.js` qui nomme les
+        signes de qualité ou les sous-traitants ne nomme le badge. (Une aide
+        indirecte — une fonction du badge appelée depuis `labelsDe` — y
+        échapperait : `verifier-postes` FAIT TOURNER `labelsDe`, avec et sans
+        le badge.) */
+  const blocsApi = [];
+  {
+    const lignesApi = srcApi46.split('\n');
+    let debut = 0;
+    for (let i = 1; i <= lignesApi.length; i += 1) {
+      if (i === lignesApi.length || /^(export |async function |function |const |let |var )/.test(lignesApi[i])) {
+        blocsApi.push(lignesApi.slice(debut, i).join('\n'));
+        debut = i;
+      }
+    }
+  }
+  const DES_SIGNES = /\blabels\b|\bsousTraitants\b|\bemetteur_labels\b|\bemetteur_sous_traitants\b/;
+  const blocsSignes = blocsApi.filter((b) => DES_SIGNES.test(b));
+  const blocsBadge = blocsSignes.filter((b) => BADGE.test(b)).map((b) => b.split('\n')[0].slice(0, 80));
+  verifier('…et la PROPRIÉTÉ (relecture CTL6-4) : aucun des blocs de premier niveau d’`api.js` qui nomment les signes de qualité ou les '
+    + `sous-traitants (${blocsSignes.length}, lectures comprises : \`labelsDe\`, \`sousTraitantsDe\`, \`monRegimeEtSaDate…\`, `
+    + '`motifsRefusRemiseDemo`, `monEmetteurSupabase`) ne nomme le badge',
+  blocsApi.length > 100 && blocsSignes.length >= 12 && blocsBadge.length === 0
+    && ['labelsDe', 'sousTraitantsDe', 'motifsRefusRemiseDemo', 'monEmetteurSupabase', 'monRegimeEtSaDateDemo']
+      .every((n) => blocsSignes.some((b) => new RegExp(`\\b${n}\\b`).test(b.split('\n')[0]))),
+  blocsBadge.join(' | ') || `${blocsSignes.length} blocs sur ${blocsApi.length}`);
 
   /* l. LA GARDE TVA (T9, §2.6) — le label et les travaux d'énergie ne
         changent JAMAIS un taux de TVA : la qualification n'est une condition
@@ -15123,6 +15443,31 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
     && corpsTaux.length > 20 && corpsCle.length > 20 && !/energie|label|sousTrait/i.test(corpsTaux + corpsCle)
     && appelsTaux.length >= 2 && appelsFauxTaux.length === 0,
   `${json(appelsTaux)} ; fautifs ${json(appelsFauxTaux)}`);
+  /* …ET UNE LISTE FERMÉE, pas une liste de mots interdits (relecture
+        CTL6-3, 24/11/2026) : un ALIAS (`const regimeDesTaux = … energie… ?
+        'reel' : regime`, puis `tauxProposes(regimeDesTaux)`) passait la
+        garde ci-dessus, qui lisait la syntaxe des arguments ; et le choix du
+        taux d'une ligne NEUVE (`tauxPour`) n'était regardé par personne. Les
+        appels de `src/` sont EXACTEMENT les deux d'aujourd'hui, arguments
+        compris — un appel ou un argument nouveau se DÉCIDE ici ; `tauxPour`
+        est figé ENTIER, ainsi que la liste des taux proposés et l'appel de
+        `ligneNeuve`. */
+  const APPELS_TAUX_PERMIS = ['src/lib/devis.js:cleDuTauxDeLaLigne(l, regime, d.chantierNeufTva)',
+    'src/screens/SaisieDevisScreen.js:tauxProposes(regime)'];
+  const SAtaux = sansEspaces(sansCommentairesJs(lire('src/screens/SaisieDevisScreen.js')));
+  const TAUX_POUR = "const tauxPour = (avantOrdre, type = 'poste') => { if (franchise) return 0; if (!reel) return null; "
+    + 'const precedentes = trierLignes(lignesRef.current) .filter((l) => l.type === type && (avantOrdre == null || '
+    + 'Number(l.ordre) <= avantOrdre)); const t = precedentes.length ? precedentes[precedentes.length - 1].tauxTvaCentiemes : null; '
+    + 'return propositions && propositions.includes(t) ? t : null; };';
+  verifier('…et une LISTE FERMÉE des appels (relecture CTL6-3) : `src/` appelle `tauxProposes` et `cleDuTauxDeLaLigne` EXACTEMENT deux '
+    + 'fois, avec ces arguments (`cleDuTauxDeLaLigne(l, regime, d.chantierNeufTva)`, `tauxProposes(regime)`) ; `tauxPour`, le taux d’une '
+    + 'ligne NEUVE, est figé entier (le dernier taux du même type, jamais un travail d’énergie), ainsi que `const propositions = '
+    + 'tauxProposes(regime);` et l’appel de `ligneNeuve`',
+  egal([...appelsTaux].sort(), [...APPELS_TAUX_PERMIS].sort())
+    && SAtaux.split(TAUX_POUR).length === 2 && SAtaux.split('const propositions = tauxProposes(regime);').length === 2
+    && SAtaux.split('ligneNeuve(type, id, ordre, tauxPour(ordre, type))').length === 2
+    && (SAtaux.match(/\btauxPour\s*\(/g) || []).length === 1 && !/energie/i.test(TAUX_POUR),
+  `${json(appelsTaux)} ; tauxPour figé : ${SAtaux.split(TAUX_POUR).length === 2}`);
 
   /* m. CE QUE L'APPLICATION ENVOIE ET RELIT (§3.5) : `devisVersBase` pose
         les quatre colonnes TELLES QUE LA CARTE LES TIENT (aucune
@@ -15160,6 +15505,10 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
   const verdicts46 = {
     labelBon: nomDe(VL({})), labelCategoriesVides: nomDe(VL({ categories: [] })), labelCleInconnue: nomDe(VL({ categories: ['aucun'] })),
     labelSansOrganisme: nomDe(VL({ organisme: '  ' })), labelCheminAilleurs: nomDe(VL({ justificatif_chemin: 'q/a.pdf' })),
+    /* Relecture CTL6-7 : un signe SANS DATE n'était éprouvé nulle part — le
+       miroir pouvait l'oublier, et la démonstration rangeait alors un signe
+       que la base refuse. L'erreur s'affiche sous la date. */
+    labelSansDate: nomDe(VL({ valide_jusquau: null })), champSansDate: (VL({ valide_jusquau: null }) || {}).champ || null,
     stBon: nomDe(VS({})), stSiretCourt: nomDe(VS({ siret: '123' })), stLabelSansDate: nomDe(VS({ label_detient: true,
       label_categories: ['fenetres'] })),
   };
@@ -15169,6 +15518,7 @@ console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le
   verdicts46.labelBon === 'ok' && verdicts46.labelCategoriesVides === 'emetteur_label_categories_check'
     && verdicts46.labelCleInconnue === 'emetteur_label_categories_check' && verdicts46.labelSansOrganisme === 'emetteur_label_complet_check'
     && verdicts46.labelCheminAilleurs === 'emetteur_label_chemin_check' && verdicts46.stBon === 'ok'
+    && verdicts46.labelSansDate === 'emetteur_label_complet_check' && verdicts46.champSansDate === 'valide_jusquau'
     && verdicts46.stSiretCourt === 'emetteur_sous_traitant_siret_check'
     && verdicts46.stLabelSansDate === 'emetteur_sous_traitant_complet_check',
   json(verdicts46));
@@ -15297,19 +15647,40 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
   const iCases = CEd.indexOf('{TRAVAUX_ENERGIE.map((t) => (');
   const iAmendeE = CEd.indexOf('{LE_LABEL.amende}');
   const iAmendeST = CEd.indexOf('{LE_LABEL.amendeSousTraitance}');
+  /* RELECTURE DROIT6-1 (24/11/2026) : CHAQUE AMENDE SOUS SA RUBRIQUE. Posée
+     à la fin, juste après l'aide de la sous-traitance, l'amende du label
+     (15 000 € / 75 000 €) se lisait comme la sanction de la SOUS-TRAITANCE,
+     que L. 242-51 ne punit que de nullité — une phrase de droit qui disait
+     plus que la loi, et l'ancienne forme de cette vérification la
+     VERROUILLAIT. Les mots ne changent pas (P14) ; seules leurs PLACES
+     sont tenues, par les balises EXACTES et CONSÉCUTIVES (CTL6-10) : l'amende
+     du label juste après la porte « Mes signes de qualité » et avant le
+     titre « Sous-traitance », sans condition entre les deux ; la nullité de
+     la sous-traitance juste après son aide, hors de toute réponse. */
+  const BLOC_AMENDE_LABEL = 'onPress={allerAMesSignes} /> </View> <Text style={s.amende}>{LE_LABEL.amende}</Text> '
+    + "<Text style={s.titre} onLayout={ancre('sousTraitance')} accessibilityRole=\"header\">{ST.sousTitre}</Text>";
+  const BLOC_AMENDE_ST = '</> )} <Text style={s.aide}>{ST.aide}</Text> <Text style={s.amendeSuite}>{LE_LABEL.amendeSousTraitance}</Text> '
+    + '</> )} </> )} </ScrollView>';
+  const compte = (t, x) => t.split(x).length - 1;
   verifier('d. les blocs dans l’ordre du cahier (§3.8) — la question, « Aucun de ces travaux » et ses deux phrases AVANT les dix-neuf '
-    + 'cases (ÉCRAN-3), le label, la sous-traitance, l’aide et les deux amendes — chaque rubrique ANCRÉE une fois, sur un titre enfant '
-    + 'DIRECT du contenu défilant ; le défilement ne se pose qu’une fois, sur `rubriqueInitiale`',
+    + 'cases (ÉCRAN-3), le label, la sous-traitance — chaque rubrique ANCRÉE une fois, sur un titre enfant DIRECT du contenu défilant ; '
+    + 'le défilement ne se pose qu’une fois, sur `rubriqueInitiale` ; et CHAQUE AMENDE SOUS SA RUBRIQUE (relecture DROIT6-1, CTL6-10) : '
+    + 'celle du label juste après « Mes signes de qualité », avant « Sous-traitance » ; la nullité de la sous-traitance juste après son '
+    + 'aide — balises exactes et consécutives',
   positionsE.every((i, k) => i > 0 && (k === 0 || i > positionsE[k - 1]))
     && ANCRES_E.every((k) => (CEdb.match(new RegExp(`ancre\\('${k}'\\)`, 'g')) || []).length === 1)
     && pilesE.every((p) => Array.isArray(p) && p.every((n) => n === ''))
     && iQuestion > 0 && iAucun > iQuestion && iSousAucun > iAucun && iSousAucunST > iSousAucun && iCases > iSousAucunST
     && CEd.indexOf("onLayout={ancre('label')}") > iCases
-    && iAmendeE > CEd.indexOf("onLayout={ancre('sousTraitance')}") && iAmendeST > iAmendeE
+    && iAmendeE > CEd.indexOf("onLayout={ancre('label')}") && iAmendeE < CEd.indexOf("onLayout={ancre('sousTraitance')}")
+    && iAmendeE > CEd.indexOf('onPress={allerAMesSignes}') && iAmendeST > CEd.indexOf('{ST.aide}')
+    && compte(CEd, '{LE_LABEL.amende}') === 1 && compte(CEd, '{LE_LABEL.amendeSousTraitance}') === 1 && compte(CEd, '{ST.aide}') === 1
+    && compte(CEd, BLOC_AMENDE_LABEL) === 1 && compte(CEd, BLOC_AMENDE_ST) === 1
     && CEd.includes('if (place.current || cle !== rubriqueInitiale || !refDefile.current) return; place.current = true;')
     && /<ScrollView ref=\{refDefile\} \{\.\.\.CLAVIER\} keyboardDismissMode="on-drag"/.test(CEd)
     && (CEd.match(/<ScrollView\b/g) || []).length === 1,
-  json({ positionsE, pilesE, iQuestion, iAucun, iCases, iAmendeE }));
+  json({ positionsE, pilesE, iQuestion, iAucun, iCases, iAmendeE, iAmendeST, blocLabel: compte(CEd, BLOC_AMENDE_LABEL),
+    blocST: compte(CEd, BLOC_AMENDE_ST) }));
 
   /* e. POUR QUI LA LOI PARLE (§3.8, 1) : l'introduction suit la réponse « à
         quel titre » VALABLE de l'écran (`introductionDeLEnergie`) ; pour un
@@ -15427,6 +15798,15 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
     'LE_LABEL.amendeSousTraitance'];
   const absentsE = NOMMES_E.filter((n) => !CEd.includes(n));
   const textesJsxE = [...CEdb.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1].trim()).filter(Boolean);
+  /* i bis. LA CASE « JE NE DÉTIENS PAS… » NOMME SON TRAVAIL POUR VOICEOVER
+        (relecture ÉCRAN-2) : deux cases du même libellé ne se distinguaient
+        pas, alors que la déclaration ira sur le contrat. Le `nom` dit le
+        libellé PUIS le travail ; l'aide reste derrière (`Interrupteur`). */
+  verifier('i bis. la case « Je ne détiens pas… » porte un `nom` qui dit son TRAVAIL (`${L.declaration} — ${libelleDuTravail(cle)}`), '
+    + 'une seule fois, et le libellé affiché reste `L.declaration` (relecture ÉCRAN-2)',
+  CEd.split('<Interrupteur actif={declaree} libelle={L.declaration} nom={`${L.declaration} — ${libelleDuTravail(cle)}`} '
+    + 'aide={L.aideDeclaration} onPress={() => toucherDeclaration(cle)} />').length === 2,
+  CEd.slice(CEd.indexOf('actif={declaree}') - 20, CEd.indexOf('actif={declaree}') + 220));
   verifier('i. chaque texte de l’annexe A.3 est NOMMÉ dans la carte (`LE_LABEL`, `L`, `ST`), et elle n’écrit aucune phrase entre ses '
     + 'balises (seuls « ‹ Liste » et « ‹ Devis ») ; ni « registre » (mot entier), « vérifi », « agré », « certifié », « garanti »',
   absentsE.length === 0 && textesJsxE.every((t) => ['‹ Liste', '‹ Devis'].includes(t))
@@ -15533,17 +15913,49 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
         champ tableau du devis — un tableau relu est toujours un tableau
         NEUF. La règle est éprouvée sur deux sabotages écrits ici. */
   const CHAMPS_TABLEAUX = ['dechetsFlux', 'dechetsSurPlace', 'dechetsLieux', 'energieTravaux', 'energieSansLabel', 'energieSousTraitants'];
-  const STRICTE3 = new RegExp(`(?:\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b\\s*!==?|\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b\\s*===|(?:===|!==)\\s*[\\w.]*\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b)`);
+  const stricte3 = (noms) => new RegExp(`(?:\\b(?:${noms.join('|')})\\b\\s*!==?|\\b(?:${noms.join('|')})\\b\\s*===|(?:===|!==)\\s*[\\w.]*\\b(?:${noms.join('|')})\\b)`);
+  const STRICTE3 = stricte3(CHAMPS_TABLEAUX);
+  /* …ET PAR UN ALIAS (banc des sabotages, C4) : `const ancien =
+        devis.energieSansLabel;` puis `c.sansLabel !== ancien` passait au vert
+        — la règle ne voyait un champ tableau qu'écrit À CÔTÉ de
+        l'opérateur. Les alias se relèvent dans chaque fichier : une
+        variable (`const`, `let`, `var`) dont la valeur COMMENCE par un
+        chemin qui finit sur un champ tableau (`devis.energieSansLabel`,
+        `d?.dechetsLieux || []`), et la déstructuration `const { champ: x }
+        =` — jamais la clé d'un littéral d'objet (`{ energieTravaux:
+        c.travaux }`), trop large : elle prendrait `c` pour un alias. Puis ces
+        noms entrent dans l'alternation, fichier par fichier. */
+  const aliasDesTableaux = (c) => {
+    const ch = CHAMPS_TABLEAUX.join('|');
+    const noms = new Set();
+    for (const m of c.matchAll(new RegExp(`\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*[\\w$.?]*\\b(?:${ch})\\b(?![\\w$(.\\[])`, 'g'))) {
+      noms.add(m[1]);
+    }
+    for (const m of c.matchAll(/\b(?:const|let|var)\s*\{([^{}]*)\}\s*=/g)) {
+      for (const a of m[1].matchAll(new RegExp(`\\b(?:${ch})\\s*:\\s*([A-Za-z_$][\\w$]*)`, 'g'))) noms.add(a[1]);
+    }
+    return [...noms];
+  };
+  const aliasParFichier = {};
   const fautifsEgal = ['src/components/DechetsDevis.js', 'src/components/EnergieDevis.js', 'src/screens/SaisieDevisScreen.js']
     .filter((f) => {
       const c = sansCommentairesJs(lireSiExiste(f) || '');
-      return /\bObject\.is\s*\(/.test(c) || STRICTE3.test(c);
+      const alias = aliasDesTableaux(c);
+      aliasParFichier[f] = alias;
+      return /\bObject\.is\s*\(/.test(c) || stricte3([...CHAMPS_TABLEAUX, ...alias]).test(c);
     });
-  verifier('n. ÉCRAN-12 : ni `Object.is`, ni égalité stricte dont un côté est un champ TABLEAU du devis, dans les deux cartes et la saisie '
-    + '— la règle éprouvée sur deux sabotages (`d.energieTravaux === x`, `x !== choix.dechetsLieux`)',
+  const SABOTAGE_C4 = 'const ancien = devis.energieSansLabel; if (c.sansLabel !== ancien) y();';
+  const aliasC4 = aliasDesTableaux(SABOTAGE_C4);
+  verifier('n. ÉCRAN-12 : ni `Object.is`, ni égalité stricte dont un côté est un champ TABLEAU du devis — écrit tel quel, ou par un '
+    + 'ALIAS (`const ancien = devis.energieSansLabel`, ou `const { energieSansLabel: ancien } =`) —, dans les deux cartes et la saisie '
+    + '— la règle éprouvée sur quatre sabotages (`d.energieTravaux === x`, `x !== choix.dechetsLieux`, et l’alias C4 sous ses deux formes)',
   fautifsEgal.length === 0 && STRICTE3.test('if (d.energieTravaux === x) y();') && STRICTE3.test('if (x !== choix.dechetsLieux) y();')
-    && !STRICTE3.test('const v = d.energieTravaux; memeValeur(v, w);'),
-  fautifsEgal.join(', ') || 'aucun');
+    && !STRICTE3.test('const v = d.energieTravaux; memeValeur(v, w);')
+    && json(aliasC4) === json(['ancien']) && stricte3([...CHAMPS_TABLEAUX, ...aliasC4]).test(SABOTAGE_C4)
+    && json(aliasDesTableaux('const { energieSansLabel: ancien, objet } = devis;')) === json(['ancien'])
+    && aliasDesTableaux('const coches = travauxCoches({ energieTravaux: c.travaux });').length === 0
+    && aliasDesTableaux('const n = devis.energieTravaux.length;').length === 0,
+  fautifsEgal.length ? `${fautifsEgal.join(', ')} ; alias relevés : ${json(aliasParFichier)}` : `aucun ; alias relevés : ${json(aliasParFichier)}`);
 
   /* o. LA DÉMONSTRATION (T14, §3.9) : « Muret » et « Terrasse » répondent
         « Aucun de ces travaux » et gardent leurs parcours ; « Sol du séjour »

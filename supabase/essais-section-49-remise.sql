@@ -97,12 +97,12 @@
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 471 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 472e qui les compte (cas 28) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 472 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 473e qui les compte (cas 28) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
 --  transaction déjà annulée, un cas retiré) manque au compte, et le cas 28
---  vaut `f`. Joué comme ci-dessus, le juge relit 472 colonnes `…_attendu_`
+--  vaut `f`. Joué comme ci-dessus, le juge relit 473 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
 --
 --  CE QUE 2b-6 A AJOUTÉ (24/11/2026) : `devis_complet` RÉPOND « AUCUN DE CES
@@ -141,7 +141,12 @@
 --  `security definer` (sous la RLS, retirer ces filtres passerait au vert) ;
 --  d. les quinze refus des trois contraintes, JUGÉS EN SQL ; e. les bornes
 --  acceptées. Cent sept valeurs de plus (364 → 471), quinze refus de plus
---  (38 → 53). Le compte est devenu le cas 28.
+--  (38 → 53). Le compte est devenu le cas 28. PUIS LA RELECTURE (banc des
+--  sabotages, S9b) : une valeur de plus au cas 27 a, « 29 bis » — une
+--  petite entreprise HORS de son activité, les travaux PAS DITS, ne reçoit
+--  aucun motif du rang 14. Sans lui, cette réponse ajoutée au SEUL bloc du
+--  rang 14 (pas à sa lecture) faisait sortir `devis_energie`, et ni cet
+--  essai ni la parité ne le voyaient (471 → 472, aucun refus de plus).
 --
 --  CE QUE 2b-5 A AJOUTÉ (21/11/2026) : `devis_complet` RÉPOND « NON » AUX
 --  DÉCHETS (`dechets_concerne = false`) — sans lui, la réponse vide comptant
@@ -331,13 +336,13 @@
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 471. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 472. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
 -- pas. Le jugement final (cas 28) compare le compte à l’annonce.
-\set VALEURS_ANNONCEES 471
+\set VALEURS_ANNONCEES 472
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -2825,20 +2830,24 @@ execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
 \echo '-- 29, 30, 34. « pour son entreprise » (les deux réponses) : rien, les travaux dits ou non'
 update public.devis set pour_qui = 'professionnel', energie_travaux = null, generation = 36 where id = :D1;
 execute liste(:D1, '—');
-update public.devis set pour_qui = 'professionnel_hors_activite', energie_travaux = array['isolation_combles'], generation = 37 where id = :D1;
+\echo '-- 29 bis. une petite entreprise HORS de son activité, les travaux PAS DITS : rien (relecture de 2b-6, banc S9b : sans'
+\echo '--     ce cas, cette réponse ajoutée au SEUL bloc du rang 14 faisait sortir devis_energie, et rien ne le voyait)'
+update public.devis set pour_qui = 'professionnel_hors_activite', generation = 37 where id = :D1;
 execute liste(:D1, '—');
-update public.devis set pour_qui = 'professionnel', generation = 38 where id = :D1;
+update public.devis set pour_qui = 'professionnel_hors_activite', energie_travaux = array['isolation_combles'], generation = 38 where id = :D1;
+execute liste(:D1, '—');
+update public.devis set pour_qui = 'professionnel', generation = 39 where id = :D1;
 execute liste(:D1, '—');
 \echo '-- 31. la réponse VIDE, les combles : devis_pour_qui, puis la prudence'
-update public.devis set pour_qui = null, generation = 39 where id = :D1;
+update public.devis set pour_qui = null, generation = 40 where id = :D1;
 execute liste(:D1, '1:devis_pour_qui=regle_opus,14:devis_energie_mentions_prudence=prudence');
 \echo '-- 32. la réponse donnée pour un AUTRE client, les travaux pas dits : devis_pour_qui, puis devis_energie'
-update public.devis set pour_qui = 'consommateur', energie_travaux = null, generation = 40 where id = :D1;
+update public.devis set pour_qui = 'consommateur', energie_travaux = null, generation = 41 where id = :D1;
 execute liste(:D1, '14:devis_energie=prudence');
-update public.devis set client_id = :C2, generation = 41 where id = :D1;
+update public.devis set client_id = :C2, generation = 42 where id = :D1;
 execute liste(:D1, '1:devis_pour_qui=regle_opus,14:devis_energie=prudence');
 \echo '-- 33. sans client : devis_client, puis devis_energie'
-update public.devis set client_id = null, generation = 42 where id = :D1;
+update public.devis set client_id = null, generation = 43 where id = :D1;
 execute liste(:D1, '1:devis_client=regle_opus,14:devis_energie=prudence');
 select pg_temp.v(total_ht_centimes = 100000 and total_ttc_centimes = 100000) as totaux_inchanges_attendu_t
   from public.devis where id = :D1;
@@ -3152,7 +3161,7 @@ select pg_temp.v(:'e27a_err' = 'true' and :'e27a_code' = '23514'
 \echo ''
 \echo '=== 28. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 472e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 473e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

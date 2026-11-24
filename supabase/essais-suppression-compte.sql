@@ -7,7 +7,11 @@
 --      psql -h 127.0.0.1 -p 5444 -U postgres -d opus_essai \
 --           -v ON_ERROR_STOP=0 -f supabase/essais-suppression-compte.sql
 --
---  QUATRE CAS ATTENDENT UNE ERREUR. C'est le but : un essai de sécurité
+--  TROIS CAS ATTENDENT UNE ERREUR — le cas 2 (le professionnel supprime sa
+--  propre ligne : 42501), le cas 3 (un visiteur : 42501) et le cas 5 (la
+--  fiche recréée depuis l'application : OP010). L'en-tête disait « quatre »
+--  depuis le 11/10 (a576238), et le texte n'en annotait que trois (relecture
+--  BASE-R3 de 2b-6, 24/11/2026). C'est le but : un essai de sécurité
 --  qui ne montre aucun refus n'éprouve rien. Chaque ordre qui doit échouer
 --  est le DERNIER de sa transaction — après une erreur, PostgreSQL abandonne
 --  la transaction entière et tout ce qui suivrait répondrait « current

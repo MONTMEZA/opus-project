@@ -2013,6 +2013,28 @@ const extraire = (nom, injecte = {}) => {
         || json(absentes.rendu.lieux) !== json(LIEUX)) fauxRegime.push(`${nom}(tables 2b-6 absentes) → ${json(absentes.rendu)}`);
       const panne = await tourne(nom, lecteur, new Error('réseau'));
       if (!panne.erreur || panne.erreur.message !== 'réseau') fauxRegime.push(`${nom} avale une erreur → ${json(panne.rendu)}`);
+      /* Relecture CTL6-4 : LE BADGE PUBLIC NE CHANGE RIEN. Une fiche qui
+         porte le badge (`rge`, `rge_url`, `rge_declare`, `rge_numero`, sur
+         la fiche ET sur l'émetteur) rend EXACTEMENT les mêmes signes de
+         qualité et les mêmes sous-traitants qu'une fiche qui ne le porte
+         pas — un signe sans certificat reste sans certificat. */
+      const BADGE_FICHE = { rge: true, rge_url: 'p/rge.pdf', rge_declare: true, rge_expire: '2999-01-01', rge_numero: 'X' };
+      const sansCert = [{ ...LABELS[0], justificatif_chemin: null }];
+      const stOui = [{ ...SOUS_TRAITANTS[0], label_detient: true, label_categories: ['fenetres'], label_valide_jusquau: '2999-01-01',
+        label_justificatif_chemin: null }];
+      const sansB = await tourne(nom, lecteur, { ...FICHE, labels: sansCert, sousTraitants: stOui });
+      const avecB = await tourne(nom, lecteur, { ...FICHE, ...BADGE_FICHE, emetteur: { ...FICHE.emetteur, ...BADGE_FICHE },
+        labels: sansCert, sousTraitants: stOui });
+      if (!sansB.rendu || !avecB.rendu || json(avecB.rendu.labels) !== json(sansB.rendu.labels)
+        || json(avecB.rendu.sousTraitants) !== json(sansB.rendu.sousTraitants) || json(avecB.rendu.labels) !== json(sansCert)) {
+        fauxRegime.push(`${nom} : le badge change les signes ou les sous-traitants → ${json(avecB.rendu)}`);
+      }
+    }
+    {
+      const BADGE_FICHE = { rge: true, rge_url: 'p/rge.pdf', rge_declare: true };
+      const sansCert = [{ ...LABELS[0], justificatif_chemin: null }];
+      if (json(lbs({ ...FICHE, ...BADGE_FICHE, labels: sansCert })) !== json(sansCert)
+        || json(sts({ ...FICHE, ...BADGE_FICHE })) !== json(SOUS_TRAITANTS)) fauxRegime.push('labelsDe / sousTraitantsDe lisent le badge');
     }
     for (const [nom, lecteur] of [['monRegimeSupabase', 'monEmetteurSupabase'], ['monRegimeDemo', 'monEmetteurDemo']]) {
       const r = await tourne(nom, lecteur, FICHE);
@@ -2025,7 +2047,8 @@ const extraire = (nom, injecte = {}) => {
     + 'changement de régime ; les assurances depuis 2b-4, par `assurancesDe`, les lieux de dépôt depuis 2b-5, par `lieuxDe`, les signes '
     + 'de qualité et les sous-traitants depuis 2b-6, par `labelsDe` et `sousTraitantsDe` — chacun une LISTE ou `null`, '
     + 'jamais `[]` inventé), en UNE lecture (`monEmetteur…`), FAIT TOURNER des deux côtés (Supabase et démonstration) — `monRegime` '
-    + 'rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel',
+    + 'rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel ; et le badge public de la fiche ne change RIEN aux '
+    + 'signes de qualité ni aux sous-traitants rendus (relecture CTL6-4)',
   fauxRegime.length === 0, fauxRegime.join(' ; '));
   /* 2b-5 (T12) : LA LECTURE DES LIEUX dans `monEmetteurSupabase` — une
      cinquième requête du MÊME `Promise.all`, sur `emetteur_lieux_depot`, de
@@ -2047,6 +2070,68 @@ const extraire = (nom, injecte = {}) => {
     && lecteurM.includes('lieux: l.error ? null : (l.data || []),')
     && (lecteurM.match(/emetteur_lieux_depot/g) || []).length === 1,
   lecteurM.slice(0, 200));
+
+  /* 2b-6, relecture (banc des sabotages, S31) : la vérification ci-dessus
+     ne lit le texte que pour les LIEUX ; `labels: q.error ? [] : …` passait
+     au vert ici (seul `verifier-emetteur`, qui lit la lecture à la lettre,
+     le voyait). On INJECTE désormais l'erreur « table absente » dans chaque
+     lecture qui la tolère — les lieux, les signes de qualité, les
+     sous-traitants, la preuve de TVA — en FAISANT TOURNER
+     `monEmetteurSupabase` sur un faux client Supabase : la liste touchée
+     rend `null` (non lue), JAMAIS `[]`, les autres restent lues ; et toute
+     AUTRE erreur sur ces lectures, ou la table absente sur les trois
+     premières (la fiche, les assurances, les tarifs), LÈVE. Les deux codes
+     de la table absente sont éprouvés (PGRST205, 42P01), et la VRAIE
+     `tableAbsente` est celle d'`api.js`. */
+  const LIGNES_LUES = {
+    emetteur: { pro_id: 'p', regime_tva: 'reel' }, emetteur_assurances: [{ id: 'a1' }], tarifs_pro: { pro_id: 'p' },
+    emetteur_lieux_depot: [{ id: 'l1' }], emetteur_labels: [{ id: 'g1' }], emetteur_sous_traitants: [{ id: 's1' }],
+    preuves_tva: { siren: '000049007', numero: 'FR00000049007' },
+  };
+  const fauxClient = (erreurs) => ({
+    from: (table) => {
+      const r = erreurs[table] ? { data: null, error: erreurs[table] } : { data: LIGNES_LUES[table], error: null };
+      const q = { select: () => q, eq: () => q, order: () => q, maybeSingle: () => q, then: (ok, ko) => Promise.resolve(r).then(ok, ko) };
+      return q;
+    },
+  });
+  const tableAbsenteApi = extraire('tableAbsente');
+  const colonneAbsenteApi = extraire('colonneAbsente');
+  const lireAvec = async (erreurs) => {
+    const f = extraire('monEmetteurSupabase', { supabase: fauxClient(erreurs), currentUserId: 'p', tableAbsente: tableAbsenteApi,
+      colonneAbsente: colonneAbsenteApi });
+    if (typeof f !== 'function') return { plante: 'introuvable' };
+    try { return { rendu: await f() }; } catch (e) { return { erreur: e }; }
+  };
+  const fauxAbsente = [];
+  if (typeof tableAbsenteApi !== 'function' || typeof colonneAbsenteApi !== 'function') fauxAbsente.push('`tableAbsente` ou `colonneAbsente` introuvable');
+  else {
+    const nominal = await lireAvec({});
+    const attendu = { emetteur: LIGNES_LUES.emetteur, assurances: LIGNES_LUES.emetteur_assurances, tarifs: LIGNES_LUES.tarifs_pro,
+      preuveTva: LIGNES_LUES.preuves_tva, lieux: LIGNES_LUES.emetteur_lieux_depot, labels: LIGNES_LUES.emetteur_labels,
+      sousTraitants: LIGNES_LUES.emetteur_sous_traitants };
+    if (!nominal.rendu || json(nominal.rendu) !== json(attendu)) fauxAbsente.push(`lecture nominale → ${json(nominal.rendu || nominal.plante || nominal.erreur && nominal.erreur.message)}`);
+    const TOLERANTES = { emetteur_lieux_depot: 'lieux', emetteur_labels: 'labels', emetteur_sous_traitants: 'sousTraitants', preuves_tva: 'preuveTva' };
+    for (const code of ['PGRST205', '42P01']) {
+      for (const [table, champ] of Object.entries(TOLERANTES)) {
+        const r = await lireAvec({ [table]: { code, message: `relation "public.${table}" does not exist` } });
+        const voulu = { ...attendu, [champ]: null };
+        if (!r.rendu || json(r.rendu) !== json(voulu)) fauxAbsente.push(`${table} absente (${code}) → ${json(r.rendu || (r.erreur && r.erreur.message) || r.plante)}`);
+      }
+      for (const table of ['emetteur', 'emetteur_assurances', 'tarifs_pro']) {
+        const r = await lireAvec({ [table]: { code, message: 'absente' } });
+        if (!r.erreur) fauxAbsente.push(`${table} absente (${code}) avalée → ${json(r.rendu)}`);
+      }
+    }
+    for (const table of [...Object.keys(TOLERANTES), 'emetteur', 'emetteur_assurances', 'tarifs_pro']) {
+      const r = await lireAvec({ [table]: { code: '42501', message: 'permission denied' } });
+      if (!r.erreur || r.erreur.code !== '42501') fauxAbsente.push(`${table} : un refus (42501) avalé → ${json(r.rendu)}`);
+    }
+  }
+  verifier('`monEmetteurSupabase`, FAIT TOURNER sur un faux client : la table ABSENTE (PGRST205 ou 42P01) des lieux, des signes de '
+    + 'qualité, des sous-traitants ou de la preuve de TVA rend `null` pour ELLE SEULE — jamais `[]` —, les autres restent lues ; toute '
+    + 'autre erreur LÈVE, et la table absente aussi pour la fiche, les assurances et les tarifs (banc 2b-6, S31)',
+  fauxAbsente.length === 0, fauxAbsente.join(' ; '));
 
   /* -- LA CLÉ DE RAPPROCHEMENT, NULLE PART DANS L'APPLICATION ------------ */
   const nommentLaCle = fichiers.filter((f) => f.startsWith('src/') && /cle_rapprochement/.test(f === 'src/lib/api.js' ? API : sansCommentairesJs(lire(f))));

@@ -118,8 +118,13 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
      (« mettez Opus à jour »). */
   emetteur_label_categories_check: 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
   emetteur_label_chemin_check: 'ce certificat n’est pas rangé dans votre espace : envoyez-le depuis ce formulaire.',
+  /* « ce qu'Opus range pour vos devis », jamais « ce que le devis doit
+     porter » (relecture DROIT6-7) : la loi ne demande sur le devis ni
+     l'organisme, ni l'intitulé, ni la date de fin, et la date OBLIGATOIRE
+     est un choix d'Opus (T7) — un choix d'Opus ne se dit pas comme une
+     obligation. */
   emetteur_label_complet_check: 'un signe de qualité s’écrit avec l’organisme qui l’a délivré, son intitulé, les travaux '
-    + 'qu’il couvre et sa date de fin : c’est ce que le devis doit porter. Le numéro du certificat, lui, est facultatif.',
+    + 'qu’il couvre et sa date de fin : c’est ce qu’Opus range pour vos devis. Le numéro du certificat, lui, est facultatif.',
   emetteur_label_longueurs_check: TEXTE_TROP_LONG,
   emetteur_sous_traitant_categories_check: 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
   emetteur_sous_traitant_chemin_check: 'ce justificatif n’est pas rangé dans votre espace : envoyez-le depuis ce '

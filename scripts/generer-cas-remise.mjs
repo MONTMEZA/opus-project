@@ -872,6 +872,20 @@ const SITUATIONS = [
     devis: { ...VIDE, energie_travaux: null, sos_request_id: SA, source: 'urgence' }, lignes: [] },
   { nom: 'D4-c : devis NEUF VIDE SANS RÉPONSE AUX TRAVAUX venu d’une demande ET d’une urgence', e: 'franchise',
     devis: { ...VIDE, energie_travaux: null, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
+  //     La relecture de 2b-6 (banc des sabotages, S9b), À LA FIN pour que les
+  //     numéros des cas déjà là ne bougent pas : une petite entreprise HORS de
+  //     son activité, les travaux PAS DITS. Sans lui, cette réponse ajoutée au
+  //     SEUL bloc du rang 14 (pas à sa lecture) faisait sortir `devis_energie`,
+  //     et la parité restait verte : aucun cas ne la jouait.
+  { nom: 'énergie : une petite entreprise hors de son activité, les travaux PAS DITS : rien ne manque (le rang se tait)',
+    e: 'franchise', devis: { pour_qui: 'professionnel_hors_activite', energie_travaux: null }, lignes: UN_POSTE_0 },
+  //     La relecture de 2b-6 (CTL6-3, la garde TVA T9), À LA FIN aussi : au
+  //     régime réel, « Pour la TVA » à Oui, une ligne à 10 % ET un travail
+  //     d'énergie coché. Aucun cas ne réunissait le rang 3 et des travaux
+  //     d'énergie : un miroir qui taisait le rang 3 dès qu'un travail est
+  //     coché (R03) gardait la parité verte.
+  { nom: 'T9 : au réel, un chantier neuf pour la TVA, une ligne à 10 % ET un travail d’énergie coché : devis_taux_reduit_neuf reste',
+    e: 'reel_tva', devis: { chantier_neuf_tva: true, energie_travaux: ['isolation_combles'] }, lignes: [poste(100000, 1000)] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -1346,6 +1360,16 @@ if (cas.some((c) => c.attendu.filter((m) => m.rang === 14).length > 1)) throw ne
     ['pour son entreprise, un travail coché : rien', (c) => reponse(c) === 'professionnel' && coche(c) && rien(c)],
     ['une petite entreprise hors de son activité, un travail coché : rien', (c) => reponse(c) === 'professionnel_hors_activite'
       && coche(c) && rien(c)],
+    /* S9b : la même réponse, les travaux PAS DITS (`energie_travaux` vide de
+       valeur) — le bloc du rang 14 ne doit pas parler pour elle non plus. */
+    ['une petite entreprise hors de son activité, les travaux PAS DITS : rien', (c) => reponse(c) === 'professionnel_hors_activite'
+      && br(c).energie_travaux === null && rien(c)],
+    ['pour son entreprise, les travaux PAS DITS : rien', (c) => reponse(c) === 'professionnel'
+      && br(c).energie_travaux === null && rien(c)],
+    /* Relecture CTL6-3 (T9) : le rang 3 ET un travail d'énergie coché — le
+       label ne change jamais un taux de TVA. */
+    ['au réel, le rang 3 ET un travail d’énergie coché : le rang 3 reste (T9)', (c) => coche(c) && br(c).chantier_neuf_tva === true
+      && c.attendu.some((m) => m.cle === 'devis_taux_reduit_neuf')],
     ['la réponse « à quel titre » vide, un travail coché : la prudence', (c) => reponse(c) === null && br(c).client_id && coche(c)
       && c.attendu.some((m) => m.cle === 'devis_energie_mentions_prudence')],
     ['une ligne de prudence SEULE, à titre privé : la prudence', (c) => reponse(c) === 'consommateur' && coche(c)

@@ -70,12 +70,16 @@ export const VERSION = '2026-11-24';
        SIRET et le justificatif d'un sous-traitant concernent une autre
        entreprise, qui n'a souvent pas de compte Opus. Dans la branche
        affichée, la phrase vient APRÈS la garantie « … ni dans l'espace
-       d'administration » et n'en relève pas : la garantie reste limitée au
-       carnet et aux devis, et le texte le dit — étendue aux sous-traitants,
-       elle serait fausse pour leur justificatif (le risque vu par la
-       contradiction de DROIT-11). « Sous-traitant » y a deux sens, celui du
-       chantier et celui du RGPD : le paragraphe nouveau ne parle que du
-       premier ;
+       d'administration » et n'en relève pas : elle dit elle-même ce qui
+       vaut — le nom et le SIRET lisibles de l'artisan seul, le justificatif
+       aussi de l'administration, gardé jusqu'à la suppression du compte —,
+       la garantie étendue aux sous-traitants serait fausse pour leur
+       justificatif (le risque vu par la contradiction de DROIT-11), et la
+       retirer en entier faux pour leur nom et leur SIRET (relecture
+       DROIT6-11, a). La branche du contrat a sa forme à la troisième
+       personne (DROIT6-11, b). Aucune des deux ne dit « sous-traitant »,
+       que la même section emploie au sens du RGPD : « une entreprise à qui
+       vous sous-traitez des travaux » ;
      - UNE INTERDICTION NOUVELLE dans « Ce qui est interdit » (décision
        P14, la phrase (b) mot pour mot) : déclarer dans « Mon entreprise »
        un signe de qualité que son entreprise ne détient pas, ou pour des
@@ -1610,13 +1614,31 @@ const CE_QUI_RESTE_D_UN_CLIENT = 'Supprimer la fiche d’un client ne supprime p
    « Sous-traitant » au sens du CHANTIER : l'entreprise qui fait une partie
    des travaux, pas le rôle d'Opus au sens du RGPD (article 28), que la même
    section nomme aussi. Dans la branche affichée, elle vient APRÈS la
-   garantie « … ni dans l’espace d’administration », et la phrase qui la
-   suit dit que cette garantie ne vaut que pour le carnet et les devis : le
-   justificatif d'un sous-traitant, rangé dans `documents`, est lisible par
-   l'administration. */
-const SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE = 'Il en va de même de vos sous-traitants : leur nom, '
-  + 'leur numéro SIRET et leur justificatif concernent une autre entreprise, qui n’a souvent pas '
-  + 'de compte Opus.';
+   garantie « … ni dans l’espace d’administration ».
+   RELECTURE DROIT6-11 (24/11/2026), deux défauts, et la phrase change :
+     a) « Il en va de même de vos sous-traitants », juste après la garantie
+        (« … les supprimer à tout moment ; et ils partent entièrement avec
+        votre compte »), se lisait d'abord comme l'ÉTENDANT, puis la phrase
+        suivante la retirait EN ENTIER (« la garantie qui précède ne vaut que
+        pour votre carnet et vos devis »), alors que le nom et le SIRET d'un
+        sous-traitant ne sont lisibles que de l'artisan. Elle ne dit plus
+        « il en va de même » ; la phrase qui suit dit EXACTEMENT ce qui vaut :
+        le nom et le SIRET, de l'artisan seul ; le justificatif, aussi de
+        l'administration, et il reste jusqu'à la suppression du compte ;
+     b) la branche du contrat parle de l'artisan à la troisième personne, et
+        enchaînait « vos sous-traitants ». D'où DEUX formes, une par branche,
+        chacune tenue mot pour mot par `verifier-legal` — et aucune ne dit
+        « sous-traitant », que la même section emploie au sens du RGPD pour
+        Opus : « une entreprise à qui vous sous-traitez des travaux ». */
+const SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE = 'Le nom, le numéro SIRET et le justificatif d’une entreprise '
+  + 'à qui vous sous-traitez des travaux concernent cette autre entreprise, qui n’a souvent pas de '
+  + 'compte Opus : vous en êtes là aussi le responsable du traitement. Son nom et son numéro SIRET '
+  + 'ne sont lisibles que de vous ; son justificatif, comme vos autres documents professionnels, '
+  + 'l’est aussi de l’administration d’Opus, et reste dans votre espace privé jusqu’à la '
+  + 'suppression de votre compte.';
+const SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE_CONTRAT = 'Le nom, le numéro SIRET et le justificatif '
+  + 'd’une entreprise à qui l’artisan sous-traite des travaux concernent cette autre entreprise, qui '
+  + 'n’a souvent pas de compte Opus.';
 
 export const CONFIDENTIALITE = [
   {
@@ -2010,14 +2032,23 @@ export const CONFIDENTIALITE = [
        justificatif d'un sous-traitant est la pièce d'une AUTRE entreprise :
        « Les clients que vous enregistrez » le dit, et « Combien de temps »
        dit qu'il reste dans l'espace privé quand on retire le sous-traitant. */
+    /* DEUX PHRASES DE FINALITÉ, et non une énumération collective (relecture
+       DROIT6-4, 24/11/2026) : « servent au contrôle du badge vérifié, à
+       l'examen d'une demande… et, pour…, à accompagner vos devis » prêtait
+       aux certificats et aux justificatifs — la pièce d'une AUTRE
+       entreprise, pour ces derniers — une finalité qu'ils n'ont pas :
+       aucune fonction de l'administration ni le badge ne lisent
+       `emetteur_labels` ni `emetteur_sous_traitants`. */
     texte: 'Le Kbis, l’extrait d’immatriculation, l’attestation d’assurance, les certificats de '
       + 'vos signes de qualité et les justificatifs de vos sous-traitants sont '
       + 'rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus '
-      + 'seulement. Ils ne sont jamais affichés publiquement et servent au contrôle du '
-      + 'badge vérifié, à l’examen d’une demande d’ouverture de compte professionnel — '
+      + 'seulement. Ils ne sont jamais affichés publiquement. Les pièces de votre profil (le '
+      + 'Kbis ou l’extrait d’immatriculation, l’attestation d’assurance) servent au contrôle du '
+      + 'badge vérifié et à l’examen d’une demande d’ouverture de compte professionnel — '
       + 'dont le justificatif suit les mêmes règles, et ne passe jamais par la '
-      + 'messagerie — et, pour l’attestation d’assurance, les certificats et les justificatifs '
-      + 'que vous joignez dans « Mon entreprise », à accompagner vos devis.',
+      + 'messagerie. L’attestation d’assurance, les certificats de vos signes de qualité et les '
+      + 'justificatifs de vos sous-traitants que vous joignez dans « Mon entreprise » servent à '
+      + 'accompagner vos devis.',
   },
   {
     titre: 'Pourquoi, et sur quelle base',
@@ -2182,12 +2213,14 @@ export const CONFIDENTIALITE = [
        DROIT-11) : leur nom, leur SIRET et leur justificatif sont des
        données d'une AUTRE entreprise, souvent un entrepreneur individuel —
        une personne —, que l'artisan range seul, sous sa responsabilité.
-       La phrase (`SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE`) est dans les DEUX
-       branches. Dans la branche affichée, elle vient APRÈS la garantie et
-       N'EN RELÈVE PAS : « vous pouvez les supprimer à tout moment » et
-       « ni dans l’espace d’administration » seraient faux pour leur
-       justificatif (aucun client ne retire un fichier de `documents`, et
-       l'administration lit cet espace). La phrase qui suit le dit. Leur nom
+       La phrase (`SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE`, et sa forme à la
+       troisième personne pour la branche du contrat : relecture DROIT6-11)
+       est dans les DEUX branches. Dans la branche affichée, elle vient
+       APRÈS la garantie et N'EN RELÈVE PAS : « vous pouvez les supprimer à
+       tout moment » et « ni dans l’espace d’administration » seraient faux
+       pour leur justificatif (aucun client ne retire un fichier de
+       `documents`, et l'administration lit cet espace). Elle dit elle-même
+       ce qui vaut, pièce par pièce. Leur nom
        et leur SIRET, eux, ne sont lisibles que de l'artisan (une politique
        `est_mon_entreprise`), ce que « Ce que nous collectons » couvre déjà
        par « Aucun écran d’Opus ne les montre ». « Le seul artisan qui y
@@ -2213,10 +2246,7 @@ export const CONFIDENTIALITE = [
         + 'contenu n’apparaît sur votre fiche publique, dans le fil ou dans '
         + 'une notification ; vous pouvez les exporter et les supprimer à '
         + 'tout moment ; et ils partent entièrement avec votre compte.\n\n'
-        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE + ' Vous en êtes là aussi le responsable du '
-        + 'traitement. Mais la garantie qui précède ne vaut que pour votre carnet et vos devis : '
-        + 'le justificatif d’un sous-traitant, comme vos autres documents professionnels, est '
-        + 'aussi lisible par l’administration d’Opus.\n\n'
+        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE + '\n\n'
         + CE_QUI_RESTE_D_UN_CLIENT
         + '\n\nUne exception à dire clairement : quand vous tapez '
         + 'l’adresse d’un client, ou le lieu des travaux d’un devis, et que '
@@ -2237,7 +2267,7 @@ export const CONFIDENTIALITE = [
         + 'client, le lieu des travaux d’un devis), envoyée à la Base Adresse '
         + 'Nationale pour proposer des suggestions —, et les restitue ou les '
         + 'efface sur demande. '
-        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE + ' '
+        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE_CONTRAT + ' '
         + CE_QUI_RESTE_D_UN_CLIENT,
   },
   {

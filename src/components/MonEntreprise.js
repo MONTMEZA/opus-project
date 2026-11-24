@@ -115,6 +115,22 @@ const listesLues = (d) => ({
   labels: Array.isArray(d.labels) ? d.labels : null,
   sousTraitants: Array.isArray(d.sousTraitants) ? d.sousTraitants : null,
 });
+
+/* LA LISTE APRÈS UNE ÉCRITURE RÉUSSIE (relecture ÉCRAN-1 de 2b-6,
+   24/11/2026) : la ligne que la BASE vient de rendre remplace la sienne, ou
+   s'ajoute ; une ligne retirée part. La MÊME règle fait la liste de cette
+   fenêtre (`setDonnees`) et celle qui REMONTE à la saisie d'un devis
+   (`surEmetteur`). Sans la remontée, la carte « Énergie et label RGE » (et
+   « Déchets ») montrait l'ANCIENNE liste pendant toute la relecture qui
+   suit la fermeture : « Aucun de vos signes de qualité ne porte ces
+   travaux », et la case « Je ne détiens pas… », sous un travail qu'un signe
+   venait de couvrir — un appui sur la case, dans cette fenêtre, écrivait
+   une déclaration fausse (mesuré ; jusqu'à 8 s sur la vraie base). */
+const avecLaLigne = (liste, pose, existant) => {
+  const avant = Array.isArray(liste) ? liste : [];
+  return existant ? avant.map((x) => (String(x.id) === String(pose.id) ? pose : x)) : [...avant, pose];
+};
+const sansLaLigne = (liste, id) => (Array.isArray(liste) ? liste : []).filter((x) => String(x.id) !== String(id));
 const MANQUES_EN_LECTURE = { etat: 'charge', liste: [] };
 
 /* LES DEUX LECTURES, hors du composant : elles ne posent leur résultat
@@ -617,20 +633,15 @@ export default function MonEntreprise({
      BASE a rendu (sa date de création, son identifiant), puis on revient à
      la section. « Ce qui manque » n'est pas relu : `emetteur_incomplet()`
      ne lit pas les lieux, qui se jugent devis par devis. Et aucun devis
-     n'est récrit ici : la saisie d'un devis relit les lieux quand cette
-     fenêtre se ferme (`OpusApp`, `lireRegime`). */
+     n'est récrit ici. La nouvelle liste REMONTE à la saisie d'un devis
+     (`surEmetteur`, `avecLaLigne`, relecture ÉCRAN-1 de 2b-6), qui la
+     relit aussi quand cette fenêtre se ferme (`OpusApp`, `lireRegime`). */
   const enregistrerLieu = async (valeurs) => {
     const existant = lieu && lieu.fiche;
     const pose = await api.enregistrerLieuDepot(valeurs, existant ? existant.id : null);
-    setDonnees((d) => {
-      const avant = Array.isArray(d.lieux) ? d.lieux : [];
-      return {
-        ...d,
-        lieux: existant
-          ? avant.map((x) => (String(x.id) === String(pose.id) ? pose : x))
-          : [...avant, pose],
-      };
-    });
+    const lieux = avecLaLigne(donnees.lieux, pose, existant);
+    setDonnees((d) => ({ ...d, lieux: avecLaLigne(d.lieux, pose, existant) }));
+    if (surEmetteur) surEmetteur(donnees.emetteur || null, { lieux });
     retour.reussite();
     setQuitter(false);
     afficher(demo
@@ -647,10 +658,9 @@ export default function MonEntreprise({
     retraitLieuEnCours.current = true;
     try {
       await api.retirerLieuDepot(l.id);
-      setDonnees((d) => ({
-        ...d,
-        lieux: (Array.isArray(d.lieux) ? d.lieux : []).filter((x) => String(x.id) !== String(l.id)),
-      }));
+      const lieux = sansLaLigne(donnees.lieux, l.id);
+      setDonnees((d) => ({ ...d, lieux: sansLaLigne(d.lieux, l.id) }));
+      if (surEmetteur) surEmetteur(donnees.emetteur || null, { lieux });
       retour.reussite();
       setQuitter(false);
       afficher('Lieu de dépôt retiré. Les brouillons qui le citaient l’ont perdu.');
@@ -672,23 +682,20 @@ export default function MonEntreprise({
      serait un lien mort ; puis la liste locale suit ce que la BASE a rendu,
      et on revient à la section. « Ce qui manque » n'est pas relu :
      `emetteur_incomplet()` ne lit ni les labels ni les sous-traitants, qui
-     se jugent devis par devis (rang 14). Aucun devis n'est récrit ici : la
-     saisie relit ces listes quand cette fenêtre se ferme (`OpusApp`,
-     `lireRegime`). */
+     se jugent devis par devis (rang 14). Aucun devis n'est récrit ici. La
+     nouvelle liste REMONTE à la saisie d'un devis APRÈS chaque écriture
+     réussie (`surEmetteur`, `avecLaLigne`, `sansLaLigne` : relecture
+     ÉCRAN-1) — la relecture de la fermeture (`OpusApp`, `lireRegime`)
+     GARDE les listes pendant qu'elle lit, et la carte « Énergie et label
+     RGE » montrait sinon l'ANCIENNE. */
   const enregistrerLabel = async (valeurs, doc) => {
     let chemin = valeurs.justificatif_chemin || null;
     if (doc) chemin = await api.envoyerCertificat(doc);
     const existant = label && label.fiche;
     const pose = await api.enregistrerLabel({ ...valeurs, justificatif_chemin: chemin }, existant ? existant.id : null);
-    setDonnees((d) => {
-      const avant = Array.isArray(d.labels) ? d.labels : [];
-      return {
-        ...d,
-        labels: existant
-          ? avant.map((x) => (String(x.id) === String(pose.id) ? pose : x))
-          : [...avant, pose],
-      };
-    });
+    const labels = avecLaLigne(donnees.labels, pose, existant);
+    setDonnees((d) => ({ ...d, labels: avecLaLigne(d.labels, pose, existant) }));
+    if (surEmetteur) surEmetteur(donnees.emetteur || null, { labels });
     retour.reussite();
     setQuitter(false);
     afficher(demo
@@ -706,10 +713,9 @@ export default function MonEntreprise({
     retraitLabelEnCours.current = true;
     try {
       await api.retirerLabel(g.id);
-      setDonnees((d) => ({
-        ...d,
-        labels: (Array.isArray(d.labels) ? d.labels : []).filter((x) => String(x.id) !== String(g.id)),
-      }));
+      const labels = sansLaLigne(donnees.labels, g.id);
+      setDonnees((d) => ({ ...d, labels: sansLaLigne(d.labels, g.id) }));
+      if (surEmetteur) surEmetteur(donnees.emetteur || null, { labels });
       retour.reussite();
       setQuitter(false);
       afficher(g.justificatif_chemin
@@ -735,15 +741,9 @@ export default function MonEntreprise({
     const pose = await api.enregistrerSousTraitant(
       { ...valeurs, label_justificatif_chemin: chemin }, existant ? existant.id : null,
     );
-    setDonnees((d) => {
-      const avant = Array.isArray(d.sousTraitants) ? d.sousTraitants : [];
-      return {
-        ...d,
-        sousTraitants: existant
-          ? avant.map((x) => (String(x.id) === String(pose.id) ? pose : x))
-          : [...avant, pose],
-      };
-    });
+    const sousTraitants = avecLaLigne(donnees.sousTraitants, pose, existant);
+    setDonnees((d) => ({ ...d, sousTraitants: avecLaLigne(d.sousTraitants, pose, existant) }));
+    if (surEmetteur) surEmetteur(donnees.emetteur || null, { sousTraitants });
     retour.reussite();
     setQuitter(false);
     afficher(demo
@@ -759,10 +759,9 @@ export default function MonEntreprise({
     retraitSousTraitantEnCours.current = true;
     try {
       await api.retirerSousTraitant(st.id);
-      setDonnees((d) => ({
-        ...d,
-        sousTraitants: (Array.isArray(d.sousTraitants) ? d.sousTraitants : []).filter((x) => String(x.id) !== String(st.id)),
-      }));
+      const sousTraitants = sansLaLigne(donnees.sousTraitants, st.id);
+      setDonnees((d) => ({ ...d, sousTraitants: sansLaLigne(d.sousTraitants, st.id) }));
+      if (surEmetteur) surEmetteur(donnees.emetteur || null, { sousTraitants });
       retour.reussite();
       setQuitter(false);
       afficher('Sous-traitant retiré. Les brouillons qui le citaient l’ont perdu.');

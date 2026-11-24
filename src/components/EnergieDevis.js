@@ -46,7 +46,10 @@
  *      pas de label RGE pour ces travaux » (`declarationMontree`) ;
  *   4. « Sous-traitance », dès qu'une case est cochée : « Non » · « Oui »,
  *      rien de choisi ; sous « Oui », une case par sous-traitant rangé ;
- *   5. l'aide de la loi et l'amende (réponse P14).
+ *   5. l'aide de la loi de la sous-traitance et sa nullité. L'amende
+ *      (réponse P14), elle, est SOUS « Votre label RGE », avant
+ *      « Sous-traitance » : L. 242-51 ne punit d'une amende que le
+ *      manquement sur le label (relecture DROIT6-1, 24/11/2026).
  *
  * TROIS RÈGLES, et aucune n'est cosmétique :
  *   - JAMAIS DE TABLEAU VIDE : la dernière case décochée écrit VIDE DE
@@ -68,8 +71,14 @@
  *
  * LES DEUX PORTES (« Mes signes de qualité », « Mes sous-traitants ») :
  * la carte s'ENREGISTRE d'abord, puis la saisie ouvre « Mon entreprise » sur
- * la section voulue ; à la fermeture, les listes reviennent par les props,
- * et la carte — restée ouverte — montre ce qui vient d'être rangé.
+ * la section voulue. Chaque écriture RÉUSSIE dans « Mon entreprise » y fait
+ * remonter la nouvelle liste (`surEmetteur`, relecture ÉCRAN-1 du 24/11) :
+ * la carte — restée ouverte — montre ce qui vient d'être rangé DÈS la
+ * fermeture, sans attendre la relecture qui la suit (`lireRegime`, discrète,
+ * GARDE les listes pendant qu'elle lit). Sans cette remontée, elle montrait
+ * l'ANCIENNE liste pendant toute la relecture — jusqu'à 8 s sur la vraie
+ * base —, et un appui sur la case « Je ne détiens pas… » y écrivait une
+ * déclaration sous un travail qu'un signe venait de couvrir.
  *
  * OUVERTE DEPUIS « POUR LE REMETTRE » : SUR la rubrique que vise le point
  * (`rubriqueInitiale` : la question, le label, la sous-traitance), et son
@@ -323,6 +332,12 @@ const EnergieDevis = forwardRef(function EnergieDevis({
                         <Interrupteur
                           actif={declaree}
                           libelle={L.declaration}
+                          /* Le NOM dit pour QUEL travail (relecture ÉCRAN-2) :
+                             deux cases du même libellé ne se distinguaient
+                             pas pour VoiceOver, alors que la déclaration
+                             ira sur le contrat. Le libellé affiché, lui, ne
+                             change pas (annexe A.3). */
+                          nom={`${L.declaration} — ${libelleDuTravail(cle)}`}
                           aide={L.aideDeclaration}
                           onPress={() => toucherDeclaration(cle)}
                         />
@@ -335,6 +350,11 @@ const EnergieDevis = forwardRef(function EnergieDevis({
                     accessibilityLabel="Mes signes de qualité : ouvrir « Mon entreprise » sur vos signes de qualité"
                     onPress={allerAMesSignes} />
                 </View>
+                {/* L'AMENDE DU LABEL (réponse P14, mots inchangés), SOUS SA
+                    rubrique et AVANT « Sous-traitance » (relecture
+                    DROIT6-1) : « ces informations », ce sont celles du
+                    label — la seule que L. 242-51 punit d'une amende. */}
+                <Text style={s.amende}>{LE_LABEL.amende}</Text>
 
                 {/* 4. LA SOUS-TRAITANCE — « Non » à GAUCHE, rien de choisi. */}
                 <Text style={s.titre} onLayout={ancre('sousTraitance')} accessibilityRole="header">{ST.sousTitre}</Text>
@@ -393,10 +413,14 @@ const EnergieDevis = forwardRef(function EnergieDevis({
                   </>
                 )}
 
-                {/* 5. L'AIDE DE LA LOI ET L'AMENDE (réponse P14) — dans l'aide de
-                    la carte, jamais dans une phrase du point. */}
+                {/* 5. L'AIDE DE LA LOI DE LA SOUS-TRAITANCE, ET SA SUITE : la
+                    NULLITÉ seule (réponse P14) — L. 242-51 ne punit d'une
+                    amende que le manquement sur le LABEL (L. 224-114), dont
+                    la phrase est sous « Votre label RGE » (relecture
+                    DROIT6-1 : posée ici, à la fin, elle attribuait l'amende
+                    à la sous-traitance). Dans l'aide de la carte, jamais
+                    dans une phrase du point. */}
                 <Text style={s.aide}>{ST.aide}</Text>
-                <Text style={s.amende}>{LE_LABEL.amende}</Text>
                 <Text style={s.amendeSuite}>{LE_LABEL.amendeSousTraitance}</Text>
               </>
             )}
@@ -433,7 +457,7 @@ const s = StyleSheet.create({
   /* Un travail coché, dans « Votre label RGE » : son nom, son état, sa case. */
   travail: { gap: S.xs, marginTop: S.sm },
   /* L'amende : une aide, à l'encre du texte — elle dit ce qui se joue. */
-  amende: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xl },
+  amende: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.md },
   amendeSuite: { fontFamily: F.inter6, fontSize: T.petit, color: C.ink, lineHeight: interligne(T.petit), marginTop: S.xs },
   erreur: { fontFamily: F.inter, fontSize: T.petit, color: C.bad, lineHeight: interligne(T.petit), marginTop: S.xs },
   /* LA LIGNE D'ÉTAT : une ligne réservée même au repos — l'envoi qui

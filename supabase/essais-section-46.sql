@@ -69,6 +69,14 @@
 --  l'export (des données sur des tiers, qui reviennent à l'artisan), le
 --  compte qui part — puis six refus (33 b à g). Le SIRET d'un sous-traitant
 --  est celui de D, fictif, propre à ce fichier. Dix-huit erreurs de plus.
+--
+--  PUIS LA RELECTURE DE 2b-6 (banc des sabotages, X26) : un cas 34. Sous la
+--  RLS, l'export de B rendait 0 signe et 0 sous-traitant de A même SANS le
+--  filtre `x.pro_id = auth.uid()` de `mes_donnees()` — le bon résultat pour
+--  la mauvaise raison, et le retirer passait au vert. Le cas 34 appelle
+--  l'export par une ENVELOPPE `security definer` (la RLS ne filtre plus),
+--  A et B ayant chacun un signe et un sous-traitant : chacun ne reçoit que
+--  les siens. Aucune erreur de plus.
 -- ==========================================================================
 
 \set A '''a4600000-0000-4000-8000-00000000000a'''
@@ -1485,6 +1493,60 @@ insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label
                                             label_valide_jusquau)
 values (:A, 'Sous-traitant d’essai', '00004603700016', true, array['aucun'], '2999-12-31');
 rollback;
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 34. L EXPORT PAR UNE ENVELOPPE security definer (relecture de 2b-6, banc X26) : la RLS ne filtre plus, et seuls les filtres x.pro_id = auth.uid() de mes_donnees() separent A de B — l export de B ne contient AUCUN signe de qualite ni AUCUN sous-traitant de A, celui de A rien de B ; puis l enveloppe retiree ==='
+-- Sous la RLS (cas 32 et 33), retirer ces filtres de l'export passait au
+-- vert : chacun ne lit que ses lignes de toute façon, et l'export de B
+-- rendait 0 pour la mauvaise raison. Une enveloppe `security definer` (le
+-- modèle du cas 22 de l'essai 49-remise) appelle `mes_donnees()` en
+-- superutilisateur : la RLS ne s'applique plus, et le jeton dit encore QUI
+-- demande — la forme d'un export qu'une fonction d'administration, ou la clé
+-- de service, appellerait un jour. A ET B ont chacun un signe et un
+-- sous-traitant : un « 1 » prouve que la donnée existe, un « 2 » serait celle
+-- de l'autre. L'enveloppe est créée DANS la transaction, et part avec elle.
+-- --------------------------------------------------------------------------
+begin;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+values (:A, 'Organisme d’essai', 'Label de A', array['isolation_combles'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000a/certificat.pdf'),
+       (:B, 'Organisme d’essai', 'Label de B', array['fenetres'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000b/certificat.pdf');
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient)
+values (:A, 'Sous-traitant de A', '00004603700016', false),
+       (:B, 'Sous-traitant de B', '00004603700016', false);
+select count(*) filter (where pro_id = :A) as signe_de_a_existe_attendu_1,
+       count(*) filter (where pro_id = :B) as signe_de_b_existe_attendu_1
+  from public.emetteur_labels;
+select count(*) filter (where pro_id = :A) as sous_traitant_de_a_existe_attendu_1,
+       count(*) filter (where pro_id = :B) as sous_traitant_de_b_existe_attendu_1
+  from public.emetteur_sous_traitants;
+create function public.essai_export_enveloppe()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $enveloppe$ select public.mes_donnees() $enveloppe$;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+select jsonb_array_length(d -> 'mes_signes_de_qualite') as enveloppe_signes_de_b_attendu_1,
+       d -> 'mes_signes_de_qualite' -> 0 ->> 'intitule' = 'Label de B' as enveloppe_le_signe_de_b_attendu_t,
+       jsonb_array_length(d -> 'mes_sous_traitants') as enveloppe_sous_traitants_de_b_attendu_1,
+       d -> 'mes_sous_traitants' -> 0 ->> 'raison_sociale' = 'Sous-traitant de B' as enveloppe_le_sous_traitant_de_b_attendu_t,
+       position('Label de A' in d::text) = 0 and position('Sous-traitant de A' in d::text) = 0
+         as enveloppe_rien_de_a_chez_b_attendu_t
+  from (select public.essai_export_enveloppe() as d) x;
+set local request.jwt.claim.sub = :A;
+select jsonb_array_length(d -> 'mes_signes_de_qualite') as enveloppe_signes_de_a_attendu_1,
+       d -> 'mes_signes_de_qualite' -> 0 ->> 'intitule' = 'Label de A' as enveloppe_le_signe_de_a_attendu_t,
+       jsonb_array_length(d -> 'mes_sous_traitants') as enveloppe_sous_traitants_de_a_attendu_1,
+       d -> 'mes_sous_traitants' -> 0 ->> 'raison_sociale' = 'Sous-traitant de A' as enveloppe_le_sous_traitant_de_a_attendu_t,
+       position('Label de B' in d::text) = 0 and position('Sous-traitant de B' in d::text) = 0
+         as enveloppe_rien_de_b_chez_a_attendu_t
+  from (select public.essai_export_enveloppe() as d) x;
+rollback;
+select count(*) as enveloppe_export_retiree_attendu_0 from pg_proc where proname = 'essai_export_enveloppe';
 
 deallocate fiche_complete_a;
 deallocate frais_a;

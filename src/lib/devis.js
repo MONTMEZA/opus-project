@@ -5201,7 +5201,12 @@ export function avisDuDevis({
   if (label) {
     avis.push({
       cle: 'avis_label_echeance',
-      phrase: AVIS_DU_DEVIS.avis_label_echeance.replace('{intitule}', label.intitule ?? '').replace('{fin}', dateFrancaise(label.fin)),
+      /* UN SEUL PASSAGE, par une FONCTION (relecture ÉCRAN-3) : remplacé par
+         une chaîne, un « $' », « $& » ou « $` » de l'intitulé tapé par
+         l'artisan était interprété, et un « {fin} » venu de l'intitulé
+         remplacé à son tour — l'avis devenait du charabia. */
+      phrase: AVIS_DU_DEVIS.avis_label_echeance.replace(/\{(intitule|fin)\}/g,
+        (_, k) => (k === 'intitule' ? (label.intitule ?? '') : (dateFrancaise(label.fin) ?? ''))),
     });
   }
 
@@ -7912,8 +7917,14 @@ export const LE_LABEL = Object.freeze({
        (L. 224-115 I ne pose pas la condition d'aide, DROIT-6). */
     sousAucunSousTraitance: 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie de ce '
       + 'devis, dites-le à votre client : la loi peut le demander.',
-    aide: 'Cochez ce que vous ferez dans un logement, même une petite partie : un doublage isolé, une VMC, une fenêtre. '
-      + 'Les deux dernières lignes sont comptées par prudence. Dans le doute, cochez : c’est le cas le plus sûr.',
+    /* « Ce que ce devis comporte, même fait par un sous-traitant » (relecture
+       DROIT6-11, c) : la question et la loi visent les travaux du CONTRAT,
+       sous-traités compris. « Ce que vous ferez » laissait un artisan qui
+       sous-traite toute la VMC choisir « Aucun », et la question de la
+       sous-traitance disparaissait. */
+    aide: 'Cochez ce que ce devis comporte dans un logement, même fait par un sous-traitant, même une petite partie : un '
+      + 'doublage isolé, une VMC, une fenêtre. Les deux dernières lignes sont comptées par prudence. Dans le doute, '
+      + 'cochez : c’est le cas le plus sûr.',
     /* Annoncé quand la pastille retire des cases cochées. */
     retires: 'Les travaux cochés ont été retirés.',
   }),
@@ -7929,9 +7940,13 @@ export const LE_LABEL = Object.freeze({
       + 'entreprise » si vous le détenez encore.',
     absent: 'Aucun de vos signes de qualité ne porte ces travaux.',
     /* La case, sous un travail expiré ou absent, et son aide — sans
-       promesse sur les aides (DROIT-13). */
+       promesse sur les aides (DROIT-13). La seconde phrase (relecture
+       DROIT6-8) dit ce qu'Opus ne fait PAS : L. 224-114 I demande aussi de
+       dire au client ce que l'absence de label change pour ses aides, et
+       rien, après la case, ne le disait à l'artisan. */
     declaration: 'Je ne détiens pas de label RGE pour ces travaux',
-    aideDeclaration: 'Cochez seulement si c’est vrai : le devis le dira à votre client.',
+    aideDeclaration: 'Cochez seulement si c’est vrai : le devis le dira à votre client. Ce que cela change pour ses aides, '
+      + 'Opus ne l’écrit pas encore.',
     echec: 'Vos signes de qualité n’ont pas pu être lus.',
     reessayer: 'Réessayer',
     vide: 'Vous n’avez déclaré aucun signe de qualité.',
@@ -7955,8 +7970,13 @@ export const LE_LABEL = Object.freeze({
     /* Un sous-traitant de plus que `SOUS_TRAITANTS_MAX` : MONTRÉ juste sous
        les cases, annoncé, rien n'est écrit. */
     plafond: 'Dix sous-traitants au plus par devis : décochez-en un pour en choisir un autre.',
-    aide: 'La loi demande de nommer, avant la signature, chaque entreprise qui fera une partie des travaux de ce devis, '
-      + 'et de dire si elle détient un label RGE.',
+    /* BORNÉE au client qui commande à titre privé (relecture DROIT6-5) :
+       L. 224-115 ne vise que le consommateur, et la carte d'une association
+       dit en tête « la loi ne prévoit peut-être pas ces mentions » — une
+       aide qui disait « La loi demande » tout court la contredisait sur le
+       même écran (la forme de DROIT-R4, 2b-5). */
+    aide: 'Pour un client qui commande à titre privé, la loi demande de nommer, avant la signature, chaque entreprise '
+      + 'qui fera une partie des travaux de ce devis, et de dire si elle détient un label RGE.',
   }),
   amende: AMENDE_DU_LABEL,
   amendeSousTraitance: AMENDE_DE_LA_SOUS_TRAITANCE,
@@ -7968,7 +7988,11 @@ export const LE_LABEL = Object.freeze({
 export function phraseDuTravail(e) {
   if (!e || typeof e !== 'object') return null;
   const L = LE_LABEL.label;
-  const remplir = (modele) => modele.replace('{intitule}', e.intitule ?? '').replace('{fin}', dateFrancaise(e.fin) ?? '');
+  /* Un seul passage, par une fonction (relecture ÉCRAN-3) : l'intitulé est
+     TAPÉ par l'artisan, et un « $' » ou un « {fin} » qu'il contient ne doit
+     rien remplacer. */
+  const remplir = (modele) => modele.replace(/\{(intitule|fin)\}/g,
+    (_, k) => (k === 'intitule' ? (e.intitule ?? '') : (dateFrancaise(e.fin) ?? '')));
   if (e.etat === 'couvert') return remplir(L.couvert);
   if (e.etat === 'sans_certificat') return remplir(L.sansCertificat);
   if (e.etat === 'expire') return remplir(L.expire);
