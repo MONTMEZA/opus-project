@@ -49,6 +49,29 @@
  * et c'est celle du second établissement de l'entreprise de démonstration
  * (`siret-demo.js`).
  *
+ * UN SIGNE DE QUALITÉ ET UN SOUS-TRAITANT (étape 2b-6, cahier §3.9 et T14) :
+ * sans eux, la carte « Énergie et label RGE » d'un devis de démonstration
+ * n'aurait ni travail « couvert », ni case de sous-traitant, et les quatre
+ * états d'un travail ne se verraient nulle part sans fichier `.env`. Ils
+ * vivent DANS la fiche, comme le lieu (ÉCRAN-9). INVENTÉS tous les deux :
+ *   - le signe : organisme « Qualifications de démonstration », intitulé
+ *     « Label de démonstration — isolation des murs », pour la seule
+ *     catégorie `isolation_exterieur` (l'isolation des murs par
+ *     l'extérieur), valable 45 jours (calculés), certificat JOINT — un chemin
+ *     de démonstration, aucun fichier derrière ;
+ *   - le sous-traitant : « Isolations de démonstration », SIRET FICTIF
+ *     `00000496000019` (cinq zéros en tête, clé juste — distinct de tous ceux
+ *     de `siret-demo.js`, de `demo.js` et des essais SQL), qui ne détient
+ *     PAS de label.
+ * JAMAIS le nom d'un organisme réel (Qualibat, Qualit’EnR…) : une
+ * démonstration qui sert à la publicité ne prête rien à personne, et
+ * `verifier-demo` le refuse (CTL-4). Cherchés le 24/11/2026 dans l'annuaire
+ * Sirene (recherche-entreprises.api.gouv.fr), avec et sans accent, et
+ * absents tous les trois : « Isolations de démonstration », « Qualifications
+ * de démonstration », le SIREN 000004960 et le SIRET 00000496000019 —
+ * 0 résultat chacun ; la même requête rend « LA POSTE » pour « la poste » et
+ * pour 356000000 (le service répondait).
+ *
  * Ce fichier n'importe RIEN.
  */
 
@@ -73,11 +96,24 @@ export const PRO_DEMO_EMETTEUR = '1';
 export const LIEU_DEPOT_DEMO_ID = '00000000-0000-4000-8000-00000000d0e5';
 
 /**
- * `{ emetteur, assurances, tarifs, lieux }`, aux noms de la base. `tarifs`
- * vaut `null` : les frais n'ont jamais été déclarés, et c'est un des cinq
- * manques. `lieux` porte UN lieu de dépôt des déchets (2b-5) : il ne change
- * rien à « Prêt à émettre un devis ? » — `emetteur_incomplet()` ne lit pas
- * les lieux, qui se jugent devis par devis.
+ * Les identifiants du signe de qualité et du sous-traitant de démonstration
+ * (2b-6) — FIXES, de la forme d'un UUID, pour la même raison que le lieu :
+ * un devis de démonstration peut citer le sous-traitant dans
+ * `energieSousTraitants` (un `uuid[]` en base).
+ */
+export const LABEL_DEMO_ID = '00000000-0000-4000-8000-0000000a1be1';
+export const SOUS_TRAITANT_DEMO_ID = '00000000-0000-4000-8000-0000000057a1';
+
+/** Le SIRET FICTIF du sous-traitant de démonstration (cinq zéros en tête, clé juste). */
+export const SIRET_SOUS_TRAITANT_DEMO = '00000496000019';
+
+/**
+ * `{ emetteur, assurances, tarifs, lieux, labels, sousTraitants }`, aux noms
+ * de la base. `tarifs` vaut `null` : les frais n'ont jamais été déclarés, et
+ * c'est un des cinq manques. `lieux` porte UN lieu de dépôt des déchets
+ * (2b-5), `labels` UN signe de qualité et `sousTraitants` UN sous-traitant
+ * (2b-6) : ils ne changent rien à « Prêt à émettre un devis ? » —
+ * `emetteur_incomplet()` ne les lit pas, ils se jugent devis par devis.
  */
 export function fabriquerEmetteurDemo(maintenant = new Date()) {
   const t = maintenant instanceof Date ? maintenant.getTime() : new Date(maintenant).getTime();
@@ -148,6 +184,39 @@ export function fabriquerEmetteurDemo(maintenant = new Date()) {
         ville: 'Lambesc',
         type_installation: 'decheterie_pro',
         libelle: null,
+        created_at: ilYA20Jours,
+      },
+    ],
+    /* 2b-6 : aux noms de la base, comme `emetteur_labels` et
+       `emetteur_sous_traitants` les rendent — déjà NETTOYÉS (la forme que
+       `tient_le_label()` et `tient_le_sous_traitant()` laissent), et passant
+       leurs propres contraintes : `verifier-emetteur` les fait tourner. La
+       fin du signe est CALCULÉE (+ 45 jours) : il ne s'éteint pas tout seul
+       un jour, et il finit avant la fin de validité d'un devis à 60 jours —
+       ce qui fait vivre l'avis du label. */
+    labels: [
+      {
+        id: LABEL_DEMO_ID,
+        pro_id: PRO_DEMO_EMETTEUR,
+        organisme: 'Qualifications de démonstration',
+        intitule: 'Label de démonstration — isolation des murs',
+        reference: null,
+        categories: ['isolation_exterieur'],
+        valide_jusquau: jour(new Date(t + 45 * JOUR_MS)),
+        justificatif_chemin: `${PRO_DEMO_EMETTEUR}/certificat-signe-qualite-demo.pdf`,
+        created_at: ilYA20Jours,
+      },
+    ],
+    sousTraitants: [
+      {
+        id: SOUS_TRAITANT_DEMO_ID,
+        pro_id: PRO_DEMO_EMETTEUR,
+        raison_sociale: 'Isolations de démonstration',
+        siret: SIRET_SOUS_TRAITANT_DEMO,
+        label_detient: false,
+        label_categories: null,
+        label_valide_jusquau: null,
+        label_justificatif_chemin: null,
         created_at: ilYA20Jours,
       },
     ],

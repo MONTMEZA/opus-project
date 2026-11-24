@@ -336,6 +336,28 @@ export function moisDecale(am, pas) {
 }
 
 /**
+ * Le MÊME mois, une ou plusieurs années plus tôt ou plus tard (étape 2b-6
+ * du module devis, choix T30 du cahier).
+ *
+ * POURQUOI : un signe de qualité (label RGE) vaut jusqu'à quatre ans, et sa
+ * date de fin est OBLIGATOIRE dans « Mon entreprise ». Avec les seules
+ * flèches « mois », une date de fin en 2030 demandait une quarantaine
+ * d'appuis (critique ÉCRAN-6). Les deux flèches « année » du calendrier
+ * passent par ici.
+ *
+ * C'est `moisDecale` par douze, et rien d'autre : une seule arithmétique des
+ * mois — le passage d'année ne peut pas se tromper autrement que lui.
+ * `anneeDecalee('2026-11', 1)` rend « 2027-11 », `('2026-01', -1)`
+ * « 2025-01 ». Un pas qui n'est pas un nombre entier rend `null` : un
+ * demi-an n'est pas un mois.
+ */
+export function anneeDecalee(am, pas) {
+  const n = Number(pas == null ? 0 : pas);
+  if (!Number.isInteger(n)) return null;
+  return moisDecale(am, 12 * n);
+}
+
+/**
  * Combien de jours dans ce mois.
  *
  * Le jour 0 du mois SUIVANT est le dernier du mois courant : les années

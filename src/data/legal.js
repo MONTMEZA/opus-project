@@ -29,7 +29,83 @@
  * « quelque chose », sans savoir quoi. À changer à chaque modification de
  * fond des textes ci-dessous.
  */
-export const VERSION = '2026-11-21';
+export const VERSION = '2026-11-24';
+/* 24/11/2026 — LE LABEL RGE ET LES SOUS-TRAITANTS (étape 2b-6 du module
+   devis ; sections 46 et 49 de `schema.sql`, cahier 2b-6 §4 ; décisions du
+   propriétaire du 23/11 — Q5 : deux questions par devis, P1 : une liste à
+   cocher, P3 : les sous-traitants rangés une fois dans « Mon entreprise » —
+   et du 24/11 : P11 à P14, les quatre recommandations). Ce qui a changé DE
+   FOND :
+     - DES DONNÉES NOUVELLES COLLECTÉES pour les devis. Dans « Mon
+       entreprise » : vos signes de qualité (label RGE : l'organisme,
+       l'intitulé, le numéro, les travaux couverts, la date de fin et le
+       certificat — la table privée `emetteur_labels`) et vos
+       sous-traitants (nom ou raison sociale, numéro SIRET, s'ils
+       détiennent un label RGE, pour quels travaux, jusqu'à quand, et leur
+       justificatif — la table privée `emetteur_sous_traitants`), deux
+       tables lisibles par leur seul titulaire, aucune politique pour
+       l'administration. Et sur chaque devis : les travaux d'économies
+       d'énergie ou d'énergie renouvelable qu'il comporte, ceux pour
+       lesquels l'artisan déclare, sur CE devis, ne pas détenir de label
+       RGE (décision P11 : une liste par devis, jamais « une fois pour
+       toutes »), et si une autre entreprise fera une partie ou la
+       totalité de ses travaux, et laquelle. « Ce que nous collectons » les
+       nomme : les deux listes dans la phrase de « Mon entreprise », AVANT
+       « Aucun écran d'Opus ne les montre », dont la promesse les couvre ;
+       le reste dans la phrase des devis, après les déchets et avant
+       « leurs lignes », comme 2b-2 à 2b-5 — chacune restant UNE phrase ;
+     - DES PIÈCES DE TIERS dans l'espace privé `documents` (décision P13 :
+       « Oui, dans Opus ») : le justificatif d'un sous-traitant, comme le
+       certificat d'un signe de qualité, est lisible par l'administration
+       d'Opus, comme toute pièce de cet espace, et il RESTE dans l'espace
+       privé jusqu'à la suppression du compte, même si l'on retire le
+       sous-traitant ou le signe — aucun client ne retire un fichier de
+       `documents` (lot S-a). « Vos documents professionnels » (les pièces et
+       leur finalité, vos devis), « Ce que nous collectons » (lisibles par
+       l'administration) et « Combien de temps » le disent — ce dernier pour
+       une attestation retirée aussi, que les textes taisaient (critique
+       DROIT-11) ;
+     - LES DONNÉES D'UNE AUTRE ENTREPRISE : « Les clients que vous
+       enregistrez » dit, dans ses DEUX branches, que le nom, le numéro
+       SIRET et le justificatif d'un sous-traitant concernent une autre
+       entreprise, qui n'a souvent pas de compte Opus. Dans la branche
+       affichée, la phrase vient APRÈS la garantie « … ni dans l'espace
+       d'administration » et n'en relève pas : la garantie reste limitée au
+       carnet et aux devis, et le texte le dit — étendue aux sous-traitants,
+       elle serait fausse pour leur justificatif (le risque vu par la
+       contradiction de DROIT-11). « Sous-traitant » y a deux sens, celui du
+       chantier et celui du RGPD : le paragraphe nouveau ne parle que du
+       premier ;
+     - UNE INTERDICTION NOUVELLE dans « Ce qui est interdit » (décision
+       P14, la phrase (b) mot pour mot) : déclarer dans « Mon entreprise »
+       un signe de qualité que son entreprise ne détient pas, ou pour des
+       travaux qu'il ne couvre pas : le compte peut être fermé — sur le
+       modèle de la phrase du n° de TVA, elle dit ce qu'Opus peut faire,
+       rien de ce qu'un juge déciderait ;
+     - RIEN D'AUTRE : « Ce qu'il manque pour remettre ce devis » gagne un
+       point (rang 14), mais un motif n'est pas une décision automatique —
+       il dit à l'artisan ce qui manque à SON devis, sans rien décider pour
+       personne. Aucun texte ne promet que le label, les sous-traitants ou
+       leurs pièces s'imprimeront sur le devis (rien ne sort avant le lot
+       2c) : « Vos documents professionnels » en dit la FINALITÉ, pas un
+       envoi. Aucun ne dit « certifié », « agréé » ni « Reconnu garant de
+       l'environnement » : la pièce s'appelle un certificat, et c'est le
+       seul mot de cette famille. « Ce que les autres voient de vous » ne
+       change pas d'un mot : la « Certification RGE » de la fiche publique
+       n'est pas touchée (décision T29), et les deux tables nouvelles s'y
+       classent par une RAISON (`verifier-legal`). « Vos tarifs et vos prix »
+       non plus : l'engagement de l'éditeur ne s'étend pas aux signes de
+       qualité ni aux sous-traitants, que rien ne lui demande ;
+     - LA MÊME LIMITE QUE LES VERSIONS PRÉCÉDENTES : aucun écran ne fait
+       ré-accepter les conditions à un compte existant, et le préavis de
+       quinze jours du règlement 2019/1150 (art. 3.2) s'appliquerait. Sans
+       effet tant que STATUT vaut 'essai' ; à organiser avant l'ouverture au
+       public (A-FAIRE).
+   Cette version prend la date prévue du commit des textes (24/11/2026) ;
+   si le commit se fait un autre jour, `VERSION` prend la date de ce
+   commit — jamais plus loin que le lendemain du jour où l'on publie, sinon
+   la base range la trace d'acceptation à vide (`verifier-legal`). */
+/* VERSION PRÉCÉDENTE : '2026-11-21'. */
 /* 21/11/2026 — LES DÉCHETS DU CHANTIER (étape 2b-5 du module devis ;
    sections 46 et 49 de `schema.sql`, cahier 2b-5 §4 ; décision Q4 = 1 du
    17/11 : les lieux de dépôt rangés une fois dans « Mon entreprise », une
@@ -1385,7 +1461,15 @@ export const CGU = [
        phrase du SIRET. Elle dit ce qu'Opus peut faire — fermer le compte —,
        et rien de ce qu'un juge déciderait (la qualification pénale d'une
        fausse déclaration à une plateforme privée est une question au
-       juriste, J2 : à savoir, pas à écrire). */
+       juriste, J2 : à savoir, pas à écrire).
+
+       UN SIGNE DE QUALITÉ DÉCLARÉ À TORT (étape 2b-6, décision P14 du
+       24/11, la phrase (b) du cahier 2b-6 mot pour mot) : sur le modèle de
+       la phrase du n° de TVA. Elle ne dit pas « RGE » : elle vise tout
+       signe de qualité rangé dans « Mon entreprise », et ce que la loi en
+       pense (L. 121-4 2°, une pratique commerciale trompeuse) est dit à
+       l'artisan dans le formulaire du signe, pas promis ici. Elle dit ce
+       qu'Opus peut faire, rien de ce qu'un juge déciderait. */
     texte: 'Se faire passer pour quelqu’un d’autre ou pour une entreprise qui '
       + "n'est pas la sienne. Proposer des travaux sans assurance ni facture. "
       + 'Insulter, menacer, harceler. Publier du contenu sexuel ou violent. '
@@ -1401,7 +1485,9 @@ export const CGU = [
       + 'invité à justifier qu’il en est le titulaire. Un compte déjà professionnel ne '
       + 'peut pas encore la demander depuis l’application. Déclarer sur l’honneur un numéro '
       + 'de TVA qui n’est pas celui que l’administration fiscale a attribué à son '
-      + 'entreprise : le compte peut être fermé.',
+      + 'entreprise : le compte peut être fermé. Déclarer dans « Mon entreprise » un signe '
+      + 'de qualité que son entreprise ne détient pas, ou pour des travaux qu’il ne couvre '
+      + 'pas : le compte peut être fermé.',
   },
   {
     titre: 'Modération',
@@ -1516,6 +1602,21 @@ const CE_QUI_RESTE_D_UN_CLIENT = 'Supprimer la fiche d’un client ne supprime p
   + 'de postes toute phrase qui le nommerait : un poste n’est rattaché à aucun client, '
   + 'cherchez son nom dans « Ma base de postes ». Si vous avez repris une de ces phrases dans le '
   + 'devis d’un autre client, elle y reste aussi : corrigez-la dans ce devis.';
+
+/* LES SOUS-TRAITANTS D'UN ARTISAN (étape 2b-6, cahier §4, critique
+   DROIT-11 et sa contradiction) : la phrase du cahier, mot pour mot,
+   écrite UNE fois et servie aux DEUX branches de « Les clients que vous
+   enregistrez » — sinon elles divergeraient le jour où l'une change.
+   « Sous-traitant » au sens du CHANTIER : l'entreprise qui fait une partie
+   des travaux, pas le rôle d'Opus au sens du RGPD (article 28), que la même
+   section nomme aussi. Dans la branche affichée, elle vient APRÈS la
+   garantie « … ni dans l’espace d’administration », et la phrase qui la
+   suit dit que cette garantie ne vaut que pour le carnet et les devis : le
+   justificatif d'un sous-traitant, rangé dans `documents`, est lisible par
+   l'administration. */
+const SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE = 'Il en va de même de vos sous-traitants : leur nom, '
+  + 'leur numéro SIRET et leur justificatif concernent une autre entreprise, qui n’a souvent pas '
+  + 'de compte Opus.';
 
 export const CONFIDENTIALITE = [
   {
@@ -1656,7 +1757,44 @@ export const CONFIDENTIALITE = [
        des devis de « devis en préparation » au point suivant, et compare
        chaque colonne de `devis` lue dans le schéma à ses mots. Rien
        d'autre : ni « Ce que les autres voient de vous », ni « Vos tarifs et
-       vos prix », ni une promesse d'impression. */
+       vos prix », ni une promesse d'impression.
+
+       LE LABEL RGE ET LES SOUS-TRAITANTS, étape 2b-6 (24/11/2026, cahier
+       2b-6 §4 ; décisions Q5, P1, P3 du 23/11, P11 à P14 du 24/11). Deux
+       insertions, mot pour mot celles du cahier, et une phrase élargie :
+         - dans la phrase de « Mon entreprise », juste APRÈS les lieux de
+           dépôt (que `verifier-legal` garde intacts) et AVANT « et vos
+           tarifs » : « vos signes de qualité (label RGE : l’organisme,
+           l’intitulé, le numéro, les travaux couverts, la date de fin et le
+           certificat), vos sous-traitants (nom ou raison sociale, numéro
+           SIRET, s’ils détiennent un label RGE, pour quels travaux, jusqu’à
+           quand, et leur justificatif) » — les deux tables privées
+           `emetteur_labels` et `emetteur_sous_traitants` (sections 46.2 ter
+           et 46.2 quater), chaque colonne lue dans le schéma par
+           `verifier-legal`. Posées avant « Aucun écran d’Opus ne les
+           montre » : c'est ce qui les range dans cette promesse, qui est
+           vraie (une seule politique, `est_mon_entreprise`, rien pour
+           l'administration ni pour `anon`) ;
+         - dans la phrase des devis, juste APRÈS les déchets et AVANT
+           « leurs lignes » : « les travaux d’économies d’énergie ou
+           d’énergie renouvelable qu’ils comportent, ceux pour lesquels vous
+           déclarez ne pas détenir de label RGE, et si une autre entreprise
+           fera une partie ou la totalité de leurs travaux, et laquelle » —
+           les quatre colonnes `devis.energie_*` (49.4 septies). « Ceux pour
+           lesquels vous déclarez » : la déclaration se fait sur CE devis,
+           travail par travail (P11), jamais une fois pour toutes ;
+         - « Les attestations jointes, comme vos autres documents
+           professionnels, sont aussi lisibles par l’administration d’Opus »
+           nomme désormais les certificats des signes de qualité et les
+           justificatifs des sous-traitants (cahier §4) : rangés dans
+           `documents`, ils sont lisibles par l'administration comme toute
+           pièce de cet espace (`schema.sql`, « lecture des documents par l
+           administration »). Sans eux, « Aucun écran d’Opus ne les montre »
+           aurait couvert le justificatif d'une AUTRE entreprise sans dire
+           que l'administration peut le lire.
+       Le RGE ne se lit, dans les textes, qu'ici et dans « Ce que les autres
+       voient de vous » (la « Certification RGE » de la fiche publique, qui
+       ne change pas) : `verifier-legal` le tient. */
     texte: 'Votre adresse électronique et votre mot de passe (chiffré : '
       + 'personne, chez Opus, ne peut le lire). Votre nom, votre ville et '
       + 'votre code postal. Les coordonnées géographiques APPROXIMATIVES de '
@@ -1703,7 +1841,10 @@ export const CONFIDENTIALITE = [
       + 'immatriculation, votre capital, vos assurances et leurs attestations, votre '
       + 'médiateur, vos garanties, vos conditions de paiement, d’exécution et de '
       + 'réclamation, vos lieux de dépôt des déchets (raison sociale, adresse, type '
-      + 'd’installation), et vos tarifs (frais de déplacement, taux horaire et son décompte, '
+      + 'd’installation), vos signes de qualité (label RGE : l’organisme, l’intitulé, le '
+      + 'numéro, les travaux couverts, la date de fin et le certificat), vos sous-traitants (nom '
+      + 'ou raison sociale, numéro SIRET, s’ils détiennent un label RGE, pour quels travaux, '
+      + 'jusqu’à quand, et leur justificatif), et vos tarifs (frais de déplacement, taux horaire et son décompte, '
       + 'majoration de nuit et de week-end, prix du devis) ; et vos devis en préparation '
       + 'eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de '
       + 'garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont '
@@ -1713,7 +1854,10 @@ export const CONFIDENTIALITE = [
       + 'partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent '
       + 'engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il '
       + 's’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets '
-      + '(quantité, tri, lieux de dépôt, coût estimé), leurs '
+      + '(quantité, tri, lieux de dépôt, coût estimé), les travaux d’économies d’énergie ou '
+      + 'd’énergie renouvelable qu’ils comportent, ceux pour lesquels vous déclarez ne pas détenir '
+      + 'de label RGE, et si une autre entreprise fera une partie ou la totalité de leurs travaux, '
+      + 'et laquelle, leurs '
       + 'lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le '
       + 'client —, leurs prix et leurs totaux, le client de votre carnet auquel ils '
       + 'sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent. Et votre '
@@ -1727,7 +1871,8 @@ export const CONFIDENTIALITE = [
       + 's’affichent ni aux autres artisans, ni dans l’espace d’administration, et la date à '
       + 'laquelle vous les affichez est enregistrée. C’est une barrière, pas un verrou : Opus ne '
       + 'vérifie pas l’identité des particuliers, et quelqu’un qui ouvre un compte particulier, '
-      + 'un artisan compris, peut les lire. Les attestations jointes, comme vos autres documents '
+      + 'un artisan compris, peut les lire. Les attestations jointes, les certificats de vos '
+      + 'signes de qualité et les justificatifs de vos sous-traitants, comme vos autres documents '
       + 'professionnels, sont aussi lisibles par l’administration d’Opus. Si vous répondez ou '
       + 'avez répondu aux urgences : votre métier d’urgence, votre rayon d’intervention et votre '
       + 'délai d’arrivée habituel, et si vous y répondez encore, lisibles par les utilisateurs '
@@ -1854,13 +1999,25 @@ export const CONFIDENTIALITE = [
   },
   {
     titre: 'Vos documents professionnels',
-    texte: 'Le Kbis, l’extrait d’immatriculation et l’attestation d’assurance sont '
+    /* LES PIÈCES DU LABEL RGE (étape 2b-6, cahier §4, critique DROIT-11) :
+       le certificat d'un signe de qualité et le justificatif d'un
+       sous-traitant vivent dans le MÊME espace privé que l'attestation
+       d'assurance (`documents`, un niveau sous le dossier du compte), donc
+       sous les mêmes règles : lisibles par l'administration d'Opus, jamais
+       affichés publiquement. Leur finalité est la même que celle de
+       l'attestation jointe dans « Mon entreprise » : accompagner vos devis
+       — une finalité, pas un envoi, rien ne sort avant le lot 2c. Le
+       justificatif d'un sous-traitant est la pièce d'une AUTRE entreprise :
+       « Les clients que vous enregistrez » le dit, et « Combien de temps »
+       dit qu'il reste dans l'espace privé quand on retire le sous-traitant. */
+    texte: 'Le Kbis, l’extrait d’immatriculation, l’attestation d’assurance, les certificats de '
+      + 'vos signes de qualité et les justificatifs de vos sous-traitants sont '
       + 'rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus '
       + 'seulement. Ils ne sont jamais affichés publiquement et servent au contrôle du '
       + 'badge vérifié, à l’examen d’une demande d’ouverture de compte professionnel — '
       + 'dont le justificatif suit les mêmes règles, et ne passe jamais par la '
-      + 'messagerie — et, pour l’attestation d’assurance que vous joignez dans « Mon '
-      + 'entreprise », à accompagner vos devis.',
+      + 'messagerie — et, pour l’attestation d’assurance, les certificats et les justificatifs '
+      + 'que vous joignez dans « Mon entreprise », à accompagner vos devis.',
   },
   {
     titre: 'Pourquoi, et sur quelle base',
@@ -2019,7 +2176,23 @@ export const CONFIDENTIALITE = [
        couvrir la base de postes » — mais la section ne le disait pas, et le
        jour où `contratSousTraitance` passera à `true`, la branche affichée
        aurait décrit un contrat sans elle. Les DEUX branches la nomment, et
-       `verifier-legal` les fait tourner toutes les deux. */
+       `verifier-legal` les fait tourner toutes les deux.
+
+       LES SOUS-TRAITANTS Y ENTRENT AUSSI (étape 2b-6, cahier §4, critique
+       DROIT-11) : leur nom, leur SIRET et leur justificatif sont des
+       données d'une AUTRE entreprise, souvent un entrepreneur individuel —
+       une personne —, que l'artisan range seul, sous sa responsabilité.
+       La phrase (`SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE`) est dans les DEUX
+       branches. Dans la branche affichée, elle vient APRÈS la garantie et
+       N'EN RELÈVE PAS : « vous pouvez les supprimer à tout moment » et
+       « ni dans l’espace d’administration » seraient faux pour leur
+       justificatif (aucun client ne retire un fichier de `documents`, et
+       l'administration lit cet espace). La phrase qui suit le dit. Leur nom
+       et leur SIRET, eux, ne sont lisibles que de l'artisan (une politique
+       `est_mon_entreprise`), ce que « Ce que nous collectons » couvre déjà
+       par « Aucun écran d’Opus ne les montre ». « Le seul artisan qui y
+       tient un carnet ou y prépare des devis » se relit sur la vraie base
+       APRÈS la migration de 2b-6, par la forme (cahier BASE-9). */
     texte: !EDITEUR.contratSousTraitance
       ? 'Si vous êtes artisan, Opus vous permet de tenir un carnet de '
         + 'clients et de préparer des devis. Un devis se rattache à une fiche '
@@ -2040,6 +2213,10 @@ export const CONFIDENTIALITE = [
         + 'contenu n’apparaît sur votre fiche publique, dans le fil ou dans '
         + 'une notification ; vous pouvez les exporter et les supprimer à '
         + 'tout moment ; et ils partent entièrement avec votre compte.\n\n'
+        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE + ' Vous en êtes là aussi le responsable du '
+        + 'traitement. Mais la garantie qui précède ne vaut que pour votre carnet et vos devis : '
+        + 'le justificatif d’un sous-traitant, comme vos autres documents professionnels, est '
+        + 'aussi lisible par l’administration d’Opus.\n\n'
         + CE_QUI_RESTE_D_UN_CLIENT
         + '\n\nUne exception à dire clairement : quand vous tapez '
         + 'l’adresse d’un client, ou le lieu des travaux d’un devis, et que '
@@ -2060,6 +2237,7 @@ export const CONFIDENTIALITE = [
         + 'client, le lieu des travaux d’un devis), envoyée à la Base Adresse '
         + 'Nationale pour proposer des suggestions —, et les restitue ou les '
         + 'efface sur demande. '
+        + SOUS_TRAITANTS_D_UNE_AUTRE_ENTREPRISE + ' '
         + CE_QUI_RESTE_D_UN_CLIENT,
   },
   {
@@ -2145,7 +2323,17 @@ export const CONFIDENTIALITE = [
        une vérité qu'on croirait inverse : la clé du lien d'origine est
        `on delete set null`, donc supprimer un devis VIDE ce lien et laisse
        la phrase dans la base. Celui qui supprime un devis pour effacer un
-       client doit le savoir. */
+       client doit le savoir.
+
+       UNE PIÈCE RETIRÉE D'UNE FICHE RESTE (étape 2b-6, cahier §4, critique
+       DROIT-11) : aucun client ne retire un fichier de l'espace privé
+       `documents` (lot S-a, section 51) — retirer un signe de qualité, un
+       sous-traitant, ou répondre « Non » à son label, retire la LIGNE, pas
+       le fichier ; remplacer ou retirer une assurance, de même. Le fichier
+       part avec le compte (la fonction Edge `compte` vide le dossier du
+       compte). C'était déjà vrai des attestations, et les textes le
+       taisaient. La phrase du cahier, mot pour mot ; aucune durée n'est
+       promise au-delà du compte. */
     texte: 'Vos données sont conservées tant que votre compte existe. Mais quand une AUTRE '
       + 'personne supprime son compte, ce qui n’existait qu’avec elle part avec lui : vos '
       + 'conversations avec elle, vos propres messages compris ; les commentaires sous ses '
@@ -2201,7 +2389,9 @@ export const CONFIDENTIALITE = [
       + 'existe, y compris pour une publication supprimée depuis, et part avec votre compte. '
       + 'Une demande de partenariat refusée reste enregistrée tant que les deux '
       + 'comptes existent : c’est elle qui empêche de la renvoyer en boucle à celui qui '
-      + 'l’a refusée — celui-ci peut l’effacer. Les photos d’une publication supprimée, d’une demande refermée ou d’une '
+      + 'l’a refusée — celui-ci peut l’effacer. Un certificat, un justificatif ou une attestation '
+      + 'retiré d’une fiche reste dans votre espace privé jusqu’à la suppression de votre compte. '
+      + 'Les photos d’une publication supprimée, d’une demande refermée ou d’une '
       + 'annonce retirée, et vos anciennes photos de profil ou de bannière, restent en ligne, '
       + 'lisibles par qui connaît leur adresse, jusqu’à la suppression de votre compte. '
       + CE_QUI_RESTE_EN_LIGNE

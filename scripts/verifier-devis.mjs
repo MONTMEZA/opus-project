@@ -1210,8 +1210,9 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
     'src/components/CarteLigne.js', 'src/components/EnteteDevis.js', 'src/components/ChampDesignation.js',
     'src/components/ChoixClientDevis.js', 'src/components/ChampMontant.js', 'src/components/ConditionsDevis.js',
     /* 2b-5 : la carte « Déchets du chantier » — une carte du module, lue
-       comme les autres. */
-    'src/components/DechetsDevis.js'];
+       comme les autres ; 2b-6 (cahier §2.8 bis) : la carte « Énergie et label
+       RGE », de même. */
+    'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js'];
   const UN_AN = /(?<![\p{L}\d])un an(?![\p{L}])/u;
   const phrasesDe = (src) => {
     const recousu = sansCommentairesJs(src).replace(/(['"`])\s*\+\s*(['"`])/g, '');
@@ -1475,26 +1476,36 @@ console.log('\n  8. une seule écriture des montants');
      `memeValeur` SEUL — trois valeurs du devis sont des LISTES (les déchets
      triés, ce qui reste sur place, les lieux), et « est-ce la même valeur ? »
      ne s'écrit qu'à UN endroit, que la file d'écriture lit aussi.
-     `meme-valeur.js` n'importe RIEN (vérifié juste en dessous). Un sixième
-     fichier rougit. */
+     `meme-valeur.js` n'importe RIEN (vérifié juste en dessous).
+     Un SIXIÈME depuis 2b-6 (T28, DÉCIDÉ) : `../data/travaux-energie.js`, pour
+     `TRAVAUX_ENERGIE` SEUL — les dix-neuf travaux d'économies d'énergie,
+     avec les MÊMES clés que les signes de qualité de « Mon entreprise » ;
+     une seule source, que `emetteur.js` importe aussi (les deux ne
+     s'importent pas l'un l'autre, CTL-9). Il n'importe RIEN (vérifié juste
+     en dessous). Un septième fichier rougit. */
   verifier('`devis.js` importe EXACTEMENT `./centimes.js` (`centimesLisibles`, `versCentimes` — lot 2a), `./entreprise.js` (`dateFrancaise`, `isoLisible`), '
-    + '`./rapprochement.js` (`aPlat`, `cleDeRapprochement` — lot P), `./formats.js` (`joursEntre` — 2b-4) et `./meme-valeur.js` '
-    + '(`memeValeur` — 2b-5) — cinq instructions, aucune autre forme (ni import nu, ni réexportation, ni `import()`)',
-  imps.length === 5 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles', 'versCentimes'] })
+    + '`./rapprochement.js` (`aPlat`, `cleDeRapprochement` — lot P), `./formats.js` (`joursEntre` — 2b-4), `./meme-valeur.js` '
+    + '(`memeValeur` — 2b-5) et `../data/travaux-energie.js` (`TRAVAUX_ENERGIE` — 2b-6) — six instructions, aucune autre forme '
+    + '(ni import nu, ni réexportation, ni `import()`)',
+  imps.length === 6 && json(imps.find((x) => x.de === './centimes.js')) === json({ de: './centimes.js', noms: ['centimesLisibles', 'versCentimes'] })
     && json(imps.find((x) => x.de === './entreprise.js')) === json({ de: './entreprise.js', noms: ['dateFrancaise', 'isoLisible'] })
     && json(imps.find((x) => x.de === './rapprochement.js')) === json({ de: './rapprochement.js', noms: ['aPlat', 'cleDeRapprochement'] })
     && json(imps.find((x) => x.de === './formats.js')) === json({ de: './formats.js', noms: ['joursEntre'] })
     && json(imps.find((x) => x.de === './meme-valeur.js')) === json({ de: './meme-valeur.js', noms: ['memeValeur'] })
-    && json(modulesDe(srcDevis).sort()) === json(['./centimes.js', './entreprise.js', './formats.js', './meme-valeur.js', './rapprochement.js'])
-    && instructionsDImport(srcDevis) === 5
+    && json(imps.find((x) => x.de === '../data/travaux-energie.js')) === json({ de: '../data/travaux-energie.js', noms: ['TRAVAUX_ENERGIE'] })
+    && json(modulesDe(srcDevis).sort()) === json(['../data/travaux-energie.js', './centimes.js', './entreprise.js', './formats.js',
+      './meme-valeur.js', './rapprochement.js'])
+    && instructionsDImport(srcDevis) === 6
     && !/\brequire\s*\(|\bimport\s*\(/.test(srcDevis), `${json(imps)} ; modules ${json(modulesDe(srcDevis))} ; `
     + `${instructionsDImport(srcDevis)} instruction(s)`);
   /* 2b-5 (T4) : `file-ecriture.js` n'est plus pur — il importe
      `memeValeur`, et lui SEUL, d'un fichier qui n'importe rien : `node` fait
      toujours tourner la file. `meme-valeur.js` rejoint les fichiers purs. */
-  const purs = ['src/lib/centimes.js', 'src/lib/identifiant.js', 'src/lib/formats.js', 'src/lib/meme-valeur.js']
+  const purs = ['src/lib/centimes.js', 'src/lib/identifiant.js', 'src/lib/formats.js', 'src/lib/meme-valeur.js',
+    'src/data/travaux-energie.js']
     .filter((f) => chargeQuelqueChose(sansCommentairesJs(lire(f))));
-  verifier('`centimes.js`, `identifiant.js`, `formats.js` (2b-4) et `meme-valeur.js` (2b-5) n’importent RIEN — sous aucune forme, import nu compris',
+  verifier('`centimes.js`, `identifiant.js`, `formats.js` (2b-4), `meme-valeur.js` (2b-5) et `travaux-energie.js` (2b-6) n’importent '
+    + 'RIEN — sous aucune forme, import nu compris',
     purs.length === 0, purs.join(', '));
   const srcFile = sansCommentairesJs(lire('src/lib/file-ecriture.js'));
   const impsFile = importsDe(srcFile);
@@ -1525,15 +1536,24 @@ console.log('\n  8. une seule écriture des montants');
      écrite UNE fois, sur deux lignes de source ; c'est la seconde, celle qui
      porte les deux « € », qui est cherchée telle quelle. */
   const AMENDE_DECHETS_SOURCE = "'pouvant aller jusqu’à 3\\u00a0000\\u00a0€, 15\\u00a0000\\u00a0€ pour une société.'";
+  /* 2b-6 : une QUATRIÈME exception, l'amende administrative du label RGE
+     (L. 242-51, annexe A.3, réponse P14 du 24/11 : « Les deux ») —
+     `AMENDE_DU_LABEL`, écrite UNE fois, sa dernière ligne de source portant
+     les deux « € ». L'amende de la SOUS-TRAITANCE n'en porte aucun : la loi
+     n'en prévoit pas (DROIT-23). */
+  const AMENDE_LABEL_SOURCE = "'pouvant aller jusqu’à 15\\u00a0000\\u00a0€, 75\\u00a0000\\u00a0€ pour une société.'";
   const morceauxAmende = srcDevis.split(AMENDE_SOURCE);
   const morceauxConstruction = morceauxAmende.join('').split(AMENDE_CONSTRUCTION_SOURCE);
   const morceauxDechets = morceauxConstruction.join('').split(AMENDE_DECHETS_SOURCE);
+  const morceauxLabel = morceauxDechets.join('').split(AMENDE_LABEL_SOURCE);
   verifier('`devis.js` n’écrit jamais « € » lui-même : un montant ne s’écrit qu’à UN endroit — sauf l’amende de la loi, dans la '
     + 'confirmation du chantier neuf et l’avertissement de l’urgence, celle du code de la construction, dans la ligne '
-    + '« pourquoi » du bâtiment neuf, et l’amende administrative des déchets (2b-5) : chacune écrite UNE fois',
-  morceauxAmende.length === 2 && morceauxConstruction.length === 2 && morceauxDechets.length === 2 && !/€/.test(morceauxDechets.join('')),
+    + '« pourquoi » du bâtiment neuf, l’amende administrative des déchets (2b-5) et celle du label RGE (2b-6) : chacune écrite '
+    + 'UNE fois',
+  morceauxAmende.length === 2 && morceauxConstruction.length === 2 && morceauxDechets.length === 2 && morceauxLabel.length === 2
+    && !/€/.test(morceauxLabel.join('')),
   `${morceauxAmende.length - 1} amende(s) de la loi ; ${morceauxConstruction.length - 1} du code de la construction ; `
-    + `${morceauxDechets.length - 1} des déchets ; « € » ailleurs : ${/€/.test(morceauxDechets.join(''))}`);
+    + `${morceauxDechets.length - 1} des déchets ; ${morceauxLabel.length - 1} du label ; « € » ailleurs : ${/€/.test(morceauxLabel.join(''))}`);
 }
 
 console.log('\n  9. les dates, dans trois fuseaux, des deux côtés de minuit');
@@ -3050,9 +3070,15 @@ const COUT_2B4 = ['cout_devis_centimes'];
    lirait. DÉCIDÉ (cahier 2b-5 §2.1, réponses P1 à P6 du 21/11). */
 const DECHETS_2B5 = ['dechets_concerne', 'dechets_quantite_milliemes', 'dechets_unite', 'dechets_flux', 'dechets_sur_place',
   'dechets_lieux', 'dechets_sans_depot', 'dechets_cout_centimes'];
+/* 2b-6 (49.4 septies, 49.7) : les quatre faits des travaux d'économies
+   d'énergie et du label RGE, écrits par l'artisan (carte « Énergie et label
+   RGE »), juste avant `generation` dans les deux `grant`, dans cet ordre.
+   Aucune date : personne ne la lirait. DÉCIDÉ (cahier 2b-6 §2.1, réponses
+   P1 à P3 du 23/11 et P11 à P14 du 24/11). */
+const ENERGIE_2B6 = ['energie_travaux', 'energie_sans_label', 'energie_sous_traitance', 'energie_sous_traitants'];
 const ENTETE_DEVIS = ['client_id', 'quote_request_id', 'sos_request_id', 'objet', 'lieu_adresse', 'lieu_code_postal', 'lieu_ville',
   'delai_execution', 'retenue_garantie_centiemes', ...CONDITIONS_2A, ...QUI_ET_CHANTIER_2B2, ...DECENNALE_ET_SIGNATURE_2B3,
-  ...COUT_2B4, ...DECHETS_2B5];
+  ...COUT_2B4, ...DECHETS_2B5, ...ENERGIE_2B6];
 const COLONNES_LIGNE = ['ordre', 'type', 'designation', 'quantite_milliemes', 'unite', 'prix_unitaire_centimes', 'taux_tva_centiemes',
   'offert', 'main_oeuvre', 'fourniture_non_comprise', 'surface_sol_milliemes', 'surface_murs_milliemes', 'urgence'];
 const DROITS_DE_COLONNE = {
@@ -3174,7 +3200,21 @@ const AJOUTS_2B5 = [
   'devis: add column if not exists dechets_sans_depot boolean',
   'devis: add column if not exists dechets_cout_centimes bigint',
 ];
-const AJOUTS_PERMIS = [...AJOUTS_2A, ...AJOUTS_2B2, ...AJOUTS_2B3, ...AJOUTS_2B4, ...AJOUTS_2B5];
+/* …ET LES QUATRE DE 2b-6 (24/11/2026, 49.4 septies) : les travaux
+   d'économies d'énergie et le label RGE — toutes nullables, SANS défaut (le
+   vide est une réponse à part : le motif du rang 14, `devis_energie` ; un
+   défaut le tairait sur chaque devis existant), trois LISTES (`text[]`,
+   `text[]`, `uuid[]`) et une réponse (`boolean`), aucune clé étrangère (les
+   sous-traitants sont lus, jamais tenus : le contrat de
+   `energie_sous_traitants`, comme celui de `dechets_lieux`). Aucune PAIRE
+   qui lierait deux colonnes (T23). DÉCIDÉ. */
+const AJOUTS_2B6 = [
+  'devis: add column if not exists energie_travaux text[]',
+  'devis: add column if not exists energie_sans_label text[]',
+  'devis: add column if not exists energie_sous_traitance boolean',
+  'devis: add column if not exists energie_sous_traitants uuid[]',
+];
+const AJOUTS_PERMIS = [...AJOUTS_2A, ...AJOUTS_2B2, ...AJOUTS_2B3, ...AJOUTS_2B4, ...AJOUTS_2B5, ...AJOUTS_2B6];
 
 console.log('\n  12. les colonnes — une liste FERMÉE');
 {
@@ -3210,7 +3250,11 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
          défaut (vide = pas dit, le motif du rang 13), trois listes, hors des
          totaux (le coût des déchets est une estimation, pas une ligne). */
       'dechets_concerne boolean', 'dechets_quantite_milliemes bigint', 'dechets_unite text', 'dechets_flux text[]',
-      'dechets_sur_place text[]', 'dechets_lieux uuid[]', 'dechets_sans_depot boolean', 'dechets_cout_centimes bigint'],
+      'dechets_sur_place text[]', 'dechets_lieux uuid[]', 'dechets_sans_depot boolean', 'dechets_cout_centimes bigint',
+      /* 2b-6 (49.4 septies) : les quatre faits des travaux d'énergie —
+         nullables, sans défaut (vide = pas dit, le motif du rang 14), trois
+         listes et une réponse, hors des totaux. */
+      'energie_travaux text[]', 'energie_sans_label text[]', 'energie_sous_traitance boolean', 'energie_sous_traitants uuid[]'],
     devis_lignes: ['id uuid +', 'devis_id uuid +', 'ordre integer +', 'type text +', 'designation text', 'quantite_milliemes bigint',
       'unite text', 'prix_unitaire_centimes bigint', 'taux_tva_centiemes integer', 'total_centimes bigint', 'offert boolean +',
       'main_oeuvre boolean +', 'fourniture_non_comprise boolean +', 'surface_sol_milliemes bigint', 'surface_murs_milliemes bigint',
@@ -3248,8 +3292,8 @@ console.log('\n  12. les colonnes — une liste FERMÉE');
   const malComptes = AJOUTS_PERMIS.filter((a) => ajouts.filter((x) => x === a).length !== 1 || !ajoutsS49.includes(a));
   verifier('…et rien ne s’y ajoute plus bas : sur ces tables, le seul `add` est `add constraint <nom> check` (ni `add column`, ni '
     + '`add if not exists`, ni une contrainte anonyme) — sauf les dix colonnes des conditions (lot 2a), les cinq de 2b-2 (49.4 ter), '
-    + 'les trois de 2b-3 (49.3 bis, 49.4 quater), celle de 2b-4 (49.4 quinquies) et les huit de 2b-5 (49.4 sexies), chacune une fois, '
-    + 'dans la section 49', horsListe.length === 0 && malComptes.length === 0 && ajouts.length === AJOUTS_PERMIS.length,
+    + 'les trois de 2b-3 (49.3 bis, 49.4 quater), celle de 2b-4 (49.4 quinquies), les huit de 2b-5 (49.4 sexies) et les quatre de '
+    + '2b-6 (49.4 septies), chacune une fois, dans la section 49', horsListe.length === 0 && malComptes.length === 0 && ajouts.length === AJOUTS_PERMIS.length,
   `hors liste : ${horsListe.join(' | ') || '—'} ; manquants ou en double : ${malComptes.join(' | ') || '—'}`);
 }
 
@@ -3328,8 +3372,8 @@ console.log('\n  12 bis. aucune table du devis ne change de FORME après sa cré
     return d && ad && !(d.index < ad.index && alters49.includes(d.brut) && alters49.includes(ad.brut));
   });
   verifier(`sur les trois tables, chaque \`alter table\` du fichier (${alters.length} lus) est l’une des formes PERMISES : la RLS, une `
-    + 'contrainte refaite (`drop constraint if exists` puis `add constraint … check`), ou une des vingt-sept colonnes du lot 2a, de 2b-2, '
-    + 'de 2b-3, de 2b-4 et de 2b-5 — ni '
+    + 'contrainte refaite (`drop constraint if exists` puis `add constraint … check`), ou une des trente et une colonnes du lot 2a, de '
+    + '2b-2, de 2b-3, de 2b-4, de 2b-5 et de 2b-6 — ni '
     + '`alter column` (un défaut, un type, un `drop not null`), ni `drop column`, ni `rename`, ni `owner to`, ni `disable`, ni '
     + '`not valid`',
   alters.length >= 74 && horsListe.length === 0, horsListe.join(' | ') || `${alters.length} lus — le lecteur a perdu sa cible`);
@@ -3340,8 +3384,10 @@ console.log('\n  12 bis. aucune table du devis ne change de FORME après sa cré
      les lignes, 5 sur la ventilation. 42 depuis 2b-5 : les sept contraintes
      des déchets (`devis_dechets_{cout,flux,lieux,quantite,sans_depot,
      sur_place,unite}_check`), que `CONTRAINTES_DEVIS` porte aussi — 26 sur
-     les devis. DÉCIDÉ. */
-  tousLesNoms.length === 42 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
+     les devis. DÉCIDÉ. 45 depuis 2b-6 : les trois contraintes des travaux
+     d'énergie (`devis_energie_{sans_label,sous_traitants,travaux}_check`),
+     que `CONTRAINTES_DEVIS` porte aussi — 29 sur les devis. DÉCIDÉ. */
+  tousLesNoms.length === 45 && malComptees.length === 0 && desordre.length === 0, [...malComptees, ...desordre].join(' | '));
 }
 
 /* LA FIN D'UN ORDRE SQL, en sautant ses chaînes (`'…'`, `E'…'` et ses
@@ -3667,7 +3713,7 @@ console.log('\n  14. D4 — rien n’est obligatoire hors l’entreprise, et auc
     mauvais.length === 0, mauvais.join(' | '));
 }
 
-console.log('\n  15. les contraintes — trente-cinq, toutes nommées en `_check`');
+console.log('\n  15. les contraintes — quarante-cinq, toutes nommées en `_check`');
 {
   const noms = CHECKS49.map((c) => c.nom);
   const tables = [...new Set(CHECKS49.map((c) => c.table))].sort();
@@ -3682,12 +3728,16 @@ console.log('\n  15. les contraintes — trente-cinq, toutes nommées en `_check
      centimes, ou vide). Un nombre seul laissait passer une contrainte
      remplacée par une autre. Et sept en 2b-5 (49.5, les déchets du
      chantier) : le coût, les déchets triés, les lieux, la quantité,
-     « Aucun dépôt », ce qui reste sur place, l'unité — 26 sur les devis. */
+     « Aucun dépôt », ce qui reste sur place, l'unité — 26 sur les devis.
+     Et trois en 2b-6 (49.5, les travaux d'économies d'énergie) : les
+     travaux du devis, ceux qu'aucun signe ne porte, les sous-traitants —
+     29 sur les devis. DÉCIDÉ. */
   const ATTENDUES = {
     devis: ['devis_acompte_check', 'devis_acompte_nature_check', 'devis_acompte_une_forme_check', 'devis_calculs_check',
       'devis_cout_check', 'devis_dechets_cout_check', 'devis_dechets_flux_check', 'devis_dechets_lieux_check',
       'devis_dechets_quantite_check', 'devis_dechets_sans_depot_check', 'devis_dechets_sur_place_check', 'devis_dechets_unite_check',
-      'devis_delai_check', 'devis_lieu_adresse_check', 'devis_lieu_code_postal_check', 'devis_lieu_ville_check', 'devis_objet_check',
+      'devis_delai_check', 'devis_energie_sans_label_check', 'devis_energie_sous_traitants_check', 'devis_energie_travaux_check',
+      'devis_lieu_adresse_check', 'devis_lieu_code_postal_check', 'devis_lieu_ville_check', 'devis_objet_check',
       'devis_plafond_check', 'devis_pour_qui_check', 'devis_remise_check', 'devis_remise_une_forme_check', 'devis_retenue_check',
       'devis_source_check',
       'devis_statut_check', 'devis_totaux_check', 'devis_validite_check'],
@@ -3698,9 +3748,9 @@ console.log('\n  15. les contraintes — trente-cinq, toutes nommées en `_check
       'devis_tva_vide_check'],
   };
   const parTable = Object.fromEntries(TABLES49.map((t) => [t, CHECKS49.filter((c) => c.table === t).map((c) => c.nom).sort()]));
-  verifier(`la section pose ${noms.length} contraintes \`check\` sur les trois tables — il en faut 42, NOMMÉES (26 sur les devis, `
+  verifier(`la section pose ${noms.length} contraintes \`check\` sur les trois tables — il en faut 45, NOMMÉES (29 sur les devis, `
     + '11 sur les lignes, 5 sur la ventilation)',
-  noms.length === 42 && json(tables) === json([...TABLES49].sort())
+  noms.length === 45 && json(tables) === json([...TABLES49].sort())
     && TABLES49.every((t) => egalListes(parTable[t], [...ATTENDUES[t]].sort())), json(parTable));
   /* LES RÈGLES DU LOT 2a, ENTIÈRES (espaces réduits) : un nom juste
      portant une règle relâchée — `>= -1`, un `or` à la place d'un `and`,
@@ -3753,13 +3803,30 @@ console.log('\n  15. les contraintes — trente-cinq, toutes nommées en `_check
       + 'array_lower(dechets_sur_place, 1) = 1 then cardinality(dechets_sur_place) between 1 and 2 and dechets_sur_place <@ '
       + "array['broyage', 'compostage'] else false end",
     devis_dechets_unite_check: "dechets_unite is null or dechets_unite in ('m3', 't')",
+    /* 2b-6 (49.5) : les trois règles des travaux d'énergie, ENTIÈRES. Jamais
+       un tableau vide, une seule dimension commençant à 1, la liste FERMÉE
+       des dix-neuf travaux (`TRAVAUX_ENERGIE`, dans son ORDRE), `aucun` en
+       tête et EXCLUSIF pour les travaux du devis, jamais pour « sans
+       label » ; au plus dix sous-traitants sans trou. Les doublons ne sont
+       PAS refusés (`<@` et `cardinality` les acceptent) : le miroir non
+       plus (`travauxRecevables`). DÉCIDÉ. */
+    devis_energie_sans_label_check: 'energie_sans_label is null or case when array_ndims(energie_sans_label) = 1 and '
+      + 'array_lower(energie_sans_label, 1) = 1 then cardinality(energie_sans_label) between 1 and 19 and energie_sans_label <@ '
+      + "array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage', 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique', 'desembouage'] and array_position(energie_sans_label, null) is null else false end",
+    devis_energie_sous_traitants_check: 'energie_sous_traitants is null or case when array_ndims(energie_sous_traitants) = 1 and '
+      + 'array_lower(energie_sous_traitants, 1) = 1 then cardinality(energie_sous_traitants) between 1 and 10 and '
+      + 'array_position(energie_sous_traitants, null) is null else false end',
+    devis_energie_travaux_check: 'energie_travaux is null or case when array_ndims(energie_travaux) = 1 and '
+      + 'array_lower(energie_travaux, 1) = 1 then cardinality(energie_travaux) between 1 and 19 and energie_travaux <@ '
+      + "array['aucun', 'chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage', 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique', 'desembouage'] and (cardinality(energie_travaux) = 1 or not ('aucun' = any (energie_travaux))) else false end",
     devis_tva_remise_check: 'remise_centimes >= 0',
     devis_tva_vide_check: 'nb_lignes > 0 or (base_centimes = 0 and tva_centimes = 0 and remise_centimes = 0)',
   };
   const formesFausses = Object.entries(FORMES_2A).filter(([nom, forme]) => sansEspaces(regleDe(nom)) !== forme)
     .map(([nom]) => `${nom} : « ${sansEspaces(regleDe(nom))} »`);
   verifier('…et les dix règles du lot 2a (conditions, plafond, calculs, ventilation), celle de 2b-2 (`pour_qui`), celle de 2b-3 '
-    + '(`urgence`), celle de 2b-4 (`cout`) et les sept de 2b-5 (les déchets) sont celles ATTENDUES, entières',
+    + '(`urgence`), celle de 2b-4 (`cout`), les sept de 2b-5 (les déchets) et les trois de 2b-6 (les travaux d’énergie) sont celles '
+    + 'ATTENDUES, entières',
     formesFausses.length === 0, formesFausses.join(' | '));
   verifier('…toutes finissent par `_check`, aucune en `_check<chiffres>`, aucune en double',
     noms.every((n) => /_check$/.test(n) && !/_check\d+$/.test(n)) && new Set(noms).size === noms.length);
@@ -3798,13 +3865,13 @@ console.log('\n  16. l’ordre des contraintes de ligne — celui de PostgreSQL'
   verifier('`CONTRAINTES_LIGNE` : onze noms `devis_ligne_…_check` (dix au lot 1, une à 2b-3), TRIÉS par ordre alphabétique '
     + '(octet par octet, comme PostgreSQL les applique)', noms.length === 11 && noms.every((n) => /^devis_ligne_[a-z_]+_check$/.test(n))
     && egalListes(noms, [...noms].sort()) && noms[10] === 'devis_ligne_urgence_check', json(noms));
-  verifier('`CONTRAINTES_DEVIS` : vingt-six noms `devis_…_check` (dix au lot 1, sept au lot 2a, une à 2b-2, une à 2b-4, sept à 2b-5), '
-    + 'triés de même',
-    D.CONTRAINTES_DEVIS.length === 26 && D.CONTRAINTES_DEVIS.every((n) => /^devis_[a-z_]+_check$/.test(n) && !/^devis_ligne_/.test(n))
+  verifier('`CONTRAINTES_DEVIS` : vingt-neuf noms `devis_…_check` (dix au lot 1, sept au lot 2a, une à 2b-2, une à 2b-4, sept à '
+    + '2b-5, trois à 2b-6), triés de même',
+    D.CONTRAINTES_DEVIS.length === 29 && D.CONTRAINTES_DEVIS.every((n) => /^devis_[a-z_]+_check$/.test(n) && !/^devis_ligne_/.test(n))
     && egalListes([...D.CONTRAINTES_DEVIS], [...D.CONTRAINTES_DEVIS].sort()));
   const schemaLigne = CHECKS49.filter((c) => c.table === 'devis_lignes').map((c) => c.nom).sort();
   const schemaDevis = CHECKS49.filter((c) => c.table === 'devis').map((c) => c.nom).sort();
-  verifier('…et ce sont EXACTEMENT les onze de `devis_lignes` et les vingt-six de `devis` que le schéma pose',
+  verifier('…et ce sont EXACTEMENT les onze de `devis_lignes` et les vingt-neuf de `devis` que le schéma pose',
     egalListes(schemaLigne, noms) && egalListes(schemaDevis, [...D.CONTRAINTES_DEVIS]),
     `schéma (lignes) ${json(schemaLigne)} ; schéma (devis) ${json(schemaDevis)}`);
 }
@@ -3898,6 +3965,14 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
      inverse). Son code postal est rogné par une AUTRE classe, plus petite,
      sans invisibles, comme les rognages de « Mon entreprise » : il n'est pas
      une copie, et la propriété ci-dessous ne le compte pas.
+     SEIZE depuis 2b-6 (DÉCIDÉ : T1 laisse la consolidation au propriétaire,
+     elle n'a pas été faite) : les trois textes d'un signe de qualité
+     (`tient_le_label` — organisme, intitulé, référence) et la raison
+     sociale d'un sous-traitant (`tient_le_sous_traitant`), section 46, en
+     `chr(n)` comme les lieux. Leurs CHEMINS de justificatif sont rognés par
+     la petite classe (espace, tabulation, retours), sans invisibles : un
+     chemin de stockage n'en contient jamais, et ce n'est pas une copie.
+     Seize copies dans HUIT fonctions.
      DEUX FORMES SE LISENT : la chaîne `E'…'` à séquences des sections 47
      et 49, et la concaténation de littéraux `'…'` et de `chr(n)` de la
      section 50, qui ne contient AUCUNE barre oblique inverse (cahier du
@@ -3935,6 +4010,10 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
     'tient_le_lieu_de_depot.adresse (46, 2b-5)': jeuDe('tient_le_lieu_de_depot', 'adresse'),
     'tient_le_lieu_de_depot.ville (46, 2b-5)': jeuDe('tient_le_lieu_de_depot', 'ville'),
     'tient_le_lieu_de_depot.libelle (46, 2b-5)': jeuDe('tient_le_lieu_de_depot', 'libelle'),
+    'tient_le_label.organisme (46, 2b-6)': jeuDe('tient_le_label', 'organisme'),
+    'tient_le_label.intitule (46, 2b-6)': jeuDe('tient_le_label', 'intitule'),
+    'tient_le_label.reference (46, 2b-6)': jeuDe('tient_le_label', 'reference'),
+    'tient_le_sous_traitant.raison_sociale (46, 2b-6)': jeuDe('tient_le_sous_traitant', 'raison_sociale'),
   };
   const tarifs = [...new Set(E.BLANCS_TARIFS || '')].sort().join('');
   /* …ET TOUTE COPIE EST DANS LA LISTE — une PROPRIÉTÉ, pas une liste à
@@ -3954,7 +4033,7 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
   const dansLeFichier = parFonction(trouvees.map((c) => c.f));
   const dansLaListe = parFonction(Object.keys(copies).map((k) => k.split(/[ .]/)[0]));
   verifier(`chaque copie de la classe que porte le fichier (${trouvees.length}, invisibles compris) est dans la liste comparée ci-dessous`,
-    trouvees.length >= 12 && dansLeFichier === dansLaListe, `fichier ${dansLeFichier} ; liste ${dansLaListe}`);
+    trouvees.length >= 16 && dansLeFichier === dansLaListe, `fichier ${dansLeFichier} ; liste ${dansLaListe}`);
   /* T1 (2b-5) : UNE PROPRIÉTÉ de plus, sur TOUT le fichier. La propriété
      précédente ne compte que les rognages qu'elle sait LIRE : une classe
      écrite autrement — une variable, une fonction, un `repeat(…)`, un
@@ -3988,7 +4067,8 @@ console.log('\n  17. les miroirs — une seule règle, recopiée sous contrôle'
     + '`E\'…\'`, un littéral, ou des littéraux et des `chr(n)` concaténés — jamais une variable, une fonction ni un `repeat(…)` (T1)',
   nbBtrims >= 40 && btrimsIllisibles.length === 0, btrimsIllisibles.join(' | ') || `${nbBtrims} lus`);
   const differentes = Object.entries(copies).filter(([, v]) => v !== js).map(([k, v]) => `${k} ${json(v)}`);
-  verifier('`BLANCS` (devis.js) = les DOUZE copies de la classe (section 46 ×4, section 47 ×2, section 49 ×5, section 50 ×1) = '
+  verifier('`BLANCS` (devis.js) = les SEIZE copies de la classe (section 46 ×8 — 2b-5 ×4, 2b-6 ×4 —, section 47 ×2, section 49 ×5, '
+    + 'section 50 ×1) = '
     + '`BLANCS_TARIFS` — les invisibles compris',
     differentes.length === 0 && js === tarifs && [' ', '​', '‌', '‍', '⁠', '﻿'].every((ch) => js.includes(ch)),
     `devis ${json(js)} ; différentes : ${differentes.join(' | ') || '—'} ; tarifs ${json(tarifs)}`);
@@ -5006,7 +5086,15 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
        quatre ordres changés (n° 333-334 et 353-354), aucun ajouté ni retiré ;
        rejoué sur une base neuve par le rôle « base » : 27 ERROR, 57 valeurs
        justes, 0 écart. Le rattrapage n'a pas bougé. */
-    'supabase/essais-section-49-conditions.sql': `
+        /* 2b-6 (24/11/2026) : le cas 18 (55 colonnes nommées, dont les quatre
+       des travaux d'énergie, dans `attendu` ET dans la liste des colonnes
+       trouvées) et le cas 23 (trente et un défauts, dont les quatre de 2b-6,
+       tous VIDES) — quatre ordres changés (n° 333-334 et 353-354), aucun
+       ajouté ni retiré ; rejoué sur une base neuve par le rôle « base » :
+       27 ERROR, 61 valeurs justes, 0 écart (son compte rendu, §3). Le
+       rattrapage n'a pas bougé. `cout_devis_centimes` (2b-4) n'est
+       toujours pas dans le cas 23 : écart E4 de la base, laissé à décider. */
+'supabase/essais-section-49-conditions.sql': `
       ea204fd0 a42b5839 e6d39479 11f916d2 9ae9ffe7 539ea4c9 fe7a39a2 bf46f024 58364e28 9e84eb77 819a22c5 9535a418
       085b0ee8 3877bf7f 5cd053aa 03edac1b edd65695 8808baf6 364647c8 350fa2c4 16ef89c9 388cebd2 edd65695 19ccc5ce
       95c8eec7 8e18d6e4 78f8158f 4013b479 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c7ba749f 64b38cfb
@@ -5034,9 +5122,9 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
       19ccc5ce 95c8eec7 8e18d6e4 45d1cebf 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 06c1e1c4 1a2a6843 edd65695
       19ccc5ce 95c8eec7 8e18d6e4 77b8828c 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 b9e79b8f 1a2a6843 edd65695
       19ccc5ce 95c8eec7 8e18d6e4 78f8158f 67bfd527 1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f 12f16112
-      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 ca73da85 8688985b 0ac89d76 4b439408
+      1a2a6843 edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f a0217a90 1a2a6843 6d4ba219 ebc149af 0ac89d76 4b439408
       4d880d4c 13912acb 1441f239 3771726b edd65695 19ccc5ce 95c8eec7 8e18d6e4 78f8158f c43faebb a59edfec a54b0e4f
-      bd2af069 95c8eec7 0b57b066 1a2a6843 07db1011 f99b015c`,
+      bd2af069 95c8eec7 0b57b066 1a2a6843 4818e9ff 61a25f38`,
     'supabase/essais-section-49-rattrapage.sql': `
       ea204fd0 a42b5839 487feef8 e6d39479 11f916d2 40b5e395 910964bd bbe8eece 9a0b1f3e e85833ec 4910e716 06c1e0f2
       c4f022d1 adac5bc7 2ac8c3b8 5cd053aa c9dc7baa edd65695 2480b900 364647c8 94f16cc3 edd65695 b61a7250 8e64dc2e
@@ -5049,7 +5137,7 @@ console.log('\n  26 ter. les deux essais du lot 2a jouent ce qui a été relu �
   const JUGES = {
     'supabase/essais-section-49-conditions.sql': [
       ['`relire()`, le juge des cas 0 à 13 bis', String.raw`prepare relire(uuid, text) as select r.*, concat_ws('|', r.ht, r.tva, r.ttc, r.reduction, r.acompte, r.options, r.ventilation) = $2 as valeurs_attendu_t from (select d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc, d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte, d.total_ttc_options_centimes as options, coalesce((select string_agg(concat_ws(':', t.taux_tva_centiemes, t.base_centimes, t.remise_centimes, t.tva_centimes, t.nb_lignes), ',' order by t.taux_tva_centiemes desc) from public.devis_tva t where t.devis_id = d.id), '—') as ventilation, d.generation as horloge from public.devis d where d.id = $1) r;`],
-      ['le cas 23, le juge des défauts et du « not null »', String.raw`with attendu(tab, col, defaut, nullable) as (values ('devis', 'remise_centiemes', null, 'YES'), ('devis', 'remise_centimes', null, 'YES'), ('devis', 'acompte_centiemes', null, 'YES'), ('devis', 'acompte_centimes', null, 'YES'), ('devis', 'acompte_nature', null, 'YES'), ('devis', 'validite_jours', null, 'YES'), ('devis', 'retenue_garantie_centiemes', null, 'YES'), ('devis', 'remise_ht_centimes', '0', 'NO'), ('devis', 'acompte_ttc_centimes', '0', 'NO'), ('devis', 'total_ttc_options_centimes', '0', 'NO'), ('devis_tva', 'remise_centimes', '0', 'NO'), ('devis', 'pour_qui', null, 'YES'), ('devis', 'pour_qui_client', null, 'YES'), ('devis', 'chantier_neuf_conso', null, 'YES'), ('devis', 'chantier_neuf_conso_le', null, 'YES'), ('devis', 'chantier_neuf_tva', null, 'YES'), ('devis', 'engage_decennale', null, 'YES'), ('devis', 'acompte_a_la_signature', null, 'YES'), ('devis_lignes', 'urgence', 'false', 'NO'), ('devis', 'dechets_concerne', null, 'YES'), ('devis', 'dechets_quantite_milliemes', null, 'YES'), ('devis', 'dechets_unite', null, 'YES'), ('devis', 'dechets_flux', null, 'YES'), ('devis', 'dechets_sur_place', null, 'YES'), ('devis', 'dechets_lieux', null, 'YES'), ('devis', 'dechets_sans_depot', null, 'YES'), ('devis', 'dechets_cout_centimes', null, 'YES') ) select a.tab || '.' || a.col as colonne, c.column_default as defaut_lu, c.is_nullable as nullable_lu, coalesce(c.column_default is not distinct from a.defaut and c.is_nullable = a.nullable, false) as forme_attendu_t from attendu a left join information_schema.columns c on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col order by a.tab, a.col;`],
+      ['le cas 23, le juge des défauts et du « not null »', String.raw`with attendu(tab, col, defaut, nullable) as (values ('devis', 'remise_centiemes', null, 'YES'), ('devis', 'remise_centimes', null, 'YES'), ('devis', 'acompte_centiemes', null, 'YES'), ('devis', 'acompte_centimes', null, 'YES'), ('devis', 'acompte_nature', null, 'YES'), ('devis', 'validite_jours', null, 'YES'), ('devis', 'retenue_garantie_centiemes', null, 'YES'), ('devis', 'remise_ht_centimes', '0', 'NO'), ('devis', 'acompte_ttc_centimes', '0', 'NO'), ('devis', 'total_ttc_options_centimes', '0', 'NO'), ('devis_tva', 'remise_centimes', '0', 'NO'), ('devis', 'pour_qui', null, 'YES'), ('devis', 'pour_qui_client', null, 'YES'), ('devis', 'chantier_neuf_conso', null, 'YES'), ('devis', 'chantier_neuf_conso_le', null, 'YES'), ('devis', 'chantier_neuf_tva', null, 'YES'), ('devis', 'engage_decennale', null, 'YES'), ('devis', 'acompte_a_la_signature', null, 'YES'), ('devis_lignes', 'urgence', 'false', 'NO'), ('devis', 'dechets_concerne', null, 'YES'), ('devis', 'dechets_quantite_milliemes', null, 'YES'), ('devis', 'dechets_unite', null, 'YES'), ('devis', 'dechets_flux', null, 'YES'), ('devis', 'dechets_sur_place', null, 'YES'), ('devis', 'dechets_lieux', null, 'YES'), ('devis', 'dechets_sans_depot', null, 'YES'), ('devis', 'dechets_cout_centimes', null, 'YES'), ('devis', 'energie_travaux', null, 'YES'), ('devis', 'energie_sans_label', null, 'YES'), ('devis', 'energie_sous_traitance', null, 'YES'), ('devis', 'energie_sous_traitants', null, 'YES') ) select a.tab || '.' || a.col as colonne, c.column_default as defaut_lu, c.is_nullable as nullable_lu, coalesce(c.column_default is not distinct from a.defaut and c.is_nullable = a.nullable, false) as forme_attendu_t from attendu a left join information_schema.columns c on c.table_schema = 'public' and c.table_name = a.tab and c.column_name = a.col order by a.tab, a.col;`],
     ],
     'supabase/essais-section-49-rattrapage.sql': [
       ['`lire()`, le juge des trois parties', String.raw`prepare lire(uuid, text) as select d.objet, d.total_ht_centimes as ht, d.total_tva_centimes as tva, d.total_ttc_centimes as ttc, d.remise_ht_centimes as reduction, d.acompte_ttc_centimes as acompte, d.total_ttc_options_centimes as options, d.generation as horloge, concat_ws('|', d.total_ht_centimes, d.total_tva_centimes, d.total_ttc_centimes, d.remise_ht_centimes, d.acompte_ttc_centimes, d.total_ttc_options_centimes, d.generation) = $2 as valeurs_attendu_t from public.devis d where d.id = $1;`],
@@ -5650,15 +5738,17 @@ console.log('\n  27 bis. la base de démonstration refuse AVEC LES MOTS DE LA BA
        lot 2b-1 — « Muret » (« Ce devis » complet) et « Terrasse » (il y
        manque la validité et la nature de l'acompte), pour que la liste « Ce
        qu'il manque pour remettre ce devis » se VOIE dans ses deux états sans
-       `.env` (cahier 2b-1, §3.4). Le nombre se lit dans le jeu fabriqué, pas
-       écrit ici : un brouillon de plus ne doit pas faire rougir la
-       troncature, qui n'en dépend pas. */
+       `.env` (cahier 2b-1, §3.4) ; CINQ depuis l'étape 2b-6 — « Isolation des
+       combles et des murs », pour que le point `devis_energie_mentions` et
+       l'avis du label se voient sans `.env` (cahier 2b-6, §3.9). Le nombre
+       se lit dans le jeu fabriqué, pas écrit ici : un brouillon de plus ne
+       doit pas faire rougir la troncature, qui n'en dépend pas. */
     const nbDemo = DEMO.fabriquerDevisDemo(new Date()).devis.length;
     const deux = D.decouperListe(await DEMO.creerBaseDevisDemo().liste('1'));
     verifier(`o. 201 devis lus comme « Mes devis » : 200 gardés, \`tronque\` VRAI, et c’est le plus ANCIEN qui sort ; les ${nbDemo} devis `
       + 'de la démonstration : `tronque` faux', lus.length === 201 && r.devis.length === 200 && r.tronque === true
       && !r.devis.some((d) => d.objet === 'Devis 0') && r.devis[0].objet === 'Devis 200'
-      && nbDemo === 4 && deux.tronque === false && deux.devis.length === nbDemo,
+      && nbDemo === 5 && deux.tronque === false && deux.devis.length === nbDemo,
     `${lus.length} lus, ${r.devis.length} gardés, tronque ${r.tronque} ; le premier : ${r.devis[0] && r.devis[0].objet}`);
   }
 
@@ -6509,8 +6599,11 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
     && !/TTC|HT/.test(eAf.aDire) && D.effetDeLaReduction(tEcran, {}, 'reel') === null && D.effetDeLAcompte(tEcran, {}, 'reel') === null,
   json([eR, eA, eAf]));
   /* Une phrase d'échec par contrainte que l'APPLICATION peut violer : les
-     vingt-six moins les QUATRE que la base pose seule — vingt-deux depuis
-     2b-5 (les sept des déchets, chacune nommant son champ) ; quinze en 2b-4
+     vingt-neuf moins les QUATRE que la base pose seule — vingt-cinq depuis
+     2b-6 (les trois des travaux d'énergie, annexe A.7 : « Les travaux
+     d'énergie… », « Votre déclaration sur le label RGE… », « Les
+     sous-traitants de ce devis… ») ; vingt-deux en 2b-5 (les sept des
+     déchets, chacune nommant son champ) ; quinze en 2b-4
      (le prix du devis lui-même, `devis_cout_check`, « Le prix du devis
      lui-même n'a pas pu être enregistré. ») ; la réponse « à quel titre »
      depuis 2b-2. `devis_plafond_check`
@@ -6522,12 +6615,20 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
   const sansPhrase = D.CONTRAINTES_DEVIS.filter((n) => !parLaBase.includes(n))
     .filter((n) => D.phraseEchecDuDevis({ enBase: true, erreur: { message: `violates check constraint "${n}"` } }) === generique);
   verifier('`phraseEchecDuDevis` : avant la base, « le brouillon » ; après, le CHAMP que nomme la contrainte — pour chacune des '
-    + 'vingt-deux que l’application peut violer (le plafond, la réponse « à quel titre », le prix du devis lui-même et les sept des '
-    + 'déchets compris) ; sinon la phrase générale, qui nomme les déchets (2b-5)',
+    + 'vingt-cinq que l’application peut violer (le plafond, la réponse « à quel titre », le prix du devis lui-même, les sept des '
+    + 'déchets et les trois des travaux d’énergie compris) ; sinon la phrase générale, qui nomme les déchets (2b-5) et les travaux '
+    + 'd’énergie (2b-6)',
   D.phraseEchecDuDevis({ enBase: false }) === 'Le brouillon n’a pas pu être enregistré.' && /les conditions/.test(generique)
     && sansPhrase.length === 0
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_validite_check"' } }) === 'La validité de l’offre n’a pas pu être enregistrée.'
-    && parLaBase.length === 4 && D.CONTRAINTES_DEVIS.length - parLaBase.length === 22 && /les déchets ou les conditions/.test(generique)
+    && parLaBase.length === 4 && D.CONTRAINTES_DEVIS.length - parLaBase.length === 25
+    && /les déchets, les travaux d’énergie ou les conditions/.test(generique)
+    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_energie_travaux_check"' } })
+      === 'Les travaux d’énergie n’ont pas pu être enregistrés.'
+    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_energie_sans_label_check"' } })
+      === 'Votre déclaration sur le label RGE n’a pas pu être enregistrée.'
+    && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_energie_sous_traitants_check"' } })
+      === 'Les sous-traitants de ce devis n’ont pas pu être enregistrés.'
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_dechets_lieux_check"' } })
       === 'Les lieux de dépôt des déchets n’ont pas pu être enregistrés.'
     && D.phraseEchecDuDevis({ enBase: true, erreur: { message: 'x "devis_pour_qui_check"' } })
@@ -7456,6 +7557,11 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
        listes telles quelles, dans leur ORDRE ; « Aucun dépôt » vrai. */
     dechets_concerne: true, dechets_quantite_milliemes: '12500', dechets_unite: 'm3', dechets_flux: ['bois', 'metal'],
     dechets_sur_place: ['broyage'], dechets_lieux: ['l-2', 'l-1'], dechets_sans_depot: true, dechets_cout_centimes: '45001',
+    /* 2b-6 : les quatre faits des travaux d'énergie — trois listes telles
+       quelles, dans leur ORDRE (la base ne trie rien), et « Non » à la
+       sous-traitance (FAUX, pas vide : il se relit faux). */
+    energie_travaux: ['fenetres', 'chaudiere'], energie_sans_label: ['fenetres'], energie_sous_traitance: false,
+    energie_sous_traitants: ['s-2', 's-1'],
     client: { nom: 'Mme Essai', type: 'entreprise', siret: '12345678900012' },
     demande: { created_at: '2026-10-29T08:00:00Z', budget: '500-1000', description: 'Refaire la salle de bains' },
     urgence: { created_at: '2026-10-30T07:00:00Z', probleme_label: 'Fuite', details: 'Sous l’évier' },
@@ -7473,6 +7579,8 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     coutDevisCentimes: 3001,
     dechetsConcerne: true, dechetsQuantiteMilliemes: 12500, dechetsUnite: 'm3', dechetsFlux: ['bois', 'metal'],
     dechetsSurPlace: ['broyage'], dechetsLieux: ['l-2', 'l-1'], dechetsSansDepot: true, dechetsCoutCentimes: 45001,
+    energieTravaux: ['fenetres', 'chaudiere'], energieSansLabel: ['fenetres'], energieSousTraitance: false,
+    energieSousTraitants: ['s-2', 's-1'],
     client: { nom: 'Mme Essai', type: 'entreprise', siret: '12345678900012' },
     demande: { createdAt: '2026-10-29T08:00:00Z', budget: '500-1000', texte: 'Refaire la salle de bains' },
     urgence: { createdAt: '2026-10-30T07:00:00Z', texte: 'Fuite — Sous l’évier' },
@@ -7524,7 +7632,12 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
     /* 2b-5 : un fait des déchets absent se relit `null` (« pas dit »), jamais
        FAUX ni une liste vide ; un « Non » se relit FAUX, pas vide. */
     && D.CHAMPS_DES_DECHETS.every((c) => D.rowToDevis({ id: 'd' })[c] === null)
-    && D.rowToDevis({ ...ligneDevis, dechets_concerne: false }).dechetsConcerne === false,
+    && D.rowToDevis({ ...ligneDevis, dechets_concerne: false }).dechetsConcerne === false
+    /* 2b-6 : un fait des travaux d'énergie absent se relit `null` (« pas
+       dit »), jamais FAUX ni une liste vide — sans quoi le rang 14 se
+       tairait sur un brouillon qu'on n'a jamais touché. */
+    && D.CHAMPS_DE_L_ENERGIE.length === 4 && D.CHAMPS_DE_L_ENERGIE.every((c) => D.rowToDevis({ id: 'd' })[c] === null)
+    && D.rowToDevis({ ...ligneDevis, energie_sous_traitance: true }).energieSousTraitance === true,
   `reçu ${json(luDevis)}`);
   verifier('`totauxDepuisBase` (devis.js), FAIT TOURNER : l’acompte EFFECTIF (pas le total toutes options comprises), la réduction, le '
     + 'brut = HT + réduction, la demande relue (une nature inconnue ne passe pas), la ventilation sans les taux à zéro, du plus fort '
@@ -7613,7 +7726,7 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
         plafond est refusé par `devis_plafond_check` — la bande proposait
         « Réessayer », qui échouait à l'identique. Fait tourner par la VRAIE
         file et la base de démonstration, puis sous la forme de PostgREST pour
-        chacune des vingt-six contraintes du devis (2b-5) ; une coupure, un délai, un
+        chacune des vingt-neuf contraintes du devis (2b-6) ; une coupure, un délai, un
         interblocage et une écriture dépassée, eux, se réessaient. */
   const baseP = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
   const IDP = (k) => `de0000ee-0000-4000-8000-0000000036${String(k).padStart(2, '0')}`;
@@ -7637,12 +7750,12 @@ console.log('\n  36. le lot 2a — ce que la relecture « contrôles » a vu pas
   const reessayables = [{ message: 'Network request failed' }, { code: '57014' }, { code: '40P01' }, { code: 'OP015' }, { code: 'PGRST116' }, null]
     .filter((e) => ERR.estUnRefusDefinitif(e));
   verifier('retirer la réduction d’un devis près du plafond : refus 23514 `devis_plafond_check` par la vraie file, et ce refus est '
-    + 'DÉFINITIF (« Réessayer » échouerait à l’identique — vérifié) ; les vingt-six contraintes du devis (2b-4 : le prix du devis '
-    + 'lui-même ; 2b-5 : les sept des déchets), sous la forme de PostgREST, '
+    + 'DÉFINITIF (« Réessayer » échouerait à l’identique — vérifié) ; les vingt-neuf contraintes du devis (2b-4 : le prix du devis '
+    + 'lui-même ; 2b-5 : les sept des déchets ; 2b-6 : les trois des travaux d’énergie), sous la forme de PostgREST, '
     + 'aussi ; une coupure, un délai, un interblocage, une écriture dépassée restent réessayables',
   fileP.etatDe('devis') === 'echec' && !!refusP && refusP.code === '23514' && /"devis_plafond_check"/.test(refusP.message || '')
     && ERR.estUnRefusDefinitif(refusP) === true && !!encoreP && encoreP.code === '23514'
-    && D.CONTRAINTES_DEVIS.length === 26 && pasDefinitifs.length === 0 && reessayables.length === 0,
+    && D.CONTRAINTES_DEVIS.length === 29 && pasDefinitifs.length === 0 && reessayables.length === 0,
   `refus ${refusP && refusP.code} ; non définitifs : ${pasDefinitifs.join(', ') || '—'} ; réessayables pris pour définitifs : ${reessayables.length}`);
   /* …la PHRASE de ce refus, ENTIÈRE, des deux côtés : l'en-tête nomme la
      réduction (seul chemin de l'en-tête vers ce plafond, BASE-4), la phrase
@@ -8027,14 +8140,17 @@ console.log('\n  37. le lot 2a — la reprise « écran » : le refus définitif
     && (enregistrer.match(/f\.ligne\(/g) || []).length === 1 && /rejouerLePlafond\(\);\s*\}$/.test(retirerC.trim()));
   /* 2b-5 (cahier §3.7) : la carte « Déchets du chantier » couvre les
      bandes du bas comme « Conditions » — elle reçoit la MÊME ligne d'état,
-     donc le même `messageDEcritureDuDevis(…, 'entete')` : TROIS appels,
-     décidé (la bande, « Conditions », « Déchets »), chacun dans sa balise. */
-  verifier('…la bande du bas et la ligne d’état des cartes « Conditions » et « Déchets du chantier » (2b-5) disent l’en-tête par '
-    + '`messageDEcritureDuDevis(…, \'entete\')` — plus aucun `messageClair(attente.devisErreur` —, et la carte d’une ligne reçoit son '
-    + 'échec (`echec`), qu’elle affiche sans aucun « Réessayer »',
-  (S.match(/messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/g) || []).length === 3 && !/messageClair\(attente\.devisErreur/.test(S)
+     donc le même `messageDEcritureDuDevis(…, 'entete')` ; et, depuis 2b-6,
+     la carte « Énergie et label RGE » aussi : QUATRE appels, décidé (la
+     bande, « Conditions », « Déchets », « Énergie »), chacun dans sa
+     balise. */
+  verifier('…la bande du bas et la ligne d’état des cartes « Conditions », « Déchets du chantier » (2b-5) et « Énergie et label RGE » '
+    + '(2b-6) disent l’en-tête par `messageDEcritureDuDevis(…, \'entete\')` — plus aucun `messageClair(attente.devisErreur` —, et la '
+    + 'carte d’une ligne reçoit son échec (`echec`), qu’elle affiche sans aucun « Réessayer »',
+  (S.match(/messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/g) || []).length === 4 && !/messageClair\(attente\.devisErreur/.test(S)
     && /messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/.test(balises(S, 'ConditionsDevis')[0] || '')
     && /messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/.test(balises(S, 'DechetsDevis')[0] || '')
+    && /messageDEcritureDuDevis\(attente\.devisErreur, 'entete'\)/.test(balises(S, 'EnergieDevis')[0] || '')
     && /echec=\{etats\[ligneOuverte\.id\] === 'echec'\s*\? \(phrasesEchec\[ligneOuverte\.id\] \|\| '[^']+'\) : null\}/.test(balises(S, 'CarteLigne')[0] || '')
     && /\{!!echec && \(\s*<Text style=\{s\.echec\}[^>]*>\s*<Text style=\{s\.echecMot\}>Non enregistrée\. <\/Text>\s*\{echec\}\s*<\/Text>\s*\)\}/.test(ECR.carte)
     && !/Réessayer/.test(ECR.carte));
@@ -8257,6 +8373,11 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
      balise, sous la même garde (`reessayable`). */
   const balise38d = balises(S38, 'DechetsDevis')[0] || '';
   const iBaliseD = balise38d ? S38.indexOf(balise38d) : -1;
+  /* 2b-6 : la carte « Énergie et label RGE » porte la même ligne d'état — un
+     cinquième renvoi permis, `reessayer('devis')` DANS sa balise, sous la
+     même garde. */
+  const balise38e = balises(S38, 'EnergieDevis')[0] || '';
+  const iBaliseE = balise38e ? S38.indexOf(balise38e) : -1;
   /* TOUS les appels à la file, l'argument écrit comme on voudra — et aucun
      accès détourné (`const { reessayer } = …`, `f['reessayer']`). */
   const appelsFile = [...blanchi.matchAll(/\.\s*reessayer\b/g)].map((m) => m.index);
@@ -8270,6 +8391,7 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
     if (appel === ".reessayer('devis')" && gardes.some(([a, b]) => i > a && i < b)) return 'bande';
     if (appel === ".reessayer('devis')" && iBalise >= 0 && i > iBalise && i < iBalise + balise38.length) return 'carte';
     if (appel === ".reessayer('devis')" && iBaliseD >= 0 && i > iBaliseD && i < iBaliseD + balise38d.length) return 'carte des déchets';
+    if (appel === ".reessayer('devis')" && iBaliseE >= 0 && i > iBaliseE && i < iBaliseE + balise38e.length) return 'carte de l’énergie';
     if (appel === '.reessayer(id)' && /const reessayerStable = useCallback\(\(id\) => \{ if \(fileRef\.current\) fileRef\.current$/.test(sansEspaces(S38.slice(Math.max(0, i - 120), i)))) return 'rangee';
     return `NU : ${appel} — ${sansEspaces(S38.slice(Math.max(0, i - 80), i))}`;
   });
@@ -8277,14 +8399,15 @@ console.log('\n  38. le banc adverse du 04/11 — ce qui passait encore au vert 
   /* `reessayerStable` : sa définition, et deux passages `onReessayer={reessayerStable}` — jamais appelé avec une clé. */
   const stables = [...blanchi.matchAll(/\breessayerStable\b/g)].map((m) => sansEspaces(S38.slice(m.index - 14, m.index + 'reessayerStable'.length + 1)));
   const passages = stables.filter((t) => t === 'onReessayer={reessayerStable}').length;
-  verifier('CHAQUE renvoi par la file (`.reessayer(`, quelle que soit l’écriture de l’argument) est l’un des quatre permis : la bande de '
-    + 'l’en-tête sous la garde du refus définitif, la carte « Conditions » et la carte « Déchets du chantier » (2b-5 — dont `reessayable` '
-    + 'porte cette garde), la rangée (`reessayerStable(id)`, passé tel quel aux rangées) — aucun `reessayer()` sans clé, aucun accès '
-    + 'détourné, aucun `reessayerStable(…)` appelé à la main',
-  appelsFile.length === 4 && json(classe.slice().sort()) === json(['bande', 'carte', 'carte des déchets', 'rangee']) && nus.length === 0
+  verifier('CHAQUE renvoi par la file (`.reessayer(`, quelle que soit l’écriture de l’argument) est l’un des cinq permis : la bande de '
+    + 'l’en-tête sous la garde du refus définitif, la carte « Conditions », la carte « Déchets du chantier » (2b-5) et la carte « Énergie '
+    + 'et label RGE » (2b-6 — dont `reessayable` porte cette garde), la rangée (`reessayerStable(id)`, passé tel quel aux rangées) — '
+    + 'aucun `reessayer()` sans clé, aucun accès détourné, aucun `reessayerStable(…)` appelé à la main',
+  appelsFile.length === 5
+    && json(classe.slice().sort()) === json(['bande', 'carte', 'carte des déchets', 'carte de l’énergie', 'rangee'].sort()) && nus.length === 0
     && detournes === 0
     && iStable >= 0 && stables.length === 3 && passages === 2
-    && [balise38, balise38d].every((b) => /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(b)
+    && [balise38, balise38d, balise38e].every((b) => /reessayable: !!attente\.devisErreur && !estUnRefusDefinitif\(attente\.devisErreur\)/.test(b)
       && /onReessayer=\{\(\) => fileRef\.current && fileRef\.current\.reessayer\((['\"`])devis\1\)\}/.test(b)),
   `${appelsFile.length} appel(s) : ${classe.join(' | ')} ; reessayerStable : ${json(stables)} ; détournés ${detournes}`);
   {
@@ -8672,9 +8795,10 @@ console.log('\n  39. la relecture finale du 04/11 — l’en-tête refusé n’e
     verifier('…une COUPURE sur l’objet : la phrase nomme les deux — l’en-tête, et la réduction toujours refusée (`retenue`) ; « Réessayer » '
       + '(sans `retenues`) ne renvoie QUE l’objet ; le renvoi du plafond (`retenues: true`) renvoie la réduction, refusée pareil, sans boucle',
     /* 2b-3 (annexe A.6, E2) : la phrase par défaut nomme aussi « À quel
-       titre ? » et « Le chantier » ; 2b-5, les déchets. */
+       titre ? » et « Le chantier » ; 2b-5, les déchets ; 2b-6, les travaux
+       d'énergie (la carte « Énergie et label RGE » écrit dans l'en-tête). */
     phrase === 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai, « À quel titre ? », « Le chantier », les '
-      + 'déchets ou les conditions. La réduction n’a pas pu être changée.'
+      + 'déchets, les travaux d’énergie ou les conditions. La réduction n’a pas pu être changée.'
       && json(partis) === json(['modifier devis {"objet":"Coupé"}']) && (await enBase39(base)).objet === 'Coupé'
       && partis2.length === 1 && /"remiseCentiemes":null/.test(partis2[0]) && file.etatDe('devis') === 'echec',
     `${phrase} | ${json(partis)} | ${json(partis2)}`);
@@ -8826,9 +8950,9 @@ console.log('\n  39. la relecture finale du 04/11 — l’en-tête refusé n’e
   /const enBase = f\.entreesVoulues\(\)\.find\(\(x\) => x\.cle === 'devis'\);/.test(ranger39)
     && /\.\.\.devisPourMesDevis\(\{ confirme: enBase \? enBase\.confirme : null, local: d, client: clientAffiche \}\),/.test(ranger39)
     && !/choisirChamps\(/.test(ranger39) && !/CHAMPS_DEVIS/.test(ranger39), ranger39.slice(0, 200));
-  verifier('la bande de l’en-tête et les cartes « Conditions » et « Déchets du chantier » (2b-5) nomment aussi ce qui reste TENU à part '
-    + '(`retenue: attente.devisRetenue`), et `majAttente` le lit dans la file (`retenueDe`)',
-  (S39.match(/phraseEchecDuDevis\(\{ enBase: attente\.devisEnBase, erreur: attente\.devisErreur, retenue: attente\.devisRetenue \}\)/g) || []).length === 3
+  verifier('la bande de l’en-tête et les cartes « Conditions », « Déchets du chantier » (2b-5) et « Énergie et label RGE » (2b-6) '
+    + 'nomment aussi ce qui reste TENU à part (`retenue: attente.devisRetenue`), et `majAttente` le lit dans la file (`retenueDe`)',
+  (S39.match(/phraseEchecDuDevis\(\{ enBase: attente\.devisEnBase, erreur: attente\.devisErreur, retenue: attente\.devisRetenue \}\)/g) || []).length === 4
     && /devisRetenue: f\.etatDe\('devis'\) === 'echec' \? f\.retenueDe\('devis'\) : null,/.test(S39));
   /* LA DEVIS-DEMO de `devisPourMesDevis` : une colonne inconnue manque ; le client n'est nommé que s'il est le client confirmé. */
   const pm = D.devisPourMesDevis({ confirme: { objet: 'Base', clientId: 'c1' }, local: { objet: 'Écran', clientId: 'c2' }, client: { nom: 'Mme Écran' } });
@@ -8865,7 +8989,7 @@ console.log('\n  39. la relecture finale du 04/11 — l’en-tête refusé n’e
   phrasesDouble[0] === 'La réduction n’a pas pu être changée.'
     && phrasesDouble[1] === 'La réduction n’a pas pu être enregistrée.'
     && phrasesDouble[2] === 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai, « À quel titre ? », '
-      + '« Le chantier », les déchets ou les conditions. La réduction n’a pas pu être changée.',
+      + '« Le chantier », les déchets, les travaux d’énergie ou les conditions. La réduction n’a pas pu être changée.',
   json(phrasesDouble));
 
   /* e. L'OPTION REFUSÉE (F4) : sa gélule garde son remplissage — seule sa
@@ -8991,8 +9115,30 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      si le tri ne nomme aucune sorte qui part à part. Le `not` porte sur une
      expression qui ne vaut JAMAIS `null` : `is true` et `is null` rendent
      vrai ou faux, et `v_dechets_flux = …` n'est lu que quand le tableau
-     n'est pas vide de valeur. */
-  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_cout bigint; v_dechets boolean; v_dechets_qte bigint; v_dechets_unite text; v_dechets_flux text[]; v_dechets_lieux uuid[]; v_dechets_sans boolean; v_dechets_cout bigint; v_lieux_existants bigint := 0; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes, d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux, d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature, v_cout, v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux, v_dechets_lieux, v_dechets_sans, v_dechets_cout from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; if v_dechets is not false then select count(distinct l.id) into v_lieux_existants from public.emetteur_lieux_depot l where l.pro_id = v_pro and l.id = any (v_dechets_lieux); end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; if v_cout is null then rang := 12; cle := 'devis_cout'; nature := 'prudence'; phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_dechets is not false and (v_dechets_qte is null or v_dechets_unite is null or v_dechets_flux is null or (v_lieux_existants = 0 and not (v_dechets_sans is true and (v_dechets_flux is null or v_dechets_flux = array['aucune']::text[]))) or v_dechets_cout is null) then if v_dechets is null then rang := 13; cle := 'devis_dechets'; nature := 'prudence'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.'; return next; else rang := 13; cle := 'devis_dechets_rubriques'; nature := 'loi'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
+     n'est pas vide de valeur.
+     2b-6 (24/11/2026, réécrite EN LE DÉCIDANT depuis le corps du schéma,
+     relu contre le cahier §2.4 et l'annexe B.1) : neuf variables après
+     `v_lieux_existants` (`v_energie`, `v_energie_sans`, `v_energie_st`,
+     `v_energie_st_ids`, puis les quatre compteurs et `v_st_manque`, tous
+     initialisés) ; les quatre colonnes de l'énergie en FIN des deux listes
+     de la lecture du devis ; la lecture des signes de qualité et des
+     sous-traitants, seulement à titre privé, pour une association ou sans
+     réponse, et seulement quand le devis coche au moins un travail (ni
+     vide, ni `{aucun}`) — UNE lecture par table, filtrée par `pro_id =
+     v_pro` (le contrat de `energie_sous_traitants` : le sous-traitant d'un
+     autre artisan ne compte jamais) ; un travail COUVERT par un signe
+     valable avec son certificat ne manque pas, un signe valable SANS
+     certificat le fait manquer même déclaré « sans label », un travail non
+     couvert manque sauf s'il est déclaré « sans label » ; les deux lignes
+     de prudence (`photovoltaique`, `desembouage`) comptées à part ; puis,
+     après le rang 13, la branche du rang 14 : `devis_energie` (prudence)
+     quand rien n'est dit, `devis_energie_mentions` (la loi) à titre privé
+     quand un travail du décret ou la sous-traitance manque,
+     `devis_energie_mentions_prudence` sinon. `is not true`, `is true`,
+     jamais `not x` sur une valeur qui peut manquer. « Pour son
+     entreprise » et « une petite entreprise hors de son activité » ne
+     voient jamais le rang 14 (T27). Même signature, mêmes attributs. */
+  const FORME_MOTIFS_REFUS_REMISE =String.raw`p_devis uuid) returns table (rang smallint, cle text, phrase text, nature text, ligne_id uuid) language plpgsql stable security invoker set search_path = public $$ declare v_pro uuid; v_client uuid; v_adresse text; v_code_postal text; v_ville text; v_delai text; v_validite integer; v_acompte_pct integer; v_acompte_eur bigint; v_acompte_nat text; v_acompte_eff bigint; v_remise_eur bigint; v_remise_eff bigint; v_pour_qui text; v_pour_qui_cl uuid; v_neuf_tva boolean; v_decennale boolean; v_signature boolean; v_cout bigint; v_dechets boolean; v_dechets_qte bigint; v_dechets_unite text; v_dechets_flux text[]; v_dechets_lieux uuid[]; v_dechets_sans boolean; v_dechets_cout bigint; v_lieux_existants bigint := 0; v_energie text[]; v_energie_sans text[]; v_energie_st boolean; v_energie_st_ids uuid[]; v_label_loi bigint := 0; v_label_prudence bigint := 0; v_st_choisis bigint := 0; v_st_incomplets bigint := 0; v_st_manque boolean := false; v_valable text; v_regime text; v_un_poste boolean; v_tout_urgent boolean; v_fautives uuid[]; v_cles_lignes text[]; v_jour date := (now() at time zone 'Europe/Paris')::date; v_dec_sans_date boolean := false; v_att_valable boolean := false; v_i integer; v_ligne uuid; v_motif text; v_position bigint; begin select d.pro_id, d.client_id, d.lieu_adresse, d.lieu_code_postal, d.lieu_ville, d.delai_execution, d.validite_jours, d.acompte_centiemes, d.acompte_centimes, d.acompte_nature, d.acompte_ttc_centimes, d.remise_centimes, d.remise_ht_centimes, d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva, d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes, d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux, d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes, d.energie_travaux, d.energie_sans_label, d.energie_sous_traitance, d.energie_sous_traitants into v_pro, v_client, v_adresse, v_code_postal, v_ville, v_delai, v_validite, v_acompte_pct, v_acompte_eur, v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff, v_pour_qui, v_pour_qui_cl, v_neuf_tva, v_decennale, v_signature, v_cout, v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux, v_dechets_lieux, v_dechets_sans, v_dechets_cout, v_energie, v_energie_sans, v_energie_st, v_energie_st_ids from public.devis d where d.id = p_devis and public.est_mon_entreprise(d.pro_id); if not found then raise exception 'Ce devis n’existe pas, ou il n’est pas le vôtre.' using errcode = 'OP027'; end if; v_valable := case when v_client is not null and v_pour_qui_cl = v_client then v_pour_qui end; select e.regime_tva into v_regime from public.emetteur e where e.pro_id = v_pro; select coalesce(bool_or(l.type = 'poste'), false), coalesce(bool_and(l.urgence) filter (where l.type in ('poste', 'option')), false), coalesce(array_agg(l.id order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}'), coalesce(array_agg(case when v_regime = 'franchise' then 'devis_taux_franchise' when l.taux_tva_centiemes = 0 then 'devis_taux_sans_tva' else 'devis_taux_reduit_neuf' end order by l.ordre, l.id) filter (where l.type in ('poste', 'option') and ((v_regime = 'franchise' and l.taux_tva_centiemes <> 0) or (v_regime = 'reel' and l.taux_tva_centiemes = 0) or (v_regime = 'reel' and v_neuf_tva is true and l.taux_tva_centiemes in (550, 1000)))), '{}') into v_un_poste, v_tout_urgent, v_fautives, v_cles_lignes from public.devis_lignes l where l.devis_id = p_devis; if v_decennale is not false then select coalesce(bool_or(a.valide_jusquau is null), false), coalesce(bool_or(a.valide_jusquau >= v_jour), false) into v_dec_sans_date, v_att_valable from public.emetteur_assurances a where a.pro_id = v_pro and a.nature = 'decennale' and a.attestation_chemin is not null; end if; if v_dechets is not false then select count(distinct l.id) into v_lieux_existants from public.emetteur_lieux_depot l where l.pro_id = v_pro and l.id = any (v_dechets_lieux); end if; if (v_valable is null or v_valable in ('consommateur', 'non_professionnel')) and v_energie is not null and v_energie <> array['aucun']::text[] then select count(*) filter (where not c.prudence), count(*) filter (where c.prudence) into v_label_loi, v_label_prudence from (select u.cle, u.cle = any (array['photovoltaique', 'desembouage']) as prudence, bool_or(g.justificatif_chemin is not null and g.valide_jusquau >= v_jour) as couverte, bool_or(g.justificatif_chemin is null and g.valide_jusquau >= v_jour) as sans_certificat from unnest(v_energie) as u(cle) left join public.emetteur_labels g on g.pro_id = v_pro and u.cle = any (g.categories) group by u.cle) c where c.couverte is not true and (c.sans_certificat is true or (c.cle = any (v_energie_sans)) is not true); if v_energie_st is null then v_st_manque := true; elsif v_energie_st then select count(distinct s.id), count(distinct s.id) filter (where s.label_detient is null or (s.label_detient is true and ((s.label_valide_jusquau >= v_jour) is not true or s.label_justificatif_chemin is null))) into v_st_choisis, v_st_incomplets from public.emetteur_sous_traitants s where s.pro_id = v_pro and s.id = any (v_energie_st_ids); v_st_manque := v_st_choisis = 0 or v_st_incomplets > 0; end if; end if; ligne_id := null; if v_client is null then rang := 1; cle := 'devis_client'; nature := 'regle_opus'; phrase := 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'; return next; elsif v_valable is null then rang := 1; cle := 'devis_pour_qui'; nature := 'regle_opus'; phrase := 'Dites à quel titre ce client commande : selon la réponse, la loi ne demande pas les mêmes mentions sur le devis. Opus le demande pour tous vos devis.'; return next; end if; if not v_un_poste then rang := 2; cle := 'devis_lignes'; nature := 'regle_opus'; phrase := 'Ce devis ne chiffre encore aucun travail : ajoutez au moins un poste. La loi demande de décrire les travaux et leur prix pour un devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; for v_i in 1 .. coalesce(array_length(v_fautives, 1), 0) loop v_ligne := v_fautives[v_i]; if v_cles_lignes[v_i] = 'devis_taux_franchise' then rang := 3; cle := 'devis_taux_franchise'; nature := 'loi'; ligne_id := v_ligne; phrase := 'En franchise de TVA, aucune ligne ne porte de TVA : corrigez le taux de cette ligne.'; elsif v_cles_lignes[v_i] = 'devis_taux_sans_tva' then rang := 3; cle := 'devis_taux_sans_tva'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Au régime réel, une ligne sans TVA n’est possible que dans quelques cas, comme la sous-traitance en autoliquidation, qu’Opus ne sait pas encore imprimer : corrigez le taux de cette ligne.'; else rang := 3; cle := 'devis_taux_reduit_neuf'; nature := 'prudence'; ligne_id := v_ligne; phrase := 'Mettez cette ligne au taux normal, ou changez votre réponse dans « Le chantier » : vous avez répondu que ces travaux font partie d’un chantier qui crée un bâtiment neuf.'; end if; return next; end loop; ligne_id := null; if v_adresse is null and v_code_postal is null and v_ville is null then rang := 4; cle := 'devis_lieu'; nature := 'prudence'; phrase := 'Écrivez le lieu des travaux. La loi le demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_delai is null then rang := 5; cle := 'devis_delai'; nature := 'regle_opus'; phrase := 'Écrivez le délai d’exécution des travaux. La loi le demande pour la plupart des devis à un particulier ; Opus le demande pour tous vos devis.'; return next; end if; if v_validite is null then rang := 6; cle := 'devis_validite'; nature := 'prudence'; phrase := 'Choisissez la durée de validité du devis. La loi la demande pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if (v_acompte_pct is not null or v_acompte_eur is not null) and v_acompte_nat is null then rang := 7; cle := 'devis_acompte_nature'; nature := 'prudence'; phrase := 'Dites si la somme demandée d’avance est un acompte ou des arrhes : leurs effets ne sont pas les mêmes, et Opus ne choisit pas à votre place.'; return next; end if; if v_acompte_eur is not null and v_acompte_eff < v_acompte_eur then rang := 8; cle := 'devis_acompte_ramene'; nature := 'prudence'; phrase := 'L’acompte en euros dépasse le total du devis : Opus l’a ramené. Corrigez-le pour que le devis dise ce que vous voulez.'; return next; end if; if v_remise_eur is not null and v_remise_eff < v_remise_eur then rang := 9; cle := 'devis_reduction_ramenee'; nature := 'prudence'; phrase := 'La réduction en euros dépasse le total des postes : Opus l’a ramenée. Corrigez-la pour que le devis dise ce que vous voulez.'; return next; end if; if v_signature is true and (v_acompte_pct is not null or v_acompte_eur is not null) and v_valable is distinct from 'professionnel' and (v_tout_urgent and v_valable in ('consommateur', 'non_professionnel')) is not true then rang := 10; cle := 'devis_acompte_signature'; nature := 'prudence'; phrase := 'Choisissez « Dès le 8e jour » pour l’acompte ou les arrhes : signé chez le client, ce devis pourrait n’autoriser aucun paiement avant, et Opus ne sait pas où il le sera.'; return next; end if; if v_decennale is not false and v_att_valable is not true then if v_decennale is null then rang := 11; cle := 'devis_decennale'; nature := 'prudence'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'; return next; elsif v_dec_sans_date is true then rang := 11; cle := 'devis_attestation_date'; nature := 'prudence'; phrase := 'Écrivez dans « Mon entreprise » la date de fin de votre attestation décennale : sans elle, Opus ne sait pas si l’attestation jointe est encore valable.'; return next; else rang := 11; cle := 'devis_attestation'; nature := 'loi'; phrase := 'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin : la loi demande de la joindre à ce devis, puisque ses travaux peuvent engager cette garantie.'; return next; end if; end if; if v_cout is null then rang := 12; cle := 'devis_cout'; nature := 'prudence'; phrase := 'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'; return next; end if; if v_dechets is not false and (v_dechets_qte is null or v_dechets_unite is null or v_dechets_flux is null or (v_lieux_existants = 0 and not (v_dechets_sans is true and (v_dechets_flux is null or v_dechets_flux = array['aucune']::text[]))) or v_dechets_cout is null) then if v_dechets is null then rang := 13; cle := 'devis_dechets'; nature := 'prudence'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.'; return next; else rang := 13; cle := 'devis_dechets_rubriques'; nature := 'loi'; phrase := 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'; return next; end if; end if; if v_valable is null or v_valable in ('consommateur', 'non_professionnel') then if v_energie is null then rang := 14; cle := 'devis_energie'; nature := 'prudence'; phrase := 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.'; return next; elsif v_label_loi > 0 or v_label_prudence > 0 or v_st_manque then if v_valable = 'consommateur' and (v_label_loi > 0 or v_st_manque) then rang := 14; cle := 'devis_energie_mentions'; nature := 'loi'; phrase := 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou partie de ce devis : la loi le demande pour un client qui commande à titre privé.'; else rang := 14; cle := 'devis_energie_mentions_prudence'; nature := 'prudence'; phrase := 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.'; end if; return next; end if; end if; for v_motif, v_position in select u.m, u.o from unnest(public.emetteur_incomplet(v_pro)) with ordinality as u(m, o) order by u.o loop rang := 100 + v_position; cle := split_part(v_motif, ': ', 1); phrase := substr(v_motif, char_length(cle) + 3); continue when v_valable = 'professionnel' and left(cle, 6) = 'conso_' and cle not in ('conso_adresse_etablissement', 'conso_adresse_siege'); nature := case when cle in ('entreprise_ancienne', 'conso_tva_intra', 'frais_deplacement') then 'regle_opus' when v_valable in ('non_professionnel', 'professionnel') and left(cle, 6) = 'conso_' then 'prudence' when cle in ('conso_profession_reglementee', 'regime_tva') then 'prudence' else 'loi' end; ligne_id := null; return next; end loop; return; end; $$`;
   const defsMRR = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
   const vuMRR = defsMRR.length === 1 ? `${sansEspaces(defsMRR[0].attributs)} $$ ${sansEspaces(defsMRR[0].corps)} $$` : `(${defsMRR.length} définition(s) dans le fichier)`;
   verifier('a. `motifs_refus_remise` a EXACTEMENT la forme du contrat, relue et éprouvée par l’essai et `cas-remise.json` — une seule '
@@ -9048,7 +9194,17 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      travaux sur un bâtiment, ou de jardinage ? » laissée vide vaut « Oui »)
      et `devis_dechets_rubriques` (LA LOI, L. 541-9-1 : la réponse est
      « Oui », et une des quatre rubriques manque). Sous « Non », rien.
-     DÉCIDÉ. */
+     DÉCIDÉ.
+     VINGT-DEUX CLÉS SUR QUATORZE RANGS depuis 2b-6 (cahier 2b-6, §2.4 et
+     annexe A.1, réponses P1 du 23/11 et P11 à P14 du 24/11) : au rang 14, au
+     plus UNE des trois clés des travaux d'énergie — `devis_energie`
+     (PRUDENCE : rien n'est dit des travaux d'énergie), `devis_energie_mentions`
+     (LA LOI, L. 224-114 et L. 224-115 : à titre privé, un travail du décret
+     sans signe valable déclaré, ou la sous-traitance à dire) et
+     `devis_energie_mentions_prudence` (PRUDENCE : une association, une
+     copropriété, une société civile, ou seules les deux lignes hors du
+     décret manquent). « Aucun de ces travaux », « pour son entreprise » et
+     « une petite entreprise hors de son activité » : rien. DÉCIDÉ. */
   const CONTRAT_B2 = [
     ['devis_client', 1, 'regle_opus'], ['devis_pour_qui', 1, 'regle_opus'], ['devis_lignes', 2, 'regle_opus'],
     ['devis_taux_franchise', 3, 'loi'], ['devis_taux_sans_tva', 3, 'prudence'], ['devis_taux_reduit_neuf', 3, 'prudence'],
@@ -9057,14 +9213,15 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     ['devis_acompte_signature', 10, 'prudence'], ['devis_decennale', 11, 'prudence'], ['devis_attestation_date', 11, 'prudence'],
     ['devis_attestation', 11, 'loi'], ['devis_cout', 12, 'prudence'],
     ['devis_dechets', 13, 'prudence'], ['devis_dechets_rubriques', 13, 'loi'],
+    ['devis_energie', 14, 'prudence'], ['devis_energie_mentions', 14, 'loi'], ['devis_energie_mentions_prudence', 14, 'prudence'],
   ];
   const motifsSql = [...sansEspaces(corpsMRRbrut).matchAll(/rang := (\d+); cle := '(\w+)'; nature := '(\w+)';(?: ligne_id := v_ligne;)? phrase := '((?:[^']|'')*)';/g)]
     .map((m) => ({ cle: m[2], rang: Number(m[1]), nature: m[3], phrase: m[4].replace(/''/g, "'") }));
   const motifsJs = Object.entries(D.MOTIFS_DEVIS || {}).map(([cle, m]) => ({ cle, rang: m.rang, nature: m.nature, phrase: m.phrase }))
     .sort((a, b) => a.rang - b.rang);
-  verifier('b. les DIX-NEUF motifs du devis (treize rangs) : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans `MOTIFS_DEVIS` '
-    + '(devis.js) — octet pour octet, dans l’ordre des rangs', motifsSql.length === 19 && egal(motifsSql, motifsJs),
-  motifsSql.length !== 19 ? `${motifsSql.length} motif(s) lus dans la fonction`
+  verifier('b. les VINGT-DEUX motifs du devis (quatorze rangs) : mêmes clés, rangs, natures et phrases dans `schema.sql` et dans '
+    + '`MOTIFS_DEVIS` (devis.js) — octet pour octet, dans l’ordre des rangs', motifsSql.length === 22 && egal(motifsSql, motifsJs),
+  motifsSql.length !== 22 ? `${motifsSql.length} motif(s) lus dans la fonction`
     : motifsSql.filter((m, i) => !egal(m, motifsJs[i])).map((m) => `${m.cle} : SQL ${json(m)} ≠ JS ${json(motifsJs.find((j) => j.cle === m.cle))}`).join(' | '));
   verifier('…et ce sont les clés, rangs et natures du CONTRAT (annexe B.2) : `devis_delai`, `devis_client` et `devis_lignes` sont des '
     + 'RÈGLES D’OPUS (réponses du 05/11), `devis_pour_qui` aussi (rang 1, avec `devis_client`, 2b-2), le rang 3 a trois clés (la franchise, '
@@ -9072,7 +9229,8 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     + '`devis_validite`, la nature et les « ramenés » des PRUDENCES, aucun `devis_taux_reduit` tout court (réponse 3 : tout permettre) ni '
     + '`devis_taux_regime` (coupé en deux) ; depuis 2b-3, le rang 10 (`devis_acompte_signature`, une prudence) et le rang 11 '
     + '(`devis_decennale` et `devis_attestation_date`, des prudences ; `devis_attestation`, la loi) ; depuis 2b-4, le rang 12 '
-    + '(`devis_cout`, une prudence) ; depuis 2b-5, le rang 13 (`devis_dechets`, une prudence ; `devis_dechets_rubriques`, la loi)',
+    + '(`devis_cout`, une prudence) ; depuis 2b-5, le rang 13 (`devis_dechets`, une prudence ; `devis_dechets_rubriques`, la loi) ; '
+    + 'depuis 2b-6, le rang 14 (`devis_energie` et `devis_energie_mentions_prudence`, des prudences ; `devis_energie_mentions`, la loi)',
   egal(motifsSql.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2) && egal(motifsJs.map((m) => [m.cle, m.rang, m.nature]), CONTRAT_B2)
     && !('devis_taux_reduit' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_reduit(?!_neuf\b)/.test(SQL)
     && !('devis_taux_regime' in (D.MOTIFS_DEVIS || {})) && !/devis_taux_regime/.test(SQL), json(motifsSql.map((m) => [m.cle, m.rang, m.nature])));
@@ -9122,7 +9280,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const fauteDeForme = motifsJs.filter((m) => /\d|€|'|[\u00a0\u202f]|\\/.test(sansLe8e(m)) || !/[.]$/.test(m.phrase) || !/’/.test(m.phrase + '’'));
   verifier('…aucune phrase ne porte de chiffre (sauf « Dès le 8e jour », le nom d’une pastille, dans `devis_acompte_signature`), d’euro, '
     + 'd’apostrophe DROITE, d’espace insécable ni de barre oblique : la base ne met pas '
-    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 19
+    + 'de montant en forme, et l’apostrophe est typographique, comme dans `emetteur_incomplet()`', motifsJs.length === 22
     && fauteDeForme.length === 0, fauteDeForme.map((m) => m.cle).join(', '));
   /* Les natures de l'ENTREPRISE (annexe B.3) : `regle_opus` pour les trois
      règles d'Opus gardées le 05/11, `prudence` pour la profession
@@ -9158,8 +9316,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        tait — seuls les motifs de l'entreprise restent. `coutDevisCentimes: 0`
        (2b-4) : « gratuit », sinon `devis_cout` s'ajoute (critique BASE-1).
        `dechetsConcerne: false` (2b-5) : « Non », sinon `devis_dechets`
-       s'ajoute au rang 13. */
-    && egal(D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', delaiExecution: 'x', lieuVille: 'v', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false }, lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise',
+       s'ajoute au rang 13. `energieTravaux: ['aucun']` (2b-6) : « Aucun de
+       ces travaux », sinon `devis_energie` s'ajoute au rang 14. */
+    && egal(D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', delaiExecution: 'x', lieuVille: 'v', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false, energieTravaux: ['aucun'] }, lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise',
       motifsEmetteur: ['conso_mediateur: Pour un devis : le médiateur.', 'frais_deplacement: Vos frais : à dire.'] })
       .map((m) => [m.rang, m.cle, m.phrase, m.nature]),
     [[101, 'conso_mediateur', 'Pour un devis : le médiateur.', 'loi'], [102, 'frais_deplacement', 'Vos frais : à dire.', 'regle_opus']]));
@@ -9206,8 +9365,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        ensemble (S22). 2b-5 (annexe A.6, T18, DÉCIDÉ) : « les déchets de
        chantier » SORT (le rang 13 les demande), « si vos lieux de dépôt
        acceptent ces déchets » ENTRE, en DERNIER — Opus ne le vérifie pas :
-       toujours SEPT faits. */
-    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, si ce devis relève des services à la personne, le label RGE pour des travaux d’énergie, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.',
+       toujours SEPT faits. 2b-6 (annexe A.8, DÉCIDÉ) : « le label RGE pour
+       des travaux d’énergie » devient « si les labels RGE déclarés, les
+       vôtres et ceux de vos sous-traitants, existent, couvrent ces travaux
+       et sont toujours en vigueur » — le rang 14 DEMANDE ce que l'artisan
+       déclare, Opus ne lit encore aucun annuaire : toujours SEPT faits. */
+    PAS_ENCORE_VERIFIE: 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est vraiment, si ce devis relève des services à la personne, si les labels RGE déclarés, les vôtres et ceux de vos sous-traitants, existent, couvrent ces travaux et sont toujours en vigueur, les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.',
     RIEN_NE_MANQUE_POUR_CE_DEVIS: 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.',
     LISTE_AVANT_LA_PREMIERE_LIGNE: 'Écrivez une première ligne : la liste se calculera ensuite.',
     LISTE_EN_ROUTE: 'Des changements partent : la liste sera à jour juste après.',
@@ -9296,6 +9459,14 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
         + 'comptera, sauf si ce chantier est déjà ouvert : avec un permis de construire, une déclaration '
         + 'd’ouverture déposée ; sans permis, un premier ordre de service donné, ou, à défaut, des travaux déjà '
         + 'commencés. Demandez-la à votre assureur, et pensez à la donner à votre client.',
+      /* 2b-6 (annexe A.6, T31, DÉCIDÉ), juste APRÈS l'attestation (l'ordre des
+         clés est celui de l'écran) : le signe de qualité qui arrive à sa
+         fin, avant que le devis ait des chances d'être signé — `{intitule}`
+         et `{fin}` se remplissent dans `avisDuDevis` (section « Le lot
+         2b-6 »). L'aide ne promet aucune aide publique : elle dit qu'elle
+         peut se PERDRE. */
+      avis_label_echeance: 'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé après cette '
+        + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.',
       avis_franchise_plafond: 'Ce devis atteint à lui seul {montant}. En franchise de TVA, les travaux comptent en principe comme des '
         + 'prestations de services : au-delà de 41 250,00 € sur une même année civile, la franchise cesse à partir '
         + 'du jour du dépassement ; au-delà de 37 500,00 €, vous n’y avez plus droit à partir du 1er janvier '
@@ -9326,15 +9497,16 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     + 'DEMANDÉS, les conditions du taux réduit restent — l’ancienneté du logement, la certification du client ; 2b-3 : la décennale est '
     + 'LUE, sauf ce que couvre l’attestation, et l’urgence reste — si une ligne marquée l’est vraiment ; 2b-4 : le prix du devis '
     + 'lui-même est DEMANDÉ, les services à la personne entrent ; 2b-5 : les déchets sont DEMANDÉS, seul reste ce que les lieux de '
-    + 'dépôt acceptent), jamais « le prix du devis », et n’annonce ni date ni lot (S13)',
+    + 'dépôt acceptent ; 2b-6 : le label RGE est DÉCLARÉ, reste ce qu’Opus ne lit pas — que les signes déclarés existent, couvrent '
+    + 'ces travaux et sont en vigueur), jamais « le prix du devis », et n’annonce ni date ni lot (S13)',
   ['le moment de la signature', 'si une ligne marquée « réparation urgente » l’est vraiment',
     'si ce devis relève des services à la personne',
-    'le label RGE pour des travaux d’énergie',
+    'si les labels RGE déclarés, les vôtres et ceux de vos sous-traitants, existent, couvrent ces travaux et sont toujours en vigueur',
     'les conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client)',
     'si votre attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira)',
     'si vos lieux de dépôt acceptent ces déchets']
     .every((x) => pev.includes(x)) && !/le prix du devis/.test(pev) && !/si le devis lui-même est payant/.test(pev)
-    && !/les déchets de chantier/.test(pev)
+    && !/les déchets de chantier/.test(pev) && !/le label RGE pour des travaux d’énergie/.test(pev)
     && !/pour qui le client commande|immeuble neuf|la garantie décennale|, l’urgence,/.test(pev)
     && !/bient[oô]t|prochain|lot\b|\b20\d\d\b|\d{1,2}\/\d{1,2}|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre/i.test(pev), pev);
 
@@ -9388,8 +9560,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       /* 2b-5 : les lieux de dépôt que la base a lus (ceux d'un AUTRE
          artisan compris), sous la forme `{ id, proId }` : le miroir ne compte
          qu'un lieu choisi qui existe chez l'entreprise du devis. */
+      /* 2b-6 : les signes de qualité et les sous-traitants que la base a lus
+         (ceux d'un AUTRE artisan compris), TELS QUE LA BASE LES REND (noms
+         de colonnes, `pro_id`) : le miroir ne compte que ceux de l'entreprise
+         du devis, comme la base. */
       vu = D.motifsDeRemise({ devis: c.devis, lignes: c.lignes, regime: c.regime, motifsEmetteur: c.motifsEmetteur,
-        assurances: c.assurances, lieux: c.lieux })
+        assurances: c.assurances, lieux: c.lieux, labels: c.labels, sousTraitants: c.sousTraitants })
         .map((m) => ({ rang: m.rang, cle: m.cle, phrase: m.phrase, nature: m.nature,
           ligne_id: m.ligneId == null ? null : c.lignes.findIndex((l) => l.id === m.ligneId) }));
     } catch (e) {
@@ -9510,8 +9686,11 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      mesuré : six vérifications rougissaient pour cette seule raison). */
   /* 2b-5 : « complet » répond aussi « Non » aux déchets — sans lui,
      `devis_dechets` (rang 13) s'ajoute à chaque bord. */
+  /* 2b-6 : « complet » répond aussi « Aucun de ces travaux » — sans lui,
+     `devis_energie` (rang 14) s'ajoute à chaque bord. Les travaux d'énergie
+     ont leurs propres bords, dans la section « Le lot 2b-6 ». */
   const complet = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'Brest', delaiExecution: '2 semaines', validiteJours: 30,
-    engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false };
+    engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false, energieTravaux: ['aucun'] };
   const poste20 = { id: 'p', type: 'poste', tauxTvaCentiemes: 2000, ordre: 1000 };
   verifier('le miroir, FAIT TOURNER sur les bords : des BLANCS ne sont pas un délai ni un lieu (insécable, espace sans chasse compris) ; un '
     + 'acompte en % n’est jamais « ramené » ; une réduction ÉGALE ne l’est pas ; un effectif absent ne se compare pas',
@@ -9704,14 +9883,20 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      inconnue, `aucune` avec une autre, onze lieux, un lieu vide, une
      quantité ou un coût de 0, « Aucun dépôt » faux, une unité inconnue —,
      derrière un `savepoint`, jugés EN SQL), soit TRENTE-HUIT. L'expression
-     voit désormais les variables `e26…` (DÉCIDÉ). */
-  const errs = (essE.match(/\\set\s+e(?:1[2589]|2[56])\w+_err\s+:ERROR\b/g) || []).length;
-  const juges = (essE.match(/:'e(?:1[2589]|2[56])\w+_err'\s*=\s*'true'/g) || []).length;
-  verifier('d. l’essai `essais-section-49-remise.sql` annonce EXACTEMENT ses 38 erreurs et JUGE chacune en SQL (`:ERROR`, '
+     voit désormais les variables `e26…` (DÉCIDÉ).
+     2b-6 : quinze de plus, le cas 27 (les trois contraintes des travaux
+     d'énergie, chacune à ses bords — un tableau vide, deux dimensions, une
+     clé inconnue, l'ancienne clé, `aucun` avec un travail, `aucun` dans
+     « sans label », onze sous-traitants, un identifiant vide —, jugés EN
+     SQL), soit CINQUANTE-TROIS — le compte rendu de la base (§3 : 53
+     erreurs). L'expression voit désormais les variables `e27…` (DÉCIDÉ). */
+  const errs = (essE.match(/\\set\s+e(?:1[2589]|2[567])\w+_err\s+:ERROR\b/g) || []).length;
+  const juges = (essE.match(/:'e(?:1[2589]|2[567])\w+_err'\s*=\s*'true'/g) || []).length;
+  verifier('d. l’essai `essais-section-49-remise.sql` annonce EXACTEMENT ses 53 erreurs et JUGE chacune en SQL (`:ERROR`, '
     + '`LAST_ERROR_SQLSTATE`, `LAST_ERROR_MESSAGE`) ; aucun bloc `do` n’y change de rôle ni de jeton ; OP027 y est éprouvé avec un jeton, '
     + 'depuis une fonction `security definer` et par `service_role`, et un visiteur y est refusé',
-  brutE.length > 20000 && /EXACTEMENT 38 lignes/.test(brutE) && errs === 38 && juges === 38
-    && (essE.match(/LAST_ERROR_SQLSTATE/g) || []).length >= 38
+  brutE.length > 20000 && /EXACTEMENT 53 lignes/.test(brutE) && errs === 53 && juges === 53
+    && (essE.match(/LAST_ERROR_SQLSTATE/g) || []).length >= 53
     && blocsDo.every((b) => !/\brole\b|request\.jwt|set_config/i.test(b))
     && /set\s+local\s+role\s+service_role\s*;/i.test(essE) && /security\s+definer/i.test(essE) && /set\s+local\s+role\s+anon\s*;/i.test(essE)
     && (essE.match(/motifs_refus_remise\s*\(/g) || []).length >= 30,
@@ -9735,7 +9920,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     'e19a', 'e19b', 'e19c', 'e19d', 'e19e', 'e19f', 'e25h1', 'e25h2',
     /* 2b-5 : les dix-sept refus du cas 26 e. */
     'e26a', 'e26b', 'e26c', 'e26d', 'e26e', 'e26f', 'e26g', 'e26h', 'e26i', 'e26j', 'e26k', 'e26l', 'e26m', 'e26n', 'e26o', 'e26p',
-    'e26q']
+    'e26q',
+    /* 2b-6 : les quinze refus du cas 27. */
+    'e27a', 'e27b', 'e27c', 'e27d', 'e27e', 'e27f', 'e27g', 'e27h', 'e27i', 'e27j', 'e27k', 'e27l', 'e27m', 'e27n', 'e27o']
     .every((v) => ['err', 'code', 'msg'].every((x) => {
       const i = essE.indexOf(`\\set ${v}_${x} 'jamais relevé'`);
       const j = essE.indexOf(`\\set ${v}_${x} :`);
@@ -9756,12 +9943,19 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      variables des refus (63 et les 51 du cas 26 e) déclarées d'avance.
      2b-5, DROIT-R2 (décision du 21/11) : 364 valeurs — trois de plus au cas
      26 a (« Aucun dépôt » avec le bois et le plâtre à part rallume le point,
-     un lieu de A l'éteint, `{aucune}` remis l'éteint), aucun refus de plus. */
-  verifier('…il ANNONCE ses 364 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
-    + '288 avec le cas 25 de 2b-4, 361 avec le cas 26 de 2b-5, et les trois de DROIT-R2), les COMPTE (chaque valeur passe par '
-    + '`pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre compte ; les 114 variables des '
-    + 'refus sont déclarées d’avance (un cas retiré laisse un `f`, pas une autre erreur)',
-  valeursAnnoncees === 364 && /JUGE EXACTEMENT 364 VALEURS/.test(brutE)
+     un lieu de A l'éteint, `{aucune}` remis l'éteint), aucun refus de plus.
+     2b-6 (DÉCIDÉ) : 471 valeurs — les 364 de 2b-5, et les CENT SEPT du cas
+     27 (les cinquante-huit situations de l'annexe B.1/B.3, les enveloppes
+     `security definer` qui prouvent les filtres `pro_id`, les quinze refus
+     et les bornes), comptées par le rôle « base » (son compte rendu, §2 :
+     471 annoncées, 472 colonnes jugées par son juge, 0 écart) ; le compte
+     est désormais le cas 28. Les 159 variables des refus (114 et les 45 du
+     cas 27) déclarées d'avance. */
+  verifier('…il ANNONCE ses 471 valeurs jugées (130 jusqu’à 2b-1, 187 avec les cas 15 à 18 de 2b-2, 267 avec les cas 19 à 24 de 2b-3, '
+    + '288 avec le cas 25 de 2b-4, 361 avec le cas 26 de 2b-5, 364 avec DROIT-R2, et les cent sept du cas 27 de 2b-6), les COMPTE '
+    + '(chaque valeur passe par `pg_temp.v`, une séquence que `rollback` n’annule pas) et un jugement final EN SQL refuse un autre '
+    + 'compte ; les 159 variables des refus sont déclarées d’avance (un cas retiré laisse un `f`, pas une autre erreur)',
+  valeursAnnoncees === 471 && /JUGE EXACTEMENT 471 VALEURS/.test(brutE)
     && /create temporary sequence essai_valeurs;/.test(essE)
     && /create function pg_temp\.v\(x anyelement\) returns anyelement\s+language plpgsql volatile security definer as \$v\$\s+begin\s+perform nextval\('pg_temp\.essai_valeurs'\);\s+return x;\s+end;\s+\$v\$;/.test(essE)
     && /select pg_temp\.valeurs_jugees\(\) = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,/.test(essE)
@@ -10452,9 +10646,13 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     /* …ET LES NOMS DES SECTIONS SONT CEUX DE L'ÉCRAN : une COPIE dans
        `devis.js` (il n'importe pas les écrans), comparée ici aux titres de
        `FicheEmetteur.js` (`<Section ancre="…" titre="…">`) et au bloc
-       d'identité (« Votre entreprise », `IdentiteEntreprise.js`). */
+       d'identité (« Votre entreprise », `IdentiteEntreprise.js`). L'ancre
+       admet une MAJUSCULE depuis 2b-6 : `sousTraitants` est la clé que lisent
+       `ouvrirMonEntreprise('sousTraitants')` et `NOM_DES_SECTIONS` — avec
+       `[a-z_]+`, la section n'était pas vue et la comparaison rougissait
+       pour une raison de forme. */
     const ficheE = lire('src/components/FicheEmetteur.js');
-    const titresEcran = Object.fromEntries([...ficheE.matchAll(/<Section ancre="([a-z_]+)" titre="([^"]+)"/g)].map((m) => [m[1], m[2]]));
+    const titresEcran = Object.fromEntries([...ficheE.matchAll(/<Section ancre="([A-Za-z_]+)" titre="([^"]+)"/g)].map((m) => [m[1], m[2]]));
     const identiteE = sansCommentairesJs(lire('src/components/IdentiteEntreprise.js'));
     verifier('…les noms des sections (`NOM_DES_SECTIONS`, devis.js) sont EXACTEMENT les titres de « Mon entreprise » : ceux de '
       + '`FicheEmetteur.js`, et « Votre entreprise » pour le bloc d’identité ; chaque section d’un motif a le sien',
@@ -10543,9 +10741,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      phrase permise est la constante, et une phrase qui le NIE (« ce n'est
      pas que rien ne manque »). */
   /* 2b-5 : la carte « Déchets du chantier » aussi (cahier §3.8 : HORS
-     d'`ECRANS_DEVIS`, comme « Conditions », mais dans ces deux listes). */
+     d'`ECRANS_DEVIS`, comme « Conditions », mais dans ces deux listes) ; et
+     2b-6 : la carte « Énergie et label RGE » (cahier §2.8 bis). */
   const enDur = ['src/components/PourRemettre.js', ...Object.values(ECRANS_DEVIS), 'src/components/ConditionsDevis.js',
-    'src/components/DechetsDevis.js', 'src/OpusApp.js', ...ECRANS_2B2]
+    'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js', 'src/OpusApp.js', ...ECRANS_2B2]
     .flatMap((f) => [...sansCommentairesJs(lireSiExiste(f) || '').matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*?rien ne manque(?:(?!\1)[^\\]|\\.)*?)\1/gi)]
       .filter((m) => !/pas que rien ne manque/i.test(m[2])).map((m) => `${f} : ${m[2].slice(0, 80)}`));
   verifier('…et aucun écran n’écrit « rien ne manque » en dur, sauf pour le NIER (« ce n’est pas que rien ne manque »)', enDur.length === 0,
@@ -10563,7 +10762,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     .replace(/\$\{\s*(['"`])/g, '').replace(/(['"`])\s*\}/g, '')
     .replace(/[{}'"`$]/g, ' ');
   const enMorceaux = ['src/components/PourRemettre.js', ...Object.values(ECRANS_DEVIS), 'src/components/ConditionsDevis.js',
-    'src/components/DechetsDevis.js', 'src/OpusApp.js', ...ECRANS_2B2]
+    'src/components/DechetsDevis.js', 'src/components/EnergieDevis.js', 'src/OpusApp.js', ...ECRANS_2B2]
     .flatMap((f) => [...recolle(sansCommentairesJs(lireSiExiste(f) || '')).matchAll(/(.{0,12})rien\s*ne\s*manque/gi)]
       .filter((m) => !/pas\s+que\s*$/i.test(m[1])).map((m) => `${f} : …${sansEspaces(m[0])}`));
   verifier('…ni en morceaux recollés (`\'Rien ne \' + \'manque\'`), ni en texte JSX : relu concaténations recollées, la phrase n’apparaît que NIÉE',
@@ -10936,7 +11135,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /retourEntreprise=\{retourEntreprise\}/.test(opus));
   verifier('la carte se pose par `carte === CARTE_POUR_REMETTRE` (une valeur de PLUS de l’unique état de carte), reçoit `etatDeLaListe`, '
     + 'la liste rangée avec la table des sections d’« Mon entreprise », et les avis À PART — jamais dans la ligne',
-  /\{carte === CARTE_POUR_REMETTRE && \( <PourRemettre/.test(saE) && /if \(id === CARTE_POUR_REMETTRE \|\| id === CARTE_CHANTIER\) return;/.test(saE)
+  /\{carte === CARTE_POUR_REMETTRE && \( <PourRemettre/.test(saE) && /if \(id === CARTE_POUR_REMETTRE \|\| id === CARTE_CHANTIER \|\| id === CARTE_ENERGIE\) return;/.test(saE)
     && /lireMotifsDeRemise\(liste\.motifs, \{ sections: SECTION_DU_MOTIF \}\)/.test(saE) && /Array\.isArray\(liste\.motifs\) \?/.test(saE)
     && /erreur: liste\.erreur,/.test(saE) && /enBase: attente\.devisEnBase,/.test(saE)
     && balises(SA, 'LigneRemise').every((b) => !/\bavis\b/.test(b)) && balises(SA, 'PourRemettre').some((b) => /avis=\{avis\}/.test(b)));
@@ -10961,8 +11160,9 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     /* 2b-4 (T7, cahier §3.5, DÉCIDÉ) : trois entrées de plus — `regime`,
        `assurances` et `tarifs`, telles que l'ÉCRAN les tient (sans elles, les
        six avis de 2b-4 se tairaient tous, au vert : `undefined` veut dire
-       « pas transmis »). */
-    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, \}\);/.test(saE)
+       « pas transmis »). 2b-6 (cahier §3.7 bis) : `labels`, pour l'avis du
+       label qui arrive à sa fin — sans lui, il se tairait au vert. */
+    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, labels, \}\);/.test(saE)
     && saE.indexOf('const avis = avisDuDevis(') > saE.indexOf('const pasCompte = ceQueLaListeNeComptePas(')
     && !/useMemo\(\(\) => avisDuDevis/.test(saE)
     && (saE.match(/const listeReessayable = !!liste\.erreur && !estUnRefusDefinitif\(liste\.erreur\);/g) || []).length === 1
@@ -10974,9 +11174,10 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   /* Le même appel, À SON NOM (le banc de 2b-4, S21) : retirer `assurances`
      de l'appel faisait rougir la vérification ci-dessus, dont le titre parle
      de « des changements partent » — celui qui la lit chercherait ailleurs. */
-  verifier('la saisie : UN appel des avis (`avisDuDevis`), qui transmet `regime`, `assurances` et `tarifs` tels que l’écran les tient',
+  verifier('la saisie : UN appel des avis (`avisDuDevis`), qui transmet `regime`, `assurances`, `tarifs` et (2b-6) `labels` tels que '
+    + 'l’écran les tient',
     (saE.match(/avisDuDevis\(/g) || []).length === 1
-    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, \}\);/.test(saE));
+    && /const avis = avisDuDevis\(\{ devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste\.reponseVue, regime, assurances, tarifs, labels, \}\);/.test(saE));
   /* LA PLACE DE LA LIGNE, DANS LA SAISIE : AUCUNE MÉMOIRE (relecture 6 de
      2b-1). La relecture 5 y avait mis un état `placeGardee`, remis à jour
      pendant le rendu, qui ne rendait la place qu'au retour d'une liste
@@ -11004,7 +11205,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /renvoisEnRoute: f\.renvoisEnRoute\(\)\.length,/.test(corpsMaj)
     /* 2b-3 (E-I6) : l'état de la troisième question, `etatQ3`, part du même
        état de repos. */
-    && /const \[attente, setAttente\] = useState\(\{ nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT, etatDechets: AUCUN_ETAT, \}\);/.test(saE)
+    && /const \[attente, setAttente\] = useState\(\{ nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT, etatDechets: AUCUN_ETAT, etatEnergie: AUCUN_ETAT, \}\);/.test(saE)
     && (saE.match(/\brenvoisEnRoute\b/g) || []).length === 4
     && !/fileRef\.current\.renvoisEnRoute|fileRef\.current && fileRef\.current\.renvoisEnRoute/.test(saE)
     && saE.includes("const glisserFermeLeClavier = carte || feuille ? 'none' : 'on-drag';")
@@ -11236,9 +11437,12 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       && saE.includes('const entrees = f.entreesVoulues();')
       /* 2b-5 (T24) : SIX appels — le sixième, `etatDechets`, sur les champs de
          la carte « Déchets » (`CHAMPS_DECHETS`), écrit à la lettre plus bas
-         (section 45). */
-      && (saE.match(/etatDesChampsDuDevis\(/g) || []).length === 6
+         (section 45) ; 2b-6 (cahier §3.7 bis) : SEPT — le septième,
+         `etatEnergie`, sur ceux de la carte « Énergie et label RGE »
+         (`CHAMPS_ENERGIE`), section 47. */
+      && (saE.match(/etatDesChampsDuDevis\(/g) || []).length === 7
       && saE.includes('etatDechets: etatDesChampsDuDevis(entrees, CHAMPS_DECHETS),')
+      && saE.includes('etatEnergie: etatDesChampsDuDevis(entrees, CHAMPS_ENERGIE),')
       && saE.includes('f.devis(diff); majAttente(); return { ok, refus };')
       && saE.includes('const dejaVu = totaux && totaux.demande ? totaux.demande : null; const confirmeLe = dejaVu && '
         + 'dejaVu.chantierNeufConso === true ? (dejaVu.chantierNeufConsoLe || null) : null;')
@@ -11320,9 +11524,11 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
     'frais_deplacement: e', 'conso_tva_intra: f', 'consomme_x: g'];
   /* 2b-3 : « Non » à la décennale — le rang 11 se tait, ces cas ne parlent
      que du rang 1 et de l'entreprise. 2b-4 : « gratuit » — le rang 12 se
-     tait aussi. 2b-5 : « Non » aux déchets — le rang 13 aussi. */
+     tait aussi. 2b-5 : « Non » aux déchets — le rang 13 aussi. 2b-6 :
+     « Aucun de ces travaux » — le rang 14 aussi (il parlerait pour une
+     réponse privée, une association et l'absence de réponse). */
   const DEV = { clientId: 'c', lieuVille: 'Brest', delaiExecution: 'x', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0,
-    dechetsConcerne: false };
+    dechetsConcerne: false, energieTravaux: ['aucun'] };
   const POSTE = { id: 'p', type: 'poste', tauxTvaCentiemes: 2000, ordre: 1000 };
   const avec = (pq, autre = {}) => D.motifsDeRemise({ devis: { ...DEV, pourQui: pq, pourQuiClient: pq ? 'c' : null, ...autre },
     lignes: [POSTE], regime: 'reel', motifsEmetteur: ENT }).map((m) => [m.rang, m.cle, m.nature]);
@@ -11438,8 +11644,15 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
   /* f. « À QUEL TITRE ? » (annexe A.3) : les textes, l'ordre de la feuille
         (du plus protecteur au moins protecteur, « pour son entreprise » en
         DERNIER, avec « Dans le doute… », S39), la liste de la base. */
+  /* 2b-6 (annexe A.9, T27, DÉCIDÉ) : deux aides changent. « À titre
+     privé » gagne la sienne (un artisan ou un commerçant pour son propre
+     logement EST un client à titre privé — sans elle, il répondrait « pour
+     son entreprise », et le rang 14 se tairait) ; « hors de son activité
+     principale » ne dit plus « toutes les mentions » : le label RGE n'est dû
+     qu'à un consommateur (L. 224-114), et le rang 14 ne lui parle pas. */
   const REPONSES_ATTENDUES = [
-    { valeur: 'consommateur', rangee: 'À titre privé, pour lui-même', aide: null, resume: 'à titre privé' },
+    { valeur: 'consommateur', rangee: 'À titre privé, pour lui-même',
+      aide: 'Y compris un artisan ou un commerçant pour son propre logement.', resume: 'à titre privé' },
     { valeur: 'non_professionnel', rangee: 'Pour une association, une copropriété ou une société civile',
       aide: 'Sans activité professionnelle : une SCI familiale, un syndicat de copropriétaires (même représenté par un syndic '
         + 'professionnel), une association. Opus leur compte, par prudence, les mentions dues à un particulier.',
@@ -11447,7 +11660,7 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
     { valeur: 'professionnel_hors_activite', rangee: `Pour son entreprise de 5${nb}salariés au plus, hors de son activité principale`,
       aide: 'Par exemple, une boulangerie qui fait refaire sa vitrine. Quand le devis est signé hors de vos locaux, la loi la protège '
         + 'comme un particulier (sauf pour un bâtiment neuf ou une transformation importante) ; Opus lui compte, par prudence, '
-        + 'toutes les mentions dues à un particulier.',
+        + 'les mentions dues à un particulier, sauf celles du label RGE, que la loi ne lui étend pas.',
       resume: `pour son entreprise (5${nb}salariés au plus), hors de son activité principale` },
     { valeur: 'professionnel', rangee: `Pour son entreprise, dans son activité principale, ou une entreprise de plus de 5${nb}salariés`,
       aide: `Par exemple, un autre artisan qui vous sous-traite une partie de son chantier, ou un commerce de plus de 5${nb}salariés. `
@@ -11729,7 +11942,8 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
         neuf » à Oui) porte `devis_taux_reduit_neuf` sur chacune de ses
         lignes à taux réduit ; « Muret » et « Terrasse » portent une réponse
         valable pour Mme Martin, et gardent leurs invariants de 2b-1 (vérifiés
-        en section 40). */
+        en section 40). Depuis 2b-6, CINQ devis : « Isolation des combles et
+        des murs », elle aussi à titre privé pour Mme Martin (section 47). */
   const jeu2 = DEMO.fabriquerDevisDemo(new Date());
   let regime2 = null;
   try { regime2 = (await import('../src/data/emetteur-demo.js')).fabriquerEmetteurDemo(new Date()).emetteur.regime_tva; } catch (e) { regime2 = null; }
@@ -11745,11 +11959,11 @@ console.log('\n  41. le lot 2b-2 — « à quel titre », le chantier, et ce qu�
   const valables = [DEMO.DEVIS_DEMO_IDS.muret, DEMO.DEVIS_DEMO_IDS.terrasse].map((id) => D.pourQuiValable(de2(id).d));
   verifier('m. en démonstration, chaque motif de 2b-2 se voit : « Rénovation » demande à quel titre le client commande, « Sol du séjour » '
     + 'porte le taux réduit d’un chantier neuf sur CHACUNE de ses lignes à 10 % ou 5,5 % ; « Muret » et « Terrasse » ont une réponse '
-    + 'VALABLE (« à titre privé », pour leur client) ; quatre devis, pas un de plus',
+    + 'VALABLE (« à titre privé », pour leur client) ; cinq devis (2b-6), pas un de plus',
   !!reno.d && reno.cles.includes('devis_pour_qui') && !reno.cles.includes('devis_client') && D.pourQuiValable(reno.d) === null
     && !!sejour.d && sejour.d.chantierNeufTva === true && reduitsSejour > 0
     && sejour.cles.filter((k) => k === 'devis_taux_reduit_neuf').length === reduitsSejour
-    && egal(valables, ['consommateur', 'consommateur']) && jeu2.devis.length === 4 && regime2 === 'reel',
+    && egal(valables, ['consommateur', 'consommateur']) && jeu2.devis.length === 5 && regime2 === 'reel',
   `${json(reno.cles)} | ${json(sejour.cles)} | ${json(valables)}`);
 }
 
@@ -11772,9 +11986,10 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   }).map(([k]) => k);
   verifier('a. les quatre motifs de 2b-3 : `devis_acompte_signature` au rang 10 (prudence), et au rang 11 `devis_decennale` (prudence), '
     + '`devis_attestation_date` (prudence), `devis_attestation` (la loi) — chacun en 200 caractères au plus, d’une seule phrase ; '
-    + 'dix-neuf clés sur treize rangs en tout (le rang 12 de 2b-4 compris : `devis_cout` ; le rang 13 de 2b-5 : les deux des déchets)',
-  fauxA.length === 0 && Object.keys(D.MOTIFS_DEVIS).length === 19
-    && new Set(Object.values(D.MOTIFS_DEVIS).map((m) => m.rang)).size === 13, fauxA.join(', '));
+    + 'vingt-deux clés sur quatorze rangs en tout (le rang 12 de 2b-4 compris : `devis_cout` ; le rang 13 de 2b-5 : les deux des '
+    + 'déchets ; le rang 14 de 2b-6 : les trois des travaux d’énergie)',
+  fauxA.length === 0 && Object.keys(D.MOTIFS_DEVIS).length === 22
+    && new Set(Object.values(D.MOTIFS_DEVIS).map((m) => m.rang)).size === 14, fauxA.join(', '));
 
   /* b. LA RÈGLE DE « À LA SIGNATURE », UNE SEULE FOIS : sur TOUTES les
         combinaisons (réponse valable, chantier neuf, lignes), l'aide dit
@@ -11916,9 +12131,11 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
         « true » ne font rien ; rangé AVANT le rang 11. */
   /* 2b-4 : `coutDevisCentimes: 0` (« gratuit ») — sans lui, `devis_cout`
      (rang 12) s'ajoute à la fin de chaque liste (critique BASE-1). 2b-5 :
-     `dechetsConcerne: false` (« Non »), pour la même raison (rang 13). */
+     `dechetsConcerne: false` (« Non »), pour la même raison (rang 13).
+     2b-6 : `energieTravaux: ['aucun']`, pour la même raison (rang 14). */
   const sig = (plus, lignes = [P0('a')]) => D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c',
-    lieuVille: 'v', delaiExecution: 'x', validiteJours: 30, engageDecennale: true, coutDevisCentimes: 0, dechetsConcerne: false, ...plus }, lignes, regime: 'franchise', assurances: [],
+    lieuVille: 'v', delaiExecution: 'x', validiteJours: 30, engageDecennale: true, coutDevisCentimes: 0, dechetsConcerne: false,
+    energieTravaux: ['aucun'], ...plus }, lignes, regime: 'franchise', assurances: [],
   jour: '2026-11-12' }).map((m) => m.cle).join();
   verifier('e. le rang 10, FAIT TOURNER : « à la signature » sans acompte → rien ; un acompte en euros → le motif ; « Dès le 8e jour » '
     + '(faux) ou « true » en chaîne → rien ; tout marqué à titre privé → rien ; et le rang 10 sort AVANT le rang 11',
@@ -12092,8 +12309,9 @@ console.log('\n  42. le lot 2b-3 — la réparation urgente, « à la signature 
   appelsJuges.length >= 3 && appelsJuges.some((a) => a.f === 'src/lib/api.js' && a.nom === 'motifsDeRemise')
     && fautifsJour.length === 0
     /* 2b-5 : un paramètre de plus APRÈS le jour (`lieux`, sans valeur par
-       défaut calculée) — le jour garde le sien. */
-    && /assurances = \[\], jour = jourDuTelephone\(\), lieux = undefined, \} = \{\}\) \{/.test(defauts)
+       défaut calculée) — le jour garde le sien. 2b-6 : deux de plus, après
+       les lieux (`labels`, `sousTraitants`, sans valeur calculée non plus). */
+    && /assurances = \[\], jour = jourDuTelephone\(\), lieux = undefined, labels = undefined, sousTraitants = undefined, \} = \{\}\) \{/.test(defauts)
     && /export function etatDeLAttestation\(assurances, jour = jourDuTelephone\(\), \{ proId = null \} = \{\}\) \{/.test(defauts)
     && /export function etatDeLAssurance\(a, jour = jourLocal\(new Date\(\)\)\) \{/.test(defautsEm),
   `${appelsJuges.length} appel(s) ; fautifs : ${fautifsJour.map((a) => `${a.f} : ${a.texte.slice(0, 140)}`).join(' | ') || '—'}`);
@@ -12261,9 +12479,10 @@ console.log('  43. le lot 2b-4 — le prix du devis lui-même, les six avis, les
         la décennale, les tarifs n'y changent RIEN (la base ne les lit pas
         pour ce rang) ; et il suit les autres motifs dans l'ordre des rangs. */
   /* 2b-5 : « Non » aux déchets — sans lui, `devis_dechets` (rang 13)
-     suivrait `devis_cout` dans chaque liste. */
+     suivrait `devis_cout` dans chaque liste. 2b-6 : « Aucun de ces
+     travaux » — sans lui, `devis_energie` (rang 14) suivrait aussi. */
   const COMPLET = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x', validiteJours: 30,
-    engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false };
+    engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false, energieTravaux: ['aucun'] };
   const POSTE = [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }];
   const cles = (devis, plus = {}) => D.motifsDeRemise({ devis, lignes: POSTE, regime: 'franchise', ...plus }).map((m) => m.cle);
   const bordsMiroir = [
@@ -13120,7 +13339,7 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
                 else if (!manquent.length) attenduR = 'Les quatre rubriques sont remplies';
                 else attenduR = `À compléter : ${manquent.map((k) => NOMS[k]).join(', ')}`;
                 const rang13 = D.motifsDeRemise({ devis: { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v',
-                  delaiExecution: 'x', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, ...dv },
+                  delaiExecution: 'x', validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, energieTravaux: ['aucun'], ...dv },
                 lignes: [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }], regime: 'franchise', lieux: liste })
                   .filter((x) => x.rang === 13).map((x) => x.cle);
                 const point = D.rubriqueDuPoint({ cle: 'devis_dechets_rubriques' }, { devis: dv, lieux: liste });
@@ -13215,7 +13434,7 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
      dépôt » — avec un déchet coché, « Aucun dépôt » ne remplirait plus la
      rubrique des lieux, et ce cas ne garderait plus le seul tri. */
   const TRI_COMPLET44 = { clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x',
-    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, proId: 'p', dechetsConcerne: true,
+    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, energieTravaux: ['aucun'], proId: 'p', dechetsConcerne: true,
     dechetsQuantiteMilliemes: 1000, dechetsUnite: 't', dechetsSurPlace: null, dechetsLieux: ['l1'], dechetsSansDepot: null,
     dechetsCoutCentimes: 100 };
   const LIEU_P44 = [{ id: 'l1', pro_id: 'p' }];
@@ -13399,8 +13618,10 @@ console.log('  44. le lot 2b-5 — les déchets du chantier : la même valeur, l
   /* k. LE MIROIR, À SES BORDS (la parité de `cas-remise.json` les tient
         aussi, mais elle ne se rattache à la base que par `--verifier`) :
         écrits ici et FAITS TOURNER. */
+  /* 2b-6 : « Aucun de ces travaux » — sans lui, `14:devis_energie` suivrait
+     le rang 13 dans chaque liste. */
   const COMPLET44 = { proId: 'p', clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x',
-    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0 };
+    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, energieTravaux: ['aucun'] };
   const QUATRE = { dechetsQuantiteMilliemes: 2000, dechetsUnite: 't', dechetsFlux: ['bois'], dechetsLieux: ['l1'],
     dechetsCoutCentimes: 15000 };
   const M44 = (dv, lieux, plus = {}) => D.motifsDeRemise({ devis: { ...COMPLET44, ...dv },
@@ -14320,6 +14541,1109 @@ console.log('  45. le lot 2b-5 — l’écran : la carte « Déchets du chantier
     + '`lieux={mesLieux}` à la saisie, tirés de `monRegimeEtSaDate` et oubliés sur un échec de la lecture',
   CDd.includes('<View style={s.ecran} accessibilityViewIsModal>') && OAd.includes('lieux={mesLieux}')
     && OAd.includes('setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null)') && OAd.includes('setMesLieux(undefined)'));
+}
+
+console.log('');
+console.log('  46. le lot 2b-6 — les travaux d’énergie et le label RGE : le rang 14, les appuis, les états, FAITS TOURNER');
+{
+  /* POURQUOI CETTE SECTION (cahier 2b-6, §5.2 et §5.3) : tout ce que 2b-6
+     DÉCIDE au téléphone vit dans `devis.js`, `emetteur.js`,
+     `travaux-energie.js` et `api.js`, que `node` sait ouvrir — elle les FAIT
+     TOURNER ; elle ne relit leur code que pour les propriétés « une seule
+     écriture », la garde du badge (CTL-5) et la garde TVA (CTL-17). Ce qui
+     lit un ÉCRAN (la carte « Énergie et label RGE », la saisie, « Mon
+     entreprise ») et la démonstration appartient aux étapes de l'écran et de
+     la démonstration. */
+  const TE = await import('../src/data/travaux-energie.js');
+  const egal = (a, b) => json(a) === json(b);
+  const NB = String.fromCharCode(0xa0);
+  const srcDevis46 = sansCommentairesJs(lire('src/lib/devis.js'));
+  const srcEm46 = sansCommentairesJs(lire('src/lib/emetteur.js'));
+  const srcApi46 = sansCommentairesJs(lire('src/lib/api.js'));
+  const srcTe46 = sansCommentairesJs(lire('src/data/travaux-energie.js'));
+  const defs46 = FONCTIONS.filter((f) => f.nom === 'motifs_refus_remise');
+  const corps46 = defs46.length === 1 ? sansEspaces(defs46[0].corps) : '';
+  const corpsFn = (nom) => { const f = FONCTIONS.filter((x) => x.nom === nom); return f.length === 1 ? sansEspaces(f[0].corps) : ''; };
+
+  /* a. LES TROIS MOTIFS DU RANG 14 (annexe A.1, réponses P1 et P11 à P14),
+        EN TOUTES LETTRES — une troisième écriture, qui garde la base et le
+        miroir ensemble. Leur endroit est la carte « Énergie et label RGE »,
+        UN bouton (« Compléter : énergie et label RGE ») ; aucun n'entre dans
+        `CHAMP_DU_MOTIF` (la carte n'est pas un champ de l'en-tête). */
+  const PHRASES_14 = {
+    devis_energie: ['prudence', 188, 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». '
+      + 'La loi demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.'],
+    devis_energie_mentions: ['loi', 187, 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un '
+      + 'sous-traitant fera tout ou partie de ce devis : la loi le demande pour un client qui commande à titre privé.'],
+    devis_energie_mentions_prudence: ['prudence', 194, 'Dites si vous détenez un label RGE pour les travaux cochés, et si un '
+      + 'sous-traitant fera tout ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.'],
+  };
+  const BOUTON_14 = { libelle: 'Compléter : énergie et label RGE', aDire: 'Compléter : énergie et label RGE' };
+  const fauxA46 = Object.entries(PHRASES_14).filter(([cle, [nature, longueur, phrase]]) => {
+    const m = D.MOTIFS_DEVIS[cle] || {};
+    const p = D.endroitDuMotif({ cle });
+    return m.rang !== 14 || m.nature !== nature || m.phrase !== phrase || phrase.length !== longueur
+      || !corps46.includes(`phrase := '${phrase}'`) || !egal(p, { endroit: 'energie' })
+      || !egal(D.actionDuPoint({ cle, endroit: p }), BOUTON_14) || cle in D.CHAMP_DU_MOTIF || phrase.length > 200;
+  }).map(([cle]) => cle);
+  verifier('a. les trois motifs du rang 14, EN TOUTES LETTRES des deux côtés : `devis_energie` (prudence, 188 caractères), '
+    + '`devis_energie_mentions` (la loi, 187) et `devis_energie_mentions_prudence` (prudence, 194) ; leur endroit est la carte '
+    + '« Énergie et label RGE », UN bouton « Compléter : énergie et label RGE », et aucun n’est dans `CHAMP_DU_MOTIF`',
+  fauxA46.length === 0 && D.LE_LABEL.bouton === BOUTON_14.libelle, fauxA46.join(', '));
+
+  /* b. LES DIX-NEUF TRAVAUX (réponse P12 du 24/11 : « Les 17, plus ces 2 »),
+        UNE seule source : `travaux-energie.js`, qui n'importe rien. Les
+        CINQ listes de clés de la base — `devis_energie_travaux_check`
+        (`aucun` en TÊTE), `devis_energie_sans_label_check`,
+        `emetteur_label_categories_check`,
+        `emetteur_sous_traitant_categories_check`, et la liste de prudence
+        du corps du rang 14 — sont comparées à elle, contenu ET ordre
+        (BASE-8 : une clé retirée d'UNE seule liste rougit ici). */
+  const CLES_19 = ['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage', 'pac_eau_chaude',
+    'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur',
+    'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique',
+    'desembouage'];
+  const T = TE.TRAVAUX_ENERGIE;
+  const cles = T.map((t) => t.cle);
+  const formeT = T.every((t) => Object.isFrozen(t) && typeof t.libelle === 'string' && t.libelle.trim() === t.libelle
+    && t.libelle.length >= 10 && (t.exemples === null || (typeof t.exemples === 'string' && t.exemples.length > 3))
+    && (t.aide === null || typeof t.aide === 'string') && typeof t.prudence === 'boolean'
+    && egal(Object.keys(t), ['cle', 'libelle', 'exemples', 'aide', 'decret', 'ademe', 'prudence']));
+  const decrets = T.map((t) => t.decret);
+  const tableauDe46 = (texte, colonne) => {
+    const m = new RegExp(`${colonne}\\s*<@\\s*array\\[([^\\]]*)\\]`, 'i').exec(texte || '');
+    return m ? m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')) : null;
+  };
+  const regle46 = (table, nom) => {
+    const m = new RegExp(`alter\\s+table\\s+public\\.${table}\\s+add\\s+constraint\\s+${nom}\\s+check\\s*\\(([\\s\\S]*?)\\);`, 'i').exec(SQL);
+    return m ? m[1] : null;
+  };
+  const listes46 = {
+    devis_energie_travaux_check: tableauDe46(regle46('devis', 'devis_energie_travaux_check'), 'energie_travaux'),
+    devis_energie_sans_label_check: tableauDe46(regle46('devis', 'devis_energie_sans_label_check'), 'energie_sans_label'),
+    emetteur_label_categories_check: tableauDe46(regle46('emetteur_labels', 'emetteur_label_categories_check'), 'categories'),
+    emetteur_sous_traitant_categories_check: tableauDe46(regle46('emetteur_sous_traitants', 'emetteur_sous_traitant_categories_check'),
+      'label_categories'),
+  };
+  const prudenceCorps = (/u\.cle = any \(array\[([^\]]*)\]\) as prudence/.exec(corps46) || [])[1];
+  const prudenceSql = prudenceCorps ? prudenceCorps.split(',').map((x) => x.trim().replace(/^'|'$/g, '')) : null;
+  const cardinalites = Object.entries({
+    devis_energie_travaux_check: ['devis', 19], devis_energie_sans_label_check: ['devis', 19],
+    emetteur_label_categories_check: ['emetteur_labels', 19], emetteur_sous_traitant_categories_check: ['emetteur_sous_traitants', 19],
+    devis_energie_sous_traitants_check: ['devis', D.SOUS_TRAITANTS_MAX],
+  }).filter(([nom, [table, n]]) => !new RegExp(`cardinality\\([a-z_]+\\) between 1 and ${n}\\b`).test(sansEspaces(regle46(table, nom))))
+    .map(([nom]) => nom);
+  verifier('b. `TRAVAUX_ENERGIE` (`travaux-energie.js`) : les DIX-NEUF clés, dans l’ordre du décret n° 2014-812 (1° à 17°), puis les '
+    + 'deux lignes de PRUDENCE (`photovoltaique`, `desembouage`, hors décret) ; chaque entrée gelée, à sept champs, un libellé ; '
+    + '`aucun` n’en est PAS une',
+  egal(cles, CLES_19) && Object.isFrozen(T) && formeT && egal(decrets, [...Array.from({ length: 17 }, (_, i) => i + 1), null, null])
+    && egal(T.filter((t) => t.prudence).map((t) => t.cle), ['photovoltaique', 'desembouage']) && !cles.includes('aucun')
+    && egal([...D.CLES_PRUDENCE], ['photovoltaique', 'desembouage']) && D.TRAVAUX_ENERGIE_MAX === 19 && D.ENERGIE_AUCUN === 'aucun'
+    && T[16].cle === 'renovation_ensemble' && /« offre globale »/.test(T[16].libelle) && /cochez chacun d’eux\.$/.test(T[16].aide || ''),
+  json(cles));
+  verifier('…et les CINQ listes de la base sont la sienne, contenu ET ordre : `devis_energie_travaux_check` (`aucun` en tête), '
+    + '`devis_energie_sans_label_check`, `emetteur_label_categories_check`, `emetteur_sous_traitant_categories_check`, et la liste '
+    + 'de prudence du corps du rang 14 (= `CLES_PRUDENCE`) ; les cardinalités disent 19, et 10 pour les sous-traitants '
+    + '(`SOUS_TRAITANTS_MAX`)',
+  egal(listes46.devis_energie_travaux_check, ['aucun', ...CLES_19]) && egal(listes46.devis_energie_sans_label_check, CLES_19)
+    && egal(listes46.emetteur_label_categories_check, CLES_19) && egal(listes46.emetteur_sous_traitant_categories_check, CLES_19)
+    && egal(prudenceSql, [...D.CLES_PRUDENCE]) && D.SOUS_TRAITANTS_MAX === 10 && cardinalites.length === 0,
+  `${json(listes46)} ; prudence ${json(prudenceSql)} ; cardinalités fausses : ${cardinalites.join(', ') || '—'}`);
+  verifier('…`travaux-energie.js` n’importe RIEN, et il est importé par `devis.js` ET `emetteur.js`, qui ne s’importent pas l’un '
+    + 'l’autre (une seule source, T28)',
+  !/\bimport\b|\brequire\s*\(/.test(srcTe46) && /from '\.\.\/data\/travaux-energie\.js';/.test(srcDevis46)
+    && /from '\.\.\/data\/travaux-energie\.js';/.test(srcEm46) && !/from '\.\/emetteur\.js'/.test(srcDevis46)
+    && !/from '\.\/devis\.js'/.test(srcEm46));
+
+  /* c. LES APPUIS, FAITS TOURNER (S24, S25, S52) : jamais un tableau vide —
+        la dernière case décochée rend `null` ; « Aucun de ces travaux »
+        EXCLUSIF et annoncé ; l'ordre canonique ; une clé inconnue ne change
+        rien ; un tableau NEUF à chaque changement. */
+  const TA = D.travauxApresAppui;
+  const unAUn = [];
+  let v = null;
+  for (const c of [...CLES_19].reverse()) { v = TA(v, c); unAUn.push(v); }
+  for (const c of CLES_19) { v = TA(v, c); unAUn.push(v); }
+  const avant1 = ['fenetres'];
+  const apres1 = TA(avant1, 'chaudiere');
+  verifier('c. `travauxApresAppui`, FAIT TOURNER : une case se coche (dans l’ORDRE de la liste, quel que soit l’ordre des appuis) et '
+    + 'se décoche ; la DERNIÈRE décochée rend `null`, jamais `[]` (sur les 38 appuis des 19 cases, aucun tableau vide) ; « Aucun de ces '
+    + 'travaux » s’allume en RETIRANT les cases (et l’annonce), s’éteint en `null` ; une case sous « Aucun » l’éteint ; une clé '
+    + 'inconnue ne change rien ; un tableau NEUF',
+  egal(TA(null, 'fenetres'), ['fenetres']) && egal(apres1, ['chaudiere', 'fenetres']) && apres1 !== avant1 && egal(avant1, ['fenetres'])
+    && egal(TA(['chaudiere', 'fenetres'], 'chaudiere'), ['fenetres']) && TA(['fenetres'], 'fenetres') === null
+    && unAUn.every((x) => x === null || (Array.isArray(x) && x.length > 0)) && egal(unAUn[18], CLES_19) && unAUn[37] === null
+    && egal(TA(['fenetres', 'ventilation'], 'aucun'), ['aucun']) && TA(['aucun'], 'aucun') === null && egal(TA(null, 'aucun'), ['aucun'])
+    && egal(TA(['aucun'], 'geothermie'), ['geothermie']) && TA(null, 'inconnue') === null
+    && egal(TA(['fenetres'], 'inconnue'), ['fenetres']) && TA([], 'inconnue') === null && TA([], 'fenetres') !== null
+    && D.annonceDesTravaux(['fenetres'], ['aucun']) === D.LE_LABEL.travaux.retires && D.annonceDesTravaux(null, ['aucun']) === null
+    && D.annonceDesTravaux(['aucun'], null) === null && D.LE_LABEL.travaux.retires === 'Les travaux cochés ont été retirés.',
+  json([TA(null, 'fenetres'), apres1, TA(['fenetres', 'ventilation'], 'aucun')]));
+  const SA = D.sansLabelApresAppui;
+  verifier('…`sansLabelApresAppui`, FAIT TOURNER : ajoute ou retire SA clé seule, dans l’ordre de la liste ; la dernière retirée rend '
+    + '`null` ; `aucun` et une clé inconnue ne changent rien — « Aucun » n’est jamais une déclaration ; une clé d’un travail décoché '
+    + 'reste (T23)',
+  egal(SA(null, 'fenetres'), ['fenetres']) && egal(SA(['fenetres'], 'chaudiere'), ['chaudiere', 'fenetres'])
+    && SA(['fenetres'], 'fenetres') === null && SA(null, 'aucun') === null && egal(SA(['fenetres'], 'aucun'), ['fenetres'])
+    && egal(SA(['fenetres'], 'inconnue'), ['fenetres']) && egal(SA(['ventilation', 'fenetres'], 'geothermie'), ['ventilation',
+      'fenetres', 'geothermie'].sort((a, b) => CLES_19.indexOf(a) - CLES_19.indexOf(b))));
+  const SO = D.sousTraitantsApresAppui;
+  const LUS = [{ id: 's1' }, { id: 's2' }, { id: 's3' }];
+  const ONZE = Array.from({ length: 11 }, (_, i) => ({ id: `t${i}` }));
+  const DIX = ONZE.slice(0, 10).map((x) => x.id);
+  verifier('…`sousTraitantsApresAppui`, FAIT TOURNER : une liste NON LUE ne change rien ; un appui se coche ou se décoche, et le tableau '
+    + 'se REBÂTIT dans l’ordre de la liste lue (les orphelins tombent, sans annonce) ; le dernier décoché rend `null` ; un identifiant '
+    + 'hors de la liste ne change rien ; LE PLAFOND (dix) se compte sur la liste REBÂTIE — jamais sur ce que la carte garde (S25) : '
+    + 'dix orphelins n’empêchent pas d’en choisir un',
+  egal(SO(null, undefined, 's1'), { sousTraitants: null, plafond: false }) && egal(SO(['s1'], null, 's2'), { sousTraitants: ['s1'], plafond: false })
+    && egal(SO(null, LUS, 's2'), { sousTraitants: ['s2'], plafond: false })
+    && egal(SO(['s3'], LUS, 's1'), { sousTraitants: ['s1', 's3'], plafond: false })
+    && egal(SO(['x', 's1'], LUS, 's2'), { sousTraitants: ['s1', 's2'], plafond: false })
+    && egal(SO(['s2'], LUS, 's2'), { sousTraitants: null, plafond: false })
+    && egal(SO(['s1'], LUS, 'zz'), { sousTraitants: ['s1'], plafond: false })
+    && egal(SO(DIX, ONZE, 't10'), { sousTraitants: DIX, plafond: true })
+    && egal(SO([...DIX.slice(0, 9), 'o1', 'o2', 'o3'], ONZE, 't10'), { sousTraitants: [...DIX.slice(0, 9), 't10'], plafond: false })
+    && egal(SO(Array.from({ length: 10 }, (_, i) => `o${i}`), ONZE, 't0'), { sousTraitants: ['t0'], plafond: false })
+    && egal(SO(DIX, ONZE, 't0'), { sousTraitants: DIX.slice(1), plafond: false })
+    && D.LE_LABEL.sousTraitance.plafond === 'Dix sous-traitants au plus par devis : décochez-en un pour en choisir un autre.',
+  json([SO(DIX, ONZE, 't10'), SO(['x', 's1'], LUS, 's2')]));
+
+  /* d. LES QUATRE ÉTATS D'UN TRAVAIL (T26), FAITS TOURNER — `etatsDesTravaux`
+        est la SEULE écriture de la règle « un signe porte ce travail » :
+        couvert (valable ET certificat joint), sans certificat, expiré,
+        absent ; la liste pas lue → `null` (jamais « absent ») ; le signe d'une
+        AUTRE entreprise ne compte pas (le miroir de `g.pro_id = v_pro`) ;
+        une date de fin ÉGALE au jour compte valable ; la fin la plus TARDIVE
+        est rendue. */
+  const L = (id, categories, fin, chemin = `p/${id}.pdf`, pro = 'p', intitule = `Signe ${id}`) => ({
+    id, pro_id: pro, organisme: 'Organisme d’essai', intitule, categories, valide_jusquau: fin, justificatif_chemin: chemin,
+  });
+  const DV = { proId: 'p', energieTravaux: ['isolation_combles', 'ventilation', 'fenetres', 'geothermie'] };
+  const ED = (labels, jour = '2026-11-24') => D.etatsDesTravaux(DV, labels, { jour });
+  const e1 = ED([L('a', ['isolation_combles'], '2026-11-24'), L('b', ['ventilation'], '2999-01-01', null),
+    L('c', ['fenetres'], '2026-11-23'), L('d', ['geothermie'], '2999-01-01', 'q/d.pdf', 'q')]);
+  const tardif = ED([L('a', ['isolation_combles'], '2027-01-01', 'p/a.pdf', 'p', 'Premier'),
+    L('b', ['isolation_combles'], '2028-06-30', 'p/b.pdf', 'p', 'Second')]);
+  verifier('d. `etatsDesTravaux`, FAIT TOURNER : `couvert` (valable, certificat joint — la fin ÉGALE au jour compte), `sans_certificat` '
+    + '(valable, rien de joint), `expire` (fin passée), `absent` (aucun signe — celui d’une AUTRE entreprise ne compte pas) ; la '
+    + 'fin la plus TARDIVE et son intitulé ; une liste non lue → `null` ; « Aucun » ou rien de dit → aucun travail ; un travail coché '
+    + 'DEUX fois (la contrainte de la base ne l’interdit pas : un client modifié peut l’écrire) ne compte qu’UNE fois (`travauxCoches`, '
+    + 'dans l’ordre de sa première apparition — le banc : S19)',
+  egal(e1 && e1.map((e) => `${e.cle}:${e.etat}`), ['isolation_combles:couvert', 'ventilation:sans_certificat', 'fenetres:expire',
+    'geothermie:absent'])
+    && e1[0].fin === '2026-11-24' && e1[0].intitule === 'Signe a' && e1[2].fin === '2026-11-23' && e1[3].fin === null
+    && egal(tardif && tardif[0], { cle: 'isolation_combles', etat: 'couvert', intitule: 'Second', fin: '2028-06-30' })
+    && ED(undefined) === null && ED(null) === null && egal(ED([]).map((e) => e.etat), ['absent', 'absent', 'absent', 'absent'])
+    && egal(D.etatsDesTravaux({ energieTravaux: ['aucun'] }, []), []) && egal(D.etatsDesTravaux({}, []), [])
+    && egal(D.travauxCoches({ energieTravaux: ['fenetres', 'ventilation', 'fenetres'] }), ['fenetres', 'ventilation'])
+    && egal(D.travauxCoches({ energieTravaux: ['aucun'] }), []) && egal(D.travauxCoches(null), [])
+    && egal(D.etatsDesTravaux({ proId: 'p', energieTravaux: ['fenetres', 'fenetres'] }, []).map((e) => e.cle), ['fenetres'])
+    && egal(D.ETATS_DU_TRAVAIL, ['couvert', 'sans_certificat', 'expire', 'absent']),
+  json(e1));
+  /* …LE JOUR : celui du TÉLÉPHONE par défaut (jamais celui d'UTC), dans
+        chaque fonction de 2b-6 qui juge une date — la base, elle, juge au
+        jour de Paris ; et aucun appelant de `src/` ne leur passe un jour
+        calculé (la règle de i bis, section 42). */
+  /* La signature d'une fonction : de sa parenthèse ouvrante à celle qui la
+     ferme, parenthèses COMPTÉES (un défaut `jourDuTelephone()` en contient
+     une paire). */
+  const sig46 = (nom) => {
+    const t = sansEspaces(srcDevis46);
+    const i = t.indexOf(`export function ${nom}(`);
+    if (i < 0) return '';
+    let j = i + `export function ${nom}(`.length;
+    const d = j;
+    for (let p = 1; j < t.length && p > 0; j += 1) { if (t[j] === '(') p += 1; else if (t[j] === ')') p -= 1; }
+    return t.slice(d, j - 1);
+  };
+  const jugesDuJour = ['etatsDesTravaux', 'sousTraitantComplet', 'rubriquesDeLEnergie', 'motifDeLEnergie', 'rubriqueDeLEnergieDuPoint',
+    'finDuLabel', 'resumeDeLEnergie'];
+  const sansDefaut = jugesDuJour.filter((nom) => !/jour = jourDuTelephone\(\)/.test(sig46(nom)));
+  const fichiers46 = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { cwd: RACINE, encoding: 'utf8' })
+    .stdout.split('\n').filter((f) => /\.js$/.test(f));
+  const appelsFautifs46 = [];
+  for (const f of fichiers46) {
+    const src = sansCommentairesJs(lireSiExiste(f) || '');
+    for (const nom of jugesDuJour) {
+      for (const m of src.matchAll(new RegExp(`\\b${nom}\\s*\\(([^;]*)`, 'g'))) {
+        if (/toISOString|getUTC|Date\.UTC|\.(slice|substring|substr)\(\s*0\s*,\s*10\s*\)/.test(m[1].split('\n')[0])) appelsFautifs46.push(`${f}:${nom}`);
+      }
+    }
+  }
+  verifier('…le jour qui juge une date de 2b-6 est celui du TÉLÉPHONE par défaut (`jour = jourDuTelephone()`), dans les sept fonctions '
+    + 'qui en jugent une, et aucun appel dans `src/` ne leur passe un jour tiré d’UTC',
+  sansDefaut.length === 0 && appelsFautifs46.length === 0,
+  `sans défaut : ${sansDefaut.join(', ') || '—'} ; appels fautifs : ${appelsFautifs46.join(', ') || '—'}`);
+  /* …ET `etatsDesTravaux` EST LA SEULE ÉCRITURE de la règle (§5.3 n° 2) :
+        aucune autre fonction de `src/` ne compare les catégories d'un
+        signe de qualité à un travail. */
+  const comparent = [];
+  for (const f of fichiers46) {
+    const src = sansCommentairesJs(lireSiExiste(f) || '');
+    if (/\.categories\.includes\(|\bcategories\.includes\(|\.label_categories\.includes\(/.test(src)) comparent.push(f);
+  }
+  const dansDevis = (srcDevis46.match(/\.categories\.includes\(/g) || []).length;
+  verifier('…`etatsDesTravaux` est la SEULE écriture de « ce signe porte ce travail » : un `categories.includes(` dans `devis.js`, et '
+    + 'nulle part ailleurs dans `src/` (`rubriquesDeLEnergie`, `finDuLabel` et `motifDeLEnergie` passent par elle)',
+  egal(comparent, ['src/lib/devis.js']) && dansDevis === 1 && /etatsDesTravaux\(d, labels, \{ jour \}\)/.test(corpsDeFonction(srcDevis46, 'rubriquesDeLEnergie') || '')
+    && /etatsDesTravaux\(d, labels, \{ jour: auJour \}\)/.test(corpsDeFonction(srcDevis46, 'finDuLabel') || '')
+    && /rubriquesDeLEnergie\(/.test(corpsDeFonction(srcDevis46, 'motifDeLEnergie') || ''),
+  `${json(comparent)} ; ${dansDevis} dans devis.js`);
+
+  /* e. UN SOUS-TRAITANT COMPLET (T20), FAIT TOURNER : « Non » ; ou « Oui »
+        avec une fin au moins égale au jour ET son justificatif (P13) ; jamais
+        un sous-traitant d'une autre entreprise. SON IDENTITÉ n'est PAS jugée
+        par défaut : la base la garantit (`emetteur_sous_traitant_complet_
+        check`) et le rang 14 ne la lit pas — l'exiger rendait faux trois cas
+        de la parité (213, 215, 219, mesuré). */
+  const ST = (id, plus = {}) => ({ id, pro_id: 'p', raison_sociale: 'Sous-traitant d’essai', siret: '00004910600016', ...plus });
+  const SC = (s, o = {}) => D.sousTraitantComplet(s, { proId: 'p', jour: '2026-11-24', ...o });
+  verifier('e. `sousTraitantComplet`, FAIT TOURNER : « Non » → complet ; « Oui » valable (fin ÉGALE au jour comprise) ET justifié → '
+    + 'complet ; sans justificatif, à date passée, sans date, sans réponse, d’une AUTRE entreprise → incomplet ; l’identité ne se juge '
+    + 'que sur demande (`identiteExigee`), la base la garantissant',
+  SC(ST('a', { label_detient: false })) === true
+    && SC(ST('b', { label_detient: true, label_valide_jusquau: '2026-11-24', label_justificatif_chemin: 'p/b.pdf' })) === true
+    && SC(ST('c', { label_detient: true, label_valide_jusquau: '2999-01-01', label_justificatif_chemin: null })) === false
+    && SC(ST('c', { label_detient: true, label_valide_jusquau: '2999-01-01' }), { justificatifExige: false }) === true
+    && SC(ST('d', { label_detient: true, label_valide_jusquau: '2026-11-23', label_justificatif_chemin: 'p/d.pdf' })) === false
+    && SC(ST('e', { label_detient: true, label_valide_jusquau: null, label_justificatif_chemin: 'p/e.pdf' })) === false
+    && SC(ST('f', { label_detient: null })) === false && SC(ST('g', { label_detient: false, pro_id: 'q' })) === false
+    && SC({ id: 'h', pro_id: 'p', label_detient: false }) === true
+    && SC({ id: 'h', pro_id: 'p', label_detient: false }, { identiteExigee: true }) === false
+    && SC(null) === false);
+
+  /* f. LE MIROIR DU RANG 14, À SES BORDS, écrits ici et FAITS TOURNER (la
+        parité de `cas-remise.json` les tient aussi, mais elle ne se rattache
+        à la base que par `--verifier`). Un devis COMPLET aux rangs 1 à 13,
+        à titre privé ; le rang 14 seul change. */
+  const COMPLET46 = { proId: 'p', clientId: 'c', pourQui: 'consommateur', pourQuiClient: 'c', lieuVille: 'v', delaiExecution: 'x',
+    validiteJours: 30, engageDecennale: false, coutDevisCentimes: 0, dechetsConcerne: false };
+  const POSTE46 = [{ id: 'l', type: 'poste', tauxTvaCentiemes: 0, ordre: 1 }];
+  const M46 = (dv, labels, sousTraitants, plus = {}) => D.motifsDeRemise({ devis: { ...COMPLET46, ...dv }, lignes: POSTE46,
+    regime: 'franchise', jour: '2026-11-24', labels, sousTraitants, ...plus }).map((m) => `${m.rang}:${m.cle}`);
+  const COMBLES = { energieTravaux: ['isolation_combles'], energieSousTraitance: false };
+  const LA = [L('a', ['isolation_combles'], '2999-01-01')];
+  const bords46 = [
+    ['rien de dit → `devis_energie`', M46({}, [], []), ['14:devis_energie']],
+    ['…une association → `devis_energie`', M46({ pourQui: 'non_professionnel' }, [], []), ['14:devis_energie']],
+    ['…pour son entreprise → rien', M46({ pourQui: 'professionnel' }, [], []), []],
+    ['…une petite entreprise hors de son activité → rien (T27)', M46({ pourQui: 'professionnel_hors_activite' }, [], []), []],
+    ['« Aucun de ces travaux », sous-traitance sans réponse → rien', M46({ energieTravaux: ['aucun'] }, [], []), []],
+    ['les combles, aucun signe, rien de déclaré → la loi', M46(COMBLES, [], []), ['14:devis_energie_mentions']],
+    ['…déclarés « sans label » → rien', M46({ ...COMBLES, energieSansLabel: ['isolation_combles'] }, [], []), []],
+    ['…un signe valable et joint → rien', M46(COMBLES, LA, []), []],
+    ['…un signe valable SANS certificat, même déclarés → la loi', M46({ ...COMBLES, energieSansLabel: ['isolation_combles'] },
+      [L('a', ['isolation_combles'], '2999-01-01', null)], []), ['14:devis_energie_mentions']],
+    ['…un signe d’une AUTRE entreprise → la loi', M46(COMBLES, [L('a', ['isolation_combles'], '2999-01-01', 'q/a.pdf', 'q')], []),
+      ['14:devis_energie_mentions']],
+    ['…les signes PAS TRANSMIS : comptés absents → la loi', M46(COMBLES, undefined, undefined), ['14:devis_energie_mentions']],
+    ['…pour une association → prudence', M46({ ...COMBLES, pourQui: 'non_professionnel' }, [], []), ['14:devis_energie_mentions_prudence']],
+    ['…sans réponse « à quel titre » → le rang 1, puis prudence', M46({ ...COMBLES, pourQui: null, pourQuiClient: null }, [], []),
+      ['1:devis_pour_qui', '14:devis_energie_mentions_prudence']],
+    ['les panneaux photovoltaïques seuls, rien de déclaré → prudence, même à titre privé',
+      M46({ energieTravaux: ['photovoltaique'], energieSousTraitance: false }, [], []), ['14:devis_energie_mentions_prudence']],
+    ['les combles couverts, sous-traitance sans réponse → la loi', M46({ energieTravaux: ['isolation_combles'] }, LA, []),
+      ['14:devis_energie_mentions']],
+    ['…« Oui », aucun sous-traitant choisi → la loi', M46({ ...COMBLES, energieSousTraitance: true }, LA, []),
+      ['14:devis_energie_mentions']],
+    ['…« Oui », un sous-traitant de l’entreprise sans label → rien', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s1'] }, LA, [ST('s1', { label_detient: false })]), []],
+    ['…« Oui », le même sous-traitant DEUX fois → rien (compté une fois)', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s1', 's1'] }, LA, [ST('s1', { label_detient: false })]), []],
+    ['…« Oui », un complet ET un à date passée → la loi (TOUS complets)', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s1', 's2'] }, LA, [ST('s1', { label_detient: false }), ST('s2', { label_detient: true,
+      label_valide_jusquau: '2001-01-01', label_justificatif_chemin: 'p/s2.pdf' })]), ['14:devis_energie_mentions']],
+    ['…« Oui », seul le sous-traitant d’une AUTRE entreprise → la loi', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s9'] }, LA, [ST('s9', { label_detient: false, pro_id: 'q' })]), ['14:devis_energie_mentions']],
+    ['…« Oui », la liste des sous-traitants PAS TRANSMISE → la loi', M46({ ...COMBLES, energieSousTraitance: true,
+      energieSousTraitants: ['s1'] }, LA, undefined), ['14:devis_energie_mentions']],
+    ['l’origine du devis ne change RIEN (une urgence d’isolation)', M46({ source: 'urgence', sosRequestId: 'u',
+      objet: 'Isoler les combles' }, [], []), ['14:devis_energie']],
+    ['le rang 14 vient APRÈS le rang 13, AVANT l’entreprise', M46({ dechetsConcerne: null }, [], [],
+      { motifsEmetteur: ['identite: Votre nom.'] }), ['13:devis_dechets', '14:devis_energie', '101:identite']],
+  ];
+  const fauxBords46 = bords46.filter(([, vu, attendu]) => !egal(vu, attendu)).map(([nom, vu]) => `${nom} → ${json(vu)}`);
+  verifier('f. le miroir du rang 14, à ses bords, écrits ici et FAITS TOURNER : rien de dit → `devis_energie` ; « pour son entreprise » '
+    + 'et la petite entreprise hors de son activité → rien ; « Aucun » → rien ; un travail du décret sans signe valable ni déclaration → '
+    + 'la loi à titre privé, la prudence pour une association ou sans réponse ; les deux lignes de prudence seules → prudence ; '
+    + 'un signe sans certificat fait manquer même déclaré ; la sous-traitance : « Non », ou « Oui » et TOUS complets, distincts, de '
+    + 'l’entreprise ; des listes non transmises comptent vides ; l’origine ne change rien ; UNE clé, entre les rangs 13 et 101',
+  fauxBords46.length === 0, fauxBords46.join(' | '));
+  /* …ET LA RUBRIQUE OÙ LE POINT OUVRE LA CARTE (`rubriqueDeLEnergieDuPoint`) :
+        la question pour `devis_energie`, la PREMIÈRE rubrique qui manque
+        sinon (le label, puis la sous-traitance), une liste pas lue comptée
+        manquante, et rien pour un autre point. */
+  const RP = (cle, dv, labels, sousTraitants) => D.rubriqueDeLEnergieDuPoint({ cle }, { devis: { ...COMPLET46, ...dv }, labels,
+    sousTraitants, jour: '2026-11-24' });
+  verifier('…`rubriqueDeLEnergieDuPoint` : `devis_energie` → la question ; un label qui manque → « label » ; seulement la '
+    + 'sous-traitance → « sousTraitance » ; une liste pas lue → « label » ; tout dit (la base plus récente) → la question ; un autre '
+    + 'point → rien',
+  RP('devis_energie', {}, [], []) === 'travaux' && RP('devis_energie_mentions', COMBLES, [], []) === 'label'
+    && RP('devis_energie_mentions', { energieTravaux: ['isolation_combles'] }, LA, []) === 'sousTraitance'
+    && RP('devis_energie_mentions_prudence', COMBLES, undefined, []) === 'label'
+    && RP('devis_energie_mentions', COMBLES, LA, []) === 'travaux' && RP('devis_dechets', COMBLES, LA, []) === null);
+  /* …ET L'ÉTAT D'UNE CASE « JE NE DÉTIENS PAS » (§3.8, ÉCRAN-10) : montrée
+        sous un travail expiré ou absent, jamais sous un travail couvert,
+        sans certificat, ni sur une liste pas lue — sauf déjà cochée. */
+  const DM = D.declarationMontree;
+  verifier('…`declarationMontree` : la case se montre sous un travail `expire` ou `absent`, jamais `couvert`, `sans_certificat` ni '
+    + 'inconnu (une liste pas lue) — sauf déjà cochée, pour pouvoir la décocher',
+  DM({ etat: 'expire' }) && DM({ etat: 'absent' }) && !DM({ etat: 'couvert' }) && !DM({ etat: 'sans_certificat' })
+    && !DM({ etat: null }) && !DM() && DM({ etat: 'couvert', declaree: true }) && DM({ etat: null, declaree: true }));
+
+  /* g. L'AVIS DU SIGNE DE QUALITÉ QUI ARRIVE À SA FIN (T31), FAIT TOURNER :
+        il parle quand la fin du premier travail couvert tombe avant
+        l'horizon de l'attestation — la validité, plus trente jours quand le
+        délai est EXACTEMENT celui par défaut ; il se tait pour une réponse
+        « entreprise », sous « Aucun », sans validité, sur une liste pas
+        lue, et quand rien n'est couvert ; il NE DÉPEND PAS de la liste sûre
+        (S29 : « même liste en lecture »). */
+  const FL = (dv, labels, plus = {}) => D.finDuLabel({ devis: { ...COMPLET46, ...COMBLES, ...dv }, labels, jour: '2026-11-24', ...plus });
+  const proche = [L('a', ['isolation_combles'], '2026-12-10', 'p/a.pdf', 'p', 'Qualif d’essai')];
+  const deux = [L('a', ['isolation_combles'], '2026-12-10'), L('b', ['isolation_combles'], '2027-06-30', 'p/b.pdf', 'p', 'Plus tard')];
+  const avis46 = (etat, labels = proche) => D.avisDuDevis({ devis: { ...COMPLET46, ...COMBLES, objet: 'Isolation' }, etat, labels,
+    jour: '2026-11-24' }).filter((a) => a.cle === 'avis_label_echeance').map((a) => a.phrase);
+  const PHRASE_AVIS46 = 'Votre signe de qualité « Qualif d’essai » est valable jusqu’au 10/12/2026. Si ce devis est signé après cette '
+    + 'date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+  verifier('g. `finDuLabel` et l’avis `avis_label_echeance`, FAITS TOURNER : une fin avant l’horizon (30 jours de validité) → l’avis, '
+    + 'son intitulé et sa date ; au-delà, ou ÉGALE à l’horizon → rien ; le délai par défaut ajoute trente jours ; deux signes sur le '
+    + 'même travail → le plus TARDIF (ÉCRAN-7) ; « pour son entreprise », « Aucun », sans validité, une liste pas lue, rien de couvert '
+    + '→ rien ; et l’avis parle « même liste en lecture » (S29)',
+  egal(FL({}, proche), { fin: '2026-12-10', intitule: 'Qualif d’essai' })
+    && FL({}, [L('a', ['isolation_combles'], '2026-12-24')]) === null && FL({}, [L('a', ['isolation_combles'], '2026-12-23')]) !== null
+    && FL({ delaiExecution: D.DELAI_PAR_DEFAUT.texte }, [L('a', ['isolation_combles'], '2027-01-20')]) !== null
+    && FL({}, [L('a', ['isolation_combles'], '2027-01-20')]) === null
+    && FL({}, deux) === null && FL({ pourQui: 'professionnel' }, proche) === null && FL({ energieTravaux: ['aucun'] }, proche) === null
+    && FL({ validiteJours: null }, proche) === null && FL({}, undefined) === null
+    && FL({}, [L('a', ['isolation_combles'], '2026-12-10', null)]) === null
+    && egal(avis46('liste'), [PHRASE_AVIS46]) && egal(avis46('chargement'), [PHRASE_AVIS46]) && egal(avis46(null), [PHRASE_AVIS46])
+    && egal(avis46('liste', null), []),
+  json([FL({}, proche), avis46('chargement')]));
+
+  /* h. RIEN DE COCHÉ D'OFFICE (§3.2, §3.8, CTL-10, S22) : la carte s'ouvre
+        sur les QUATRE champs du devis, et rien d'autre — l'origine, l'objet,
+        un devis venu d'une urgence « isolation des combles », les signes de
+        qualité de « Mon entreprise » ne cochent rien ; et `etatInitialEnergie`
+        n'a qu'UN paramètre, qui ne nomme rien d'autre. */
+  const vierge = D.etatInitialEnergie({ source: 'urgence', sosRequestId: 'u', quoteRequestId: 'q', objet: 'Isoler les combles et la VMC',
+    metier: 'isolation', labels: LA, energieTravaux: null });
+  const lu46 = D.etatInitialEnergie({ energieTravaux: ['fenetres'], energieSansLabel: ['fenetres'], energieSousTraitance: false,
+    energieSousTraitants: [] });
+  const corpsInit = corpsDeFonction(srcDevis46, 'etatInitialEnergie') || '';
+  verifier('h. `etatInitialEnergie`, FAIT TOURNER avec l’origine, l’objet, le métier et des signes PRÉSENTS : rien n’est coché ; il '
+    + 'relit les quatre champs tels quels (des listes NEUVES, un tableau vide devient `null`) ; UN paramètre, et son corps ne nomme '
+    + 'ni `source`, ni `quoteRequestId`, ni `sosRequestId`, ni `objet`, ni un signe de qualité (CTL-10)',
+  egal(vierge, { travaux: null, sansLabel: null, sousTraitance: null, sousTraitants: null })
+    && egal(lu46, { travaux: ['fenetres'], sansLabel: ['fenetres'], sousTraitance: false, sousTraitants: null })
+    && /export function etatInitialEnergie\(devis\) \{/.test(srcDevis46)
+    && !/source|quoteRequestId|sosRequestId|objet|metier|labels|categories/.test(corpsInit)
+    && egal(D.lireEnergie({ devis: { energieTravaux: ['aucun'] } }).changements, { energieTravaux: ['aucun'], energieSansLabel: null,
+      energieSousTraitance: null, energieSousTraitants: null }),
+  json([vierge, lu46]));
+
+  /* i. LA RANGÉE ET SES VINGT-QUATRE GABARITS (T25, annexe A.4) : huit
+        résumés × trois suffixes, tous différents, le plus long sous les
+        cinquante-quatre caractères (« garder la grande place ») ; une liste
+        pas lue ne dit jamais « dits » ni « à compléter ». */
+  const RE = (dv, labels, sousTraitants, plus = {}) => D.resumeDeLEnergie({ devis: { ...COMPLET46, ...dv }, labels, sousTraitants,
+    jour: '2026-11-24', ...plus });
+  const resumes46 = [
+    RE({ pourQui: 'professionnel' }, [], []), RE({}, [], []), RE({ energieTravaux: ['aucun'] }, [], []),
+    RE(COMBLES, LA, []), RE(COMBLES, [], []), RE({ energieTravaux: ['isolation_combles'] }, LA, []),
+    RE({ energieTravaux: ['isolation_combles'] }, [], []), RE(COMBLES, undefined, []),
+    RE({ ...COMBLES, energieSousTraitance: true, energieSousTraitants: ['s1'] }, LA, undefined),
+    RE(COMBLES, LA, [], { enRoute: true }), RE(COMBLES, LA, [], { enEchec: true }), RE(COMBLES, LA, [], { enRoute: true, refuse: true }),
+  ];
+  verifier('i. `resumeDeLEnergie` et ses 24 gabarits (8 résumés × « », « — enregistrement… », « — pas enregistré »), tous différents, '
+    + 'le plus long de 53 caractères ; « Sans objet pour ce client », « Travaux d’énergie : à dire », « Aucun de ces travaux », '
+    + '« Label et sous-traitance : dits », « À compléter : label, sous-traitance », « Labels ou sous-traitants non lus » ; un refus '
+    + 'l’emporte sur « en route »',
+  D.GABARITS_DE_L_ENERGIE.length === 24 && new Set(D.GABARITS_DE_L_ENERGIE).size === 24
+    && Math.max(...D.GABARITS_DE_L_ENERGIE.map((g) => g.length)) === 53
+    && resumes46.every((r) => D.GABARITS_DE_L_ENERGIE.includes(r))
+    && egal(resumes46, ['Sans objet pour ce client', 'Travaux d’énergie : à dire', 'Aucun de ces travaux',
+      'Label et sous-traitance : dits', 'À compléter : label', 'À compléter : sous-traitance', 'À compléter : label, sous-traitance',
+      'Labels ou sous-traitants non lus', 'Labels ou sous-traitants non lus', `Label et sous-traitance : dits${D.SUFFIXE_EN_ROUTE}`,
+      `Label et sous-traitance : dits${D.SUFFIXE_EN_ECHEC}`, `Label et sous-traitance : dits${D.SUFFIXE_EN_ECHEC}`])
+    && D.LE_LABEL.rangee === 'Énergie (label RGE)',
+  json(resumes46));
+  /* …ET LES CHAMPS DE L'ÉNERGIE SONT UNE RUBRIQUE À PART (ÉCRAN-4) : quatre
+        champs, trois rubriques, sans PAIRE (T23) — aucun des quatre n'entre
+        dans les paires de la file ni dans les rubriques des déchets. */
+  verifier('…`CHAMPS_DE_L_ENERGIE` : les quatre champs, dans `CHAMPS_DEVIS`, chacun rattaché à SA rubrique (`RUBRIQUE_DE_L_ENERGIE`) ; '
+    + 'ni dans `RUBRIQUE_DU_CHAMP` (les déchets), ni dans une paire (T23)',
+  egal([...D.CHAMPS_DE_L_ENERGIE], ['energieTravaux', 'energieSansLabel', 'energieSousTraitance', 'energieSousTraitants'])
+    && D.CHAMPS_DE_L_ENERGIE.every((c) => D.CHAMPS_DEVIS.includes(c) && !(c in (D.RUBRIQUE_DU_CHAMP || {})))
+    && egal(D.RUBRIQUE_DE_L_ENERGIE, { energieTravaux: 'travaux', energieSansLabel: 'label', energieSousTraitance: 'sousTraitance',
+      energieSousTraitants: 'sousTraitance' })
+    && egal([...D.RUBRIQUES_DE_L_ENERGIE], ['travaux', 'label', 'sousTraitance'])
+    && !/energie/i.test(json(Object.entries(D).filter(([k]) => /PAIRES?/.test(k)).map(([, x]) => x))));
+
+  /* j. LES TEXTES DE LA CARTE ET DES AMENDES, MOT POUR MOT (annexes A.3, P14,
+        DROIT-23), et LE VOCABULAIRE (T10, CTL-6) : sur les CONSTANTES des
+        textes de 2b-6 — la carte, les amendes, les trois phrases du rang 14,
+        l'avis, les libellés, exemples et aides des dix-neuf travaux, les
+        états d'un signe et d'un sous-traitant de « Mon entreprise », la
+        phrase d'un SIRET faux — jamais « certifié » (mot entier : la pièce
+        s'appelle un certificat), jamais la racine « agré », jamais
+        « vérifié », jamais « garanti » (mot entier), jamais « Reconnu garant
+        de l'environnement ». La frontière de mot est posée À LA MAIN : `\b`
+        ne voit pas une lettre accentuée (CLAUDE.md, lot 0a). */
+  const AMENDE_ATTENDUE = `Pour un client qui commande à titre privé, sans ces informations, le contrat est nul, et votre entreprise `
+    + `s’expose à une amende administrative pouvant aller jusqu’à 15${NB}000${NB}€, 75${NB}000${NB}€ pour une société.`;
+  const plats = (x) => (typeof x === 'string' ? [x] : x && typeof x === 'object' ? Object.values(x).flatMap(plats) : []);
+  const ETATS_EM = [
+    E.libelleEtatDuLabel(L('a', ['fenetres'], '2999-01-01'), '2026-11-24'),
+    E.libelleEtatDuLabel(L('a', ['fenetres'], '2999-01-01', null), '2026-11-24'),
+    E.libelleEtatDuLabel(L('a', ['fenetres'], '2001-01-01'), '2026-11-24'),
+    ...[{ label_detient: false }, { label_detient: true, label_valide_jusquau: '2999-01-01', label_justificatif_chemin: 'p/x.pdf' },
+      { label_detient: true, label_valide_jusquau: '2999-01-01' }, { label_detient: true, label_valide_jusquau: '2001-01-01' },
+      { label_detient: null }].map((s) => E.libelleEtatDuSousTraitant(ST('x', s), '2026-11-24')),
+  ];
+  const textes46 = [
+    ...plats(D.LE_LABEL), D.AMENDE_DU_LABEL, D.AMENDE_DE_LA_SOUS_TRAITANCE,
+    ...Object.values(PHRASES_14).map(([, , p]) => p), D.AVIS_DU_DEVIS.avis_label_echeance,
+    ...T.flatMap((t) => [t.libelle, t.exemples, t.aide].filter(Boolean)), ...ETATS_EM, E.MESSAGE_SIRET_FAUX,
+    ...CLES_19.map((c) => E.libelleDuTravail(c)),
+  ];
+  const lettre = '[\\p{L}_]';
+  const interdits = [
+    new RegExp(`(?<!${lettre})certifi(?:é|ée|és|ées|er)(?!${lettre})`, 'iu'), /agr[ée]/iu,
+    new RegExp(`(?<!${lettre})v[ée]rifi[ée]e?s?(?!${lettre})`, 'iu'), new RegExp(`(?<!${lettre})garanti(?!${lettre})`, 'iu'),
+    /reconnu garant de l.environnement/iu,
+  ];
+  const fautifs46 = textes46.filter((t) => interdits.some((re) => re.test(t)));
+  verifier('j. les amendes MOT POUR MOT — celle du label (L. 242-51 et l’amende administrative, P14 : « Les deux »), espaces INSÉCABLES '
+    + 'entre les chiffres et devant « € » ; celle de la sous-traitance SANS amende (DROIT-23) — et sur les '
+    + `${textes46.length} textes de 2b-6, jamais « certifié », « agréé », « vérifié », « garanti », ni « Reconnu garant de `
+    + 'l’environnement » (T10, CTL-6 ; la frontière de mot écrite pour les lettres accentuées)',
+  D.AMENDE_DU_LABEL === AMENDE_ATTENDUE && D.LE_LABEL.amende === D.AMENDE_DU_LABEL
+    && D.AMENDE_DE_LA_SOUS_TRAITANCE === 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.'
+    && !/€|amende/.test(D.AMENDE_DE_LA_SOUS_TRAITANCE) && !/€|amende/.test(D.LE_LABEL.sousTraitance.aide)
+    && textes46.length > 60 && textes46.every((t) => typeof t === 'string' && t.length > 0) && fautifs46.length === 0
+    && interdits[0].test('certifié') && !interdits[0].test('certificat') && interdits[1].test('agréé') && interdits[2].test('vérifié')
+    && interdits[3].test('label garanti') && !interdits[3].test('garantie décennale') && !interdits[2].test('vérifiable'),
+  fautifs46.join(' | ') || `${textes46.length} textes`);
+  /* …ET SES INSÉCABLES SONT ÉCRITES `\u00a0` dans le source de la constante
+        — un caractère invisible collé ne se relit pas (CLAUDE.md, lot 1). */
+  const sourceAmende = (/export const AMENDE_DU_LABEL = [\s\S]*?;\n/.exec(lire('src/lib/devis.js')) || [''])[0];
+  verifier('…et les QUATRE insécables de l’amende du label sont écrites `\\u00a0` dans le source de la constante, aucune collée en '
+    + 'caractère invisible',
+  (sourceAmende.match(/\\u00a0/g) || []).length === 4 && !/[\u00a0\u202f]/.test(sourceAmende), sourceAmende.slice(0, 120));
+
+  /* k. LA GARDE DU BADGE, CÔTÉ JAVASCRIPT (CTL-5, S43) : le badge public
+        « RGE » de la fiche (`rge`, `rgeDeclare`, `rgeExpire`, `rgePath`,
+        `rgeNumero`, et leurs colonnes `rge_*`) n'est lu NULLE PART dans ce
+        que 2b-6 écrit — ni `travaux-energie.js`, ni les fonctions qui jugent
+        un travail ou un sous-traitant, ni les six écritures d'`api.js` ; ni
+        `submitDocuments`, ni `envoyerDocuments` (les portes du badge) ; et
+        l'envoi d'un certificat porte un nom qui n'est pas « rge ». La carte
+        et les deux formulaires (`EnergieDevis.js`, `FicheLabel.js`,
+        `FicheSousTraitant.js`) le sont aussi, dès qu'ils existent. */
+  const BADGE = /\brge(?:Declare|Expire|Path|Numero|_declare|_expire|_url|_numero)?\b|\bsubmitDocuments\b|\benvoyerDocuments\b/;
+  const corpsJuges = [
+    ...['etatsDesTravaux', 'rubriquesDeLEnergie', 'motifDeLEnergie', 'etatInitialEnergie', 'sousTraitantComplet', 'finDuLabel',
+      'resumeDeLEnergie', 'rubriqueDeLEnergieDuPoint', 'lireEnergie'].map((n) => [`devis.js:${n}`, corpsDeFonction(srcDevis46, n)]),
+    ...['etatDuLabel', 'etatDuSousTraitant', 'validerLabel', 'nettoyerLabel', 'validerSousTraitant', 'nettoyerSousTraitant']
+      .map((n) => [`emetteur.js:${n}`, corpsDeFonction(srcEm46, n)]),
+    ...['enregistrerLabel', 'retirerLabel', 'enregistrerSousTraitant', 'retirerSousTraitant', 'envoyerCertificat', 'envoyerJustificatif']
+      .flatMap((n) => [`${n}Supabase`, `${n}Demo`]).map((n) => [`api.js:${n}`, corpsDeFonction(srcApi46, n)]),
+    ['travaux-energie.js', srcTe46],
+    /* …et, au-delà des fonctions nommées, les DEUX FICHIERS ENTIERS (hors
+       commentaires) : une aide nouvelle qui lirait le badge (`travauxCoches`,
+       une constante d'une ligne) échapperait à une liste de noms — le banc
+       l'a montré (S16). Aucune ligne de `devis.js` ni d'`emetteur.js` ne lit
+       le badge aujourd'hui : la propriété vaut pour tout le fichier. */
+    ['devis.js (tout le fichier)', srcDevis46],
+    ['emetteur.js (tout le fichier)', srcEm46],
+    ...['src/components/EnergieDevis.js', 'src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js']
+      .filter((f) => lireSiExiste(f)).map((f) => [f, sansCommentairesJs(lireSiExiste(f))]),
+  ];
+  const introuvables = corpsJuges.filter(([, c]) => !c).map(([n]) => n);
+  const badge46 = corpsJuges.filter(([, c]) => c && BADGE.test(c)).map(([n]) => n);
+  const nomsEnvoi = [...srcApi46.matchAll(/nom:\s*'([^']+)'/g)].map((m) => m[1]);
+  verifier(`k. la garde du badge, côté JavaScript (CTL-5) : aucun des ${corpsJuges.length} corps de 2b-6 (les juges du rang 14, `
+    + 'ceux de « Mon entreprise », les douze écritures d’`api.js`, `travaux-energie.js`, `devis.js` et `emetteur.js` ENTIERS, et la carte '
+    + 'et les formulaires présents) ne '
+    + 'nomme `rge`, `rgeDeclare`, `rgeExpire`, `rgePath`, `rgeNumero` (ni leurs colonnes), `submitDocuments` ni `envoyerDocuments` ; '
+    + 'les envois s’appellent « certificat-signe-qualite » et « justificatif-sous-traitant », jamais « rge »',
+  introuvables.length === 0 && badge46.length === 0 && nomsEnvoi.includes('certificat-signe-qualite')
+    && nomsEnvoi.includes('justificatif-sous-traitant') && !nomsEnvoi.some((x) => /rge/i.test(x))
+    && BADGE.test('d.rgeDeclare') && BADGE.test('pro.rge') && !BADGE.test('label RGE'),
+  `introuvables : ${introuvables.join(', ') || '—'} ; nomment le badge : ${badge46.join(', ') || '—'} ; envois ${json(nomsEnvoi)}`);
+
+  /* l. LA GARDE TVA (T9, §2.6) — le label et les travaux d'énergie ne
+        changent JAMAIS un taux de TVA : la qualification n'est une condition
+        ni du 10 % ni du 5,5 %.
+          1. le corps du rang 14 et de sa lecture ne nomment ni `devis_tva`,
+             ni `taux_tva_centiemes`, ni `regime_tva` ; la lecture des lignes
+             (le rang 3) ne nomme aucune colonne `energie_` ;
+          2. `recalcule_devis()` et `tient_la_ligne_de_devis()` ne nomment
+             aucune colonne `energie_`, ni les deux tables nouvelles ;
+          3. CTL-17 : `tauxProposes(etatRegime)` et `cleDuTauxDeLaLigne(l,
+             regime, chantierNeufTva = null)` gardent leur SIGNATURE exacte,
+             leurs corps ne nomment pas l'énergie, et leurs appelants ne leur
+             passent ni le devis ni un champ `energie…` (S11). */
+  const iLecture = corps46.indexOf("if (v_valable is null or v_valable in ('consommateur', 'non_professionnel')) and v_energie is not null");
+  const iFinLecture = corps46.indexOf('ligne_id := null; if v_client is null');
+  const iRang14 = corps46.indexOf("if v_valable is null or v_valable in ('consommateur', 'non_professionnel') then if v_energie is null then rang := 14");
+  const iEntreprise = corps46.indexOf('for v_motif, v_position in');
+  const lecture14 = iLecture > 0 && iFinLecture > iLecture ? corps46.slice(iLecture, iFinLecture) : '';
+  const bloc14 = iRang14 > 0 && iEntreprise > iRang14 ? corps46.slice(iRang14, iEntreprise) : '';
+  const iLignes = corps46.indexOf('from public.devis_lignes l where l.devis_id = p_devis');
+  const lectureLignes = iLignes > 0 ? corps46.slice(corps46.lastIndexOf('select coalesce(bool_or', iLignes), iLignes) : '';
+  const TVA = /devis_tva|taux_tva_centiemes|regime_tva/;
+  const ENERGIE_SQL = /energie_|emetteur_labels|emetteur_sous_traitants/;
+  const corpsRecalc = corpsFn('recalcule_devis');
+  const corpsLigne = corpsFn('tient_la_ligne_de_devis');
+  verifier('l. la garde TVA, côté BASE (§2.6, S10) : la lecture des signes et des sous-traitants (3 quater) et le bloc du rang 14 ne '
+    + 'nomment ni `devis_tva`, ni `taux_tva_centiemes`, ni `regime_tva` ; la lecture des lignes (le rang 3) ne nomme aucune colonne '
+    + '`energie_` ; `recalcule_devis()` et `tient_la_ligne_de_devis()` ne nomment ni l’énergie ni les deux tables nouvelles — ni '
+    + '`professional_profiles` (le badge) au rang 14',
+  lecture14.length > 300 && bloc14.length > 300 && lectureLignes.length > 200 && !TVA.test(lecture14) && !TVA.test(bloc14)
+    && !ENERGIE_SQL.test(lectureLignes) && corpsRecalc.length > 200 && corpsLigne.length > 200
+    && !ENERGIE_SQL.test(corpsRecalc) && !ENERGIE_SQL.test(corpsLigne)
+    && !/professional_profiles|\brge\b/.test(lecture14 + bloc14),
+  `lecture ${lecture14.length} ; bloc ${bloc14.length} ; lignes ${lectureLignes.length} ; recalcul ${corpsRecalc.length} ; ligne ${corpsLigne.length}`);
+  const corpsTaux = corpsDeFonction(srcDevis46, 'tauxProposes') || '';
+  const corpsCle = corpsDeFonction(srcDevis46, 'cleDuTauxDeLaLigne') || '';
+  const appelsTaux = [];
+  for (const f of fichiers46) {
+    const src = sansCommentairesJs(lireSiExiste(f) || '');
+    for (const nom of ['tauxProposes', 'cleDuTauxDeLaLigne']) {
+      for (const m of src.matchAll(new RegExp(`(?<!function )\\b${nom}\\s*\\(([^)]*)\\)`, 'g'))) appelsTaux.push(`${f}:${nom}(${sansEspaces(m[1])})`);
+    }
+  }
+  const appelsFauxTaux = appelsTaux.filter((a) => /energie|\(d\)|\bdevis\b|, d\)|\(d,/.test(a.split(':').slice(1).join(':')));
+  verifier('…et côté JAVASCRIPT, par les SIGNATURES (CTL-17, S11) : `tauxProposes(etatRegime)` et `cleDuTauxDeLaLigne(l, regime, '
+    + 'chantierNeufTva = null)` gardent la leur, leurs corps ne nomment pas l’énergie, et aucun appelant de `src/` ne leur passe le '
+    + 'devis ni un champ `energie…`',
+  /export function tauxProposes\(etatRegime\) \{/.test(srcDevis46)
+    && /export function cleDuTauxDeLaLigne\(l, regime, chantierNeufTva = null\) \{/.test(srcDevis46)
+    && corpsTaux.length > 20 && corpsCle.length > 20 && !/energie|label|sousTrait/i.test(corpsTaux + corpsCle)
+    && appelsTaux.length >= 2 && appelsFauxTaux.length === 0,
+  `${json(appelsTaux)} ; fautifs ${json(appelsFauxTaux)}`);
+
+  /* m. CE QUE L'APPLICATION ENVOIE ET RELIT (§3.5) : `devisVersBase` pose
+        les quatre colonnes TELLES QUE LA CARTE LES TIENT (aucune
+        normalisation : un `[]` partirait, et la base le REFUSERAIT — un
+        défaut visible, jamais un silence) ; `monEmetteurSupabase` lit UNE
+        fois chacune des deux tables nouvelles, et une table ABSENTE rend
+        `null` (« non lue »), jamais `[]` (« aucun ») ; « Mon entreprise »
+        (`monRegimeEtSaDate`) les rend à la saisie, des deux côtés. */
+  const corpsVers = corpsDeFonction(srcApi46, 'devisVersBase') || '';
+  const corpsMon = corpsDeFonction(srcApi46, 'monEmetteurSupabase') || '';
+  const lectures = (t) => (corpsMon.match(new RegExp(`from\\(\\s*'${t}'\\s*\\)`, 'g')) || []).length;
+  const regimeS = corpsDeFonction(srcApi46, 'monRegimeEtSaDateSupabase') || '';
+  const regimeD = corpsDeFonction(srcApi46, 'monRegimeEtSaDateDemo') || '';
+  verifier('m. `api.js` : `devisVersBase` pose les quatre colonnes de l’énergie sans normaliser une liste ; `monEmetteurSupabase` lit '
+    + 'UNE fois `emetteur_labels` et `emetteur_sous_traitants`, et une table absente rend `null`, jamais `[]` ; `monRegimeEtSaDate` les '
+    + 'rend à la saisie, en démonstration comme sur la vraie base',
+  ['energie_travaux', 'energie_sans_label', 'energie_sous_traitance', 'energie_sous_traitants'].every((c) => corpsVers.includes(c))
+    && !/energie[^;]*\.length\s*\?|energie[^;]*\|\|\s*null/.test(corpsVers)
+    && lectures('emetteur_labels') === 1 && lectures('emetteur_sous_traitants') === 1
+    && /labels:\s*q\.error\s*\?\s*null\s*:\s*\(q\.data \|\| \[\]\)/.test(corpsMon)
+    && /sousTraitants:\s*st\.error\s*\?\s*null\s*:\s*\(st\.data \|\| \[\]\)/.test(corpsMon)
+    && /if \(q\.error && !tableAbsente\(q\.error\)\) throw q\.error;/.test(corpsMon)
+    && /if \(st\.error && !tableAbsente\(st\.error\)\) throw st\.error;/.test(corpsMon)
+    && /labels/.test(regimeS) && /sousTraitants/.test(regimeS) && /labels/.test(regimeD) && /sousTraitants/.test(regimeD),
+  `${corpsMon.slice(0, 160)}`);
+  /* …ET LA DÉMONSTRATION REFUSE CE QUE LA BASE REFUSE, sous le NOM de la
+        contrainte, pour les deux écritures nouvelles de « Mon entreprise »
+        (la règle de la base de démonstration des devis, section 45 p.) :
+        `validerLabel` et `validerSousTraitant`, FAITS TOURNER. */
+  const VL = (l) => E.validerLabel(E.nettoyerLabel({ pro_id: 'p', organisme: 'Organisme', intitule: 'Signe', categories: ['fenetres'],
+    valide_jusquau: '2999-01-01', justificatif_chemin: 'p/a.pdf', ...l }), 'p');
+  const VS = (s, o) => E.validerSousTraitant(E.nettoyerSousTraitant({ pro_id: 'p', raison_sociale: 'Sous-traitant', siret: '00004910600016',
+    label_detient: false, ...s }), 'p', o);
+  const nomDe = (r) => (r && r.contrainte) || (r && r.ok === false ? 'refus' : r ? 'ok' : 'ok');
+  const verdicts46 = {
+    labelBon: nomDe(VL({})), labelCategoriesVides: nomDe(VL({ categories: [] })), labelCleInconnue: nomDe(VL({ categories: ['aucun'] })),
+    labelSansOrganisme: nomDe(VL({ organisme: '  ' })), labelCheminAilleurs: nomDe(VL({ justificatif_chemin: 'q/a.pdf' })),
+    stBon: nomDe(VS({})), stSiretCourt: nomDe(VS({ siret: '123' })), stLabelSansDate: nomDe(VS({ label_detient: true,
+      label_categories: ['fenetres'] })),
+  };
+  verifier('…`validerLabel` et `validerSousTraitant` (emetteur.js), FAITS TOURNER, refusent sous le NOM de la contrainte de la base : des '
+    + 'catégories vides ou inconnues (`aucun` n’en est pas une), un organisme de blancs, un justificatif rangé hors de son dossier, '
+    + 'un SIRET court, un « Oui » au label sans date — et acceptent une ligne valable',
+  verdicts46.labelBon === 'ok' && verdicts46.labelCategoriesVides === 'emetteur_label_categories_check'
+    && verdicts46.labelCleInconnue === 'emetteur_label_categories_check' && verdicts46.labelSansOrganisme === 'emetteur_label_complet_check'
+    && verdicts46.labelCheminAilleurs === 'emetteur_label_chemin_check' && verdicts46.stBon === 'ok'
+    && verdicts46.stSiretCourt === 'emetteur_sous_traitant_siret_check'
+    && verdicts46.stLabelSansDate === 'emetteur_sous_traitant_complet_check',
+  json(verdicts46));
+}
+
+console.log('');
+console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RGE », sa rangée, son point, et la démonstration');
+{
+  /* POURQUOI CETTE SECTION (cahier 2b-6, §3.7 à §3.9, §5.2 bis) : la section
+     46 fait TOURNER ce que 2b-6 décide (`devis.js`) ; ici, l'ÉCRAN s'y
+     BRANCHE, et sous la forme qui tient les règles — la carte
+     `EnergieDevis.js` est HORS d'`ECRANS_DEVIS`, comme « Déchets » : elle a
+     ses vérifications à elle, sur le modèle de la section 45. La saisie et la
+     démonstration aussi. Chaque vérification lit le code SANS ses
+     commentaires : une explication qui cite la faute ne la commet pas. */
+  const egal = (a, b) => json(a) === json(b);
+  const CEdb = sansCommentairesJs(lireSiExiste('src/components/EnergieDevis.js') || '');
+  const CEd = sansEspaces(CEdb);
+  const SAe = ECR.saisie;
+  const SAee = sansEspaces(SAe);
+  const corpsAppuiE = (nom) => sansEspaces(corpsFleche(CEdb, `const ${nom} = `) || '');
+
+  /* a. LA VOIE UNIQUE (le modèle de la section 45 a) : l'état de départ vient
+        de `etatInitialEnergie(devis)` — le DEVIS seul, aucun texte gardé (la
+        carte n'a aucun champ tapé) ; le choix ne s'écrit QUE par `poser` ;
+        `lire` / `enregistrer` exposés par `forwardRef`. */
+  verifier('a. `EnergieDevis.js` existe, `forwardRef`, expose `lire` et `enregistrer`, et part de `etatInitialEnergie(devis)` : le choix '
+    + 'ne s’écrit QUE par `poser` (une seule affectation de `choix.current`, aucune de `initial.x` ou `choix.current.x`, aucun '
+    + '`Object.assign` sur eux), `choisir` = `poser` puis `enregistrer`, et la carte se lit par `lireEnergie`',
+  CEdb.length > 2000 && /const EnergieDevis = forwardRef\(function EnergieDevis\(/.test(CEdb)
+    && /useImperativeHandle\(ref, \(\) => \(\{ lire, enregistrer \}\)\)/.test(CEdb)
+    && CEd.includes('const [initial] = useState(() => etatInitialEnergie(devis)); const choix = useRef(initial);')
+    && CEd.includes('const [c, setC] = useState(initial);')
+    && CEd.includes('const poser = (x) => { choix.current = { ...choix.current, ...x }; setC(choix.current); };')
+    && CEd.includes('const choisir = (x, geste) => { poser(x); enregistrer(geste); };')
+    && (CEd.match(/choix\.current = /g) || []).length === 1
+    && !/\b(?:initial|choix\.current)(?:\.\w+|\[[^\]]+\])\s*=(?!=)/.test(CEdb)
+    && !/Object\.assign\(\s*(?:initial|choix\.current)\b/.test(CEdb)
+    && CEd.includes('const lire = () => lireEnergie({ choix: choix.current, devis });')
+    && CEd.includes('if (onEnregistrer) onEnregistrer(l.changements, l.erreurs, { ...l.textes, choix: choix.current }, geste);'),
+  CEd.slice(CEd.indexOf('const [initial]'), CEd.indexOf('const [initial]') + 160) || 'EnergieDevis.js introuvable');
+
+  /* b. `poser(` HORS D'UN APPUI REFUSÉ (S23) : `poser(` n'est appelé que par
+        `choisir`, et `choisir(` que par les cinq gestionnaires d'appui
+        NOMMÉS ; la carte n'a AUCUN `useEffect` ; aucun tableau changé EN
+        PLACE : les tableaux posés sont NEUFS (les fonctions d'appui de
+        `devis.js` les fabriquent). */
+  const APPUIS_E = ['toucherTravail', 'toucherAucun', 'toucherDeclaration', 'repondreSousTraitance', 'toucherSousTraitant'];
+  const appelsChoisirE = (CEd.match(/\bchoisir\(/g) || []).length;
+  const dansLesAppuisE = APPUIS_E.reduce((n, nom) => n + (corpsAppuiE(nom).match(/\bchoisir\(/g) || []).length, 0);
+  const posersE = [...CEd.matchAll(/\bposer\(/g)].map((m) => CEd.slice(Math.max(0, m.index - 40), m.index));
+  verifier('b. `poser(` n’est appelé QUE par `choisir`, et `choisir(` QUE par les cinq gestionnaires d’appui nommés (un travail, « Aucun '
+    + 'de ces travaux », la déclaration d’un travail, la question de la sous-traitance, un sous-traitant) ; la carte n’a AUCUN `useEffect` ; '
+    + 'aucun tableau changé en place (`push`, `splice`, `pop`, `shift`, `unshift`, `sort`, `reverse`, `fill`)',
+  APPUIS_E.every((nom) => corpsAppuiE(nom).length > 10) && posersE.length === 1 && /const choisir = \(x, geste\) => \{ $/.test(posersE[0])
+    && appelsChoisirE === dansLesAppuisE && dansLesAppuisE === APPUIS_E.length
+    && !/\buseEffect\b/.test(CEdb) && !/\.(?:push|splice|pop|shift|unshift|sort|reverse|fill|copyWithin)\(/.test(CEdb),
+  `${posersE.length} poser( ; choisir( ${appelsChoisirE} dont ${dansLesAppuisE} dans les appuis`);
+
+  /* c. CE QUE FONT LES APPUIS, mot pour mot : un travail, la pastille, la
+        déclaration et un sous-traitant passent par LEUR fonction de
+        `devis.js`, sur le choix du MOMENT (`choix.current`) ; « Aucun de ces
+        travaux » s'ANNONCE quand elle retire des cases (`annonceDesTravaux`),
+        les cases jamais ; la question ne réécrit pas une réponse déjà
+        donnée ; un sous-traitant se rebâtit depuis la liste VIVANTE (la prop
+        `sousTraitants`), et un de TROP n'écrit rien : la phrase s'annonce et
+        la carte vibre ; les deux portes ENREGISTRENT la carte d'abord. */
+  verifier('c. les appuis, ENTIERS : un travail par `travauxApresAppui`, « Aucun de ces travaux » qui s’ANNONCE (`annonceDesTravaux`), la '
+    + 'déclaration par `sansLabelApresAppui`, la question qui ne réécrit pas ce qui est choisi, un sous-traitant par '
+    + '`sousTraitantsApresAppui` sur la liste VIVANTE — un de TROP n’écrit rien, s’annonce et vibre ; les deux portes enregistrent d’abord',
+  corpsAppuiE('toucherTravail') === "=> { choisir({ travaux: travauxApresAppui(choix.current.travaux, cle) }, 'travaux'); }"
+    && corpsAppuiE('toucherAucun') === '=> { const avant = choix.current.travaux; const apres = travauxApresAppui(avant, ENERGIE_AUCUN); '
+      + "choisir({ travaux: apres }, 'travaux'); const dire = annonceDesTravaux(avant, apres); if (dire) retour.annoncer(dire); }"
+    && corpsAppuiE('toucherDeclaration') === "=> { choisir({ sansLabel: sansLabelApresAppui(choix.current.sansLabel, cle) }, 'sansLabel'); }"
+    && corpsAppuiE('repondreSousTraitance') === '=> { if (choix.current.sousTraitance === valeur) return; setPlafond(false); '
+      + "choisir({ sousTraitance: valeur }, 'sousTraitance'); }"
+    && corpsAppuiE('toucherSousTraitant') === '=> { const apres = sousTraitantsApresAppui(choix.current.sousTraitants, sousTraitants, id); '
+      + 'if (apres.plafond) { setPlafond(true); retour.echec(); retour.annoncer(LE_LABEL.sousTraitance.plafond); return; } '
+      + "setPlafond(false); choisir({ sousTraitants: apres.sousTraitants }, 'sousTraitants'); }"
+    && corpsAppuiE('allerAMesSignes') === "=> { enregistrer('fermer'); if (onMesSignes) onMesSignes(); }"
+    && corpsAppuiE('allerAMesSousTraitants') === "=> { enregistrer('fermer'); if (onMesSousTraitants) onMesSousTraitants(); }"
+    && (CEd.match(/retour\.annoncer\(/g) || []).length === 2
+    && (CEd.match(/setPlafond\(true\)/g) || []).length === 1 && (CEd.match(/setPlafond\(false\)/g) || []).length === 2,
+  corpsAppuiE('toucherSousTraitant').slice(0, 160));
+
+  /* d. L'ORDRE DES BLOCS (§3.8) et l'ancre de chaque rubrique, sur un titre
+        ENFANT DIRECT du contenu défilant (seuls des fragments au-dessus) ;
+        « AUCUN DE CES TRAVAUX » EN TÊTE (ÉCRAN-3) : la pastille et ses
+        phrases JUSTE sous la question, AVANT les dix-neuf cases ; puis le
+        label, puis la sous-traitance, puis l'aide de la loi et les deux
+        amendes. Chaque ancre, une fois ; le défilement ne se pose qu'une
+        fois, sur `rubriqueInitiale`. */
+  const ANCRES_E = ['travaux', 'label', 'sousTraitance'];
+  const positionsE = ANCRES_E.map((k) => CEdb.indexOf(`onLayout={ancre('${k}')}`));
+  const videE = (t) => t.replace(/`(?:[^`\\]|\\.)*`/g, (x) => '`' + ' '.repeat(x.length - 2) + '`')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, (x) => "'" + ' '.repeat(x.length - 2) + "'")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, (x) => '"' + ' '.repeat(x.length - 2) + '"');
+  const platE = videE(CEdb);
+  const iScrollE = platE.indexOf('<ScrollView');
+  const finScrollE = iScrollE >= 0 ? iScrollE + baliseOuvrante(platE, iScrollE).length : -1;
+  const pileAvantE = (fin) => {
+    const pile = [];
+    for (let i = finScrollE; i >= 0 && i < fin; i += 1) {
+      if (platE[i] !== '<') continue;
+      const suite = platE[i + 1];
+      if (suite === '/') {
+        const f = platE.indexOf('>', i);
+        const nom = platE.slice(i + 2, f).trim();
+        const k = pile.lastIndexOf(nom);
+        if (k >= 0) pile.splice(k);
+        i = f;
+      } else if (suite === '>' || /[A-Za-z]/.test(suite || '')) {
+        const b = baliseOuvrante(platE, i);
+        const nom = suite === '>' ? '' : (/^<([A-Za-z.]+)/.exec(b) || ['', ''])[1];
+        if (!/\/>$/.test(b)) pile.push(nom);
+        i += b.length - 1;
+      }
+    }
+    return pile;
+  };
+  const pilesE = positionsE.map((i) => (i >= 0 ? pileAvantE(CEdb.lastIndexOf('<Text', i)) : null));
+  const iQuestion = CEd.indexOf('{LE_LABEL.travaux.question}');
+  const iAucun = CEd.indexOf('<Pastille label={LE_LABEL.travaux.aucun} choisie={aucun} onPress={toucherAucun} />');
+  const iSousAucun = CEd.indexOf('{LE_LABEL.travaux.sousAucun}');
+  const iSousAucunST = CEd.indexOf('{LE_LABEL.travaux.sousAucunSousTraitance}');
+  const iCases = CEd.indexOf('{TRAVAUX_ENERGIE.map((t) => (');
+  const iAmendeE = CEd.indexOf('{LE_LABEL.amende}');
+  const iAmendeST = CEd.indexOf('{LE_LABEL.amendeSousTraitance}');
+  verifier('d. les blocs dans l’ordre du cahier (§3.8) — la question, « Aucun de ces travaux » et ses deux phrases AVANT les dix-neuf '
+    + 'cases (ÉCRAN-3), le label, la sous-traitance, l’aide et les deux amendes — chaque rubrique ANCRÉE une fois, sur un titre enfant '
+    + 'DIRECT du contenu défilant ; le défilement ne se pose qu’une fois, sur `rubriqueInitiale`',
+  positionsE.every((i, k) => i > 0 && (k === 0 || i > positionsE[k - 1]))
+    && ANCRES_E.every((k) => (CEdb.match(new RegExp(`ancre\\('${k}'\\)`, 'g')) || []).length === 1)
+    && pilesE.every((p) => Array.isArray(p) && p.every((n) => n === ''))
+    && iQuestion > 0 && iAucun > iQuestion && iSousAucun > iAucun && iSousAucunST > iSousAucun && iCases > iSousAucunST
+    && CEd.indexOf("onLayout={ancre('label')}") > iCases
+    && iAmendeE > CEd.indexOf("onLayout={ancre('sousTraitance')}") && iAmendeST > iAmendeE
+    && CEd.includes('if (place.current || cle !== rubriqueInitiale || !refDefile.current) return; place.current = true;')
+    && /<ScrollView ref=\{refDefile\} \{\.\.\.CLAVIER\} keyboardDismissMode="on-drag"/.test(CEd)
+    && (CEd.match(/<ScrollView\b/g) || []).length === 1,
+  json({ positionsE, pilesE, iQuestion, iAucun, iCases, iAmendeE }));
+
+  /* e. POUR QUI LA LOI PARLE (§3.8, 1) : l'introduction suit la réponse « à
+        quel titre » VALABLE de l'écran (`introductionDeLEnergie`) ; pour un
+        client « entreprise », rien d'autre ne s'affiche (`{concerne && (`,
+        une fois, avant la question) — et rien n'est effacé : aucun appui ne
+        part sans le doigt. Le label et la sous-traitance ne s'affichent que
+        quand un travail est coché. */
+  verifier('e. pour qui : l’introduction par `introductionDeLEnergie(pourQuiValable(devis))` ; pour un client « entreprise », la seule '
+    + 'phrase (`{concerne && (`, une fois, avant la question) ; le label et la sous-traitance sous `{coches.length > 0 && (`, une fois',
+  CEd.includes('const valable = pourQuiValable(devis); const concerne = energieConcerne(valable); const intro = introductionDeLEnergie(valable);')
+    && CEd.includes('{intro.map((p) => <Text key={p} style={s.aide}>{p}</Text>)}')
+    && (CEd.match(/\{concerne && \(/g) || []).length === 1 && CEd.indexOf('{concerne && (') < iQuestion
+    && CEd.indexOf('{intro.map(') < CEd.indexOf('{concerne && (')
+    && (CEd.match(/\{coches\.length > 0 && \(/g) || []).length === 1
+    && CEd.indexOf('{coches.length > 0 && (') > iCases && CEd.indexOf('{coches.length > 0 && (') < CEd.indexOf("onLayout={ancre('label')}"),
+  CEd.slice(CEd.indexOf('const valable'), CEd.indexOf('const valable') + 160));
+
+  /* f. LES CASES SONT DES `Interrupteur` TELS QUELS : les dix-neuf travaux
+        (avec leurs exemples, ou la consigne du 17°, en aide), la déclaration
+        sous un travail, un par sous-traitant LU (son SIRET formaté puis son
+        état, en aide — ÉCRAN-11 : deux homonymes ne se confondent plus) ;
+        aucun `CaseACocher`, aucun rôle `checkbox`. */
+  const balIntE = balises(CEdb, 'Interrupteur').map(sansEspaces);
+  verifier('f. trois `Interrupteur` tels quels (les travaux de `TRAVAUX_ENERGIE`, leurs exemples ou la consigne du 17° en aide ; la '
+    + 'déclaration sous un travail ; les sous-traitants LUS, le SIRET formaté puis l’état en aide) — aucun `CaseACocher`, aucun rôle '
+    + '`checkbox`',
+  balIntE.length === 3 && !/CaseACocher|checkbox/.test(CEdb)
+    && balIntE[0].includes('actif={travaux.includes(t.cle)}') && balIntE[0].includes('libelle={t.libelle}')
+    && balIntE[0].includes('aide={t.exemples || t.aide || undefined}') && balIntE[0].includes('onPress={() => toucherTravail(t.cle)}')
+    && balIntE[1].includes('actif={declaree}') && balIntE[1].includes('libelle={L.declaration}') && balIntE[1].includes('aide={L.aideDeclaration}')
+    && balIntE[1].includes('onPress={() => toucherDeclaration(cle)}')
+    && balIntE[2].includes('actif={choisis.includes(st.id)}') && balIntE[2].includes('onPress={() => toucherSousTraitant(st.id)}')
+    && balIntE[2].includes("aide={[siretDuSousTraitant(st), libelleEtatDuSousTraitant(st)].filter(Boolean).join(' · ')}"),
+  json(balIntE.map((b) => b.slice(0, 90))));
+
+  /* g. L'ÉTAT D'UN TRAVAIL, ÉCRIT UNE FOIS (S26, ÉCRAN-10) : la carte appelle
+        `etatsDesTravaux` UNE fois, sur ses propres choix, et n'écrit aucun
+        des quatre états en toutes lettres ; la phrase vient de
+        `phraseDuTravail`, la case de `declarationMontree` — et elle n'est
+        montée que sous `{montree && (` : un travail couvert par un signe de
+        qualité ne porte pas « Je ne détiens pas… » (banc, X6) ; sur une liste de
+        signes de qualité NON LUE, un travail sans case cochée ne se montre
+        pas (ni phrase, ni case) — une case cochée, si. */
+  verifier('g. l’état d’un travail : `etatsDesTravaux` UNE fois, sur les choix de la carte ; aucun des quatre états écrit dans la carte ; '
+    + 'la phrase par `phraseDuTravail`, la case par `declarationMontree` ; sur une liste non lue, rien qu’une case déjà cochée',
+  (CEd.match(/etatsDesTravaux\(/g) || []).length === 1
+    && CEd.includes('const etats = etatsDesTravaux({ ...devis, energieTravaux: c.travaux }, labels);')
+    && CEd.includes('const coches = travauxCoches({ energieTravaux: c.travaux });')
+    && !/'(?:couvert|sans_certificat|expire|absent)'/.test(CEdb)
+    && (CEd.match(/phraseDuTravail\(/g) || []).length === 1 && (CEd.match(/declarationMontree\(/g) || []).length === 1
+    && CEd.includes('const e = etats ? etats.find((x) => x.cle === cle) || null : null;')
+    && CEd.includes('const montree = declarationMontree({ etat: e ? e.etat : null, declaree });')
+    && CEd.includes('if (!e && !montree) return null;')
+    && CEd.includes('{!!e && <Text style={s.aide}>{phraseDuTravail(e)}</Text>}')
+    && CEd.includes('const declaree = declares.includes(cle);')
+    && (CEd.match(/montree && /g) || []).length === 1 && /\{montree && \(\s*<Interrupteur\s+actif=\{declaree\}/.test(CEd),
+  CEd.slice(CEd.indexOf('const etats'), CEd.indexOf('const etats') + 120));
+
+  /* h. LES QUATRE ÉTATS DES DEUX LISTES (`etatDesLieux`, la règle des lieux
+        de 2b-5) : chacune UNE fois ; en échec, la phrase et « Réessayer »
+        (la lecture du régime) ; vide, la phrase (et, pour les
+        sous-traitants, « Ajouter un sous-traitant ») ; lue, les cases ; en
+        lecture, RIEN (aucun `'lecture'` dans la carte). Les listes ne sont
+        jamais recopiées dans l'état, et n'ont AUCUNE valeur par défaut. */
+  const iEchecST = CEd.indexOf("{etatSousTraitants === 'echec' && (");
+  const iVideST = CEd.indexOf("{etatSousTraitants === 'vide' && (");
+  const iLusST = CEd.indexOf("{etatSousTraitants === 'lus' && (");
+  const blocEchecST = CEd.slice(iEchecST, iVideST);
+  const blocVideST = CEd.slice(iVideST, iLusST);
+  const blocLusST = CEd.slice(iLusST, CEd.indexOf('{ST.aide}'));
+  const signatureE = CEd.slice(CEd.indexOf('forwardRef(function EnergieDevis('), CEd.indexOf('}, ref) {'));
+  verifier('h. les deux listes : `etatDesLieux(regime, labels)` et `etatDesLieux(regime, sousTraitants)`, une fois chacune ; en ÉCHEC la '
+    + 'phrase et « Réessayer » (`onRelireListes`) ; VIDE la phrase (et « Ajouter un sous-traitant ») ; LUES les cases et la porte ; en '
+    + 'lecture RIEN ; aucune copie dans l’état, aucune valeur par défaut',
+  CEd.includes('const etatLabels = etatDesLieux(regime, labels);') && CEd.includes('const etatSousTraitants = etatDesLieux(regime, sousTraitants);')
+    && (CEd.match(/etatDesLieux\(/g) || []).length === 2 && !/'lecture'/.test(CEd)
+    && CEd.includes("{etatLabels === 'echec' && ( <> <Text style={s.erreur} accessibilityLiveRegion=\"polite\">{L.echec}</Text>")
+    && CEd.includes("{etatLabels === 'vide' && <Text style={s.etiquette}>{L.vide}</Text>}")
+    && (CEd.match(/onPress=\{onRelireListes\}/g) || []).length === 2
+    && iEchecST > 0 && iVideST > iEchecST && iLusST > iVideST
+    && blocEchecST.includes('{ST.echec}') && blocEchecST.includes('label={ST.reessayer}') && blocEchecST.includes('onPress={allerAMesSousTraitants}')
+    && blocVideST.includes('{ST.vide}') && blocVideST.includes('label={ST.ajouter}') && blocVideST.includes('onPress={allerAMesSousTraitants}')
+    && blocLusST.includes('{sousTraitantsMontres.map((st) => (') && blocLusST.includes('label={ST.porte}')
+    && CEd.includes('const sousTraitantsMontres = Array.isArray(sousTraitants) ? sousTraitants : [];')
+    && (CEd.match(/onPress=\{allerAMesSignes\}/g) || []).length === 1 && (CEd.match(/onPress=\{allerAMesSousTraitants\}/g) || []).length === 3
+    && !/useState\([^)]*\b(?:labels|sousTraitants)\b/.test(CEd)
+    && /\blabels, sousTraitants,/.test(signatureE) && !/\b(?:labels|sousTraitants) = /.test(signatureE),
+  `${blocEchecST.slice(0, 80)} | ${blocLusST.slice(0, 80)}`);
+
+  /* h bis. LA SOUS-TRAITANCE : « Non » à GAUCHE, rien de choisi d'office ;
+        les cases seulement sous « Oui » ; « Laquelle, ou lesquelles ? » ; le
+        plafond MONTRÉ juste sous les cases, avant la porte (la leçon du
+        onzième lieu). */
+  const iNonE = CEd.indexOf('<Pastille label={ST.non}');
+  const iOuiE = CEd.indexOf('<Pastille label={ST.oui}');
+  const iPlafondE = blocLusST.indexOf('{plafond && <Text style={s.erreur} accessibilityLiveRegion="polite">{ST.plafond}</Text>}');
+  verifier('h bis. la sous-traitance : « Non » À GAUCHE puis « Oui », choisis par la seule réponse de la carte (`c.sousTraitance === false` '
+    + '/ `=== true`) ; les cases seulement sous « Oui » ; le plafond MONTRÉ juste sous les cases, avant la porte',
+  iNonE > 0 && iOuiE > iNonE && CEd.includes('choisie={c.sousTraitance === false}') && CEd.includes('choisie={c.sousTraitance === true}')
+    && CEd.includes('onPress={() => repondreSousTraitance(false)}') && CEd.includes('onPress={() => repondreSousTraitance(true)}')
+    && (CEd.match(/\{c\.sousTraitance === true && \(/g) || []).length === 1 && CEd.indexOf('{c.sousTraitance === true && (') < iEchecST
+    && CEd.includes('{ST.lesquelles}')
+    && iPlafondE > blocLusST.indexOf('{sousTraitantsMontres.map((st) => (') && iPlafondE < blocLusST.indexOf('label={ST.porte}')
+    && CEd.includes('const [plafond, setPlafond] = useState(false);') && (CEd.match(/ST\.plafond|sousTraitance\.plafond/g) || []).length === 2,
+  `${iNonE} / ${iOuiE} / ${iPlafondE}`);
+
+  /* i. LES MOTS DE LA CARTE viennent TOUS de `devis.js` (`LE_LABEL`), et la
+        carte n'écrit aucune phrase entre ses balises (seuls « ‹ Liste » et
+        « ‹ Devis ») ; ni « registre » (mot entier), « vérifi », « agré »,
+        « certifié », « garanti » dans son code. */
+  const NOMMES_E = ['LE_LABEL.titre', 'LE_LABEL.sousTitre', 'LE_LABEL.travaux.question', 'LE_LABEL.travaux.aucun',
+    'LE_LABEL.travaux.sousAucun', 'LE_LABEL.travaux.sousAucunSousTraitance', 'LE_LABEL.travaux.aide', 'L.sousTitre', 'L.echec',
+    'L.reessayer', 'L.vide', 'L.porte', 'L.declaration', 'L.aideDeclaration', 'ST.sousTitre', 'ST.question', 'ST.non', 'ST.oui',
+    'ST.lesquelles', 'ST.echec', 'ST.reessayer', 'ST.vide', 'ST.ajouter', 'ST.porte', 'ST.plafond', 'ST.aide', 'LE_LABEL.amende',
+    'LE_LABEL.amendeSousTraitance'];
+  const absentsE = NOMMES_E.filter((n) => !CEd.includes(n));
+  const textesJsxE = [...CEdb.matchAll(/>([^<>{}=;()]*[\p{L}][^<>{}=;()]*)</gu)].map((m) => m[1].trim()).filter(Boolean);
+  verifier('i. chaque texte de l’annexe A.3 est NOMMÉ dans la carte (`LE_LABEL`, `L`, `ST`), et elle n’écrit aucune phrase entre ses '
+    + 'balises (seuls « ‹ Liste » et « ‹ Devis ») ; ni « registre » (mot entier), « vérifi », « agré », « certifié », « garanti »',
+  absentsE.length === 0 && textesJsxE.every((t) => ['‹ Liste', '‹ Devis'].includes(t))
+    && CEd.includes('const L = LE_LABEL.label; const ST = LE_LABEL.sousTraitance;')
+    && !/(?<![\p{L}_])registres?(?![\p{L}_])|vérifi|verifi|agré|certifié|garanti/iu.test(CEdb.replace(/import[^;]*;/g, '')),
+  `${absentsE.join(', ') || 'tous nommés'} ; texte JSX : ${json(textesJsxE)}`);
+
+  /* j. LA SAISIE (§3.7, §3.7 bis) : `CARTE_ENERGIE` ; `enregistrerCarte` SORT
+        tout de suite pour elle (elle écrit à l'appui — sinon elle tomberait
+        sur `refCarte`, la carte d'une LIGNE) ; `ouvrirEnergie(rubrique)` sur
+        le modèle d'`ouvrirDechets`, le clavier FERMÉ (rien à taper) ;
+        `enregistrerEnergie` par la file de l'en-tête, qui ne vibre que pour
+        un refus NOUVEAU ; les deux portes ; la balise reçoit les deux listes
+        VIVANTES, le régime, la ligne d'état. */
+  const carteCorpsE = sansEspaces(corpsFleche(SAe, 'const enregistrerCarte = '));
+  const balEn = sansEspaces(balises(SAe, 'EnergieDevis')[0] || '');
+  verifier('j. la saisie : `CARTE_ENERGIE = \'energie\'`, dont `enregistrerCarte` SORT tout de suite ; `ouvrirEnergie` ENTIER (la carte '
+    + 'ouverte enregistrée, l’en-tête, le clavier fermé, le retour au devis, la rubrique, le titre) ; `enregistrerEnergie` ENTIER ; les '
+    + 'deux portes ; la balise : les deux listes VIVANTES, le régime, la ligne d’état, la relecture, les portes',
+  SAee.includes("const CARTE_ENERGIE = 'energie';")
+    && carteCorpsE.includes('if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE) return;')
+    && carteCorpsE.indexOf('id === CARTE_ENERGIE') < carteCorpsE.indexOf('refCarte.current')
+    && SAee.includes('const ouvrirEnergie = (rubrique = null) => { if (carteRef.current && carteRef.current !== CARTE_ENERGIE) enregistrerCarte(); '
+      + 'if (refEntete.current) refEntete.current.enregistrer(); Keyboard.dismiss(); poserRetour(null); setRubriqueEnergie(rubrique || null); '
+      + 'poserCarte(CARTE_ENERGIE); setCleCarte((k) => k + 1); if (rappels.current.onCarte) rappels.current.onCarte(LE_LABEL.titre); };')
+    && SAee.includes("const ouvrirMesSignes = () => { if (onMonEntreprise) onMonEntreprise('labels'); };")
+    && SAee.includes("const ouvrirMesSousTraitants = () => { if (onMonEntreprise) onMonEntreprise('sousTraitants'); };")
+    && SAee.includes("const enregistrerEnergie = (changements, erreursSaisie, textes, geste = 'fermer') => { const deja = "
+      + 'CHAMPS_ENERGIE.filter((k) => refusEntete.current[k]); const r = enregistrerEntete(changements, { vibrer: false }); if '
+      + '(vibrerPourLaCarte(geste, Object.keys(r.refus || {}), deja)) retour.echec(); return r; };')
+    && SAee.includes('{carte === CARTE_ENERGIE && ( <EnergieDevis')
+    && ['key={`energie-${cleCarte}`}', 'ref={refEnergie}', 'devis={devis}', 'regime={regime}', 'labels={labels}',
+      'sousTraitants={sousTraitants}', 'onEnregistrer={enregistrerEnergie}', 'onFermer={fermerCarte}', 'rubriqueInitiale={rubriqueEnergie}',
+      'depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}', 'onRelireListes={onRelireRegime}', 'onMesSignes={ouvrirMesSignes}',
+      'onMesSousTraitants={ouvrirMesSousTraitants}'].every((x) => balEn.includes(x)),
+  carteCorpsE.slice(0, 220));
+
+  /* k. LE POINT : `case 'energie'` ouvre la carte SUR la rubrique que dit
+        `rubriqueDeLEnergieDuPoint`, lue sur le devis et les DEUX listes de
+        l'ÉCRAN, et « ‹ » ramène à la liste. UN seul bouton : le second
+        bouton ne connaît que « Le chantier ». */
+  const agirE = sansEspaces(corpsFleche(SAe, 'const agirSurLePoint = (point) =>'));
+  verifier('k. le point du rang 14 : `case \'energie\'` ouvre la carte SUR `rubriqueDeLEnergieDuPoint(point, { devis: devisRef.current, '
+    + 'labels, sousTraitants })` et RAMÈNE à la liste ; aucun second bouton pour l’énergie',
+  agirE.includes("case 'energie': ouvrirEnergie(rubriqueDeLEnergieDuPoint(point, { devis: devisRef.current, labels, sousTraitants })); "
+    + 'poserRetour(CARTE_POUR_REMETTRE); return;')
+    && (agirE.match(/ouvrirEnergie\(/g) || []).length === 1 && !/seconde\.endroit === 'energie'/.test(SAee)
+    && json(D.actionDuPoint({ cle: 'devis_energie', endroit: { endroit: 'energie' } })) === json({ libelle: D.LE_LABEL.bouton, aDire: D.LE_LABEL.bouton }),
+  agirE.slice(agirE.indexOf("case 'energie'"), agirE.indexOf("case 'energie'") + 160));
+
+  /* l. LA GARDE DE SORTIE ET « CORRIGER » (§3.7 bis, 4 ; S50) : les quatre
+        champs NOMMÉS dans `NOMS_ENTETE`, EXACTS ; `CHAMPS_ENERGIE` EST
+        `CHAMPS_DE_L_ENERGIE` ; « Corriger » rouvre la carte SUR la rubrique
+        du champ par SA table (`RUBRIQUE_DE_L_ENERGIE`, chaque rubrique une
+        ancre de la carte), après les déchets — `RUBRIQUE_DU_CHAMP` reste
+        celle des déchets (section 45, l bis). */
+  const corrigerE = sansEspaces(corpsFleche(SAe, 'const corrigerEntete = () =>'));
+  const corpsNomsE = (/const NOMS_ENTETE = Object\.freeze\(\{([\s\S]*?)\}\);/.exec(SAe) || ['', ''])[1];
+  const nomsE = Object.fromEntries([...corpsNomsE.matchAll(/(energie\w+): '([^']+)'/g)].map((m) => [m[1], m[2]]));
+  verifier('l. la garde : les quatre champs de l’énergie NOMMÉS, EXACTS, dans `NOMS_ENTETE` ; `CHAMPS_ENERGIE` EST `CHAMPS_DE_L_ENERGIE` ; '
+    + '« Corriger » rouvre la carte SUR la rubrique du champ par `RUBRIQUE_DE_L_ENERGIE` (une ancre de la carte pour chacune), après '
+    + 'les déchets',
+  egal(nomsE, { energieTravaux: 'Travaux d’énergie', energieSansLabel: 'Label RGE', energieSousTraitance: 'Sous-traitance',
+    energieSousTraitants: 'Sous-traitance' })
+    && D.CHAMPS_DE_L_ENERGIE.every((k) => Object.prototype.hasOwnProperty.call(nomsE, k))
+    && SAee.includes('const CHAMPS_ENERGIE = CHAMPS_DE_L_ENERGIE;')
+    && egal(Object.keys(D.RUBRIQUE_DE_L_ENERGIE).sort(), [...D.CHAMPS_DE_L_ENERGIE].sort())
+    && Object.values(D.RUBRIQUE_DE_L_ENERGIE).every((r) => ANCRES_E.includes(r))
+    && corrigerE.includes('if (CHAMPS_ENERGIE.includes(champ)) { ouvrirEnergie(RUBRIQUE_DE_L_ENERGIE[champ] || null); return; }')
+    && corrigerE.indexOf('CHAMPS_DECHETS.includes(champ)') < corrigerE.indexOf('CHAMPS_ENERGIE.includes(champ)')
+    && !/energie\w*: '/.test((/const RUBRIQUE_DU_CHAMP = Object\.freeze\(\{([^}]*)\}\);/.exec(SAe) || ['', ''])[1]),
+  json(nomsE));
+
+  /* m. LA RANGÉE « ÉNERGIE (LABEL RGE) » (§3.7, annexe A.4) : entre
+        « Déchets » et « Conditions », toujours là (« Sans objet pour ce
+        client » pour une réponse « entreprise » : elle ne saute pas), sur ses
+        VINGT-QUATRE gabarits, sans ligne d'erreur ; son résumé par
+        `resumeDeLEnergie` (le devis de l'écran, les deux listes SANS défaut,
+        l'état de la file, les refus de l'écran) ; `etatEnergie` par
+        `majAttente` ; la saisie reçoit `labels` et `sousTraitants` SANS
+        valeur par défaut. */
+  const BDDe = sansEspaces(corpsDeFonction(SAe, 'BasDuDevis') || '');
+  const rangeeE = BDDe.slice(BDDe.indexOf('{!!resumeEnergie && ('), BDDe.indexOf('onPress={onOuvrirConditions}'));
+  const signatureS = SAee.slice(SAee.indexOf('export default function SaisieDevisScreen('),
+    SAee.indexOf('}) {', SAee.indexOf('export default function SaisieDevisScreen(')));
+  verifier('m. la rangée « Énergie (label RGE) » : APRÈS « Déchets », AVANT « Conditions », sur `GABARITS_DE_L_ENERGIE` (24), sans ligne '
+    + 'd’erreur ; son résumé par `resumeDeLEnergie` (le devis de l’écran, les deux listes SANS défaut, l’état de la file, les refus) ; '
+    + '`etatEnergie` par `majAttente` sur `CHAMPS_ENERGIE` ; `labels` et `sousTraitants` reçus sans valeur par défaut',
+  BDDe.indexOf('{!!resumeDechets && (') >= 0 && BDDe.indexOf('{!!resumeDechets && (') < BDDe.indexOf('{!!resumeEnergie && (')
+    && BDDe.indexOf('{!!resumeEnergie && (') < BDDe.indexOf('onPress={onOuvrirConditions}')
+    && rangeeE.includes('<Pressable onPress={onOuvrirEnergie}') && rangeeE.includes('accessibilityLabel={`${LE_LABEL.rangee} : ${resumeEnergie}. Ouvrir`}')
+    && rangeeE.includes('{GABARITS_DE_L_ENERGIE.map((g, i) => (') && rangeeE.includes('<Text style={s.replieTexte}>{LE_LABEL.rangee}</Text>')
+    && !/s\.erreur/.test(rangeeE) && D.GABARITS_DE_L_ENERGIE.length === 24
+    && SAee.includes('const resumeEnergie = resumeDeLEnergie({ devis, labels, sousTraitants, enRoute: attente.etatEnergie.enRoute, enEchec: '
+      + 'attente.etatEnergie.enEchec, refuse: CHAMPS_ENERGIE.some((k) => !!erreursEntete[k]), });')
+    && SAee.includes('resumeEnergie={resumeEnergie} onOuvrirEnergie={() => ouvrirEnergie(null)}')
+    && SAee.includes('etatEnergie: etatDesChampsDuDevis(entrees, CHAMPS_ENERGIE),')
+    && /\blabels, sousTraitants, lieux, onRelireRegime\b/.test(signatureS) && !/\b(?:labels|sousTraitants) = /.test(signatureS),
+  rangeeE.slice(0, 200) || 'rangée introuvable');
+
+  /* n. L'ÉGALITÉ STRICTE SUR UN CHAMP TABLEAU (cahier §3.4, ÉCRAN-12, S54) :
+        dans les deux cartes et dans la saisie, aucun `Object.is` ET aucune
+        égalité stricte (le triple égal, ou sa négation) dont un côté est un
+        champ tableau du devis — un tableau relu est toujours un tableau
+        NEUF. La règle est éprouvée sur deux sabotages écrits ici. */
+  const CHAMPS_TABLEAUX = ['dechetsFlux', 'dechetsSurPlace', 'dechetsLieux', 'energieTravaux', 'energieSansLabel', 'energieSousTraitants'];
+  const STRICTE3 = new RegExp(`(?:\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b\\s*!==?|\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b\\s*===|(?:===|!==)\\s*[\\w.]*\\b(?:${CHAMPS_TABLEAUX.join('|')})\\b)`);
+  const fautifsEgal = ['src/components/DechetsDevis.js', 'src/components/EnergieDevis.js', 'src/screens/SaisieDevisScreen.js']
+    .filter((f) => {
+      const c = sansCommentairesJs(lireSiExiste(f) || '');
+      return /\bObject\.is\s*\(/.test(c) || STRICTE3.test(c);
+    });
+  verifier('n. ÉCRAN-12 : ni `Object.is`, ni égalité stricte dont un côté est un champ TABLEAU du devis, dans les deux cartes et la saisie '
+    + '— la règle éprouvée sur deux sabotages (`d.energieTravaux === x`, `x !== choix.dechetsLieux`)',
+  fautifsEgal.length === 0 && STRICTE3.test('if (d.energieTravaux === x) y();') && STRICTE3.test('if (x !== choix.dechetsLieux) y();')
+    && !STRICTE3.test('const v = d.energieTravaux; memeValeur(v, w);'),
+  fautifsEgal.join(', ') || 'aucun');
+
+  /* o. LA DÉMONSTRATION (T14, §3.9) : « Muret » et « Terrasse » répondent
+        « Aucun de ces travaux » et gardent leurs parcours ; « Sol du séjour »
+        ne dit rien (`devis_energie`, le point SUR la question) ; « Rénovation »
+        coche la ventilation (`devis_energie_mentions_prudence` : la réponse
+        « à quel titre » est vide) ; « Isolation des combles et des murs »,
+        à titre privé, un travail couvert et un autre non (`devis_energie_mentions`,
+        le point SUR le label, et l'avis du label) ; chaque devis ÉCRIT les
+        quatre champs, aucun `[]`. Et L'INVARIANT : chaque clé du rang 14, et
+        l'avis du label, se voient sans `.env`. Rien n'est coché d'office sur
+        un brouillon NEUF. La fiche n° 1 garde son badge `rge` : le point sort
+        malgré lui (CTL-5). */
+  const jeu47 = DEMO.fabriquerDevisDemo(new Date());
+  const EM47 = await import('../src/data/emetteur-demo.js');
+  const ed47 = EM47.fabriquerEmetteurDemo(new Date());
+  const motifs47 = (d) => D.motifsDeRemise({ devis: d, lignes: jeu47.lignes.filter((l) => l.devisId === d.id), regime: ed47.emetteur.regime_tva,
+    motifsEmetteur: [], assurances: ed47.assurances, lieux: ed47.lieux, labels: ed47.labels, sousTraitants: ed47.sousTraitants })
+    .map((m) => m.cle);
+  const parId47 = (id) => jeu47.devis.find((x) => x.id === id) || null;
+  const iso47 = parId47(DEMO.DEVIS_DEMO_IDS.isolation);
+  const reno47 = parId47(DEMO.DEVIS_DEMO_IDS.renovation);
+  const sol47 = parId47(DEMO.DEVIS_DEMO_IDS.sejour);
+  const muret47 = parId47(DEMO.DEVIS_DEMO_IDS.muret);
+  const terrasse47 = parId47(DEMO.DEVIS_DEMO_IDS.terrasse);
+  const rang14 = Object.entries(D.MOTIFS_DEVIS).filter(([, m]) => m.rang === 14).map(([k]) => k);
+  const vus47 = new Set(jeu47.devis.flatMap(motifs47));
+  const pointE = (d) => D.rubriqueDeLEnergieDuPoint({ cle: motifs47(d).find((k) => rang14.includes(k)) },
+    { devis: d, labels: ed47.labels, sousTraitants: ed47.sousTraitants });
+  const avis47 = (d) => D.avisDuDevis({ devis: d, lignes: jeu47.lignes.filter((l) => l.devisId === d.id), labels: ed47.labels,
+    regime: ed47.emetteur.regime_tva, assurances: ed47.assurances }).map((a) => a.cle);
+  const tousEcrits47 = jeu47.devis.every((d) => D.CHAMPS_DE_L_ENERGIE.every((k) => Object.prototype.hasOwnProperty.call(d, k) && d[k] !== undefined));
+  const aucunVide47 = jeu47.devis.every((d) => ['energieTravaux', 'energieSansLabel', 'energieSousTraitants']
+    .every((k) => d[k] === null || (Array.isArray(d[k]) && d[k].length > 0)));
+  const vierge47 = D.etatInitialEnergie({});
+  const PROS47 = (await import('../src/data/demo.js')).proProfiles;
+  verifier('o. la démonstration : « Muret » et « Terrasse » répondent « Aucun » et gardent leurs parcours ; « Sol du séjour » sans réponse '
+    + '(`devis_energie`, le point SUR la question) ; « Rénovation » la ventilation (`devis_energie_mentions_prudence`) ; « Isolation des '
+    + 'combles et des murs » (`devis_energie_mentions`, le point SUR le label, l’avis du label) ; les quatre champs ÉCRITS partout, jamais '
+    + '`[]` ; CHAQUE clé du rang 14 et l’avis du label se voient sans `.env` ; un brouillon neuf ne coche rien ; la fiche n° 1 garde `rge`',
+  !!(iso47 && reno47 && sol47 && muret47 && terrasse47) && jeu47.devis.length === 5
+    && egal(muret47.energieTravaux, ['aucun']) && egal(terrasse47.energieTravaux, ['aucun'])
+    && egal(motifs47(muret47), []) && egal(motifs47(terrasse47), ['devis_validite', 'devis_acompte_nature'])
+    && motifs47(sol47).includes('devis_energie') && pointE(sol47) === 'travaux'
+    && motifs47(reno47).includes('devis_energie_mentions_prudence')
+    && egal(motifs47(iso47), ['devis_energie_mentions']) && pointE(iso47) === 'label'
+    && avis47(iso47).includes('avis_label_echeance') && D.pourQuiValable(iso47) === 'consommateur'
+    && iso47.dechetsConcerne !== false && iso47.energieSousTraitance === null && iso47.energieSansLabel === null
+    && tousEcrits47 && aucunVide47 && rang14.length === 3 && rang14.every((k) => vus47.has(k))
+    && D.resumeDeLEnergie({ devis: muret47, labels: ed47.labels, sousTraitants: ed47.sousTraitants }) === 'Aucun de ces travaux'
+    && D.resumeDeLEnergie({ devis: sol47, labels: ed47.labels, sousTraitants: ed47.sousTraitants }) === 'Travaux d’énergie : à dire'
+    && D.resumeDeLEnergie({ devis: iso47, labels: ed47.labels, sousTraitants: ed47.sousTraitants }) === 'À compléter : label, sous-traitance'
+    && D.resumeDeLEnergie({ devis: iso47 }) === 'Labels ou sous-traitants non lus'
+    && egal(vierge47, { travaux: null, sansLabel: null, sousTraitance: null, sousTraitants: null })
+    && !!PROS47 && !!PROS47['1'] && PROS47['1'].rge === true,
+  `${json(motifs47(iso47))} | ${json(motifs47(reno47))} | ${json(motifs47(sol47))} | ${pointE(sol47)} / ${pointE(iso47)} | ${json(avis47(iso47))}`);
+
+  /* p. LA BASE DE DÉMONSTRATION refuse ce que la base refuse (49.5), sous le
+        NOM de la contrainte : un tableau VIDE pour les trois listes,
+        `{aucun,fenetres}`, `aucun` déclaré sans label, onze sous-traitants ;
+        accepte une liste valable ; et rend des listes NEUVES. */
+  const base47 = DEMO.creerBaseDevisDemo({ demandeDe: () => null });
+  const isoId = DEMO.DEVIS_DEMO_IDS.isolation;
+  let gen47 = Date.now();
+  const essai47 = async (valeurs) => {
+    gen47 += 1;
+    try { await base47.ecrire(DEMO.PRO_DEMO_DEVIS, { quoi: 'devis', action: 'modifier', id: isoId, generation: gen47, valeurs }); return 'accepté'; } catch (e) {
+      return `${e.code} ${(/"(devis_[a-z_]+_check)"/.exec(e.message || '') || ['', '?'])[1]}`;
+    }
+  };
+  const refus47 = {
+    travauxVides: await essai47({ energieTravaux: [] }),
+    aucunEtFenetres: await essai47({ energieTravaux: ['aucun', 'fenetres'] }),
+    sansLabelVide: await essai47({ energieSansLabel: [] }),
+    sansLabelAucun: await essai47({ energieSansLabel: ['aucun'] }),
+    sousTraitantsVides: await essai47({ energieSousTraitants: [] }),
+    onzeSousTraitants: await essai47({ energieSousTraitants: Array.from({ length: 11 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`) }),
+    bon: await essai47({ energieTravaux: ['isolation_exterieur', 'isolation_combles'], energieSansLabel: ['isolation_combles'] }),
+  };
+  const lu47 = await base47.relireUn(DEMO.PRO_DEMO_DEVIS, { quoi: 'devis', id: isoId });
+  if (lu47 && Array.isArray(lu47.energieSansLabel)) lu47.energieSansLabel.push('fenetres');
+  const relu47 = await base47.relireUn(DEMO.PRO_DEMO_DEVIS, { quoi: 'devis', id: isoId });
+  verifier('p. la base de démonstration refuse ce que la base refuse, sous le NOM de la contrainte (un tableau VIDE pour les trois listes, '
+    + '`{aucun,fenetres}`, `aucun` parmi les déclarations, onze sous-traitants), accepte une liste valable, et rend des listes NEUVES',
+  refus47.travauxVides === '23514 devis_energie_travaux_check' && refus47.aucunEtFenetres === '23514 devis_energie_travaux_check'
+    && refus47.sansLabelVide === '23514 devis_energie_sans_label_check' && refus47.sansLabelAucun === '23514 devis_energie_sans_label_check'
+    && refus47.sousTraitantsVides === '23514 devis_energie_sous_traitants_check'
+    && refus47.onzeSousTraitants === '23514 devis_energie_sous_traitants_check' && refus47.bon === 'accepté'
+    && !!relu47 && egal(relu47.energieSansLabel, ['isolation_combles']) && relu47.energieSansLabel !== (lu47 && lu47.energieSansLabel),
+  `${json(refus47)} ; relu ${json(relu47 && relu47.energieSansLabel)}`);
+
+  /* q. LA CARTE EST UNE MODALE POUR VOICEOVER, comme « Déchets » ; et
+        `OpusApp` passe les deux listes à la saisie, tirées de la MÊME
+        lecture que le régime et OUBLIÉES sur un échec (§3.7 bis, 5) — sans
+        ces props, la carte dirait « non lus » pour toujours, et la rangée
+        aussi. */
+  const OAe = sansEspaces(sansCommentairesJs(lireSiExiste('src/OpusApp.js') || ''));
+  verifier('q. la carte « Énergie et label RGE » est une MODALE pour VoiceOver (`accessibilityViewIsModal` sur sa racine) ; `OpusApp` '
+    + 'passe `labels={mesLabels}` et `sousTraitants={mesSousTraitants}` à la saisie, et les oublie sur un échec de la lecture',
+  CEd.includes('<View style={s.ecran} accessibilityViewIsModal>') && OAe.includes('labels={mesLabels}')
+    && OAe.includes('sousTraitants={mesSousTraitants}') && OAe.includes('setMesLabels(undefined)') && OAe.includes('setMesSousTraitants(undefined)'));
 }
 
 console.log('');

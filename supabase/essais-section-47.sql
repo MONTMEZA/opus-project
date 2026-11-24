@@ -764,16 +764,21 @@ select string_agg(p.proname, ', ' order by p.proname) as nomment_tarifs_pro,
 -- `emetteur` en mot entier ne la voyait pas. La lisent l'export et la liste
 -- des motifs (une lecture filtrée par `l.pro_id = v_pro`, rang 13), qui y
 -- étaient déjà : la liste ne change pas.
+-- ET DEPUIS 2b-6 (24/11/2026) : `emetteur_labels` (46.2 ter) et
+-- `emetteur_sous_traitants` (46.2 quater) y entrent de même, EN LE
+-- DÉCIDANT, dans les quatre expressions. Les lisent l'export et la liste des
+-- motifs (une lecture filtrée par `g.pro_id = v_pro`, une par
+-- `s.pro_id = v_pro`, rang 14), qui y étaient déjà : la liste ne change pas.
 select string_agg(p.proname, ', ' order by p.proname) as nomment_emetteur,
        string_agg(p.proname, ', ' order by p.proname)
          = 'emetteur_incomplet, mes_donnees, motifs_refus_remise' as liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_assurances|emetteur)\M';
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|emetteur_assurances|emetteur)\M';
 select count(*) filter (where p.prosecdef) as definer_attendu_0
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M';
-select (select count(*) from pg_views where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
-     + (select count(*) from pg_matviews where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M';
+select (select count(*) from pg_views where definition ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M')
+     + (select count(*) from pg_matviews where definition ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M')
          as vues_attendu_0;
 
 

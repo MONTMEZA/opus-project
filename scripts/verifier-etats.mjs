@@ -392,6 +392,21 @@ console.log('\nLa démonstration fait vivre CHAQUE issue, sans un vrai SIRET');
   verifier(`…et aucun n’est un SIRET des essais SQL (${essais.size} relevés)`,
     essais.size > 10 && partages.length === 0, partages.join(', '));
 
+  /* 2b-6 (cahier T26, CTL-4) : LE SIRET DU SOUS-TRAITANT DE DÉMONSTRATION
+     (`emetteur-demo.js`) suit la même règle que ceux de `siret-demo.js` :
+     sa clé passe (sinon le formulaire le refuserait), il est FICTIF (cinq
+     zéros en tête — cherché absent de l'annuaire Sirene le 24/11/2026), et
+     il ne se confond ni avec un numéro de `SIRETS_DEMO` ni avec un SIRET
+     des essais SQL : deux usages d'un même numéro feraient croire que l'un
+     éprouve l'autre. */
+  const { SIRET_SOUS_TRAITANT_DEMO } = await import('../src/data/emetteur-demo.js');
+  verifier('…et le SIRET du sous-traitant de démonstration (2b-6) : sa clé passe, cinq zéros en tête, distinct de `SIRETS_DEMO` et des '
+    + 'essais SQL',
+  typeof SIRET_SOUS_TRAITANT_DEMO === 'string' && /^\d{14}$/.test(SIRET_SOUS_TRAITANT_DEMO)
+    && cleSiretValide(SIRET_SOUS_TRAITANT_DEMO) && SIRET_SOUS_TRAITANT_DEMO.startsWith('00000')
+    && !SIRETS_DEMO.some((l) => l.siret === SIRET_SOUS_TRAITANT_DEMO) && !essais.has(SIRET_SOUS_TRAITANT_DEMO),
+  String(SIRET_SOUS_TRAITANT_DEMO));
+
   const attendues = ISSUES.filter((i) => i !== 'mal_forme');
   const couvertes = new Set(SIRETS_DEMO.map((l) => l.issue));
   verifier('toutes les issues ont leur numéro (sauf « mal_forme », que la clé suffit à produire)',
@@ -568,9 +583,26 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
      `devis.js` (`LES_DECHETS`) : la négation « Opus ne peut pas le
      vérifier » vit LÀ, jamais recopiée dans la carte — recopiée ici, elle
      serait refusée, et c'est voulu. */
+  /* …et, depuis l'étape 2b-6 (24/11/2026), `travaux-energie.js` : les
+     libellés, exemples et aides des dix-neuf travaux d'énergie, montrés
+     dans la carte « Énergie et label RGE » et dans « Mon entreprise », et
+     que le lot 2c imprimera « pour les catégories de travaux concernés ».
+     Jamais « vérifié » (Opus ne vérifie pas qu'un signe de qualité couvre
+     un travail), « registre » en mot entier seulement. Les trois écrans
+     nouveaux de 2b-6 — `FicheLabel.js`, `FicheSousTraitant.js` et
+     `EnergieDevis.js` (cahier 2b-6 §2.8 bis) — entrent ici le jour où ils
+     EXISTENT : `lire` ne tolère pas un fichier absent, et un contrôle qui
+     plante ne vérifie rien. Les trois EXISTENT depuis le 24/11 : ils y
+     sont. La carte `EnergieDevis.js` prend ses mots dans `devis.js`
+     (`LE_LABEL`), comme `DechetsDevis.js` les siens. Leurs textes vivent dans
+     `emetteur.js` (`TEXTES_SIGNES_DE_QUALITE`, `TEXTES_SOUS_TRAITANTS`),
+     déjà relu ; les formulaires eux-mêmes ne doivent pas en écrire un
+     autre qui dirait « vérifié ». */
   const DEVIS = ['src/components/FicheEmetteur.js', 'src/components/PretAEmettre.js',
     'src/components/ApercuEntete.js', 'src/lib/emetteur.js', 'src/lib/declaration-tva.js',
-    'src/components/FicheLieuDepot.js', 'src/components/DechetsDevis.js'];
+    'src/components/FicheLieuDepot.js', 'src/components/DechetsDevis.js',
+    'src/data/travaux-energie.js', 'src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js',
+    'src/components/EnergieDevis.js'];
   const fautifsDevis = [];
   DEVIS.forEach((f) => {
     const c = sansCommentaires(lire(f));

@@ -64,7 +64,7 @@ const {
   libelleDates, libellePrix,
   jourCourant, chevauche, estTerminee, libelleProximite,
   creneauSemaine, creneauMois, joursEntre,
-  JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, nomMois,
+  JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, anneeDecalee, nomMois,
   joursDuMois, indexJourSemaine, jourCourt, dansIntervalle,
   decimal1, virgule,
 } = await import('../src/lib/formats.js');
@@ -260,6 +260,49 @@ const {
     moisDecale('2026-01', -1) === '2025-12');
   verifier('reculer de douze mois rend le même mois',
     moisDecale('2026-10', -12) === '2025-10');
+
+  /* LES FLÈCHES « ANNÉE » DU CALENDRIER (étape 2b-6, T30) : un signe de
+     qualité vaut jusqu'à quatre ans, et sa date de fin se cherche dans le
+     calendrier. `anneeDecalee` ne fait que douze `moisDecale` — le même
+     mois, une autre année —, et refuse un pas qui n'est pas un entier : une
+     demi-année rendrait une date que personne n'a demandée. */
+  verifier('une année de plus rend le même mois, l’année suivante',
+    anneeDecalee('2026-11', 1) === '2027-11', String(anneeDecalee('2026-11', 1)));
+  verifier('…une de moins, l’année d’avant — janvier reste janvier',
+    anneeDecalee('2026-01', -1) === '2025-01', String(anneeDecalee('2026-01', -1)));
+  verifier('…quatre de plus : février 2030 (un label pris en février 2026)',
+    anneeDecalee('2026-02', 4) === '2030-02', String(anneeDecalee('2026-02', 4)));
+  verifier('…zéro rend le même mois, et un pas absent aussi',
+    anneeDecalee('2026-11', 0) === '2026-11' && anneeDecalee('2026-11') === '2026-11');
+  verifier('…un pas qui n’est pas un entier ne rend RIEN',
+    anneeDecalee('2026-11', 0.5) === null && anneeDecalee('2026-11', 'deux') === null,
+    `${anneeDecalee('2026-11', 0.5)} · ${anneeDecalee('2026-11', 'deux')}`);
+  verifier('…et c’est EXACTEMENT douze mois décalés, sur tout un siècle',
+    Array.from({ length: 1200 }, (_, i) => `${2000 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`)
+      .every((m) => [-4, -1, 1, 4].every((n) => anneeDecalee(m, n) === moisDecale(m, 12 * n))));
+
+  /* …et le calendrier ne les montre que DERRIÈRE sa prop `annees` : les
+     autres écrans (la Place des pros, ses deux champs de dates) ne changent
+     pas d'un pixel. Deux boutons de 44 points par leur BOÎTE — jamais par
+     un `hitSlop`, que `react-native-web` ignore —, qui disent où ils mènent,
+     et calculés par `anneeDecalee`, pas par une soustraction écrite dans
+     l'écran. */
+  {
+    const cal = readFileSync('src/components/Calendrier.js', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    verifier('le calendrier : les deux flèches « année » ne s’affichent que derrière la prop `annees` (faux par défaut), calculées par '
+      + '`anneeDecalee`, 44 points par leur boîte, chacune disant l’année où elle mène',
+    /\bannees = false,/.test(cal)
+      && /const anneeAvant = annees \? anneeDecalee\(mois, -1\) : null;/.test(cal)
+      && /const anneeApres = annees \? anneeDecalee\(mois, 1\) : null;/.test(cal)
+      && /\{annees && !!anneeAvant && !!anneeApres && \(/.test(cal)
+      && /onPress=\{\(\) => setMois\(anneeAvant\)\}/.test(cal) && /onPress=\{\(\) => setMois\(anneeApres\)\}/.test(cal)
+      && /accessibilityLabel=\{`Année précédente, \$\{nomMois\(anneeAvant\)\}`\}/.test(cal)
+      && /accessibilityLabel=\{`Année suivante, \$\{nomMois\(anneeApres\)\}`\}/.test(cal)
+      && /annee: \{[^}]*minHeight: TOUCHE, minWidth: TOUCHE,/.test(cal)
+      && !/hitSlop/.test(cal) && !/getFullYear|\+ 12\b|- 12\b/.test(cal),
+    'sans la prop, la Place des pros gagnerait une rangée ; une flèche visée par `hitSlop` ne se vérifie pas au navigateur');
+  }
 
   verifier('le mois d’un jour', moisDe('2026-10-12') === '2026-10');
   verifier('nomMois est en français, avec l’année',

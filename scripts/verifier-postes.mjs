@@ -1944,24 +1944,37 @@ const extraire = (nom, injecte = {}) => {
      (`lieuxDe`, pure) — la carte « Déchets » d'un devis les choisit — par la
      MÊME lecture : toujours UN appel. `lieuxDe` rend une LISTE, ou `null`
      (non lus : la table absente), JAMAIS `[]` pour une fiche qui ne les
-     porte pas — « aucun lieu » dirait faux à qui en a. */
+     porte pas — « aucun lieu » dirait faux à qui en a.
+     DEPUIS 2b-6 (T24, cahier 2b-6 §2.8 n° 12, DÉCIDÉ), elle rend aussi les
+     SIGNES DE QUALITÉ (`labelsDe`) et les SOUS-TRAITANTS (`sousTraitantsDe`)
+     — la carte « Énergie et label RGE » d'un devis les lit, le rang 14 du
+     miroir aussi — par la MÊME lecture : toujours UN appel. Chacune une
+     LISTE, ou `null` (non lue), jamais `[]` inventé. */
   const rs = extraire('regimeEtSaDate');
   const as = extraire('assurancesDe');
   const ls = extraire('lieuxDe');
+  const lbs = extraire('labelsDe');
+  const sts = extraire('sousTraitantsDe');
   const FICHE = { emetteur: { regime_tva: 'reel', regime_tva_declare_le: '2026-10-03T12:00:00Z' },
     assurances: [{ nature: 'decennale', valide_jusquau: '2027-03-12', attestation_chemin: 'p/a.pdf' }],
-    lieux: [{ id: 'l1', pro_id: 'p', raison_sociale: 'Déchèterie d’essai', type_installation: 'tri' }] };
+    lieux: [{ id: 'l1', pro_id: 'p', raison_sociale: 'Déchèterie d’essai', type_installation: 'tri' }],
+    labels: [{ id: 'g1', pro_id: 'p', organisme: 'Organisme d’essai', intitule: 'Signe d’essai', categories: ['fenetres'],
+      valide_jusquau: '2027-03-12', justificatif_chemin: 'p/g.pdf' }],
+    sousTraitants: [{ id: 's1', pro_id: 'p', raison_sociale: 'Sous-traitant d’essai', siret: '00004910600016', label_detient: false }] };
   const ASSURANCES = FICHE.assurances;
   const LIEUX = FICHE.lieux;
+  const LABELS = FICHE.labels;
+  const SOUS_TRAITANTS = FICHE.sousTraitants;
   const tourne = async (nom, lecteur, fiche) => {
     let appels = 0;
     const lire1 = async () => { appels += 1; if (fiche instanceof Error) throw fiche; return fiche; };
-    const f = extraire(nom, { [lecteur]: lire1, regimeEtSaDate: rs, assurancesDe: as, lieuxDe: ls });
+    const f = extraire(nom, { [lecteur]: lire1, regimeEtSaDate: rs, assurancesDe: as, lieuxDe: ls, labelsDe: lbs,
+      sousTraitantsDe: sts });
     if (typeof f !== 'function') return { plante: 'introuvable' };
     try { return { rendu: await f(), appels }; } catch (e) { return { erreur: e, appels }; }
   };
   const fauxRegime = [];
-  if (!rs || !as || !ls) fauxRegime.push('`regimeEtSaDate`, `assurancesDe` ou `lieuxDe` introuvable');
+  if (!rs || !as || !ls || !lbs || !sts) fauxRegime.push('`regimeEtSaDate`, `assurancesDe`, `lieuxDe`, `labelsDe` ou `sousTraitantsDe` introuvable');
   else {
     if (json(rs(FICHE)) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z' })) fauxRegime.push('regimeEtSaDate(fiche)');
     if (json(rs({ emetteur: null })) !== json({ regime: null, declareLe: null }) || json(rs(null)) !== json({ regime: null, declareLe: null })) {
@@ -1973,18 +1986,31 @@ const extraire = (nom, injecte = {}) => {
        `null` pour tout le reste (non lue), jamais `[]` inventé. */
     [[FICHE, LIEUX], [{ lieux: [] }, []], [{ lieux: null }, null], [{}, null], [null, null], [{ lieux: 'x' }, null],
       [{ lieux: { 0: 'x' } }, null]].forEach(([f, voulu], i) => { if (json(ls(f)) !== json(voulu)) fauxRegime.push(`lieuxDe cas ${i}`); });
+    /* 2b-6 : `labelsDe` et `sousTraitantsDe`, la même règle. */
+    [[FICHE, LABELS], [{ labels: [] }, []], [{ labels: null }, null], [{}, null], [null, null], [{ labels: 'x' }, null],
+      [{ labels: { 0: 'x' } }, null]].forEach(([f, voulu], i) => { if (json(lbs(f)) !== json(voulu)) fauxRegime.push(`labelsDe cas ${i}`); });
+    [[FICHE, SOUS_TRAITANTS], [{ sousTraitants: [] }, []], [{ sousTraitants: null }, null], [{}, null], [null, null],
+      [{ sousTraitants: 'x' }, null], [{ sousTraitants: { 0: 'x' } }, null]]
+      .forEach(([f, voulu], i) => { if (json(sts(f)) !== json(voulu)) fauxRegime.push(`sousTraitantsDe cas ${i}`); });
     for (const [nom, lecteur] of [['monRegimeEtSaDateSupabase', 'monEmetteurSupabase'], ['monRegimeEtSaDateDemo', 'monEmetteurDemo']]) {
       const r = await tourne(nom, lecteur, FICHE);
       if (r.plante || r.erreur || r.appels !== 1
-        || json(r.rendu) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z', assurances: ASSURANCES, lieux: LIEUX })) {
+        || json(r.rendu) !== json({ regime: 'reel', declareLe: '2026-10-03T12:00:00Z', assurances: ASSURANCES, lieux: LIEUX, labels: LABELS,
+          sousTraitants: SOUS_TRAITANTS })) {
         fauxRegime.push(`${nom} → ${json(r.rendu)} en ${r.appels} lecture(s)${r.plante ? ` (${r.plante})` : ''}${r.erreur ? ` (${r.erreur.message})` : ''}`);
       }
-      const vide = await tourne(nom, lecteur, { emetteur: null, assurances: null, lieux: null });
-      if (json(vide.rendu) !== json({ regime: null, declareLe: null, assurances: null, lieux: null })) fauxRegime.push(`${nom}(vide) → ${json(vide.rendu)}`);
+      const vide = await tourne(nom, lecteur, { emetteur: null, assurances: null, lieux: null, labels: null, sousTraitants: null });
+      if (json(vide.rendu) !== json({ regime: null, declareLe: null, assurances: null, lieux: null, labels: null, sousTraitants: null })) {
+        fauxRegime.push(`${nom}(vide) → ${json(vide.rendu)}`);
+      }
       /* La table des lieux ABSENTE (`monEmetteur…` rend `lieux: null`) : la
          lecture rend `null` — non lus —, jamais `[]`. */
       const absente = await tourne(nom, lecteur, { ...FICHE, lieux: null });
       if (!absente.rendu || absente.rendu.lieux !== null || absente.appels !== 1) fauxRegime.push(`${nom}(table absente) → ${json(absente.rendu)}`);
+      /* 2b-6 : les deux tables nouvelles ABSENTES — `null`, non lues. */
+      const absentes = await tourne(nom, lecteur, { ...FICHE, labels: null, sousTraitants: null });
+      if (!absentes.rendu || absentes.rendu.labels !== null || absentes.rendu.sousTraitants !== null || absentes.appels !== 1
+        || json(absentes.rendu.lieux) !== json(LIEUX)) fauxRegime.push(`${nom}(tables 2b-6 absentes) → ${json(absentes.rendu)}`);
       const panne = await tourne(nom, lecteur, new Error('réseau'));
       if (!panne.erreur || panne.erreur.message !== 'réseau') fauxRegime.push(`${nom} avale une erreur → ${json(panne.rendu)}`);
     }
@@ -1995,8 +2021,9 @@ const extraire = (nom, injecte = {}) => {
       if (!panne.erreur) fauxRegime.push(`${nom} avale une erreur`);
     }
   }
-  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe, assurances, lieux }` (la date posée par la base au changement de régime ; les '
-    + 'assurances depuis 2b-4, par `assurancesDe`, et les lieux de dépôt depuis 2b-5, par `lieuxDe` — chacun une LISTE ou `null`, '
+  verifier('`monRegimeEtSaDate` rend `{ regime, declareLe, assurances, lieux, labels, sousTraitants }` (la date posée par la base au '
+    + 'changement de régime ; les assurances depuis 2b-4, par `assurancesDe`, les lieux de dépôt depuis 2b-5, par `lieuxDe`, les signes '
+    + 'de qualité et les sous-traitants depuis 2b-6, par `labelsDe` et `sousTraitantsDe` — chacun une LISTE ou `null`, '
     + 'jamais `[]` inventé), en UNE lecture (`monEmetteur…`), FAIT TOURNER des deux côtés (Supabase et démonstration) — `monRegime` '
     + 'rend toujours le régime SEUL ; une lecture qui échoue fait échouer l’appel',
   fauxRegime.length === 0, fauxRegime.join(' ; '));
@@ -2006,12 +2033,15 @@ const extraire = (nom, injecte = {}) => {
      erreur LÈVE, sauf la table absente (`tableAbsente`), qui rend `null` —
      jamais `[]`. Lu sur le texte (la fonction charge Supabase). Rangée
      QUATRIÈME : la preuve de TVA reste la dernière du tableau, la forme que
-     `verifier-emetteur` tient. */
+     `verifier-emetteur` tient. 2b-6 : SEPT lectures — les signes de qualité
+     puis les sous-traitants, la même forme, entre les lieux et la preuve de
+     TVA (`verifier-emetteur` tient leur forme, celle-ci leur place). */
   const lecteurEmetteur = (API.match(/async function monEmetteurSupabase\(\) \{[\s\S]*?\n\}/) || [''])[0];
   const lecteurM = lecteurEmetteur.replace(/\s+/g, ' ');
-  verifier('`monEmetteurSupabase` lit les lieux de dépôt dans le MÊME `Promise.all` (cinq lectures), triés `created_at` puis `id`, et '
-    + 'lève sur toute erreur sauf la table absente, qui rend `null` (non lus) — jamais `[]`',
-  /const \[e, a, t, l, v0\] = await Promise\.all\(\[/.test(lecteurM)
+  verifier('`monEmetteurSupabase` lit les lieux de dépôt dans le MÊME `Promise.all` (sept lectures depuis 2b-6), triés `created_at` '
+    + 'puis `id`, et lève sur toute erreur sauf la table absente, qui rend `null` (non lus) — jamais `[]`',
+  /const \[e, a, t, l, q, st, v0\] = await Promise\.all\(\[/.test(lecteurM)
+    && ((/await Promise\.all\(\[([\s\S]*?)\]\);/.exec(lecteurM) || ['', ''])[1].match(/supabase\.from\('/g) || []).length === 7
     && lecteurM.includes("supabase.from('emetteur_lieux_depot').select('*').eq('pro_id', currentUserId) .order('created_at', { ascending: true }).order('id', { ascending: true }),")
     && lecteurM.includes('if (l.error && !tableAbsente(l.error)) throw l.error;')
     && lecteurM.includes('lieux: l.error ? null : (l.data || []),')
@@ -2504,7 +2534,7 @@ try {
       + '`postesPrepares`) ; `lireRegime` lit le régime ET sa date (`monRegimeEtSaDate`)',
     /setPostes\(\(liste\) => \{/.test(ranger) && !/liste\.(?:push|splice|sort|reverse)\(|liste\[\w+\]\s*=/.test(ranger)
       && /\.slice\(\)/.test(ranger) && /api\.monRegimeEtSaDate\(\)/.test(app) && !/api\.monRegime\(\)/.test(app)
-      && /setRegimeDeclareLe\(/.test(blocApres(app, 'const recevoirEmetteur = useCallback((emetteur, lieux) => {')));
+      && /setRegimeDeclareLe\(/.test(blocApres(app, 'const recevoirEmetteur = useCallback((emetteur, listes = {}) => {')));
   }
 
   /* -- CE QUE LES ÉCRANS AFFICHENT, FAIT TOURNER ------------------------- */
@@ -3168,12 +3198,20 @@ try {
      du rang 13 ne compte qu'un lieu de dépôt de l'entreprise du DEVIS (son
      `proId`, et le `proId` ou le `pro_id` d'un LIEU) — une appartenance de
      lieu de dépôt, pas celle d'un poste. */
-  const sansLecturesDuDevis = (t) => ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation', 'finDeLAttestation',
-    'rubriquesDesDechets', 'entrepriseDuLieu']
-    .reduce((s, nom) => {
-      const f = fonctionJs(s, nom);
-      return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
-    }, t);
+  /* …ni, depuis 2b-6, `etatsDesTravaux`, `sousTraitantComplet`,
+     `rubriquesDeLEnergie` et leurs deux aides (`entrepriseDeLaLigne`,
+     `deLEntreprise`, deux `const` d'une ligne) : la règle du rang 14 ne
+     compte qu'un signe de qualité ou un sous-traitant de l'entreprise du
+     DEVIS — une appartenance de ligne de « Mon entreprise », pas celle d'un
+     poste. */
+  const AIDES_2B6 = [/\nconst entrepriseDeLaLigne = [^\n]*\n/, /\nconst deLEntreprise = [^\n]*\n[^\n]*\n/];
+  const sansLecturesDuDevis = (t) => AIDES_2B6.reduce((s, re) => s.replace(re, '\n'),
+    ['rowToDevis', 'totauxDepuisBase', 'motifsDeRemise', 'etatDeLAttestation', 'finDeLAttestation',
+      'rubriquesDesDechets', 'entrepriseDuLieu', 'etatsDesTravaux', 'sousTraitantComplet', 'rubriquesDeLEnergie']
+      .reduce((s, nom) => {
+        const f = fonctionJs(s, nom);
+        return f ? s.slice(0, f.debut) + s.slice(f.fin) : s;
+      }, t));
   const LECTEURS = ['src/lib/postes.js', 'src/lib/devis.js', ...['carte', 'designation', 'ajout', 'poste', 'page'].map((k) => ECRANS_BASE[k])]
     .map((f) => (existsSync(path.join(RACINE, f)) ? sansCommentairesJs(lire(f)) : ''))
     .map((t, i) => (i === 1 ? sansLecturesDuDevis(t) : t)).join('\n');

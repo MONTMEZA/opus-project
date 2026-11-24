@@ -76,8 +76,9 @@
  *      et garde les cinq manques de l'entreprise de démonstration ; et
  *      « Terrasse en bois », à qui il ne manque que la validité et la nature
  *      de l'acompte. Sans eux, ces deux états ne se verraient nulle part sans
- *      `.env` (critique E-14). « Mes devis » montre donc QUATRE brouillons :
- *      les contrôles qui en comptaient deux changent avec cette raison ;
+ *      `.env` (critique E-14). « Mes devis » montre donc QUATRE brouillons
+ *      — CINQ depuis 2b-6 (point 8) : les contrôles qui en comptaient deux,
+ *      puis quatre, changent avec cette raison ;
  *   6. depuis 2b-4, le prix du devis LUI-MÊME : « Muret » est GRATUIT (il
  *      reste à « rien ne manque » et sans avis), « Terrasse » est PAYANT
  *      (30,00 € TTC : ses deux points ne bougent pas, et l'avis du devis
@@ -97,7 +98,23 @@
  *      La démonstration ne répond JAMAIS « Non » à la place d'un devis. Les
  *      huit colonnes sont ÉCRITES sur chaque devis, `null` quand rien n'est
  *      dit (jamais une clé absente). Un brouillon NEUF naît sans réponse
- *      (`videDevis`), donc avec le point `devis_dechets`.
+ *      (`videDevis`), donc avec le point `devis_dechets` ;
+ *   8. depuis 2b-6, les TRAVAUX D'ÉNERGIE ET LE LABEL RGE (cahier T14) :
+ *      « Muret » et « Terrasse » répondent « Aucun de ces travaux » (ils
+ *      gardent leurs parcours) ; « Sol du séjour » ne répond pas — on y voit
+ *      `devis_energie` ; « Rénovation salle de bains » coche la ventilation,
+ *      que rien ne porte, et sa réponse « à quel titre » est vide — on y voit
+ *      `devis_energie_mentions_prudence` ; et un CINQUIÈME brouillon,
+ *      « Isolation des combles et des murs », à titre privé, complet aux
+ *      rangs 1 à 13, coche les deux : les murs portés par le signe de
+ *      qualité de démonstration, les combles par aucun — on y voit
+ *      `devis_energie_mentions` (« La loi ») et l'avis du label qui finit
+ *      avant la fin de validité du devis. Le plus ancien des cinq : « Mes
+ *      devis » le range en dernier. Les signes de qualité et les
+ *      sous-traitants de démonstration vivent dans la fiche
+ *      (`emetteur-demo.js`), comme les lieux. Les quatre colonnes sont
+ *      ÉCRITES sur chaque devis (`energie`), `null` quand rien n'est dit ;
+ *      un brouillon NEUF naît sans réponse, donc avec `devis_energie`.
  *
  * L'artisan est la fiche `1` — un NOMBRE ici, une CHAÎNE ailleurs
  * (`Object.keys()`) : toute comparaison passe par `String()`, le piège des
@@ -131,14 +148,17 @@ export const DEVIS_DEMO_IDS = Object.freeze({
   sejour: 'de000002-0000-4000-8000-000000000002',
   muret: 'de000003-0000-4000-8000-000000000003',
   terrasse: 'de000004-0000-4000-8000-000000000004',
+  /* 2b-6 (cahier T14) : le cinquième, pour le rang 14 et l'avis du label. */
+  isolation: 'de000005-0000-4000-8000-000000000005',
 });
 
-/* Le devis d'une ligne de démonstration, par son numéro (1 à 4). */
+/* Le devis d'une ligne de démonstration, par son numéro (1 à 5). */
 const DEVIS_PAR_NUMERO = Object.freeze({
   1: DEVIS_DEMO_IDS.renovation,
   2: DEVIS_DEMO_IDS.sejour,
   3: DEVIS_DEMO_IDS.muret,
   4: DEVIS_DEMO_IDS.terrasse,
+  5: DEVIS_DEMO_IDS.isolation,
 });
 
 /* L'identifiant d'une ligne de démonstration : le devis, puis son rang —
@@ -198,6 +218,22 @@ function dechets({
   };
 }
 
+/* LES QUATRE COLONNES DE L'ÉNERGIE d'un devis de démonstration (2b-6,
+   cahier T14), TOUTES écrites — `null` quand rien n'est dit, jamais une clé
+   absente (la règle des déchets) ; des listes NEUVES, jamais vides (la base
+   refuse `[]`). Rien n'y est déduit de l'objet du devis ni de ses lignes :
+   « Opus propose, l'artisan confirme » vaut aussi pour la démonstration. */
+function energie({
+  travaux = null, sansLabel = null, sousTraitance = null, sousTraitants = null,
+} = {}) {
+  return {
+    energieTravaux: travaux ? [...travaux] : null,
+    energieSansLabel: sansLabel ? [...sansLabel] : null,
+    energieSousTraitance: sousTraitance,
+    energieSousTraitants: sousTraitants ? [...sousTraitants] : null,
+  };
+}
+
 export function fabriquerDevisDemo(maintenant = new Date()) {
   const t = maintenant.getTime();
   const il = (ms) => new Date(t - ms).toISOString();
@@ -229,6 +265,12 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       ...dechets({
         concerne: true, quantite: 2500, unite: 'm3', flux: ['mineral', 'platre'], lieux: [LIEU_DEPOT_DEMO_ID], cout: null,
       }),
+      /* 2b-6 (T14) : la ventilation est cochée (une VMC refaite dans la
+         salle de bains), et aucun signe de qualité de démonstration ne la
+         porte. Sa réponse « à quel titre » est VIDE : on y voit
+         `devis_energie_mentions_prudence`, et la phrase de prudence de la
+         carte. */
+      ...energie({ travaux: ['ventilation'] }),
       generation: num(3 * JOUR),
       createdAt: il(5 * JOUR),
       modifieLe: il(3 * JOUR),
@@ -262,6 +304,10 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
          `devis_dechets` se voit ici sans `.env`, et son bouton ouvre la carte
          EN HAUT, sur la question. Les huit colonnes ÉCRITES `null`. */
       ...dechets({}),
+      /* 2b-6 (T14) : la question des travaux d'énergie n'a PAS de réponse —
+         `devis_energie` (« Par prudence ») se voit ici, et son bouton ouvre
+         la carte « Énergie et label RGE » SUR la question. */
+      ...energie({}),
       generation: num(2 * HEURE),
       createdAt: il(26 * HEURE),
       modifieLe: il(2 * HEURE),
@@ -310,6 +356,10 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       ...dechets({
         concerne: true, quantite: 3000, unite: 'm3', flux: ['mineral'], lieux: [LIEU_DEPOT_DEMO_ID], cout: 12000,
       }),
+      /* 2b-6 (T14) : « Aucun de ces travaux » — un muret ne comporte aucun
+         travail d'économies d'énergie ; sans cette réponse, « Ce devis » ne
+         serait plus complet (`devis_energie`, rang 14). */
+      ...energie({ travaux: ['aucun'] }),
       generation: num(8 * JOUR),
       createdAt: il(9 * JOUR),
       modifieLe: il(8 * JOUR),
@@ -341,9 +391,51 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       ...dechets({
         concerne: true, quantite: 500, unite: 't', flux: ['bois'], lieux: [LIEU_DEPOT_DEMO_ID], cout: 6000,
       }),
+      /* 2b-6 (T14) : « Aucun de ces travaux » aussi — « Terrasse » garde ses
+         DEUX points. */
+      ...energie({ travaux: ['aucun'] }),
       generation: num(6 * JOUR),
       createdAt: il(7 * JOUR),
       modifieLe: il(6 * JOUR),
+    },
+    /* LE CINQUIÈME BROUILLON (2b-6, cahier T14 et §3.9) : « Isolation des
+       combles et des murs » — l'objet dit les DEUX travaux (ÉCRAN-9). Pour
+       Mme Martin, à titre privé, COMPLET aux rangs 1 à 13 (client, lieu,
+       délai, validité, poste, acompte et sa nature, la décennale de
+       démonstration jointe, le prix du devis dit, ses déchets REMPLIS —
+       jamais « Non »). Les deux travaux cochés : les murs par l'extérieur
+       sont portés par le signe de qualité de démonstration (jusqu'à dans
+       45 jours, certificat joint : « couvert ») ; les combles, par AUCUN —
+       et rien n'est déclaré, la sous-traitance n'a pas de réponse. On y voit
+       donc `devis_energie_mentions` (« La loi »), et l'avis du label : la
+       fin du signe (45 jours) tombe avant la fin de validité du devis
+       (30 jours, plus trente pour le délai par défaut). Le plus ANCIEN des
+       cinq : « Mes devis » le range en dernier, et l'ordre des quatre autres
+       ne bouge pas. */
+    {
+      id: DEVIS_DEMO_IDS.isolation,
+      proId: PRO_DEMO_DEVIS,
+      quoteRequestId: null,
+      sosRequestId: null,
+      ...devisDepuisClient(martin),
+      statut: 'brouillon',
+      objet: 'Isolation des combles et des murs',
+      delaiExecution: DELAI_PAR_DEFAUT.texte,
+      retenueGarantieCentiemes: null,
+      validiteJours: 30,
+      acompteCentiemes: 3000,
+      acompteNature: 'acompte',
+      pourQui: 'consommateur',
+      pourQuiClient: martin.id,
+      engageDecennale: true,
+      coutDevisCentimes: 0,
+      ...dechets({
+        concerne: true, quantite: 4000, unite: 'm3', flux: ['laines'], lieux: [LIEU_DEPOT_DEMO_ID], cout: 9000,
+      }),
+      ...energie({ travaux: ['isolation_exterieur', 'isolation_combles'] }),
+      generation: num(10 * JOUR),
+      createdAt: il(11 * JOUR),
+      modifieLe: il(10 * JOUR),
     },
   ];
 
@@ -477,6 +569,25 @@ export function fabriquerDevisDemo(maintenant = new Date()) {
       designation: 'Platelage de terrasse en pin traité', unite: 'm2',
       quantiteMilliemes: 18000, prixUnitaireCentimes: 7800, tauxTvaCentiemes: 1000,
     }, 6 * JOUR + MINUTE),
+
+    /* LES DEUX LIGNES DU CINQUIÈME BROUILLON (2b-6), au plus l'horloge de
+       son devis. Leurs mots ne croisent aucun de ceux que les contrôles
+       cherchent dans la mémoire ou tapent (« chape », « Pos », « enduit »,
+       « tir », « seuil », « carrelage », « mart »…), ni AUCUNE des syllabes que
+       `verifier-postes` (cas 45) tape pour s'assurer qu'elle ne trouve RIEN
+       (« les », « aux », « des », « pas »…) : « combles » ou « panneaux »
+       les contenaient, et le cas 45 a rougi (mesuré). Au taux de 5,5 % des
+       travaux d'économies d'énergie — et ce taux ne dépend d'AUCUN label
+       (la garde TVA, T9). Rien de ces lignes ne coche un travail dans la
+       carte : seul un appui le fait. */
+    ligne(5, 1, {
+      designation: 'Isolation du comble perdu, laine minérale soufflée en 30 cm', unite: 'm2',
+      quantiteMilliemes: 64000, prixUnitaireCentimes: 2800, tauxTvaCentiemes: 550,
+    }, 10 * JOUR + 2 * MINUTE),
+    ligne(5, 2, {
+      designation: 'Isolation thermique extérieure, panneau de fibre de bois', unite: 'm2',
+      quantiteMilliemes: 85000, prixUnitaireCentimes: 13500, tauxTvaCentiemes: 550,
+    }, 10 * JOUR + MINUTE),
   ];
 
   return { devis, lignes };

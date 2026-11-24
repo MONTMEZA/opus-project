@@ -1946,8 +1946,15 @@ const verifierTextesLegaux = () => {
     /et un jour que VIES n’a pas répondu pour lui, sous une empreinte/.test(temps)
     && /de même votre déclaration sur l’honneur, son texte et sa date\. Elle est effacée si vous la retirez, ou remplacée si un autre numéro prend sa place/.test(temps)
     && /si VIES reconnaît ensuite ce même numéro, elle reste jointe à sa preuve, et reprend effet s’il le refuse de nouveau/.test(temps));
-  verifier('aucun texte légal ne dit « certifi… » (la case le dit, pas Opus)',
-    !/certifi/i.test(legal.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
+  /* À UN MOT PRÈS, depuis l'étape 2b-6 (24/11/2026), décidé EN LE DISANT :
+     les textes nomment désormais « le certificat » d'un signe de qualité (la
+     PIÈCE qu'un organisme délivre à l'artisan, cahier 2b-6 §4 — le mot de
+     l'écran, « Joindre le certificat »). Ce mot-là, et lui seul, est permis :
+     « certifié », « certifie », « certification »… restent refusés, puisque
+     c'est la case de la déclaration qui fait certifier l'artisan, jamais
+     Opus. `verifier-legal` éprouve le même motif sur ces formes. */
+  verifier('aucun texte légal ne dit « certifi… » (la case le dit, pas Opus) — sauf « certificat », la pièce d’un organisme',
+    !/certifi(?!cats?(?![\p{L}_]))/iu.test(legal.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')));
 };
 
 const verifierPaquet = () => {

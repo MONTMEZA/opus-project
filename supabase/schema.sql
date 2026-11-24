@@ -10937,6 +10937,13 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --      les déchets de ses chantiers, rangés une fois ici et choisis ensuite
 --      dans chaque devis (49.4 sexies), avec son propre déclencheur de
 --      nettoyage ;
+--    - DEPUIS L'ÉTAPE 2b-6 (24/11/2026), une CINQUIÈME et une SIXIÈME
+--      tables privées : `emetteur_labels` (46.2 ter), les signes de qualité
+--      de l'entreprise (le label RGE), et `emetteur_sous_traitants` (46.2
+--      quater), les entreprises qui font une partie de ses travaux — rangés
+--      une fois ici, lus par le rang 14 de la liste (49.9) et, pour les
+--      sous-traitants, choisis dans chaque devis (49.4 septies), chacune
+--      avec son déclencheur de nettoyage ;
 --    - trois déclencheurs de NETTOYAGE, qui vivent avec leurs colonnes ;
 --    - une fonction de lecture, `emetteur_incomplet()`, qui rend ce qui
 --      manque — chaque élément « cle: phrase ».
@@ -10974,8 +10981,8 @@ grant execute on function public.admin_retirer_entreprise(uuid, text) to authent
 --  public tout le reste. D'où la règle écrite en tête de cette table :
 --  ON N'Y RANGE JAMAIS RIEN QUI DOIVE RESTER PRIVÉ.
 --
---  PERSONNE D'AUTRE NE LIT CES TROIS TABLES (QUATRE depuis 2b-5) — et ce
---  qu'il faut en dire honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
+--  PERSONNE D'AUTRE NE LIT CES TROIS TABLES (QUATRE depuis 2b-5, SIX depuis
+--  2b-6) — et ce qu'il faut en dire honnêtement. Aucune politique, aucune fonction `admin_*`, aucun écran ne
 --  donne à l'administration d'Opus la lecture des informations de devis
 --  d'un artisan ni de ses tarifs : le propriétaire, du métier, ne lit pas
 --  les prix des autres artisans (`DONNEES-DES-ARTISANS.md` §5.2). La seule
@@ -11427,6 +11434,393 @@ create policy "mes lieux de depot" on public.emetteur_lieux_depot
    d'autre. */
 revoke all on public.emetteur_lieux_depot from anon;
 revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated;
+
+-- --------------------------------------------------------------------------
+--  46.2 ter `emetteur_labels` — les signes de qualité de l'entreprise (le
+--           label RGE) (lot 2b, étape 2b-6, 24/11/2026)
+--
+--  Quand un professionnel propose à un particulier des travaux d'économies
+--  d'énergie ou d'énergie renouvelable dans un logement, pour lesquels une
+--  aide financière exige un label ou un signe de qualité, le contrat dit
+--  s'il détient ou non ce signe « pour les catégories de travaux
+--  concernés », avec son justificatif (code de la consommation,
+--  L. 224-114 ; décret n° 2014-812). Sans cette information, le contrat
+--  conclu avec un consommateur est NUL (L. 242-51), et l'entreprise s'expose
+--  à une amende administrative. Un artisan détient ses signes de qualité
+--  pour tous ses devis : il les RANGE UNE FOIS ici, dans « Mon entreprise »
+--  (décision Q5 du propriétaire, 23/11/2026), et le rang 14 de la liste
+--  (49.9) les relit, UNE lecture filtrée par l'entreprise du devis.
+--
+--  UNE LIGNE PAR SIGNE, et pas une colonne : une entreprise peut en détenir
+--  deux, chez deux organismes, avec deux dates de fin ; et ce qui pourrait
+--  un jour devenir public PAR LIGNE ne vit pas dans `emetteur` (la règle de
+--  `tarifs_pro`, 46.3 : une règle RLS filtre des lignes, jamais des
+--  colonnes). Jamais une colonne de `professional_profiles` non plus : le
+--  badge public « Certification RGE » (`rge`, `rge_declare`, `rge_expire`,
+--  `rge_url`, `rge_numero`) reste à part, et RIEN ICI NE LE LIT NI NE
+--  L'ÉCRIT (décision Q5, et T29 du cahier 2b-6) — ses défauts connus sont
+--  écrits dans `docs/A-FAIRE.md`.
+--
+--  LE MODÈLE EST `emetteur_lieux_depot` (46.2 bis), pièce par pièce : une
+--  table fille, la clé vers la fiche professionnelle en `cascade` (la seule
+--  colonne `not null` avec l'identifiant), des colonnes nullables, les
+--  contraintes posées après coup et nommées en `_check`, une date de
+--  création posée par la base, aucun `modifie_le`. Ce que le devis devra
+--  porter — l'organisme qui l'a délivré, l'intitulé, les travaux couverts,
+--  la date de fin — est tenu par UNE contrainte nommée,
+--  `emetteur_label_complet_check` : un signe rangé est toujours complet,
+--  SAUF son certificat, qui peut manquer.
+--
+--    - LES TRAVAUX COUVERTS (`categories`) : une liste FERMÉE de dix-neuf
+--      clés — les dix-sept catégories du décret n° 2014-812, dans son
+--      ordre, puis `photovoltaique` et `desembouage`, comptées PAR PRUDENCE
+--      (réponse P12 du propriétaire, 24/11 : « Les 17, plus ces 2 »). Ce
+--      sont les MÊMES clés, dans le même ordre, que la question des travaux
+--      du devis (`devis.energie_travaux`, 49.4 septies) et que
+--      `TRAVAUX_ENERGIE` (`src/data/travaux-energie.js`), que les contrôles
+--      comparent. `aucun` n'est jamais une catégorie d'un signe : il
+--      n'existe que sur le devis. La liste est écrite EN TOUTES LETTRES dans
+--      la contrainte : une fonction appelée par une contrainte en ferait une
+--      gardienne, que `verifier-portes` exigerait exécutable par
+--      `authenticated` (la raison écrite pour `emetteur_lieu_type_check`).
+--      L'allonger demandera une migration ;
+--    - LA DATE DE FIN est OBLIGATOIRE : une qualification a une date
+--      d'échéance de la période de qualification, une certification aussi
+--      (arrêté du 01/12/2015) ; sans date lisible, l'artisan la demande à
+--      l'organisme, et le formulaire le dit. Aucune borne : `'infinity'`
+--      passe, comme pour les assurances — seul un client modifié l'écrit, et
+--      l'écran n'en affiche rien d'étrange. Une borne commune aux dates de
+--      fin, si 2c les imprime, est notée dans `docs/A-FAIRE.md` ;
+--    - LE CERTIFICAT (`justificatif_chemin`), dans l'espace privé
+--      `documents`, UN niveau sous le dossier de l'artisan (la forme de
+--      `emetteur_assurance_chemin_check`). Un signe SANS certificat ne
+--      couvre rien, et il EMPÊCHE la déclaration « je ne détiens pas de
+--      label » de taire le point pour les travaux qu'il porte, tant qu'il
+--      est valable (49.9) : on ne déclare pas ne pas détenir ce qu'on a dit
+--      détenir — il faut joindre le certificat, ou retirer le signe.
+--      L'administration d'Opus lit ce fichier comme toute pièce de
+--      `documents` (sa politique de stockage), et il reste dans l'espace
+--      privé jusqu'à la suppression du compte, même retiré de la fiche : les
+--      textes légaux le disent ;
+--    - L'ORGANISME est un texte libre, pas une liste fermée (question au
+--      juriste, J69) ; le NUMÉRO du certificat (`reference`) est facultatif.
+--
+--  LE ROGNAGE : l'organisme, l'intitulé et le numéro par LA classe de blancs
+--  du projet, invisibles compris, écrite EN LIGNE et en `chr(n)` (trois
+--  copies de plus ; la classe n'est PAS consolidée, décision T15 du cahier
+--  2b-6, le choix de 2b-5) ; le CHEMIN par la PETITE classe (espace,
+--  tabulation, retours à la ligne), comme `tient_l_assurance()` — sans elle,
+--  un chemin suivi d'une espace serait un autre chemin que le fichier
+--  envoyé, et une chaîne vide serait refusée par la contrainte du chemin au
+--  lieu de valoir « aucun certificat » (mesuré, cahier 2b-6, k09 et k10).
+--
+--  SON NOM COMMENCE PAR `emetteur_`, et le tiret bas est une LETTRE de mot :
+--  `emetteur_labels` ne contient PAS le mot `emetteur`. Elle entre donc, EN
+--  LE DÉCIDANT, dans chacune des listes fermées qui disent qui lit ces
+--  tables (`verifier-emetteur`, `verifier-legal`, `verifier-tarifs`, les
+--  essais 46, 47 et 49-remise).
+--
+--  PRIVÉE, comme les quatre autres : `est_mon_entreprise(pro_id)` des deux
+--  côtés, aucune politique pour l'administration ni pour `anon`. `for all`
+--  est juste ici (la règle du carnet de clients) : retirer un de ses signes
+--  ne détruit rien qui engage un tiers ; c'est le devis REMIS (2c) qui
+--  figera ce qu'il a imprimé. AUCUN déclencheur ne récrit les devis quand un
+--  signe part : leur point revient (49.9).
+-- --------------------------------------------------------------------------
+create table if not exists public.emetteur_labels (
+  id                   uuid primary key default gen_random_uuid(),
+  pro_id               uuid not null references public.professional_profiles(id) on delete cascade,
+  -- L'organisme qui l'a délivré, un texte libre (J69).
+  organisme            text,
+  -- L'intitulé, tel qu'il figure sur le certificat.
+  intitule             text,
+  -- Le numéro du certificat : FACULTATIF.
+  reference            text,
+  -- Les travaux couverts, dans la liste FERMÉE des dix-neuf clés.
+  categories           text[],
+  valide_jusquau       date,
+  -- Le certificat, dans l'espace privé `documents`, un niveau sous le
+  -- dossier de l'artisan. Vide = pas encore joint.
+  justificatif_chemin  text,
+  -- Posée par la BASE (le déclencheur), jamais par le téléphone. Son
+  -- lecteur : l'ordre de la liste, `created_at, id`.
+  created_at           timestamptz default clock_timestamp()
+);
+
+create index if not exists idx_emetteur_labels_pro
+  on public.emetteur_labels (pro_id);
+
+alter table public.emetteur_labels enable row level security;
+
+/* LES QUATRE CONTRAINTES, dans l'ordre alphabétique de leurs noms — celui
+   dans lequel PostgreSQL nomme la première qu'une ligne viole (mesuré au
+   lot 1), et celui que `premierRefus` (`src/lib/emetteur.js`) suit déjà.
+     - les catégories : un tableau à UNE dimension, de borne basse 1, de 1
+       à 19 clés de la liste fermée, sans élément vide — le tableau VIDE,
+       deux dimensions ou une autre borne basse vont à `else false`, sous ce
+       nom, au lieu d'une erreur en anglais (la forme des déchets, 2b-5) ;
+     - le chemin : un niveau sous le dossier de l'ARTISAN ;
+     - la CROISÉE de ce qui s'imprimera : l'organisme, l'intitulé, les
+       travaux, la date de fin, tous écrits — le certificat, non ;
+     - les longueurs. */
+alter table public.emetteur_labels drop constraint if exists emetteur_label_categories_check;
+alter table public.emetteur_labels add constraint emetteur_label_categories_check
+  check (categories is null or case
+    when array_ndims(categories) = 1 and array_lower(categories, 1) = 1
+    then cardinality(categories) between 1 and 19
+         and categories <@ array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage',
+                                 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit',
+                                 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles',
+                                 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique',
+                                 'desembouage']
+         and array_position(categories, null) is null
+    else false end);
+alter table public.emetteur_labels drop constraint if exists emetteur_label_chemin_check;
+alter table public.emetteur_labels add constraint emetteur_label_chemin_check
+  check (justificatif_chemin is null or justificatif_chemin ~ ('^' || pro_id::text || '/[^/]+$'));
+alter table public.emetteur_labels drop constraint if exists emetteur_label_complet_check;
+alter table public.emetteur_labels add constraint emetteur_label_complet_check
+  check (organisme is not null and intitule is not null and categories is not null and valide_jusquau is not null);
+alter table public.emetteur_labels drop constraint if exists emetteur_label_longueurs_check;
+alter table public.emetteur_labels add constraint emetteur_label_longueurs_check
+  check (coalesce(char_length(organisme), 0) <= 120
+         and coalesce(char_length(intitule), 0) <= 120
+         and coalesce(char_length(reference), 0) <= 60);
+
+/* LE DÉCLENCHEUR, créé AVANT d'être posé, et AVANT le balayage de la
+   section 43 (qui lui retire `execute`). `security invoker`, `search_path`
+   fixé. Son corps ne nomme AUCUNE table : les listes fermées des essais 46
+   et 47 relisent le texte des fonctions. */
+create or replace function public.tient_le_label()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.organisme := nullif(btrim(coalesce(new.organisme, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.intitule := nullif(btrim(coalesce(new.intitule, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.justificatif_chemin := nullif(btrim(coalesce(new.justificatif_chemin, ''), ' ' || chr(9) || chr(13) || chr(10)), '');
+  new.reference := nullif(btrim(coalesce(new.reference, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+
+  if tg_op = 'UPDATE' then
+    new.created_at := old.created_at;
+  else
+    new.created_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_label
+  before insert or update on public.emetteur_labels
+  for each row execute function public.tient_le_label();
+
+comment on function public.tient_le_label() is
+  'Nettoie un signe de qualité (label RGE) avant écriture : l''organisme, l''intitulé et le numéro rognés par la '
+  'classe de blancs du projet (en chr(n), invisibles compris), le chemin du certificat rogné par la petite classe '
+  '(espace, tabulation, retours à la ligne), la date de création posée par la base à l''insertion puis gardée. '
+  'security invoker. Section 46.2 ter.';
+
+comment on table public.emetteur_labels is
+  'Les signes de qualité (label RGE) qu''un artisan détient : organisme, intitulé, numéro facultatif, travaux '
+  'couverts (dix-neuf clés, celles de devis.energie_travaux), date de fin, certificat dans l''espace documents. '
+  'Rangés une fois, lus par le rang 14 de motifs_refus_remise (filtrés par pro_id). PRIVÉE, comme emetteur : '
+  'lisible par son seul titulaire, aucune politique pour l''administration ni pour anon. Jamais le badge public '
+  'rge de professional_profiles. Section 46.2 ter.';
+
+/* QUI LIT, QUI ÉCRIT — la forme de 46.2 bis : une seule politique `for all`,
+   `est_mon_entreprise()` des deux côtés, aucun `auth.uid() = …` écrit à la
+   main. */
+drop policy if exists "mes labels" on public.emetteur_labels;
+create policy "mes labels" on public.emetteur_labels
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+/* LES DROITS DE TABLE, EN TOUTES LETTRES (la raison de 46.2 bis) : `anon`
+   n'a rien ; `authenticated` n'a ni `truncate`, ni `references`, ni
+   `trigger`. MAINTAIN (PostgreSQL 17) : le balayage de 42 bis le retire,
+   sous condition de version, ici ; sur la vraie base, un appel À PART de la
+   migration, envoyé seulement si le relevé après le demande. */
+revoke all on public.emetteur_labels from anon;
+revoke truncate, references, trigger on public.emetteur_labels from authenticated;
+
+-- --------------------------------------------------------------------------
+--  46.2 quater `emetteur_sous_traitants` — les entreprises qui font une
+--              partie, ou la totalité, des travaux (lot 2b, étape 2b-6,
+--              24/11/2026)
+--
+--  Sur le même contrat, la loi demande si le professionnel fait réaliser
+--  une partie ou la totalité de son exécution par des sous-traitants :
+--  l'identité de CHACUN, et son signe de qualité quand une aide en exige un
+--  (code de la consommation, L. 224-115) ; sans ces informations, le
+--  contrat conclu avec un consommateur est nul (L. 242-51). Le propriétaire
+--  a choisi le 23/11 (réponse P3, « Rangés une fois ») : une liste « Mes
+--  sous-traitants » dans « Mon entreprise », cochée sur le devis comme les
+--  lieux de dépôt — le devis ne garde que leurs identifiants
+--  (`devis.energie_sous_traitants`, 49.4 septies), sans clé étrangère.
+--
+--  UN SOUS-TRAITANT EST UNE AUTRE ENTREPRISE, PAS UN COMPTE OPUS. Aucun lien
+--  vers un compte, jamais `professional_partners` : un partenariat relie
+--  deux COMPTES, avec consentement ; un sous-traitant n'a souvent pas de
+--  compte, et l'artisan le nomme seul. Son nom, son SIRET et son
+--  justificatif sont des données d'un TIERS, que l'artisan range sous sa
+--  responsabilité (le modèle du carnet de clients, section 41) : ils partent
+--  avec SON compte, et reviennent à LUI dans son export — jamais au
+--  sous-traitant.
+--
+--    - L'IDENTITÉ : le nom ou la raison sociale, et le SIRET, OBLIGATOIRE et
+--      de quatorze chiffres — la seule identité que les textes nomment (le
+--      modèle des certificats d'économies d'énergie ; décision T19 du cahier
+--      2b-6). Le déclencheur n'en garde que les chiffres ; l'écran refuse en
+--      plus une clé de Luhn fausse, la base non (le siège de La Poste ne
+--      passe pas Luhn). Un sous-traitant d'un autre pays de l'Union, sans
+--      SIRET, ne peut pas être rangé : noté dans `docs/A-FAIRE.md`, posé au
+--      juriste (J39) ;
+--    - SON LABEL (`label_detient`) a TROIS états : vide (pas encore dit — le
+--      sous-traitant est alors INCOMPLET pour le rang 14), faux (« Non »),
+--      vrai (« Oui »). Sous « Oui », les travaux couverts (les dix-neuf
+--      clés de 46.2 ter) et la date de fin sont exigés par la CROISÉE de
+--      `emetteur_sous_traitant_complet_check` — la SECONDE barrière de
+--      « jamais labellisé sans date » ; la première est la forme `is not
+--      true` du rang 14 (49.9). Le justificatif, lui (réponse P13 du
+--      propriétaire, 24/11 : « Oui, dans Opus »), est exigé par le rang 14
+--      pour qu'un sous-traitant qui a un label soit COMPLET ;
+--    - LE JUSTIFICATIF est rangé dans le dossier de l'ARTISAN
+--      (`^<pro_id>/…`) : c'est lui qui l'envoie, et le ménage de compte
+--      l'emporte avec les siens. L'administration d'Opus le lit comme toute
+--      pièce de `documents` : les textes le disent.
+--
+--  SOUS « NON » (OU SANS RÉPONSE), LE DÉCLENCHEUR EFFACE LES CHAMPS DU
+--  LABEL — les travaux, la date, le justificatif —, et c'est voulu (critique
+--  BASE-7 du cahier 2b-6) : les garder casserait la croisée, s'écarterait du
+--  modèle de tout le projet (le libellé d'un lieu hors « autre ») et
+--  garderait sans usage les données d'une autre entreprise. Le formulaire le
+--  dit AVANT d'enregistrer. Le FICHIER retiré de la ligne RESTE dans
+--  `documents` (aucun client n'y retire un fichier, lot S-a) : un document
+--  d'un tiers devenu orphelin, noté dans `docs/A-FAIRE.md`.
+--
+--  LE ROGNAGE : la raison sociale par LA classe de blancs, en `chr(n)`, EN
+--  LIGNE (une copie de plus : SEIZE copies dans HUIT fonctions depuis
+--  2b-6) ; le chemin par la PETITE classe ; le SIRET réduit à ses chiffres.
+--  Même préfixe `emetteur_` que 46.2 ter, même conséquence : elle entre, EN
+--  LE DÉCIDANT, dans chaque liste fermée de ces tables.
+--
+--  PRIVÉE, `for all`, `est_mon_entreprise(pro_id)` des deux côtés : retirer
+--  un sous-traitant n'engage aucun tiers. Un devis qui le citait garde son
+--  identifiant, ORPHELIN, que plus rien ne compte (49.9).
+-- --------------------------------------------------------------------------
+create table if not exists public.emetteur_sous_traitants (
+  id                         uuid primary key default gen_random_uuid(),
+  pro_id                     uuid not null references public.professional_profiles(id) on delete cascade,
+  raison_sociale             text,
+  -- Quatorze chiffres, OBLIGATOIRE : le déclencheur retire le reste.
+  siret                      text,
+  -- Vide = pas encore dit ; faux = « Non » ; vrai = « Oui ».
+  label_detient              boolean,
+  -- Sous « Oui » seulement : le déclencheur efface les trois ailleurs.
+  label_categories           text[],
+  label_valide_jusquau       date,
+  label_justificatif_chemin  text,
+  -- Posée par la BASE (le déclencheur), jamais par le téléphone. Son
+  -- lecteur : l'ordre de la liste, `created_at, id`.
+  created_at                 timestamptz default clock_timestamp()
+);
+
+create index if not exists idx_emetteur_sous_traitants_pro
+  on public.emetteur_sous_traitants (pro_id);
+
+alter table public.emetteur_sous_traitants enable row level security;
+
+/* LES CINQ CONTRAINTES, dans l'ordre alphabétique de leurs noms :
+     - les catégories de son label : la forme de 46.2 ter, les mêmes
+       dix-neuf clés dans le même ordre ;
+     - le chemin du justificatif : un niveau sous le dossier de l'ARTISAN ;
+     - la CROISÉE : l'identité écrite, et « Oui » si et seulement si les
+       travaux et la date sont écrits (le déclencheur les efface ailleurs) ;
+     - la longueur du nom ;
+     - le SIRET : quatorze chiffres. */
+alter table public.emetteur_sous_traitants drop constraint if exists emetteur_sous_traitant_categories_check;
+alter table public.emetteur_sous_traitants add constraint emetteur_sous_traitant_categories_check
+  check (label_categories is null or case
+    when array_ndims(label_categories) = 1 and array_lower(label_categories, 1) = 1
+    then cardinality(label_categories) between 1 and 19
+         and label_categories <@ array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage',
+                                       'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit',
+                                       'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles',
+                                       'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique',
+                                       'desembouage']
+         and array_position(label_categories, null) is null
+    else false end);
+alter table public.emetteur_sous_traitants drop constraint if exists emetteur_sous_traitant_chemin_check;
+alter table public.emetteur_sous_traitants add constraint emetteur_sous_traitant_chemin_check
+  check (label_justificatif_chemin is null or label_justificatif_chemin ~ ('^' || pro_id::text || '/[^/]+$'));
+alter table public.emetteur_sous_traitants drop constraint if exists emetteur_sous_traitant_complet_check;
+alter table public.emetteur_sous_traitants add constraint emetteur_sous_traitant_complet_check
+  check (raison_sociale is not null and siret is not null
+         and (label_detient is true) = (label_categories is not null and label_valide_jusquau is not null));
+alter table public.emetteur_sous_traitants drop constraint if exists emetteur_sous_traitant_longueurs_check;
+alter table public.emetteur_sous_traitants add constraint emetteur_sous_traitant_longueurs_check
+  check (coalesce(char_length(raison_sociale), 0) <= 120);
+alter table public.emetteur_sous_traitants drop constraint if exists emetteur_sous_traitant_siret_check;
+alter table public.emetteur_sous_traitants add constraint emetteur_sous_traitant_siret_check
+  check (siret is null or siret ~ '^[0-9]{14}$');
+
+/* LE DÉCLENCHEUR — même forme que 46.2 ter, et le même ordre : créé avant
+   d'être posé, avant le balayage de la section 43 ; son corps ne nomme
+   aucune table. */
+create or replace function public.tient_le_sous_traitant()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.raison_sociale := nullif(btrim(coalesce(new.raison_sociale, ''), ' ' || chr(9) || chr(13) || chr(10) || chr(160) || chr(8203) || chr(8204) || chr(8205) || chr(8288) || chr(65279)), '');
+  new.label_justificatif_chemin := nullif(btrim(coalesce(new.label_justificatif_chemin, ''), ' ' || chr(9) || chr(13) || chr(10)), '');
+  new.siret := nullif(regexp_replace(coalesce(new.siret, ''), '[^0-9]', '', 'g'), '');
+
+  if new.label_detient is not true then
+    new.label_categories := null;
+    new.label_valide_jusquau := null;
+    new.label_justificatif_chemin := null;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    new.created_at := old.created_at;
+  else
+    new.created_at := clock_timestamp();
+  end if;
+  return new;
+end;
+$$;
+
+create or replace trigger trg_tient_le_sous_traitant
+  before insert or update on public.emetteur_sous_traitants
+  for each row execute function public.tient_le_sous_traitant();
+
+comment on function public.tient_le_sous_traitant() is
+  'Nettoie un sous-traitant avant écriture : le nom rogné par la classe de blancs du projet (en chr(n), invisibles '
+  'compris), le chemin du justificatif rogné par la petite classe, le SIRET réduit à ses chiffres, les champs du '
+  'label effacés hors « Oui », la date de création posée par la base à l''insertion puis gardée. security invoker. '
+  'Section 46.2 quater.';
+
+comment on table public.emetteur_sous_traitants is
+  'Les sous-traitants d''un artisan (une AUTRE entreprise, jamais un compte Opus) : nom ou raison sociale, SIRET, '
+  'son label RGE ou non (travaux couverts, date de fin, justificatif dans l''espace documents). Rangés une fois, '
+  'choisis ensuite dans chaque devis (devis.energie_sous_traitants, par leurs identifiants). Des données d''un tiers, '
+  'rangées par l''artisan sous sa responsabilité. PRIVÉE, comme emetteur : lisible par son seul titulaire, aucune '
+  'politique pour l''administration ni pour anon. Section 46.2 quater.';
+
+drop policy if exists "mes sous traitants" on public.emetteur_sous_traitants;
+create policy "mes sous traitants" on public.emetteur_sous_traitants
+  for all to authenticated
+  using (public.est_mon_entreprise(pro_id))
+  with check (public.est_mon_entreprise(pro_id));
+
+revoke all on public.emetteur_sous_traitants from anon;
+revoke truncate, references, trigger on public.emetteur_sous_traitants from authenticated;
 
 -- --------------------------------------------------------------------------
 --  46.3 `tarifs_pro` — privée aujourd'hui, publique PAR LIGNE plus tard
@@ -13630,9 +14024,128 @@ comment on column public.devis.dechets_cout_centimes is
   '999 999 999, jamais 0. Vide = pas dite. HORS des totaux : une estimation, pas un prix facturé. 49.4 sexies.';
 
 -- --------------------------------------------------------------------------
---  49.5 Les contraintes — quarante et une ici (sept de plus depuis 2b-5),
---       toutes en `_check`, et une quarante-deuxième en 49.6 ter
---       (`devis_calculs_check`, posée APRÈS son rattrapage)
+--  49.4 septies LES TRAVAUX D'ÉNERGIE ET LE LABEL RGE (lot 2b, étape 2b-6,
+--               24/11/2026)
+--
+--  Ajoutées ICI pour la même raison que 49.4 bis à sexies : les droits
+--  d'écriture vivent en 49.7. Quand un professionnel propose à un
+--  particulier des travaux d'économies d'énergie ou d'énergie renouvelable
+--  dans un logement, pour lesquels une aide financière exige un label, le
+--  contrat dit s'il détient ou non ce label pour les catégories de travaux
+--  concernés, avec son justificatif (code de la consommation, L. 224-114),
+--  et, s'il fait réaliser une partie des travaux par des sous-traitants,
+--  l'identité de chacun et son label (L. 224-115) ; sans ces informations,
+--  le contrat conclu avec un consommateur est nul (L. 242-51). Décisions
+--  du propriétaire du 23/11 (Q5, P1 à P3) et du 24/11 (P11 à P14) : une
+--  carte « Énergie et label RGE » par devis, des FAITS FERMÉS, dans les mots
+--  des textes ; les signes de qualité et les sous-traitants rangés une fois
+--  dans « Mon entreprise » (46.2 ter et 46.2 quater). Opus ne compose
+--  aucune phrase qui tire une conclusion de droit : la phrase imprimée
+--  s'écrira en 2c.
+--
+--  QUATRE COLONNES, NULLABLES, SANS DÉFAUT : un fait de 2b naît vide, et le
+--  vide vaut LE CAS LE PLUS PROTECTEUR. PostgreSQL n'écrit alors AUCUNE
+--  ligne existante (aucun rattrapage, aucune `modifie_le` qui bouge). Aucun
+--  nom ne contient `rge` : « RGE » est une appellation, pas une donnée ; et
+--  AUCUNE ne lit ni n'écrit le badge public `rge` de la fiche
+--  professionnelle (décision Q5).
+--
+--    `energie_travaux` (réponse P1 du 23/11, liste P12 du 24/11) : les
+--      travaux d'énergie que comporte le devis, dans une liste FERMÉE de
+--      dix-neuf clés — les dix-sept catégories du décret n° 2014-812, dans
+--      son ordre, puis `photovoltaique` et `desembouage`, par prudence —,
+--      ou `{aucun}` (« Aucun de ces travaux »), une valeur à elle,
+--      EXCLUSIVE des autres. VIDE DE VALEUR = rien de dit : un motif « Par
+--      prudence » (`devis_energie`, rang 14). JAMAIS DE TABLEAU VIDE : il
+--      naît d'une case décochée, et dirait une chose que l'artisan n'a pas
+--      dite (la leçon des déchets, 2b-5) — sa contrainte le refuse, sous
+--      son nom. Les mêmes clés, dans le même ordre, que les catégories d'un
+--      signe de qualité (46.2 ter) et que `TRAVAUX_ENERGIE`
+--      (`src/data/travaux-energie.js`).
+--    `energie_sans_label` (réponse P11) : les travaux pour lesquels
+--      l'artisan DÉCLARE, sur CE devis, ne pas détenir de label — de 1 à 19
+--      clés, jamais `aucun`. Vide de valeur = aucune déclaration ; jamais de
+--      tableau vide. Une déclaration ne vaut que pour les travaux qu'elle
+--      nomme, et elle ne tait JAMAIS le point d'un travail pour lequel un
+--      signe valable est rangé SANS son certificat (49.9) : on ne déclare
+--      pas ne pas détenir ce qu'on a dit détenir. Une clé restée pour un
+--      travail DÉCOCHÉ reste, sans effet ; si le travail est coché de
+--      nouveau, il revient déclaré, et sa case se montre cochée sous lui
+--      (critique BASE-1, tranché au cahier 2b-6). Et le cas rare, écrit et
+--      non corrigé : un travail déclaré, puis couvert par un label ajouté,
+--      puis ce label expire — la déclaration reprend effet ; c'est juste au
+--      fond (un label à date passée n'est plus détenu), et l'avis du label
+--      prévient avant l'échéance.
+--    `energie_sous_traitance` (réponse P3) : la réponse à « Un sous-traitant
+--      fera-t-il tout ou partie de ces travaux ? ». Vide = pas dite : la
+--      rubrique manque ; faux = « Non » ; vrai = « Oui ».
+--    `energie_sous_traitants` : sous « Oui », les sous-traitants choisis,
+--      des identifiants de `emetteur_sous_traitants`, dans l'ordre de la
+--      liste de « Mon entreprise » ; vide de valeur = aucun ; jamais de
+--      tableau vide ; dix au plus. « Non » ne les efface pas (aucune
+--      contrainte ne lie deux colonnes) : ils sont ignorés.
+--  `recalcule_devis()` ne lit AUCUNE de ces colonnes : rien de ce qui suit
+--  ne touche un total.
+--
+--  LE CONTRAT DE `energie_sous_traitants` — pour 2c, et pour tout lecteur à
+--  venir, le même que celui de `dechets_lieux` (49.4 sexies) : UN
+--  IDENTIFIANT DE CE TABLEAU NE PROUVE AUCUNE APPARTENANCE. Un tableau ne
+--  porte pas de clé étrangère, et un client modifié peut y écrire
+--  l'identifiant d'un sous-traitant d'un AUTRE artisan, ou un identifiant
+--  inventé : la base l'accepte, et c'est sans effet. TOUT LECTEUR FILTRE PAR
+--  `pro_id` (la liste des motifs le fait, 49.9) : un identifiant étranger ou
+--  orphelin ne lit rien et n'est compté par rien — aucun oracle. LA REMISE
+--  COPIERA les sous-traitants DISTINCTS, dans l'ordre du tableau, et FIGERA
+--  leur identité, leur label et leur justificatif tels qu'ils étaient
+--  (J70). Aucune cascade ne récrit un devis quand un sous-traitant part :
+--  l'identifiant reste, ignoré.
+--
+--  LA GARDE TVA (décision T9 du cahier 2b-6) : le label RGE NE TOUCHE PAS
+--  la TVA. Aucune condition de qualification n'existe pour les taux de 10 %
+--  et de 5,5 % des travaux de rénovation énergétique ; seuls le
+--  photovoltaïque et les bornes de recharge ont la leur, et ce sera le lot
+--  TVA. Elle est tenue par le CODE et par des contrôles, pas par une
+--  contrainte : le rang 3 de la liste et sa lecture des lignes ne nomment
+--  aucune de ces colonnes ; le bloc du rang 14 et sa lecture ne nomment
+--  aucune colonne ni aucune table de la TVA ; `recalcule_devis()` et
+--  `tient_la_ligne_de_devis()` ne nomment aucune de ces colonnes ni aucune
+--  des deux tables de 46.2 ter et quater ; et, au téléphone, les fonctions
+--  qui proposent un taux gardent leur signature, sans le devis ni un champ
+--  de l'énergie (`verifier-devis`).
+--
+--  AUCUNE CONTRAINTE NE LIE DEUX COLONNES (les travaux et la déclaration,
+--  « Non » et des sous-traitants choisis) : une règle qui lie deux colonnes
+--  d'un brouillon écrit champ par champ refuserait la saisie à mi-chemin
+--  (49.5). Ce qui manque est un MOTIF (rang 14, 49.9). Pas de date : aucune
+--  n'aurait de lecteur.
+-- --------------------------------------------------------------------------
+alter table public.devis add column if not exists energie_travaux        text[];
+alter table public.devis add column if not exists energie_sans_label     text[];
+alter table public.devis add column if not exists energie_sous_traitance boolean;
+alter table public.devis add column if not exists energie_sous_traitants uuid[];
+
+comment on column public.devis.energie_travaux is
+  'Les travaux d’énergie du devis, dans une liste fermée de dix-neuf clés (les dix-sept catégories du décret '
+  'n° 2014-812, puis photovoltaique et desembouage, par prudence), ou {aucun}, exclusif des autres. Vide de '
+  'valeur = rien de dit : un motif de refus de la remise (rang 14). Jamais de tableau vide. 49.4 septies.';
+comment on column public.devis.energie_sans_label is
+  'Les travaux pour lesquels l’artisan déclare, sur ce devis, ne pas détenir de label : de 1 à 19 clés, jamais '
+  'aucun. Vide de valeur = aucune déclaration ; jamais de tableau vide. Sans effet pour un travail couvert par '
+  'un signe de qualité rangé sans son certificat. 49.4 septies.';
+comment on column public.devis.energie_sous_traitance is
+  'La réponse à « Un sous-traitant fera-t-il tout ou partie de ces travaux ? ». Vide = pas dite ; faux = « Non » ; '
+  'vrai = « Oui ». 49.4 septies.';
+comment on column public.devis.energie_sous_traitants is
+  'Les sous-traitants choisis : des identifiants de emetteur_sous_traitants, dans l’ordre de la liste de « Mon '
+  'entreprise ». Vide de valeur = aucun ; jamais de tableau vide ; dix au plus. CONTRAT : un identifiant ne prouve '
+  'aucune appartenance (aucune clé étrangère) ; tout lecteur filtre par pro_id ; la remise copiera les '
+  'sous-traitants DISTINCTS, dans l’ordre, et figera leur identité et leur label. 49.4 septies.';
+
+-- --------------------------------------------------------------------------
+--  49.5 Les contraintes — quarante-quatre ici (sept de plus depuis 2b-5,
+--       trois de plus depuis 2b-6), toutes en `_check`, et une
+--       quarante-cinquième en 49.6 ter (`devis_calculs_check`, posée APRÈS
+--       son rattrapage)
 --
 --  `src/lib/erreurs.js` ne reconnaît une contrainte qu'à ce suffixe, et
 --  donne à chacune une phrase qui dit QUOI FAIRE (`MESSAGES_CONTRAINTE`).
@@ -13831,6 +14344,54 @@ alter table public.devis add constraint devis_dechets_sur_place_check
 alter table public.devis drop constraint if exists devis_dechets_unite_check;
 alter table public.devis add constraint devis_dechets_unite_check
   check (dechets_unite is null or dechets_unite in ('m3', 't'));
+/* LES TRAVAUX D'ÉNERGIE ET LE LABEL RGE (lot 2b, étape 2b-6, 49.4 septies) :
+   TROIS contraintes, une par TABLEAU (la réponse à la sous-traitance, un
+   booléen, n'en a pas besoin), sur la forme EXACTE des tableaux des déchets
+   (2b-5), et AUCUNE ne lie deux colonnes — une règle qui lierait la
+   déclaration aux travaux cochés refuserait la saisie à mi-chemin. Les
+   listes fermées sont écrites EN TOUTES LETTRES, les mêmes dix-neuf clés
+   dans le même ordre que les catégories d'un signe de qualité (46.2 ter) ;
+   `aucun` n'existe que dans les travaux, exclusif des autres, jamais dans
+   la déclaration. Dans l'ordre alphabétique, elles viennent entre
+   `devis_delai_check` et `devis_lieu_adresse_check`.
+
+   Le `case` refuse, sous son nom, le tableau VIDE, deux dimensions et une
+   borne basse autre que 1 ; `array_position(…, null)` refuse un élément
+   vide (mesuré au cahier 2b-6, annexe B.2 : chaque forme impossible rend
+   23514 sous le nom de sa contrainte). Un DOUBLON n'est pas refusé : le
+   téléphone n'en envoie jamais, et le rang 14 compte les sous-traitants
+   DISTINCTS. Dix sous-traitants au plus, comme les lieux de dépôt. */
+alter table public.devis drop constraint if exists devis_energie_sans_label_check;
+alter table public.devis add constraint devis_energie_sans_label_check
+  check (energie_sans_label is null or case
+    when array_ndims(energie_sans_label) = 1 and array_lower(energie_sans_label, 1) = 1
+    then cardinality(energie_sans_label) between 1 and 19
+         and energie_sans_label <@ array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage',
+                                         'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit',
+                                         'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles',
+                                         'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique',
+                                         'desembouage']
+         and array_position(energie_sans_label, null) is null
+    else false end);
+alter table public.devis drop constraint if exists devis_energie_sous_traitants_check;
+alter table public.devis add constraint devis_energie_sous_traitants_check
+  check (energie_sous_traitants is null or case
+    when array_ndims(energie_sous_traitants) = 1 and array_lower(energie_sous_traitants, 1) = 1
+    then cardinality(energie_sous_traitants) between 1 and 10
+         and array_position(energie_sous_traitants, null) is null
+    else false end);
+alter table public.devis drop constraint if exists devis_energie_travaux_check;
+alter table public.devis add constraint devis_energie_travaux_check
+  check (energie_travaux is null or case
+    when array_ndims(energie_travaux) = 1 and array_lower(energie_travaux, 1) = 1
+    then cardinality(energie_travaux) between 1 and 19
+         and energie_travaux <@ array['aucun', 'chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele',
+                                      'pac_chauffage', 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation',
+                                      'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur',
+                                      'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie',
+                                      'renovation_ensemble', 'photovoltaique', 'desembouage']
+         and (cardinality(energie_travaux) = 1 or not ('aucun' = any (energie_travaux)))
+    else false end);
 
 alter table public.devis_lignes drop constraint if exists devis_ligne_designation_check;
 alter table public.devis_lignes add constraint devis_ligne_designation_check
@@ -15072,6 +15633,10 @@ create policy "ventilation de mes devis" on public.devis_tva
      `dechets_unite`, `dechets_flux`, `dechets_sur_place`, `dechets_lieux`,
      `dechets_sans_depot`, `dechets_cout_centimes`, 49.4 sexies) — huit
      réponses de l'artisan, aucune date.
+     Depuis 2b-6, un devis naît et se modifie AUSSI sur les quatre faits des
+     travaux d'énergie et du label RGE (`energie_travaux`,
+     `energie_sans_label`, `energie_sous_traitance`, `energie_sous_traitants`,
+     49.4 septies) — quatre réponses de l'artisan, aucune date.
    Une colonne que l'application enverrait sans que la liste la rende ferait
    refuser la requête ENTIÈRE (42501) : c'est pourquoi `verifier-devis`
    compare cette liste à ce que l'application envoie, et l'essai du lot 2a la
@@ -15085,7 +15650,8 @@ grant insert (id, pro_id, source, client_id, quote_request_id, sos_request_id, o
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
               engage_decennale, acompte_a_la_signature, cout_devis_centimes,
               dechets_concerne, dechets_quantite_milliemes, dechets_unite, dechets_flux,
-              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes, generation)
+              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes,
+              energie_travaux, energie_sans_label, energie_sous_traitance, energie_sous_traitants, generation)
   on public.devis to authenticated;
 grant update (client_id, quote_request_id, sos_request_id, objet,
               lieu_adresse, lieu_code_postal, lieu_ville, delai_execution,
@@ -15094,7 +15660,8 @@ grant update (client_id, quote_request_id, sos_request_id, objet,
               pour_qui, pour_qui_client, chantier_neuf_conso, chantier_neuf_tva,
               engage_decennale, acompte_a_la_signature, cout_devis_centimes,
               dechets_concerne, dechets_quantite_milliemes, dechets_unite, dechets_flux,
-              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes, generation)
+              dechets_sur_place, dechets_lieux, dechets_sans_depot, dechets_cout_centimes,
+              energie_travaux, energie_sans_label, energie_sous_traitance, energie_sous_traitants, generation)
   on public.devis to authenticated;
 grant insert (id, devis_id, ordre, type, designation, quantite_milliemes, unite,
               prix_unitaire_centimes, taux_tva_centiemes, offert, main_oeuvre,
@@ -15126,7 +15693,7 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 -- --------------------------------------------------------------------------
 --  49.9 CE QU'IL MANQUE POUR REMETTRE CE DEVIS (lot 2b, étape 2b-1,
 --       05/11/2026 ; 2b-2, 09/11 ; 2b-3, 12/11 ; 2b-4, 16/11 ; 2b-5,
---       21/11) — `motifs_refus_remise(p_devis)`
+--       21/11 ; 2b-6, 24/11) — `motifs_refus_remise(p_devis)`
 --
 --  CE QU'ELLE FAIT. Elle dit, pour UN devis, tout ce qui manque pour qu'il
 --  puisse être remis au client : ce qui manque au devis lui-même, puis ce
@@ -15161,6 +15728,12 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  aucune écriture du devis. La remise de 2c lira les lieux qu'elle COPIE
 --  sous le même verrou, dans la même transaction que le statut. Rien à
 --  construire en 2b-5.
+--  DEPUIS 2b-6, ELLE DÉPEND AUSSI des lignes d'`emetteur_labels` et
+--  d'`emetteur_sous_traitants` — et, pour les signes de qualité et les
+--  sous-traitants, du JOUR (une date de fin qui passe fait revenir le
+--  rang 14 à minuit, sans aucune écriture). La remise de 2c lira les signes
+--  et les sous-traitants qu'elle FIGE sous le même verrou, dans la même
+--  transaction que le statut. Rien à construire en 2b-6.
 --
 --  « RIEN NE MANQUE » = ZÉRO LIGNE. Et seulement cela : une lecture qui
 --  échoue, ou un brouillon que la base n'a pas encore (rien tapé), n'est
@@ -15203,7 +15776,9 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --                sous-traite. SEPT RÈGLES D'OPUS en tout — 2b-3 n'en ajoute
 --                aucune (ses quatre motifs sont une prudence ou la loi), 2b-4
 --                non plus (son motif est une prudence, réponse Q2 du 16/11),
---                2b-5 non plus (ses deux motifs sont une prudence et la loi).
+--                2b-5 non plus (ses deux motifs sont une prudence et la loi),
+--                2b-6 non plus (ses trois motifs sont deux prudences et la
+--                loi).
 --                Et la TVA à 10 %
 --                ou 5,5 % : « tout permettre » ; c'est 2c qui imprimera la
 --                certification que le client signe. UNE SEULE EXCEPTION
@@ -15323,7 +15898,7 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  `filter`, même `order by l.ordre, l.id`, unique) : ils s'alignent indice
 --  par indice, et la boucle les parcourt ensemble, dans l'ordre `ordre,
 --  id`. La borne de la liste — 500 lignes au rang 3, plus les rangs 1, 2
---  et 4 à 13 : 512 motifs du devis depuis 2b-5 (les rangs 11, 12 et 13
+--  et 4 à 14 : 513 motifs du devis depuis 2b-6 (les rangs 11, 12, 13 et 14
 --  n'en sortent qu'un chacun) — garde trois chiffres. Elle se lit dans
 --  les LIGNES, jamais dans la ventilation, qui ignore les options (mesuré,
 --  critique B7). Régime non déclaré : aucun motif de ligne — celui de
@@ -15449,6 +16024,56 @@ create index if not exists idx_devis_lignes_devis on public.devis_lignes (devis_
 --  une règle d'Opus. La MÊME règle est écrite côté téléphone, une seule
 --  fois (`rubriquesDesDechets`, qui sert aussi le résumé de la rangée).
 --
+--  LES TRAVAUX D'ÉNERGIE ET LE LABEL RGE (2b-6, rang 14, 49.4 septies) —
+--  UNE clé au plus, trois clés possibles. La loi demande, quand un
+--  professionnel propose à un CONSOMMATEUR des travaux d'économies d'énergie
+--  ou d'énergie renouvelable pour lesquels une aide exige un label, de dire
+--  s'il détient ce label pour les catégories de travaux concernés, avec son
+--  justificatif, et, pour chaque sous-traitant, son identité et son label
+--  (code de la consommation, L. 224-114 et L. 224-115 ; sanction :
+--  L. 242-51). Le rang ne parle que pour une réponse « à quel titre » VIDE,
+--  `consommateur` ou `non_professionnel` (`v_valable is null or v_valable in
+--  (…)`) : les deux réponses « entreprise » le taisent, la loi visant le
+--  consommateur. Il sort :
+--    `devis_energie` (prudence) — les travaux ne sont pas dits
+--      (`energie_travaux` vide de valeur) : Opus ne sait pas encore si ce
+--      devis en relève ;
+--    `devis_energie_mentions` (loi) — à titre privé (`consommateur`), et une
+--      rubrique manque pour un des dix-sept travaux du décret, ou la
+--      sous-traitance ;
+--    `devis_energie_mentions_prudence` (prudence) — une rubrique manque, et
+--      la loi ne parle peut-être pas : la réponse est vide ou
+--      `non_professionnel`, ou seuls les deux travaux comptés par prudence
+--      (`photovoltaique`, `desembouage`, réponse P12) manquent.
+--  `{aucun}` tait le rang sans être nommé dans le bloc : la lecture 3 quater
+--  ne tourne pas, et les trois compteurs restent à zéro et faux.
+--  UNE RUBRIQUE MANQUE quand : pour un travail coché, aucun signe de qualité
+--  de CETTE entreprise ne le couvre (ses catégories le portent, sa date de
+--  fin est au moins le jour de Paris, son certificat est joint) ET l'artisan
+--  ne déclare pas, sur ce devis, ne pas détenir de label pour lui
+--  (`energie_sans_label`, réponse P11) — sauf qu'un signe VALABLE rangé SANS
+--  certificat empêche la déclaration de taire le point (on ne déclare pas ne
+--  pas détenir ce qu'on a dit détenir) ; la sous-traitance n'est pas dite ;
+--  « Oui » et aucun des sous-traitants choisis n'existe chez CETTE
+--  entreprise, ou l'un d'eux est INCOMPLET (son label n'est pas dit ; ou il
+--  a un label dont la date est passée, absente, ou sans justificatif —
+--  réponse P13). Un label à date passée n'est plus détenu : il est
+--  DÉCLARABLE. `is not true`, jamais `not (…)` : une déclaration vide de
+--  valeur, ou une date de fin absente, ferait sinon taire le point.
+--  LES DEUX LECTURES SONT UNE CHACUNE, leurs colonnes nommées, filtrées par
+--  l'entreprise du devis (`g.pro_id = v_pro`, `s.pro_id = v_pro`) et, pour
+--  les sous-traitants, par le tableau du devis, compté DISTINCT : un
+--  identifiant étranger ou orphelin ne compte pas (le contrat de
+--  `energie_sous_traitants`, 49.4 septies). Aujourd'hui la RLS (« mes
+--  labels », « mes sous traitants ») filtre aussi ; quand la remise de 2c
+--  appellera cette fonction depuis une fonction `security definer`, ces
+--  filtres seront la SEULE barrière — l'essai le prouve par une enveloppe
+--  `security definer` (cas 27 de l'essai 49-remise). Elles ne lisent ni le
+--  badge public de la fiche professionnelle, ni l'identité d'un
+--  sous-traitant, ni la TVA (la garde TVA, 49.4 septies), ni l'origine du
+--  devis. PAS une règle d'Opus. La MÊME règle est écrite côté téléphone,
+--  une seule fois (`rubriquesDeLEnergie`).
+--
 --  LES LIGNES SONT LUES UNE FOIS, agrégées (critique B3). La politique des
 --  lignes parcourt aujourd'hui tous les devis de la plateforme (36 ms à
 --  102 000 devis, mesuré) : un défaut EXISTANT, noté dans `docs/A-FAIRE.md`,
@@ -15538,6 +16163,15 @@ declare
   v_dechets_sans   boolean;
   v_dechets_cout   bigint;
   v_lieux_existants bigint := 0;
+  v_energie         text[];
+  v_energie_sans    text[];
+  v_energie_st      boolean;
+  v_energie_st_ids  uuid[];
+  v_label_loi       bigint := 0;
+  v_label_prudence  bigint := 0;
+  v_st_choisis      bigint := 0;
+  v_st_incomplets   bigint := 0;
+  v_st_manque       boolean := false;
   v_valable        text;
   v_regime         text;
   v_un_poste       boolean;
@@ -15560,14 +16194,16 @@ begin
          d.pour_qui, d.pour_qui_client, d.chantier_neuf_tva,
          d.engage_decennale, d.acompte_a_la_signature, d.cout_devis_centimes,
          d.dechets_concerne, d.dechets_quantite_milliemes, d.dechets_unite, d.dechets_flux,
-         d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes
+         d.dechets_lieux, d.dechets_sans_depot, d.dechets_cout_centimes,
+         d.energie_travaux, d.energie_sans_label, d.energie_sous_traitance, d.energie_sous_traitants
     into v_pro, v_client, v_adresse, v_code_postal, v_ville,
          v_delai, v_validite, v_acompte_pct, v_acompte_eur,
          v_acompte_nat, v_acompte_eff, v_remise_eur, v_remise_eff,
          v_pour_qui, v_pour_qui_cl, v_neuf_tva,
          v_decennale, v_signature, v_cout,
          v_dechets, v_dechets_qte, v_dechets_unite, v_dechets_flux,
-         v_dechets_lieux, v_dechets_sans, v_dechets_cout
+         v_dechets_lieux, v_dechets_sans, v_dechets_cout,
+         v_energie, v_energie_sans, v_energie_st, v_energie_st_ids
     from public.devis d
    where d.id = p_devis
      and public.est_mon_entreprise(d.pro_id);
@@ -15644,6 +16280,49 @@ begin
     select count(distinct l.id) into v_lieux_existants
       from public.emetteur_lieux_depot l
      where l.pro_id = v_pro and l.id = any (v_dechets_lieux);
+  end if;
+
+  -- 3 quater. Les signes de qualité et les sous-traitants de l'entreprise
+  --    (49.4 septies), lus seulement si le rang 14 peut parler — une
+  --    réponse « à quel titre » vide, à titre privé, ou pour une
+  --    association — et si les travaux d'énergie sont dits, et ne sont pas
+  --    « Aucun » : UNE lecture par table, filtrée par l'entreprise du devis
+  --    (la seule barrière quand la remise de 2c l'appellera depuis une
+  --    fonction `security definer`, où la RLS ne filtre plus). Pour chaque
+  --    travail coché, un groupe : COUVERT quand un signe le porte, valable
+  --    au jour de Paris et avec son certificat ; une déclaration « je ne
+  --    détiens pas de label » le tait, SAUF s'il reste un signe valable sans
+  --    certificat. Les deux travaux comptés par prudence sont comptés à
+  --    part. Les sous-traitants : ceux du tableau qui existent chez
+  --    l'entreprise, DISTINCTS, et ceux d'entre eux qui sont incomplets.
+  --    `is not true` : jamais une négation sur une valeur qui peut manquer.
+  if (v_valable is null or v_valable in ('consommateur', 'non_professionnel'))
+     and v_energie is not null and v_energie <> array['aucun']::text[] then
+    select count(*) filter (where not c.prudence), count(*) filter (where c.prudence)
+      into v_label_loi, v_label_prudence
+      from (select u.cle,
+                   u.cle = any (array['photovoltaique', 'desembouage']) as prudence,
+                   bool_or(g.justificatif_chemin is not null and g.valide_jusquau >= v_jour) as couverte,
+                   bool_or(g.justificatif_chemin is null and g.valide_jusquau >= v_jour) as sans_certificat
+              from unnest(v_energie) as u(cle)
+              left join public.emetteur_labels g
+                on g.pro_id = v_pro and u.cle = any (g.categories)
+             group by u.cle) c
+     where c.couverte is not true
+       and (c.sans_certificat is true or (c.cle = any (v_energie_sans)) is not true);
+    if v_energie_st is null then
+      v_st_manque := true;
+    elsif v_energie_st then
+      select count(distinct s.id),
+             count(distinct s.id) filter (where s.label_detient is null
+                                            or (s.label_detient is true
+                                                and ((s.label_valide_jusquau >= v_jour) is not true
+                                                     or s.label_justificatif_chemin is null)))
+        into v_st_choisis, v_st_incomplets
+        from public.emetteur_sous_traitants s
+       where s.pro_id = v_pro and s.id = any (v_energie_st_ids);
+      v_st_manque := v_st_choisis = 0 or v_st_incomplets > 0;
+    end if;
   end if;
 
   -- 4. Les motifs du devis, rang par rang.
@@ -15792,6 +16471,31 @@ begin
       return next;
     end if;
   end if;
+  -- Les travaux d'énergie (49.4 septies) : pour une réponse « à quel
+  -- titre » vide, à titre privé ou pour une association. UNE clé au plus :
+  -- `devis_energie` (prudence) quand les travaux ne sont pas dits ;
+  -- `devis_energie_mentions` (la loi) à titre privé, quand une rubrique
+  -- manque pour un travail du décret ou pour la sous-traitance ;
+  -- `devis_energie_mentions_prudence` sinon — la réponse est vide ou
+  -- `non_professionnel`, ou seuls les travaux comptés par prudence
+  -- manquent. « Aucun de ces travaux » se tait : la lecture 3 quater n'a
+  -- pas tourné, les compteurs sont à zéro.
+  if v_valable is null or v_valable in ('consommateur', 'non_professionnel') then
+    if v_energie is null then
+      rang := 14; cle := 'devis_energie'; nature := 'prudence';
+      phrase := 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.';
+      return next;
+    elsif v_label_loi > 0 or v_label_prudence > 0 or v_st_manque then
+      if v_valable = 'consommateur' and (v_label_loi > 0 or v_st_manque) then
+        rang := 14; cle := 'devis_energie_mentions'; nature := 'loi';
+        phrase := 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou partie de ce devis : la loi le demande pour un client qui commande à titre privé.';
+      else
+        rang := 14; cle := 'devis_energie_mentions_prudence'; nature := 'prudence';
+        phrase := 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.';
+      end if;
+      return next;
+    end if;
+  end if;
 
   -- 5. Les motifs de l'entreprise, dans leur ordre, coupés au premier ': '.
   --    Le rang garde sa position d'origine (100 + position) : un motif
@@ -15835,8 +16539,9 @@ grant execute on function public.motifs_refus_remise(uuid) to authenticated;
 comment on function public.motifs_refus_remise(uuid) is
   'Ce qu''il manque pour remettre le devis p_devis : une ligne par motif (rang, cle, phrase, '
   'nature loi | prudence | regle_opus, ligne_id pour un motif de ligne), ceux du devis (rangs 1 '
-  'à 13 : l''acompte à la signature et l''attestation décennale depuis 2b-3, le prix du devis '
-  'lui-même depuis 2b-4, les déchets du chantier depuis 2b-5) puis ceux de '
+  'à 14 : l''acompte à la signature et l''attestation décennale depuis 2b-3, le prix du devis '
+  'lui-même depuis 2b-4, les déchets du chantier depuis 2b-5, les travaux d''énergie et le '
+  'label RGE depuis 2b-6) puis ceux de '
   'l''entreprise (100 + position dans emetteur_incomplet, filtrés selon la '
   'réponse valable à « À quel titre ? », 2b-2). Aucune ligne = rien '
   'ne manque de ce qu''Opus vérifie aujourd''hui. Réservée au titulaire du devis (OP027, le même '
@@ -16894,9 +17599,12 @@ create index if not exists idx_base_postes_devis
 --  CE QUI N'EST PAS ICI, et pourquoi (`verifier-remontee` refuse une table
 --  qui a une date de création et n'est ni posée ni exclue ici) :
 --    - `devis`, `devis_lignes`, `base_postes`, `emetteur`,
---      `emetteur_assurances`, `emetteur_lieux_depot`, `tarifs_pro`,
---      `clients` : leur déclencheur pose déjà la date, pour tous les rôles
---      (`tient_le_lieu_de_depot()` pour les lieux de dépôt, depuis 2b-5) ;
+--      `emetteur_assurances`, `emetteur_lieux_depot`, `emetteur_labels`,
+--      `emetteur_sous_traitants`, `tarifs_pro`, `clients` : leur
+--      déclencheur pose déjà la date, pour tous les rôles
+--      (`tient_le_lieu_de_depot()` pour les lieux de dépôt, depuis 2b-5 ;
+--      `tient_le_label()` et `tient_le_sous_traitant()` pour les signes de
+--      qualité et les sous-traitants, depuis 2b-6) ;
 --    - `professional_partners` : `tient_le_partenariat()` la pose, et le
 --      droit de colonne est fermé (lot S-b) ;
 --    - `demandes_pro`, `entreprise_registre`, `journal_admin`,
@@ -18447,6 +19155,25 @@ as $$
     'mes_lieux_de_depot',
                  coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
                              from public.emetteur_lieux_depot x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* MES SIGNES DE QUALITÉ (section 46.2 ter, lot 2b-6) : le label RGE
+       que l'artisan a rangé dans « Mon entreprise » — l'organisme,
+       l'intitulé, le numéro, les travaux couverts, la date de fin, le
+       chemin du certificat. Pour un artisan PERSONNE PHYSIQUE, ce qu'il y
+       range parle de lui : l'article 15. Les SIENS seulement, triés comme
+       l'écran les lit (`created_at, id`). */
+    'mes_signes_de_qualite',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.emetteur_labels x where x.pro_id = auth.uid()), '[]'::jsonb),
+    /* MES SOUS-TRAITANTS (section 46.2 quater, lot 2b-6) : des données sur
+       des TIERS — d'autres entreprises —, rangées par l'artisan sous sa
+       responsabilité, comme son carnet de clients. Elles reviennent à
+       l'artisan qui demande SES données, jamais au sous-traitant, qui n'a
+       pas de compte ici. Triés comme l'écran les lit (`created_at, id`).
+       Les sous-traitants CHOISIS dans un devis voyagent déjà avec lui, sous
+       `devis_emis` (`energie_sous_traitants`). */
+    'mes_sous_traitants',
+                 coalesce((select jsonb_agg(to_jsonb(x) order by x.created_at, x.id)
+                             from public.emetteur_sous_traitants x where x.pro_id = auth.uid()), '[]'::jsonb),
     /* Bornée : d'autres la remplissent (un « j'aime », un commentaire). */
     'mes_notifications', s.j -> 'mes_notifications',
     'limites_de_l_export',             s.j -> 'limites'

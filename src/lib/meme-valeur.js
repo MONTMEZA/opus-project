@@ -10,7 +10,11 @@
  * les déchets triés, ce qui reste sur le chantier, les lieux de dépôt
  * choisis. Or deux listes égales ne sont jamais `Object.is` l'une à
  * l'autre : `Object.is(['bois'], ['bois'])` est FAUX, parce que ce sont deux
- * objets différents.
+ * objets différents. L'étape 2b-6 (le label RGE, 24/11/2026) en ajoute
+ * trois de la même famille : les travaux d'énergie cochés
+ * (`energieTravaux`), ceux pour lesquels l'artisan déclare ne pas détenir
+ * de label RGE (`energieSansLabel`) et les sous-traitants choisis
+ * (`energieSousTraitants`). La règle ne change pas : elle sert telle quelle.
  *
  * Sans cette fonction, trois défauts, et aucun ne lèverait une erreur :
  *   - la file d'écriture croirait qu'une liste a changé à chaque appui,

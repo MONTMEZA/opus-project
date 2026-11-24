@@ -285,9 +285,15 @@ if (E && M && D) {
        et les réexporte. Un fichier permis doit être pur : celui-ci n'importe
        RIEN, et la condition ci-dessous le vérifie dans la même ligne (une
        liste qui s'allonge sans vérifier ce qu'elle admet ne garde plus rien). */
+    /* `travaux-energie.js` (24/11/2026, étape 2b-6, T28) : les dix-neuf
+       travaux d'économies d'énergie, avec les MÊMES clés que les catégories
+       d'un signe de qualité — une seule source, que `devis.js` importe aussi.
+       Il n'importe RIEN : la condition ci-dessous le vérifie dans la même
+       ligne. */
     const permis = ['./entreprise.js', '../data/formes-juridiques.js', './siret.js', '../data/mediateurs.js',
-      '../data/pieces-justificatives.js', './tva.js', './centimes.js'];
-    const centimesPur = !/\bfrom\s+['"]|\bimport\s*['"(]|^\s*import\b|\brequire\s*\(/m.test(sansCommentaires(lire('src/lib/centimes.js')));
+      '../data/pieces-justificatives.js', './tva.js', './centimes.js', '../data/travaux-energie.js'];
+    const pur = (f) => !/\bfrom\s+['"]|\bimport\s*['"(]|^\s*import\b|\brequire\s*\(/m.test(sansCommentaires(lire(f)));
+    const centimesPur = pur('src/lib/centimes.js') && pur('src/data/travaux-energie.js');
     verifier('`emetteur.js` n’importe que des fichiers purs, et seulement ceux-là',
       imports.length > 0 && imports.every((i) => permis.includes(i)) && !/\brequire\(|import\(/.test(src)
       && centimesPur,
@@ -1150,6 +1156,42 @@ if (E && M && D) {
       && E.COLONNES_ECRITES.emetteur_lieux_depot.every((c) => net[c] === l0[c])
       && E.TYPES_INSTALLATION.some((t) => t.cle === l0.type_installation) && l0.type_installation !== 'autre',
     JSON.stringify(l0));
+    /* 2b-6 (cahier T26, CTL-4) : UN signe de qualité et UN sous-traitant,
+       INVENTÉS (« Qualifications de démonstration », « Isolations de
+       démonstration », le SIRET 00000496000019 : cherchés absents de
+       l'annuaire Sirene le 24/11/2026, `emetteur-demo.js`) — à
+       l'identifiant FIXE en forme d'UUID, de la fiche 1, déjà NETTOYÉS
+       comme la base les rangerait, qui passent leurs propres contraintes
+       (le SIRET a sa CLÉ, et cinq zéros en tête comme tous les SIRET de la
+       démonstration). Le signe couvre l'isolation par l'extérieur, finit
+       dans 45 jours CALCULÉS, son certificat est joint ; le sous-traitant
+       n'en détient pas. */
+    const g0 = (Array.isArray(demo.labels) ? demo.labels : [])[0] || {};
+    const st0 = (Array.isArray(demo.sousTraitants) ? demo.sousTraitants : [])[0] || {};
+    const uuid4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    const netG = E.nettoyerLabel(g0, g0);
+    const netS = E.nettoyerSousTraitant(st0, st0);
+    const dans45 = (() => { const d = new Date(MAINTENANT.getTime() + 45 * 86400000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+    verifier('…UN signe de qualité de démonstration (2b-6) : identifiant fixe en forme d’UUID, de la fiche 1, déjà nettoyé, qui passe ses '
+      + 'contraintes ; il couvre l’isolation par l’extérieur, finit dans 45 jours calculés, son certificat est joint dans le dossier de la fiche',
+    demo.labels && demo.labels.length === 1 && g0.id === D.LABEL_DEMO_ID && uuid4.test(String(g0.id))
+      && String(g0.pro_id) === String(D.PRO_DEMO_EMETTEUR) && E.validerLabel(g0, g0.pro_id).ok
+      && E.COLONNES_ECRITES.emetteur_labels.every((c) => JSON.stringify(netG[c]) === JSON.stringify(g0[c]))
+      && JSON.stringify(g0.categories) === JSON.stringify(['isolation_exterieur']) && g0.valide_jusquau === dans45
+      && String(g0.justificatif_chemin || '').startsWith(`${g0.pro_id}/`) && /démonstration/.test(g0.organisme)
+      && /démonstration/.test(g0.intitule)
+      && D.fabriquerEmetteurDemo(new Date('2030-01-01T10:00:00Z')).labels[0].valide_jusquau > '2030-01-01',
+    JSON.stringify(g0));
+    verifier('…et UN sous-traitant de démonstration : identifiant fixe, de la fiche 1, déjà nettoyé, qui passe ses contraintes ET la clé '
+      + 'de son SIRET (00000496000019 : cinq zéros en tête, comme tous les SIRET de la démonstration), qui ne détient pas de label',
+    demo.sousTraitants && demo.sousTraitants.length === 1 && st0.id === D.SOUS_TRAITANT_DEMO_ID && uuid4.test(String(st0.id))
+      && String(st0.pro_id) === String(D.PRO_DEMO_EMETTEUR) && E.validerSousTraitant(st0, st0.pro_id).ok
+      && E.COLONNES_ECRITES.emetteur_sous_traitants.every((c) => JSON.stringify(netS[c]) === JSON.stringify(st0[c]))
+      && st0.siret === D.SIRET_SOUS_TRAITANT_DEMO && /^00000\d{9}$/.test(st0.siret) && st0.label_detient === false
+      && st0.label_categories == null && st0.label_valide_jusquau == null && st0.label_justificatif_chemin == null
+      && /démonstration/.test(st0.raison_sociale) && g0.id !== st0.id && g0.id !== D.LIEU_DEPOT_DEMO_ID,
+    JSON.stringify(st0));
   }
 
   console.log('\n  la liste des médiateurs — relevée, jamais écrite de mémoire');
@@ -1282,8 +1324,89 @@ function contraintesDesQuatreTables() {
   const brut = readFileSync('supabase/schema.sql', 'utf8');
   const texte = sectionDuSchema(brut, '--  46. MON ENTREPRISE POUR MES DEVIS')
     + sectionDuSchema(brut, '--  47. LES TARIFS RÉUNIS');
-  return [...texte.matchAll(/alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint (\w+)/g)]
+  /* 2b-6 : les deux tables de 46.2 ter et 46.2 quater, nommées EN LE
+     DÉCIDANT (cahier 2b-6, §2.8 n° 2) — quatre contraintes sur les signes de
+     qualité, cinq sur les sous-traitants. */
+  return [...texte.matchAll(/alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro)\s+add constraint (\w+)/g)]
     .map((m) => m[1]);
+}
+
+/* ================================================================== */
+/*  PARTIE 2 bis — L'ÉTAPE 2b-6 : les signes de qualité (label RGE) et  */
+/*  les sous-traitants, FAITS TOURNER, et leurs neuf contraintes        */
+/* ================================================================== */
+console.log('\n2 bis. L’ÉTAPE 2b-6 — les signes de qualité et les sous-traitants : l’accord des deux fichiers, et la forme de la base');
+{
+  /* POURQUOI (cahier 2b-6, §5.3 n° 3 et n° 5) :
+       - CTL-8 : `etatDuLabel` (emetteur.js, la ligne de « Mon entreprise »)
+         et `etatsDesTravaux` (devis.js, la carte du devis) disent la même
+         chose d'un travail que cette seule ligne porte — `valable` ↔
+         `couvert`, les deux autres à l'identique ; et `etatDuSousTraitant`
+         dit « détient » ou « non » EXACTEMENT quand `sousTraitantComplet`
+         le dit complet. Les deux fichiers ne s'importent pas l'un l'autre
+         (T28) : c'est ce contrôle qui les tient ensemble, sur un même jeu
+         (les dates de part et d'autre du jour, les chemins de blancs) ;
+       - FORMES_46 : les neuf contraintes nouvelles de la section 46,
+         ENTIÈRES, espaces réduits (CTL-7) — une croisée relâchée (« ou le
+         label est vide », S40) garde son nom et passait au vert. Changer une
+         de ces règles se DÉCIDE : la base, l'essai 46 et cette forme, dans
+         le même lot. */
+  let DV = null;
+  try { DV = await import('../src/lib/devis.js'); } catch (e) { DV = null; }
+  if (!E || !DV) {
+    verifier('la partie 2 bis a besoin d’`emetteur.js` et de `devis.js`', false, 'L’un des deux n’a pas pu s’ouvrir : voir plus haut.');
+  } else {
+    const JOUR = '2026-11-24';
+    const FINS = [null, '2001-01-01', '2026-11-23', JOUR, '2026-11-25', '2999-01-01', '2026-11-24T23:30:00+00:00'];
+    const CHEMINS = [null, '', ' ', ' \t\r\n', 'p/a.pdf', ' p/a.pdf '];
+    const desaccordsL = [];
+    for (const fin of FINS) {
+      for (const chemin of CHEMINS) {
+        const ligne = { id: 'g', pro_id: 'p', organisme: 'O', intitule: 'I', categories: ['fenetres'], valide_jusquau: fin,
+          justificatif_chemin: chemin };
+        const e = E.etatDuLabel(ligne, JOUR);
+        const t = (DV.etatsDesTravaux({ proId: 'p', energieTravaux: ['fenetres'] }, [ligne], { jour: JOUR }) || [])[0];
+        const attendu = { valable: 'couvert', sans_certificat: 'sans_certificat', expire: 'expire' }[e];
+        if (!t || t.etat !== attendu) desaccordsL.push(`${JSON.stringify(fin)}/${JSON.stringify(chemin)} : ${e} ≠ ${t && t.etat}`);
+      }
+    }
+    verifier(`CTL-8 : \`etatDuLabel\` (emetteur.js) et \`etatsDesTravaux\` (devis.js) disent la même chose d’un travail que cette seule `
+      + `ligne porte, sur ${FINS.length * CHEMINS.length} lignes (dates de part et d’autre du jour, chemins de blancs) : \`valable\` ↔ `
+      + '`couvert`, `sans_certificat` et `expire` à l’identique',
+    desaccordsL.length === 0, desaccordsL.join(' | '));
+    const desaccordsS = [];
+    for (const detient of [null, false, true, 'true']) {
+      for (const fin of FINS) {
+        for (const chemin of CHEMINS) {
+          const st = { id: 's', pro_id: 'p', raison_sociale: 'S', siret: '00004910600016', label_detient: detient,
+            label_categories: detient === true ? ['fenetres'] : null, label_valide_jusquau: fin, label_justificatif_chemin: chemin };
+          const etat = E.etatDuSousTraitant(st, JOUR);
+          const complet = DV.sousTraitantComplet(st, { proId: 'p', jour: JOUR });
+          if (complet !== (etat === 'detient' || etat === 'non')) desaccordsS.push(`${JSON.stringify(detient)}/${JSON.stringify(fin)}/${JSON.stringify(chemin)} : ${etat} ≠ ${complet}`);
+        }
+      }
+    }
+    verifier('CTL-8 : `etatDuSousTraitant` dit « détient » ou « non » EXACTEMENT quand `sousTraitantComplet` le dit complet, sur '
+      + `${4 * FINS.length * CHEMINS.length} lignes (« true » écrit en chaîne n’est pas une réponse)`,
+    desaccordsS.length === 0, desaccordsS.join(' | '));
+
+    /* …ET LE MIROIR LES TIENT AUSSI, FAIT TOURNER (`validerLabel`,
+       `validerSousTraitant`) : la croisée des sous-traitants refuse un
+       « Oui » sans travaux, un « Non » avec des travaux n'est pas refusé
+       (le déclencheur les efface d'abord, `nettoyerSousTraitant` aussi). */
+    const VS = (st, o) => E.validerSousTraitant(E.nettoyerSousTraitant({ pro_id: 'p', raison_sociale: 'S', siret: '00004910600016', ...st }), 'p', o);
+    const nettoye = E.nettoyerSousTraitant({ pro_id: 'p', raison_sociale: ' S ', siret: '000 049 106 00016', label_detient: false,
+      label_categories: ['fenetres'], label_valide_jusquau: '2999-01-01', label_justificatif_chemin: 'p/x.pdf' });
+    verifier('…et le miroir les tient, FAIT TOURNER : « Oui » sans travaux ni date → `emetteur_sous_traitant_complet_check` ; « Non » '
+      + 'avec des travaux est NETTOYÉ comme le déclencheur (les travaux, la date et le justificatif effacés, le SIRET réduit à ses '
+      + 'chiffres) puis accepté ; un SIRET à clé fausse refusé par le formulaire seulement (la base ne la vérifie pas)',
+    VS({ label_detient: true }).contrainte === 'emetteur_sous_traitant_complet_check' && VS({ label_detient: false }).ok === true
+      && nettoye.label_categories === null && nettoye.label_valide_jusquau === null && nettoye.label_justificatif_chemin === null
+      && nettoye.siret === '00004910600016' && nettoye.raison_sociale === 'S'
+      && VS({ label_detient: false, siret: '00004910600017' }).ok === false
+      && VS({ label_detient: false, siret: '00004910600017' }, { cleSiret: false }).ok === true,
+    JSON.stringify(nettoye));
+  }
 }
 
 /* ================================================================== */
@@ -1299,8 +1422,14 @@ const DERNIER_DE_45 = 'grant execute on function public.admin_retirer_entreprise
 /* Les QUATRE tables privées d'« Mon entreprise » : depuis l'étape 2b-5,
    `emetteur_lieux_depot` (46.2 bis), les lieux de dépôt des déchets — DÉCIDÉ
    (cahier T6) : chaque propriété de cette partie qui vaut pour les trois
-   autres vaut pour elle. */
-const TABLES_46 = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot', 'tarifs_pro'];
+   autres vaut pour elle. SIX depuis l'étape 2b-6 (cahier 2b-6, §2.8 n° 1,
+   DÉCIDÉ) : `emetteur_labels` (46.2 ter, les signes de qualité) et
+   `emetteur_sous_traitants` (46.2 quater) — deux mots à part pour toute
+   expression qui cherche `emetteur` entier (le tiret bas est une lettre de
+   mot). Et une PROPRIÉTÉ le tient (CTL-11) : les tables CRÉÉES dans les
+   sections 46 et 47 sont EXACTEMENT celles-ci. */
+const TABLES_46 = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot', 'emetteur_labels', 'emetteur_sous_traitants',
+  'tarifs_pro'];
 const iTete46 = SCHEMA_BRUT.indexOf(TETE_46);
 const iTete42 = SCHEMA_BRUT.indexOf(TETE_42);
 /* La section s'arrête au PROCHAIN en-tête de section numérotée — la 47
@@ -1342,8 +1471,9 @@ if (!E) {
       iTete46 > 0 && i45 > 0 && iTete46 > i45 && iTete42 > iTete46,
       'L’export RGPD (42) et le balayage des portes (43) restent les deux derniers blocs : une '
       + 'section posée après eux ne serait ni exportée ni balayée.');
-    const declencheurs = ['trg_tient_l_emetteur', 'trg_tient_l_assurance', 'trg_tient_le_lieu_de_depot', 'trg_tient_les_tarifs'];
-    verifier('ses quatre déclencheurs naissent AVANT le balayage, et aucun déclencheur ne suit le balayage',
+    const declencheurs = ['trg_tient_l_emetteur', 'trg_tient_l_assurance', 'trg_tient_le_lieu_de_depot', 'trg_tient_le_label',
+      'trg_tient_le_sous_traitant', 'trg_tient_les_tarifs'];
+    verifier('ses six déclencheurs naissent AVANT le balayage, et aucun déclencheur ne suit le balayage',
       declencheurs.every((d) => { const i = SCHEMA_BRUT.indexOf(`create or replace trigger ${d}`); return i > 0 && i < iPortes; })
       && !/create (or replace )?trigger/.test(SCHEMA_BRUT.slice(iPortes)),
       'Le balayage ne voit que les fonctions déjà créées : une fonction de déclencheur née après lui '
@@ -1360,6 +1490,9 @@ if (!E) {
       trg_tient_l_emetteur: ['emetteur', 'tient_l_emetteur'],
       trg_tient_l_assurance: ['emetteur_assurances', 'tient_l_assurance'],
       trg_tient_le_lieu_de_depot: ['emetteur_lieux_depot', 'tient_le_lieu_de_depot'],
+      /* 2b-6 : les signes de qualité et les sous-traitants, la même forme. */
+      trg_tient_le_label: ['emetteur_labels', 'tient_le_label'],
+      trg_tient_le_sous_traitant: ['emetteur_sous_traitants', 'tient_le_sous_traitant'],
       trg_tient_les_tarifs: ['tarifs_pro', 'tient_les_tarifs'],
     };
     const formesFausses = Object.entries(FORMES_DECLENCHEURS).filter(([d, [tb, f]]) => {
@@ -1369,7 +1502,7 @@ if (!E) {
     }).map(([d]) => d);
     verifier('…et leur forme EXACTE, une définition chacun : « before insert or update on public.<table> for each row execute function '
       + 'public.<fonction>(); » (CTL-7)',
-    formesFausses.length === 0, formesFausses.join(', ') || 'les quatre');
+    formesFausses.length === 0, formesFausses.join(', ') || 'les six');
     /* LA CLÉ DE CHAQUE TABLE VERS LA FICHE PRO, EXACTE (relecture CTL-8) :
        un `on delete restrict` sur les lieux aurait fait REFUSER la
        suppression du compte de tout artisan qui en a un — et seul l'essai
@@ -1381,6 +1514,8 @@ if (!E) {
       tarifs_pro: 'pro_id uuid primary key references public.professional_profiles(id) on delete cascade',
       emetteur_assurances: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
       emetteur_lieux_depot: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
+      emetteur_labels: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
+      emetteur_sous_traitants: 'pro_id uuid not null references public.professional_profiles(id) on delete cascade',
     };
     const prosFaux = Object.entries(COLONNES_PRO).filter(([tb, forme]) => {
       const ligne = String(table(tb)).replace(/--[^\n]*/g, '').split('\n').map((x) => x.replace(/\s+/g, ' ').trim())
@@ -1389,9 +1524,10 @@ if (!E) {
         || new RegExp(`alter table (?:only )?public\\.${tb}\\b[^;]*(?:alter column pro_id|drop column (?:if exists )?pro_id`
           + `|add column (?:if not exists )?pro_id|foreign key \\(pro_id\\)|_pro_id_fkey)`, 'i').test(SCHEMA);
     }).map(([tb]) => tb);
-    verifier('…et la colonne `pro_id` de chacune des quatre tables, EXACTE : `references public.professional_profiles(id) on delete cascade` '
-      + '— une suppression de compte emporte la fiche émetteur, les assurances, les lieux de dépôt et les tarifs (CTL-8)',
-    prosFaux.length === 0, prosFaux.join(', ') || 'les quatre');
+    verifier('…et la colonne `pro_id` de chacune des six tables, EXACTE : `references public.professional_profiles(id) on delete cascade` '
+      + '— une suppression de compte emporte la fiche émetteur, les assurances, les lieux de dépôt, les signes de qualité, les '
+      + 'sous-traitants et les tarifs (CTL-8)',
+    prosFaux.length === 0 && Object.keys(COLONNES_PRO).length === TABLES_46.length, prosFaux.join(', ') || 'les six');
     /* LES LIEUX : LA RÉVOCATION ET L'INDEX, EXACTS (relecture CTL-13) — la
        ligne de 46.2 bis protège le cas d'une migration jouée SANS le
        balayage de 42 bis, que l'essai 46 ne sait pas distinguer. */
@@ -1400,6 +1536,44 @@ if (!E) {
       + 'l’index sur `pro_id` (CTL-13)',
     s46.includes('revoke truncate, references, trigger on public.emetteur_lieux_depot from authenticated;')
       && s46.includes('create index if not exists idx_emetteur_lieux_depot_pro on public.emetteur_lieux_depot (pro_id);'));
+    /* 2b-6 : la même ligne, la même raison, pour les deux tables de 46.2
+       ter et 46.2 quater — et `anon` n'y a RIEN (`revoke all`). */
+    verifier('…les signes de qualité et les sous-traitants (2b-6) : `revoke all … from anon;` et `revoke truncate, references, '
+      + 'trigger … from authenticated;` EXACTES, et l’index sur `pro_id` de chacune',
+    ['emetteur_labels', 'emetteur_sous_traitants'].every((t) => s46.includes(`revoke all on public.${t} from anon;`)
+      && s46.includes(`revoke truncate, references, trigger on public.${t} from authenticated;`)
+      && s46.includes(`create index if not exists idx_${t}_pro on public.${t} (pro_id);`)));
+    /* LA PROPRIÉTÉ (CTL-11, cahier 2b-6 §2.8) : les tables CRÉÉES dans les
+       sections 46 et 47 sont EXACTEMENT `TABLES_46` — une table nouvelle
+       que cette liste n'a pas décidée rougit ICI, au lieu de passer au
+       travers de chaque contrôle qui la parcourt. */
+    const creees = [...new Set([...(SECTION_46 + SECTION_47).matchAll(/create table (?:if not exists )?public\.(\w+)/g)].map((m) => m[1]))];
+    verifier('les tables créées dans les sections 46 et 47 sont EXACTEMENT les six de `TABLES_46` (CTL-11) — une table nouvelle se '
+      + 'DÉCIDE, elle n’y entre pas en silence',
+    egalEnsembles(creees, TABLES_46) && creees.length === 6, `créées : ${creees.join(', ')}`);    /* FORMES_46 (cahier 2b-6, §5.3 n° 5, CTL-7) : les neuf contraintes
+       nouvelles de la section 46 — quatre sur les signes de qualité, cinq
+       sur les sous-traitants —, ENTIÈRES, espaces réduits. Une croisée
+       relâchée (« ou le label est vide », S40) gardait son nom et passait au
+       vert. Changer une de ces règles se DÉCIDE : la base, l'essai 46 et
+       cette forme, dans le même lot. */
+    const FORMES_46 = {
+      emetteur_label_categories_check: String.raw`add constraint emetteur_label_categories_check check (categories is null or case when array_ndims(categories) = 1 and array_lower(categories, 1) = 1 then cardinality(categories) between 1 and 19 and categories <@ array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage', 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique', 'desembouage'] and array_position(categories, null) is null else false end);`,
+      emetteur_label_chemin_check: String.raw`add constraint emetteur_label_chemin_check check (justificatif_chemin is null or justificatif_chemin ~ ('^' || pro_id::text || '/[^/]+$'));`,
+      emetteur_label_complet_check: String.raw`add constraint emetteur_label_complet_check check (organisme is not null and intitule is not null and categories is not null and valide_jusquau is not null);`,
+      emetteur_label_longueurs_check: String.raw`add constraint emetteur_label_longueurs_check check (coalesce(char_length(organisme), 0) <= 120 and coalesce(char_length(intitule), 0) <= 120 and coalesce(char_length(reference), 0) <= 60);`,
+      emetteur_sous_traitant_categories_check: String.raw`add constraint emetteur_sous_traitant_categories_check check (label_categories is null or case when array_ndims(label_categories) = 1 and array_lower(label_categories, 1) = 1 then cardinality(label_categories) between 1 and 19 and label_categories <@ array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage', 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit', 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles', 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique', 'desembouage'] and array_position(label_categories, null) is null else false end);`,
+      emetteur_sous_traitant_chemin_check: String.raw`add constraint emetteur_sous_traitant_chemin_check check (label_justificatif_chemin is null or label_justificatif_chemin ~ ('^' || pro_id::text || '/[^/]+$'));`,
+      emetteur_sous_traitant_complet_check: String.raw`add constraint emetteur_sous_traitant_complet_check check (raison_sociale is not null and siret is not null and (label_detient is true) = (label_categories is not null and label_valide_jusquau is not null));`,
+      emetteur_sous_traitant_longueurs_check: String.raw`add constraint emetteur_sous_traitant_longueurs_check check (coalesce(char_length(raison_sociale), 0) <= 120);`,
+      emetteur_sous_traitant_siret_check: String.raw`add constraint emetteur_sous_traitant_siret_check check (siret is null or siret ~ '^[0-9]{14}$');`,
+    };
+    const platSql46 = (x) => String(x || '').replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim();
+    const fausses46 = Object.entries(FORMES_46).filter(([nom, forme]) => platSql46(contrainte(nom)) !== forme).map(([nom]) => nom);
+    verifier('FORMES_46 : les neuf contraintes des signes de qualité et des sous-traitants sont, ENTIÈRES, celles ATTENDUES (CTL-7) — '
+      + 'les dix-neuf catégories, le chemin dans le dossier de l’ARTISAN, la croisée de ce qui s’imprimera (le certificat n’en est '
+      + 'pas), « Oui » au label SI ET SEULEMENT SI ses travaux et sa date sont écrits, les longueurs, quatorze chiffres',
+    Object.keys(FORMES_46).length === 9 && fausses46.length === 0,
+    fausses46.map((n) => `${n} : « ${platSql46(contrainte(n)).slice(0, 160)} »`).join(' | '));
   }
 
   /* --- 6.2-14 : les phrases, à l'octet --- */
@@ -1438,13 +1612,15 @@ if (!E) {
        en pose quatre sur `emetteur_lieux_depot` : sans elle dans
        l'alternation, ses quatre `check (` comptés dans la section ne
        correspondaient à aucun ordre relevé. */
-    const ORDRE = /alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint (\w+)([^;]*);/g;
+    /* 2b-6 : les deux tables de 46.2 ter et quater (neuf contraintes),
+       nommées EN LE DÉCIDANT (cahier 2b-6, §2.8 n° 2). */
+    const ORDRE = /alter table public\.(?:emetteur|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro)\s+add constraint (\w+)([^;]*);/g;
     const ordres = [...(SECTION_46 + SECTION_47).matchAll(ORDRE)];
     const noms = ordres.map((m) => m[1]);
     const miroir = Object.keys(E.CONTRAINTES).flatMap((t) => Object.keys(E.CONTRAINTES[t]));
     const sansPhrase = noms.filter((n) => !MESSAGES_CONTRAINTE[n]);
-    verifier('les contraintes des quatre tables (sections 46 et 47) = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
-      noms.length >= 29 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
+    verifier('les contraintes des six tables (sections 46 et 47) = celles du miroir, et chacune a sa phrase dans `erreurs.js`',
+      noms.length >= 38 && egalEnsembles(noms, miroir) && sansPhrase.length === 0,
       `SQL : ${noms.length} ; miroir : ${miroir.length} ; sans phrase : ${sansPhrase.join(', ') || 'aucune'}. `
       + 'Une contrainte renommée d’un seul côté rend un refus anonyme, avec une piste fausse.');
     verifier('…toutes nommées en `_check`, aucune `check (` anonyme, et pas d’`emetteur_paiement_check`',
@@ -1472,9 +1648,12 @@ if (!E) {
        où qu'elles soient : `decompte_temps_texte: 200` vient de
        `tarif_decompte_texte_check`, posée en section 47 ; celles des lieux
        de dépôt, d'`emetteur_lieu_longueurs_check` (46.2 bis, 2b-5). */
-    const sql = { emetteur: {}, emetteur_assurances: {}, emetteur_lieux_depot: {}, tarifs_pro: {} };
+    /* 2b-6 : celles des signes de qualité (`emetteur_label_longueurs_check`)
+       et des sous-traitants (`emetteur_sous_traitant_longueurs_check`). */
+    const sql = { emetteur: {}, emetteur_assurances: {}, emetteur_lieux_depot: {}, emetteur_labels: {}, emetteur_sous_traitants: {},
+      tarifs_pro: {} };
     for (const m of (SECTION_46 + SECTION_47).matchAll(
-      /alter table public\.(emetteur|emetteur_assurances|emetteur_lieux_depot|tarifs_pro)\s+add constraint \w+([^;]*);/g,
+      /alter table public\.(emetteur|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro)\s+add constraint \w+([^;]*);/g,
     )) Object.assign(sql[m[1]], paires(m[2]));
     const ecarts = Object.keys(E.LONGUEUR_MAX).flatMap((t) => {
       const a = E.LONGUEUR_MAX[t];
@@ -1501,14 +1680,18 @@ if (!E) {
     /* …et les lieux de dépôt des déchets (2b-5) : leurs six colonnes écrites
        ↔ `COLONNES_ECRITES.emetteur_lieux_depot` ; `id`, `pro_id` et
        `created_at` posés par la base. */
-    const TABLES_ICI = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot'];
+    /* …et, depuis 2b-6, les signes de qualité et les sous-traitants : leurs
+       colonnes écrites ↔ `COLONNES_ECRITES` (six chacune) ; `id`, `pro_id`
+       et `created_at` posés par la base. */
+    const TABLES_ICI = ['emetteur', 'emetteur_assurances', 'emetteur_lieux_depot', 'emetteur_labels', 'emetteur_sous_traitants'];
     const ecarts = TABLES_ICI.flatMap((t) => {
       const ecrites = colonnes(t).filter((c) => !POSEES_PAR_LA_BASE.includes(c));
       const js = E.COLONNES_ECRITES[t] || [];
       return [...ecrites.filter((c) => !js.includes(c)).map((c) => `${t}.${c} n’est écrite par personne`),
         ...js.filter((c) => !ecrites.includes(c)).map((c) => `${t}.${c} est envoyée sans exister`)];
     });
-    verifier('`COLONNES_ECRITES` ↔ les `create table` d’`emetteur`, d’`emetteur_assurances` et d’`emetteur_lieux_depot`, dans les deux sens',
+    verifier('`COLONNES_ECRITES` ↔ les `create table` d’`emetteur`, d’`emetteur_assurances`, d’`emetteur_lieux_depot`, '
+      + 'd’`emetteur_labels` et d’`emetteur_sous_traitants`, dans les deux sens',
       TABLES_ICI.every((t) => colonnes(t).length > 0) && ecarts.length === 0, ecarts.join(' ; '));
     verifier('…et `tarifs_pro` a toujours son `create table` en section 46, avec sa clé',
       /^\s*pro_id\s+uuid primary key/m.test(table('tarifs_pro')),
@@ -1617,7 +1800,12 @@ if (!E) {
        (ses lieux à lui), et `motifs_refus_remise` (le rang 13 : combien des
        lieux CHOISIS existent chez l'entreprise du devis — sa porte étroite
        est ci-dessous). */
-    const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur)\b/;
+    /* …ET DEUX LISTES DE PLUS DEPUIS 2b-6 (cahier 2b-6, §2.8 n° 5,
+       DÉCIDÉ) : les signes de qualité et les sous-traitants. Trois fonctions
+       ont le droit de nommer chacune : son déclencheur (qui n'en lit rien),
+       l'export RGPD (les siens), et `motifs_refus_remise` (le rang 14 — sa
+       porte étroite est ci-dessous). */
+    const PRIVEES = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|emetteur)\b/;
     const LISTES = [
       { tables: /\b(emetteur_assurances|emetteur)\b/,
         permises: ['tient_l_emetteur', 'tient_l_assurance', 'emetteur_incomplet', 'mes_donnees', 'motifs_refus_remise'] },
@@ -1625,6 +1813,10 @@ if (!E) {
         permises: ['tient_les_tarifs', 'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence'] },
       { tables: /\bemetteur_lieux_depot\b/,
         permises: ['tient_le_lieu_de_depot', 'mes_donnees', 'motifs_refus_remise'] },
+      { tables: /\bemetteur_labels\b/,
+        permises: ['tient_le_label', 'mes_donnees', 'motifs_refus_remise'] },
+      { tables: /\bemetteur_sous_traitants\b/,
+        permises: ['tient_le_sous_traitant', 'mes_donnees', 'motifs_refus_remise'] },
     ];
     const fonctions = [...SCHEMA.matchAll(
       /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?(\w+)\s*\(([\s\S]*?)\bas\s+(\$\w*\$)([\s\S]*?)\3/gi,
@@ -1635,7 +1827,7 @@ if (!E) {
     const definer = [...new Set(lisent.filter((f) => /security\s+definer/i.test(f.attributs)).map((f) => f.nom))];
     const vues = [...SCHEMA.matchAll(/create\s+(?:or\s+replace\s+)?(?:materialized\s+)?view\s+[\s\S]*?;/gi)]
       .filter((m) => PRIVEES.test(m[0]));
-    verifier(`aucune fonction hors d’une liste fermée ne lit ces quatre tables, quel que soit son nom (${lisent.length} sur ${fonctions.length})`,
+    verifier(`aucune fonction hors d’une liste fermée ne lit ces six tables, quel que soit son nom (${lisent.length} sur ${fonctions.length})`,
       fonctions.length >= 60 && lisent.length >= 2 && horsListe.length === 0,
       horsListe.join(', ') || 'le lecteur ne trouve plus les fonctions : il est devenu aveugle');
     verifier('…aucune de celles qui les lisent n’est `security definer`, et aucune vue ne les nomme',
@@ -1693,6 +1885,36 @@ if (!E) {
     `${mrr.length} définition(s) ; ${mentions} mention(s) d’emetteur, ${mentionsAss} d’emetteur_assurances, ${mentionsLieux} `
     + `d’emetteur_lieux_depot ; lecture du seul régime : ${lecture} ; lecture de la décennale : ${!!lectureAssForme}/`
     + `${lectureAss ? lectureAss[1] : '—'} ; jour de Paris : ${jourDeParis} ; lecture des lieux, filtre compris : ${lectureLieux}`);
+    /* …ET DEPUIS 2b-6 (cahier 2b-6, §2.4, S3 et S4), DEUX LECTURES DE PLUS, À
+       LA LETTRE, FILTRES COMPRIS : les signes de qualité DE L'ENTREPRISE DU
+       DEVIS (`g.pro_id = v_pro`), joints aux travaux cochés par leurs
+       catégories, dont la lecture ne tire que la date de fin et la présence
+       du certificat ; et les sous-traitants CHOISIS qui existent chez elle
+       (`s.pro_id = v_pro`), distincts, dont elle ne tire que la réponse au
+       label, sa date et la présence du justificatif — jamais leur nom ni
+       leur SIRET (ce ne sont pas des faits du rang 14). Seulement à titre
+       privé, pour une association ou sans réponse, et quand le devis coche
+       au moins un travail. Sous un `security definer` de 2c, ces filtres
+       seront la SEULE barrière : l'essai 49-remise le prouve par une
+       enveloppe (cas 27) ; ici, c'est leur FORME. */
+    const plat = mrrCode.replace(/\s+/g, ' ');
+    const mentionsLabels = (mrrCode.match(/\bemetteur_labels\b/gi) || []).length;
+    const mentionsSt = (mrrCode.match(/\bemetteur_sous_traitants\b/gi) || []).length;
+    const lectureLabels = /from unnest\(v_energie\) as u\(cle\) left join public\.emetteur_labels g on g\.pro_id = v_pro and u\.cle = any \(g\.categories\) group by u\.cle\) c where/.test(plat);
+    const lectureSt = /from public\.emetteur_sous_traitants s where s\.pro_id = v_pro and s\.id = any \(v_energie_st_ids\);/.test(plat);
+    const garde14 = /if \(v_valable is null or v_valable in \('', ''\)\) and v_energie is not null and v_energie <> array\[''\]::text\[\] then select count\(\*\) filter/.test(plat);
+    const colsG = [...new Set([...plat.matchAll(/\bg\.(\w+)/g)].map((m) => m[1]))].sort();
+    const colsS = [...new Set([...plat.matchAll(/\bs\.(\w+)/g)].map((m) => m[1]))].sort();
+    verifier('…et, depuis 2b-6, des signes de qualité QUE la date de fin et la présence du certificat de ceux de l’entreprise du devis '
+      + '(une seule mention, `left join public.emetteur_labels g on g.pro_id = v_pro and u.cle = any (g.categories)`), et des '
+      + 'sous-traitants QUE la réponse au label, sa date et son justificatif de ceux qu’il CHOISIT chez elle (une seule mention, '
+      + '`s.pro_id = v_pro and s.id = any (v_energie_st_ids)`) — jamais leur nom ni leur SIRET ; seulement à titre privé, pour une '
+      + 'association ou sans réponse, et quand un travail est coché (S3, S4)',
+    mentionsLabels === 1 && mentionsSt === 1 && lectureLabels && lectureSt && garde14
+      && egalEnsembles(colsG, ['categories', 'justificatif_chemin', 'pro_id', 'valide_jusquau'])
+      && egalEnsembles(colsS, ['id', 'label_detient', 'label_justificatif_chemin', 'label_valide_jusquau', 'pro_id']),
+    `mentions ${mentionsLabels}/${mentionsSt} ; lectures ${lectureLabels}/${lectureSt} ; garde ${garde14} ; g. ${colsG.join(',')} ; `
+    + `s. ${colsS.join(',')}`);
   }
 
   /* --- 6.3-22 : rien n'est `not null` hors des clés --- */
@@ -1706,9 +1928,10 @@ if (!E) {
     }
     for (const m of (SECTION_46 + SECTION_47).matchAll(/alter column (\w+) set not null/gi)) nonNuls.push(`set not null ${m[1]}`);
     /* Deux tables FILLES depuis 2b-5 : leur `pro_id` est `not null`, leur
-       clé est un `id`. Rien d'autre. */
+       clé est un `id`. Rien d'autre. QUATRE depuis 2b-6 : les signes de
+       qualité et les sous-traitants, la même forme (cahier 2b-6, §2.8 n° 4). */
     verifier('rien n’est `not null` sauf les clés',
-      nonNuls.join() === 'emetteur_assurances.pro_id,emetteur_lieux_depot.pro_id',
+      nonNuls.join() === 'emetteur_assurances.pro_id,emetteur_lieux_depot.pro_id,emetteur_labels.pro_id,emetteur_sous_traitants.pro_id',
       `Trouvés : ${nonNuls.join(', ') || 'aucun'}. Une fiche se remplit en plusieurs fois : c’est à la `
       + 'REMISE que sa complétude se juge, et un `not null` violé rend un refus anonyme (23502).');
   }
@@ -1869,9 +2092,30 @@ if (!E) {
       && !/\bfrom\s+public\./.test(tl) && !/\bnow\(\)/.test(tl),
     'Sans la date posée par la base, un lieu daté de 2001 passait en tête de la liste ; sans le libellé effacé, il s’imprimerait à '
       + 'côté d’un type qui dit déjà tout ; et un code postal rogné autrement que celui de « Mon entreprise » ne serait comparé à rien.');
-    const triggers = ['tient_l_emetteur', 'tient_l_assurance', 'tient_le_lieu_de_depot', 'tient_les_tarifs'].map(fonction);
-    verifier('les quatre fonctions sont `security invoker`, avec un `search_path` fixé',
-      triggers.every((x) => /security invoker/.test(x) && /set search_path = public/.test(x)
+    /* K. 2b-6 : les deux déclencheurs nouveaux, par leurs PROPRIÉTÉS (S20,
+       S21) — la date de création posée par la base, jamais par le
+       téléphone ; le label d'un sous-traitant EFFACÉ hors « Oui » (sans
+       quoi « Non » garderait des travaux et une date qui s'imprimeraient) ;
+       son SIRET réduit à ses chiffres ; les deux chemins rognés par la
+       PETITE classe ; aucune table lue. */
+    const tlab = fonction('tient_le_label');
+    const tst = fonction('tient_le_sous_traitant');
+    const dateParLaBase = (x) => /if tg_op = 'UPDATE' then\s+new\.created_at := old\.created_at;\s+else\s+new\.created_at := clock_timestamp\(\);\s+end if;/.test(x)
+      && (x.match(/new\.created_at :=/g) || []).length === 2 && !/coalesce\(new\.created_at/.test(x)
+      && !/\bfrom\s+public\./.test(x) && !/\bnow\(\)/.test(x);
+    verifier('`tient_le_label` et `tient_le_sous_traitant` posent la date de création eux-mêmes et ne lisent aucune table ; le second '
+      + 'EFFACE les travaux, la date et le justificatif du label hors « Oui », et réduit le SIRET à ses chiffres ; les chemins sont '
+      + 'rognés par la petite classe (espace, tabulation, retours) (2b-6, S20, S21)',
+    dateParLaBase(tlab) && dateParLaBase(tst)
+      && /if new\.label_detient is not true then\s+new\.label_categories := null;\s+new\.label_valide_jusquau := null;\s+new\.label_justificatif_chemin := null;\s+end if;/.test(tst)
+      && tst.includes("new.siret := nullif(regexp_replace(coalesce(new.siret, ''), '[^0-9]', '', 'g'), '');")
+      && tlab.includes("new.justificatif_chemin := nullif(btrim(coalesce(new.justificatif_chemin, ''), ' ' || chr(9) || chr(13) || chr(10)), '');")
+      && tst.includes("new.label_justificatif_chemin := nullif(btrim(coalesce(new.label_justificatif_chemin, ''), ' ' || chr(9) || chr(13) || chr(10)), '');"),
+    'Sans la date posée par la base, un signe daté de 2001 passait en tête ; sans l’effacement, un « Non » porterait des travaux couverts.');
+    const triggers = ['tient_l_emetteur', 'tient_l_assurance', 'tient_le_lieu_de_depot', 'tient_le_label', 'tient_le_sous_traitant',
+      'tient_les_tarifs'].map(fonction);
+    verifier('les six fonctions sont `security invoker`, avec un `search_path` fixé',
+      triggers.every((x) => x.length > 0 && /security invoker/.test(x) && /set search_path = public/.test(x)
         && !/security definer/.test(x.slice(0, x.indexOf(' as $$')))));
   }
 
@@ -1983,27 +2227,54 @@ console.log('\n4. L’ESSAI SQL — des refus, une donnée qui existe, et les m�
      `emetteur_assurances`, `emetteur` —, et il y en a au moins quatre
      (la liste hors liste, celle des fonctions, et les deux sortes de vues). */
   {
-    const QUATRE = ['emetteur_lieux_depot', 'tarifs_pro', 'emetteur_assurances', 'emetteur'];
+    /* SIX depuis 2b-6 (cahier 2b-6, §2.8 n° 6) : les signes de qualité et
+       les sous-traitants, deux mots à part eux aussi. La liste est celle de
+       `TABLES_46` — une seule décision. */
+    const QUATRE = [...TABLES_46];
     const cas26bis = morceau(essai, '=== 26 bis.', '=== 27.');
     const alternations = [...cas26bis.matchAll(/~\*?\s*'([^']*)'/g)]
       .flatMap((m) => [...m[1].matchAll(/\(([^()]*)\)/g)].map((g) => g[1].split('|').map((x) => x.trim())));
     const nommantes = alternations.filter((a) => QUATRE.some((t) => a.includes(t)));
     const incompletes = nommantes.filter((a) => !QUATRE.every((t) => a.includes(t)));
-    verifier('le cas 26 bis cherche les QUATRE tables privées dans chacune de ses alternations (`emetteur_lieux_depot`, `tarifs_pro`, '
-      + '`emetteur_assurances`, `emetteur`) : au moins quatre alternations, aucune qui en nomme une sans les autres',
+    verifier('le cas 26 bis cherche les SIX tables privées dans chacune de ses alternations (`emetteur_lieux_depot`, '
+      + '`emetteur_labels`, `emetteur_sous_traitants`, `tarifs_pro`, `emetteur_assurances`, `emetteur`) : au moins quatre '
+      + 'alternations, aucune qui en nomme une sans les autres',
     cas26bis.length > 0 && nommantes.length >= 4 && incompletes.length === 0,
     `${nommantes.length} alternation(s) qui les nomment ; incomplètes : `
     + `${incompletes.map((a) => `(${a.join('|')})`).join(' ; ') || 'aucune'}. Une table oubliée, et l’essai ne la cherche plus.`);
+    /* …ET LES LISTES DES CAS 26, 29 ET 30 (CTL-11, cahier 2b-6 §2.8) : les
+       tables dont le cas 26 relève les droits, celles dont le cas 29 compte
+       les contraintes, celles dont le cas 30 relit les `not null` — chacune
+       EXACTEMENT `TABLES_46`. Une table retirée d'une seule liste, et ce
+       cas cesse de la regarder sans rien dire. */
+    const cas26 = morceau(essai, '=== 26.', '=== 26 bis.');
+    const cas29 = morceau(essai, '=== 29.', '=== 30.');
+    const cas30 = morceau(essai, '=== 30.', '=== 31.');
+    const droits26 = (/unnest\(array\[('public\.emetteur'[^\]]*)\]\) t/.exec(cas26) || [])[1];
+    const tables26 = droits26 ? [...droits26.matchAll(/'public\.(\w+)'/g)].map((m) => m[1]) : [];
+    const tables29 = [...((/conrelid in \(([^)]*(?:\)[^)]*)*?)\);/.exec(cas29) || [])[1] || '').matchAll(/'public\.(\w+)'::regclass/g)].map((m) => m[1]);
+    const nn30 = (/table_name in \(([^)]*)\)\s+and is_nullable = 'NO'/.exec(cas30) || [])[1];
+    const tables30 = nn30 ? [...nn30.matchAll(/'(\w+)'/g)].map((m) => m[1]) : [];
+    verifier('…et les listes des cas 26 (les droits), 29 (les contraintes) et 30 (les `not null`) de l’essai 46 sont EXACTEMENT les six '
+      + 'tables de `TABLES_46` (CTL-11)',
+    egalEnsembles(tables26, TABLES_46) && egalEnsembles(tables29, TABLES_46) && egalEnsembles(tables30, TABLES_46),
+    `26 : ${tables26.join(', ')} ; 29 : ${tables29.join(', ')} ; 30 : ${tables30.join(', ')}`);
   }
 
+  /* 2b-6 (cahier 2b-6, §2.8 n° 20) : les refus nouveaux de l'essai 46 —
+     les quatre contraintes des signes de qualité et les cinq des
+     sous-traitants. */
   const ATTENDUES = ['emetteur_mediateur_check', 'emetteur_greffe_check', 'emetteur_denomination_ei_check',
     'emetteur_assurance_libelle_check', 'emetteur_assurance_complete_check', 'emetteur_assurance_chemin_check',
-    'tarif_frais_zero_check', 'tarif_frais_check'];
+    'tarif_frais_zero_check', 'tarif_frais_check',
+    'emetteur_label_categories_check', 'emetteur_label_chemin_check', 'emetteur_label_complet_check', 'emetteur_label_longueurs_check',
+    'emetteur_sous_traitant_categories_check', 'emetteur_sous_traitant_chemin_check', 'emetteur_sous_traitant_complet_check',
+    'emetteur_sous_traitant_longueurs_check', 'emetteur_sous_traitant_siret_check'];
   const absentes = ATTENDUES.filter((n) => !brut.includes(n) || !MESSAGES_CONTRAINTE[n]);
   verifier('les refus attendus nomment des contraintes qui ont leur phrase',
     absentes.length === 0, absentes.join(', '));
   verifier('les refus de RLS et de droits, table par table, et OP011 lu avec son code',
-    ['"emetteur"', '"tarifs_pro"', '"emetteur_assurances"', '"emetteur_lieux_depot"'].every((t) => brut.includes(`RLS sur ${t}`))
+    TABLES_46.map((t) => `"${t}"`).every((t) => brut.includes(`RLS sur ${t}`))
     && TABLES_46.every((t) => new RegExp(`set local role anon;\\s*select count\\(\\*\\) from public\\.${t};`).test(essai))
     && /\\set VERBOSITY verbose[\s\S]*emetteur_incomplet\(:A\)[\s\S]*\\set VERBOSITY default/.test(essai));
 
@@ -2087,17 +2358,21 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   const api = sansCommentaires(lire('src/lib/api.js'));
   const iNoop = api.indexOf('const noop = async () => null;');
   /* NEUF depuis 2b-5 : un lieu de dépôt des déchets s'enregistre et se
-     retire, sur le modèle des assurances (cahier §2.7). */
+     retire, sur le modèle des assurances (cahier §2.7). QUINZE depuis 2b-6
+     (cahier 2b-6, §2.8 bis) : un signe de qualité et un sous-traitant
+     s'enregistrent et se retirent, leur certificat et leur justificatif
+     s'envoient — sur le même modèle. */
   const NEUF = ['monEmetteur', 'enregistrerEmetteur', 'emetteurIncomplet', 'enregistrerAssurance',
-    'retirerAssurance', 'envoyerAttestation', 'lienAttestation', 'enregistrerLieuDepot', 'retirerLieuDepot'];
+    'retirerAssurance', 'envoyerAttestation', 'lienAttestation', 'enregistrerLieuDepot', 'retirerLieuDepot',
+    'enregistrerLabel', 'retirerLabel', 'enregistrerSousTraitant', 'retirerSousTraitant', 'envoyerCertificat', 'envoyerJustificatif'];
   const malFormes = NEUF.filter((n) => {
     const choix = api.indexOf(`export const ${n} = hasSupabase ? ${n}Supabase : ${n}Demo;`);
     const sup = api.indexOf(`async function ${n}Supabase(`);
     const demo = api.indexOf(`async function ${n}Demo(`);
     return iNoop < 0 || choix < 0 || sup < iNoop || demo < iNoop || choix < sup || choix < demo;
   });
-  verifier('les neuf exports sont APRÈS `const noop`, en deux fonctions nommées, le choix à la fin',
-    malFormes.length === 0,
+  verifier('les quinze exports sont APRÈS `const noop`, en deux fonctions nommées, le choix à la fin',
+    malFormes.length === 0 && NEUF.length === 15,
     `${malFormes.join(', ')}. La forme \`!hasSupabase ? async (o = {}) => { … } : …\` fait échouer `
     + 'Metro sans dire ni la ligne ni la cause (CLAUDE.md) ; et une `const` lue avant sa déclaration '
     + 'est un écran blanc.');
@@ -2215,15 +2490,56 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
        c'est la SEULE lecture de la table dans `api.js` : une seconde finirait
        par ne pas dire la même chose que la première. */
     const lecture = corps(api, 'async function monEmetteurSupabase(');
+    /* 2b-6 (cahier 2b-6, §2.8 n° 12, DÉCIDÉ) : SEPT lectures — après les
+       lieux, les signes de qualité puis les sous-traitants, chacun dans
+       l'ordre `created_at` puis `id`, la preuve de TVA restant la DERNIÈRE. */
     verifier('`monEmetteur()` lit les lieux de dépôt en CINQUIÈME, avant la preuve de TVA : toute erreur lève, sauf la table absente '
       + '→ `null` (non lus, jamais `[]`) — et c’est la seule lecture de la table',
-    /const \[e, a, t, l, v0\] = await Promise\.all\(\[/.test(lecture)
-      && /supabase\.from\('emetteur_lieux_depot'\)\.select\('\*'\)\.eq\('pro_id', currentUserId\)\s*\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\),\s*supabase\.from\('preuves_tva'\)/.test(lecture)
+    /const \[e, a, t, l, q, st, v0\] = await Promise\.all\(\[/.test(lecture)
+      && /supabase\.from\('emetteur_lieux_depot'\)\.select\('\*'\)\.eq\('pro_id', currentUserId\)\s*\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\),\s*supabase\.from\('emetteur_labels'\)/.test(lecture)
       && /if \(l\.error && !tableAbsente\(l\.error\)\) throw l\.error;/.test(lecture)
       && /lieux: l\.error \? null : \(l\.data \|\| \[\]\),/.test(lecture)
       && (api.match(/from\('emetteur_lieux_depot'\)\s*\.select\(/g) || []).length === 1,
     'une table pas encore migrée ne doit pas faire tomber « Mon entreprise » entière ; et « aucun lieu » sur une liste non lue '
       + 'inviterait au doublon');
+    /* …LA SIXIÈME ET LA SEPTIÈME (2b-6) : les signes de qualité, puis les
+       sous-traitants, la même forme — `null` sur une table absente (« non
+       lus »), jamais `[]` (« aucun » : un artisan inviterait au doublon, et
+       le rang 14 de l'écran se tromperait) ; et la preuve de TVA reste la
+       dernière. UNE lecture de chaque table dans tout `api.js` (S30). */
+    const deux = ['emetteur_labels', 'emetteur_sous_traitants'];
+    verifier('…et les signes de qualité en SIXIÈME, les sous-traitants en SEPTIÈME, la preuve de TVA en dernier : toute erreur lève, sauf '
+      + 'la table absente → `null` (non lus, jamais `[]`) — et c’est la seule lecture de chaque table (S30, S31)',
+    /supabase\.from\('emetteur_labels'\)\.select\('\*'\)\.eq\('pro_id', currentUserId\)\s*\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\),\s*supabase\.from\('emetteur_sous_traitants'\)\.select\('\*'\)\.eq\('pro_id', currentUserId\)\s*\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\),\s*supabase\.from\('preuves_tva'\)/.test(lecture)
+      && /if \(q\.error && !tableAbsente\(q\.error\)\) throw q\.error;/.test(lecture)
+      && /if \(st\.error && !tableAbsente\(st\.error\)\) throw st\.error;/.test(lecture)
+      && /labels: q\.error \? null : \(q\.data \|\| \[\]\),/.test(lecture)
+      && /sousTraitants: st\.error \? null : \(st\.data \|\| \[\]\),/.test(lecture)
+      && deux.every((t) => (api.match(new RegExp(`from\\('${t}'\\)\\s*\\.select\\(`, 'g')) || []).length === 1),
+    'deux lectures de la même table finiraient par ne pas dire la même chose ; « aucun signe » sur une liste non lue mentirait');
+    /* …ET LEURS ÉCRITURES : la fiche du compte connecté seulement, sans
+       `upsert`, par `pourLaBase` ; la démonstration valide comme la base et
+       range comme le déclencheur (la forme des lieux, ci-dessus). */
+    const ecr = (n) => corps(api, `async function ${n}(`);
+    const formeEcriture = (t, n) => {
+      const x = ecr(`enregistrer${n}Supabase`);
+      return /\.update\(ligne\)\.eq\('id', idExistant\)\.eq\('pro_id', currentUserId\)/.test(x)
+        && /\.insert\(\{ \.\.\.ligne, pro_id: currentUserId \}\)/.test(x)
+        && new RegExp(`const ligne = pourLaBase\\('${t}', valeurs \\|\\| \\{\\}\\);`).test(x) && !/\.upsert\(/.test(x)
+        && /\.delete\(\)\.eq\('id', id\)\.eq\('pro_id', currentUserId\)/.test(ecr(`retirer${n}Supabase`));
+    };
+    const demoL = ecr('enregistrerLabelDemo');
+    const demoS = ecr('enregistrerSousTraitantDemo');
+    verifier('…un signe de qualité, un sous-traitant et leurs retraits ne visent que la fiche du compte connecté, sans `upsert`, par '
+      + '`pourLaBase` ; la démonstration refuse comme la base (`validerLabel`, `validerSousTraitant` sans la clé du SIRET, que la base '
+      + 'ne vérifie pas) et range comme le déclencheur, dans le dossier de `moiEnDemo()`',
+    formeEcriture('emetteur_labels', 'Label') && formeEcriture('emetteur_sous_traitants', 'SousTraitant')
+      && /const refus = validerLabel\(ligne, moi\);/.test(demoL) && /refusDeContrainte\('emetteur_labels', refus\.contrainte\)/.test(demoL)
+      && /nettoyerLabel\(ligne, ancien, new Date\(\)\)/.test(demoL)
+      && /const refus = validerSousTraitant\(ligne, moi, \{ cleSiret: false \}\);/.test(demoS)
+      && /refusDeContrainte\('emetteur_sous_traitants', refus\.contrainte\)/.test(demoS)
+      && /nettoyerSousTraitant\(ligne, ancien, new Date\(\)\)/.test(demoS)
+      && [demoL, demoS].every((x) => /const moi = moiEnDemo\(\);/.test(x) && !/currentUserId/.test(x)));
   }
 
   /* ------------------------------------------------------------------ */
@@ -2231,11 +2547,16 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   /* ------------------------------------------------------------------ */
   /* NEUF depuis 2b-5 : `FicheLieuDepot`, le formulaire d'un lieu de dépôt
      des déchets (le mode `lieu`). HORS d'`ECRANS_DEVIS` (`verifier-devis`) :
-     c'est un écran de « Mon entreprise », et ses règles sont ici. */
+     c'est un écran de « Mon entreprise », et ses règles sont ici.
+     ONZE depuis 2b-6 (cahier §2.8 bis, DÉCIDÉ) : `FicheLabel` (un signe de
+     qualité, le mode `label`) et `FicheSousTraitant` (un sous-traitant, le
+     mode `sousTraitant`) — chaque règle de cette partie qui parcourt
+     `ECRANS` les lit désormais (un seul `Modal`, aucun `FeuilleBas`, aucune
+     `FlatList` dans un `ScrollView`, aucun `PillToggle`…). */
   const ECRANS = ['MonEntreprise', 'IdentiteEntreprise', 'PretAEmettre', 'ApercuEntete', 'FicheEmetteur',
-    'FicheAssurance', 'FicheLieuDepot', 'ListeMediateurs', 'SaisieTva'];
+    'FicheAssurance', 'FicheLieuDepot', 'FicheLabel', 'FicheSousTraitant', 'ListeMediateurs', 'SaisieTva'];
   const absents = ECRANS.filter((n) => lireSiExiste(`src/components/${n}.js`) == null);
-  verifier('les neuf composants de « Mon entreprise » existent', absents.length === 0, absents.join(', '));
+  verifier('les onze composants de « Mon entreprise » existent', absents.length === 0 && ECRANS.length === 11, absents.join(', '));
 
   const code = Object.fromEntries(ECRANS.map((n) => [n, sansCommentaires(lireSiExiste(`src/components/${n}.js`) || '')]));
   const me = code.MonEntreprise;
@@ -2284,8 +2605,11 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
      contrôle, la déclaration, le retrait — `messageDOccupationTva`,
      declaration-tva.js, fait tourner par `verifier-tva`). */
   /* 2b-5 : un lieu de dépôt en cours d'envoi ou de retrait (`occupeLieu`,
-     posé par `FicheLieuDepot`) fait attendre la croix, comme une assurance. */
-  const FORME_DE_FERMER = "if (occupe || occupeAssurance || occupeLieu) { afficher('' + ''); return; } "
+     posé par `FicheLieuDepot`) fait attendre la croix, comme une assurance.
+     2b-6 : un signe de qualité et un sous-traitant aussi (`occupeLabel`,
+     `occupeSousTraitant`, posés par `FicheLabel` et `FicheSousTraitant`) —
+     leur certificat ou leur justificatif part D'ABORD, la ligne ensuite. */
+  const FORME_DE_FERMER = "if (occupe || occupeAssurance || occupeLieu || occupeLabel || occupeSousTraitant) { afficher('' + ''); return; } "
     + "if (occupeTva) { afficher(messageDOccupationTva(occupeTva, { fermer: true }), ''); return; } "
     + "if (!quitter && aDesChangements()) { setQuitter(true); retour.avertissement(); retour.annoncer(''); return; } onFermer();";
   verifier('…« Quitter sans enregistrer » passe par `fermer`, comme la croix et le geste de retour d’Android : pendant un envoi, il '
@@ -2295,7 +2619,8 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     && /accessibilityLabel="Fermer « Mon entreprise »"/.test(me) && (me.match(/onPress=\{fermer\}/g) || []).length === 2
     && !/onPress=\{onFermer\}|onPress=\{\(\) => onFermer\(\)\}/.test(me)
     && (me.match(/\bonFermer\(\)/g) || []).length === 1 && /\n {4}onFermer\(\);$/.test(corpsFermer)
-    && /if \(occupe \|\| occupeAssurance \|\| occupeLieu\) \{/.test(corpsFermer) && /if \(occupeTva\) \{/.test(corpsFermer)
+    && /if \(occupe \|\| occupeAssurance \|\| occupeLieu \|\| occupeLabel \|\| occupeSousTraitant\) \{/.test(corpsFermer)
+    && /if \(occupeTva\) \{/.test(corpsFermer)
     && /if \(!quitter && aDesChangements\(\)\) \{/.test(corpsFermer)
     && formeDeFermer === FORME_DE_FERMER && (me.match(/\bconst fermer = /g) || []).length === 1,
   `touché pendant un envoi, le bouton de la bande fermait la fenêtre ; l’écriture aboutissait quand même, et la saisie avait déjà relu ; forme de \`fermer\` : ${formeDeFermer}`);
@@ -2327,9 +2652,11 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
     'un `gap` dans le conteneur laisse des trous où le fenêtrage tombe (17/10) ; un séparateur fléché '
     + 'est un type neuf à chaque rendu');
 
-  /* Les pavés numériques n'ont PAS de touche retour sur iPhone. */
+  /* Les pavés numériques n'ont PAS de touche retour sur iPhone. Depuis
+     2b-6, le SIRET d'un sous-traitant (`FicheSousTraitant`, pavé numérique)
+     est lu aussi (cahier §2.8 bis, S45). */
   const pavesMenteurs = [];
-  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot'].forEach((n) => {
+  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot', 'FicheLabel', 'FicheSousTraitant'].forEach((n) => {
     ['ChampLocal', 'Field', 'TextInput'].forEach((b) => {
       balises(code[n], b).forEach((x) => {
         if (/keyboardType="(number-pad|phone-pad|decimal-pad)"/.test(x.texte) && /returnKeyType=/.test(x.texte)) {
@@ -2338,14 +2665,16 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       });
     });
   });
-  verifier('aucun pavé numérique n’annonce une touche retour (`FicheEmetteur`, `FicheAssurance`, `FicheLieuDepot`)',
-    pavesMenteurs.length === 0 && /keyboardType="decimal-pad"/.test(code.FicheEmetteur)
-    && /keyboardType="number-pad"/.test(code.FicheLieuDepot),
+  verifier('aucun pavé numérique n’annonce une touche retour (`FicheEmetteur`, `FicheAssurance`, `FicheLieuDepot`, `FicheLabel`, '
+    + '`FicheSousTraitant` — son SIRET)',
+  pavesMenteurs.length === 0 && /keyboardType="decimal-pad"/.test(code.FicheEmetteur)
+    && /keyboardType="number-pad"/.test(code.FicheLieuDepot) && /keyboardType="number-pad"/.test(code.FicheSousTraitant),
     pavesMenteurs.join(' | ') || 'aucun champ décimal trouvé : le contrôle a perdu sa cible');
 
-  /* « Suivant » va QUELQUE PART : chaque champ qui l'annonce dit où. */
+  /* « Suivant » va QUELQUE PART : chaque champ qui l'annonce dit où (les
+     deux formulaires de 2b-6 aussi, cahier §2.8 bis). */
   const suivantsVides = [];
-  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot'].forEach((n) => {
+  ['FicheEmetteur', 'FicheAssurance', 'FicheLieuDepot', 'FicheLabel', 'FicheSousTraitant'].forEach((n) => {
     balises(code[n], 'ChampLocal').forEach((x) => {
       if (/returnKeyType="next"/.test(x.texte)
         && !(/onSubmitEditing=\{/.test(x.texte) && /\.focus\(\)/.test(x.texte) && /blurOnSubmit=\{false\}/.test(x.texte))) {
@@ -2495,17 +2824,30 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   const enregistrerLieuMe = corps(me, 'const enregistrerLieu = async (valeurs) => {');
   const retirerLieuMe = corps(me, 'const retirerLieu = async (l) => {');
   verifier('la croix PENDANT un envoi n’offre pas de « quitter sans enregistrer » : elle attend',
-    /if \(occupe \|\| occupeAssurance \|\| occupeLieu\) \{[^}]*Enregistrement en cours[^}]*return;\s*\}/.test(fermerMe)
+    /if \(occupe \|\| occupeAssurance \|\| occupeLieu \|\| occupeLabel \|\| occupeSousTraitant\) \{[^}]*Enregistrement en cours[^}]*return;\s*\}/
+      .test(fermerMe)
     && fermerMe.indexOf('occupeAssurance') < fermerMe.indexOf('aDesChangements()')
     && fermerMe.indexOf('occupeLieu') > 0 && fermerMe.indexOf('occupeLieu') < fermerMe.indexOf('aDesChangements()')
-    && /onOccupe=\{setOccupeAssurance\}/.test(me) && /onOccupe=\{setOccupeLieu\}/.test(me),
+    && /onOccupe=\{setOccupeAssurance\}/.test(me) && /onOccupe=\{setOccupeLieu\}/.test(me)
+    && /onOccupe=\{setOccupeLabel\}/.test(me) && /onOccupe=\{setOccupeSousTraitant\}/.test(me)
+    && ['occupeLabel', 'occupeSousTraitant'].every((x) => fermerMe.indexOf(x) > 0
+      && fermerMe.indexOf(x) < fermerMe.indexOf('aDesChangements()')),
     'Un renoncement qui n’en est pas un : l’écriture déjà partie aboutit quand même.');
-  verifier('…et la bande se referme à chaque succès (fiche, assurance, lieu de dépôt, retraits) et à chaque changement de mode',
-    [enregistrerMe.slice(0, enregistrerMe.indexOf('catch')), enregistrerAssuranceMe,
-      retirerMe.slice(0, retirerMe.indexOf('catch')), enregistrerLieuMe,
-      retirerLieuMe.slice(0, retirerLieuMe.indexOf('catch'))].every((b) => b.length > 20 && /setQuitter\(false\)/.test(b))
-    && ['const entrerEnEdition', 'const revenirAuFormulaire', 'const ouvrirAssurance', 'const ouvrirLieu', 'const choisirMediateur']
-      .every((d) => /setQuitter\(false\)/.test(corps(me, d))),
+  /* 2b-6 : un signe de qualité et un sous-traitant, enregistrés ou retirés,
+     referment la bande comme un lieu de dépôt ; leurs deux ouvertures aussi. */
+  const enregistrerLabelMe = corps(me, 'const enregistrerLabel = async (valeurs, doc) => {');
+  const retirerLabelMe = corps(me, 'const retirerLabel = async (g) => {');
+  const enregistrerSousTraitantMe = corps(me, 'const enregistrerSousTraitant = async (valeurs, doc) => {');
+  const retirerSousTraitantMe = corps(me, 'const retirerSousTraitant = async (st) => {');
+  verifier('…et la bande se referme à chaque succès (fiche, assurance, lieu de dépôt, signe de qualité, sous-traitant, retraits) et à '
+    + 'chaque changement de mode',
+  [enregistrerMe.slice(0, enregistrerMe.indexOf('catch')), enregistrerAssuranceMe,
+    retirerMe.slice(0, retirerMe.indexOf('catch')), enregistrerLieuMe,
+    retirerLieuMe.slice(0, retirerLieuMe.indexOf('catch')), enregistrerLabelMe,
+    retirerLabelMe.slice(0, retirerLabelMe.indexOf('catch')), enregistrerSousTraitantMe,
+    retirerSousTraitantMe.slice(0, retirerSousTraitantMe.indexOf('catch'))].every((b) => b.length > 20 && /setQuitter\(false\)/.test(b))
+    && ['const entrerEnEdition', 'const revenirAuFormulaire', 'const ouvrirAssurance', 'const ouvrirLieu', 'const ouvrirLabel',
+      'const ouvrirSousTraitant', 'const choisirMediateur'].every((d) => /setQuitter\(false\)/.test(corps(me, d))),
     'Une bande « vos modifications ne sont pas enregistrées » au-dessus de « Enregistré » dit faux.');
   verifier('le retrait d’une assurance ne part qu’UNE fois, et ne promet une attestation que s’il y en avait une',
     /if \(retraitEnCours\.current\) return;\s*retraitEnCours\.current = true;/.test(retirerMe)
@@ -2718,6 +3060,229 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
   }
 
   /* ------------------------------------------------------------------ */
+  /*  5b ter. LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS (2b-6, cahier   */
+  /*  §3.6, §3.7 bis, annexe A.5, T24, T26, T29, T30)                     */
+  /* ------------------------------------------------------------------ */
+  {
+    const fg = code.FicheLabel;
+    const fs = code.FicheSousTraitant;
+    const TL = E ? E.TEXTES_SIGNES_DE_QUALITE : {};
+    const TS = E ? E.TEXTES_SOUS_TRAITANTS : {};
+    /* LES DEUX SECTIONS, après « Vos lieux de dépôt des déchets » et avant
+       « Médiateur » (cahier §3.6) : leurs ancres sont celles où mènent les
+       portes « Mes signes de qualité » et « Mes sous-traitants » de la carte
+       « Énergie et label RGE » (`ouvrirMonEntreprise('labels')`,
+       `('sousTraitants')`), et leurs titres sont ceux de `NOM_DES_SECTIONS`
+       (`verifier-devis` les compare) — écrits EN TOUTES LETTRES dans la
+       balise, et égaux aux constantes des textes. */
+    const iLieux = fe.indexOf('<Section ancre="lieux"');
+    const iLab = fe.indexOf(`<Section ancre="labels" titre="${TL.section}"`);
+    const iSt = fe.indexOf(`<Section ancre="sousTraitants" titre="${TS.section}"`);
+    const iMed = fe.indexOf('<Section ancre="mediateur"');
+    const sectionDe = (i) => (i >= 0 ? fe.slice(i, fe.indexOf('</Section>', i)) : '');
+    const secL = sectionDe(iLab);
+    const secS = sectionDe(iSt);
+    verifier('« Vos signes de qualité (label RGE) » et « Vos sous-traitants » : deux sections de « Mon entreprise », APRÈS « Vos lieux '
+      + 'de dépôt des déchets » et avant « Médiateur », titres égaux aux constantes des textes (2b-6, §3.6)',
+    iLieux >= 0 && iLab > iLieux && iSt > iLab && iMed > iSt
+      && TL.section === 'Vos signes de qualité (label RGE)' && TS.section === 'Vos sous-traitants',
+    `lieux ${iLieux} · labels ${iLab} · sous-traitants ${iSt} · médiateur ${iMed}`);
+    /* T24 : UNE LISTE NON LUE N'EST JAMAIS « AUCUN » — pas de défaut à `[]`
+       dans les props, la section le dit, et ne propose pas d'en ajouter ;
+       la phrase de la section (T29 : « rien ne s'affiche sur votre fiche
+       publique ») se lit dans les trois états. */
+    const nonLuAvantAjout = (sec, liste, ajouter) => sec.indexOf(`{${liste} == null ? (`) >= 0
+      && sec.indexOf(`{${liste} == null ? (`) < sec.indexOf('.nonLusEdition}')
+      && sec.indexOf('.nonLusEdition}') < sec.indexOf(') : (')
+      && sec.indexOf(') : (') < sec.indexOf(ajouter);
+    verifier('…une liste NON LUE le dit (« … n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun… ») et ne propose pas d’en '
+      + 'ajouter ; `labels = null` et `sousTraitants = null` par défaut, jamais `[]` (T24) ; la phrase de la section se lit dans les '
+      + 'trois états',
+    /\blabels = null, onAjouterLabel, onOuvrirLabel,/.test(fe) && /\bsousTraitants = null, onAjouterSousTraitant, onOuvrirSousTraitant,/.test(fe)
+      && !/\b(?:labels|sousTraitants) = \[\]/.test(fe)
+      && nonLuAvantAjout(secL, 'labels', 'onAjouterLabel') && nonLuAvantAjout(secS, 'sousTraitants', 'onAjouterSousTraitant')
+      && secL.indexOf('<Aide>{TEXTES_SIGNES_DE_QUALITE.phrase}</Aide>') >= 0
+      && secL.indexOf('<Aide>{TEXTES_SIGNES_DE_QUALITE.phrase}</Aide>') < secL.indexOf('{labels == null ? (')
+      && secS.indexOf('<Aide>{TEXTES_SOUS_TRAITANTS.phrase}</Aide>') >= 0
+      && secS.indexOf('<Aide>{TEXTES_SOUS_TRAITANTS.phrase}</Aide>') < secS.indexOf('{sousTraitants == null ? ('),
+    'un artisan qui a un label, à qui l’on dirait qu’il n’en a aucun, en rangerait un second exemplaire — et la carte du devis lui '
+    + 'proposerait de déclarer qu’il n’en détient pas');
+    /* CTL-8 : L'ÉTAT D'UNE LIGNE A UNE SEULE ÉCRITURE — `libelleEtatDuLabel`
+       et `libelleEtatDuSousTraitant` (`emetteur.js`, faits tourner d'accord
+       avec la carte du devis en partie 2 bis). La rangée, l'étiquette parlée
+       et le bloc en lecture la lisent ; aucun écran ne recompose un état
+       (« valable », « non joint », « dépassée ») à la main. */
+    const lectureL = corps(fe, 'export function SignesDeQualiteEnLecture(');
+    const lectureS = corps(fe, 'export function SousTraitantsEnLecture(');
+    const ecritUnEtat = (x) => /Certificat non joint|justificatif non joint|Fin de validité|Valable jusqu|Détient un label|Ne détient pas/
+      .test(x.replace(/TEXTES_[A-Z_]+\.\w+/g, ''));
+    verifier('…l’état d’une ligne n’a qu’UNE écriture (CTL-8) : la rangée, son étiquette parlée et le bloc en lecture lisent '
+      + '`libelleEtatDuLabel` et `libelleEtatDuSousTraitant`, sur leur propre ligne ; aucun écran ne recompose un état à la main ; le '
+      + 'sous-traitant montre son SIRET (ÉCRAN-11)',
+    /const etatLu = libelleEtatDuLabel\(g\);/.test(secL) && /<Text style=\{s\.optionAide\}>\{etatLu\}<\/Text>/.test(secL)
+      && /accessibilityLabel=\{`\$\{g\.intitule\}, \$\{g\.organisme\}, \$\{etatLu\}\. \$\{TEXTES_SIGNES_DE_QUALITE\.modifier\}`\}/.test(secL)
+      && /const etatLu = libelleEtatDuSousTraitant\(st\);/.test(secS) && /const siretLu = siretDuSousTraitant\(st\);/.test(secS)
+      && /<Text style=\{s\.optionAide\}>\{etatLu\}<\/Text>/.test(secS) && /\{siretLu\}/.test(secS)
+      && /libelleEtatDuLabel\(g\)/.test(lectureL) && /libelleEtatDuSousTraitant\(st\)/.test(lectureS)
+      && /siretDuSousTraitant\(st\)/.test(lectureS)
+      && /onPress=\{\(\) => onOuvrirLabel\(g\)\}/.test(secL) && /onPress=\{onAjouterLabel\}/.test(secL)
+      && /onPress=\{\(\) => onOuvrirSousTraitant\(st\)\}/.test(secS) && /onPress=\{onAjouterSousTraitant\}/.test(secS)
+      && ![secL, secS, lectureL, lectureS].some(ecritUnEtat),
+    'deux écritures de l’état d’un signe finissent par se contredire : « Valable » sur la ligne, « certificat non joint » dans la carte');
+    verifier('…en LECTURE, « Mon entreprise » montre les deux listes : la phrase de la section (T29), vides elles le disent, non lues '
+      + 'elles le disent avec « Réessayer » — SEULEMENT une fois la fiche lue',
+    /const lus = Array\.isArray\(labels\);/.test(lectureL) && /const lus = Array\.isArray\(sousTraitants\);/.test(lectureS)
+      && [lectureL, lectureS].every((x) => /\{X\.phrase\}/.test(x) && /\{X\.nonLus\}/.test(x) && /\{X\.vide\}/.test(x)
+        && /onPress=\{onReessayer\}/.test(x) && /onPress=\{onModifier\}/.test(x))
+      && /donnees\.etat === 'pret' && \(\s*<SignesDeQualiteEnLecture\s+labels=\{donnees\.labels\}\s+onModifier=\{\(\) => entrerEnEdition\('labels'\)\}/
+        .test(me)
+      && /donnees\.etat === 'pret' && \(\s*<SousTraitantsEnLecture\s+sousTraitants=\{donnees\.sousTraitants\}\s+onModifier=\{\(\) => entrerEnEdition\('sousTraitants'\)\}/
+        .test(me),
+    'un bloc qui dirait « aucun » pendant la lecture, ou après un échec, ferait croire que rien n’est enregistré');
+
+    /* LES DEUX FORMULAIRES (A.5) : leurs textes viennent des constantes —
+       jamais une phrase écrite dans le composant, qu'aucun contrôle ne
+       ferait tourner —, et leurs textes d'exemple ne ressemblent à aucune
+       donnée (la règle du 29/10) : une liste FERMÉE, aucun chiffre, aucun
+       nom d'organisme. */
+    const placeholdersDe = (c) => [...c.matchAll(/placeholder=\{X\.(\w+)\}/g)].map((m) => m[1]);
+    const enDurs = (c) => [...c.matchAll(/placeholder="([^"]*)"/g)].map((m) => m[1]);
+    const phG = placeholdersDe(fg);
+    const phS = placeholdersDe(fs);
+    verifier('les deux formulaires (A.5) : leurs textes d’exemple viennent des constantes, en liste FERMÉE, sans chiffre — « Nom de '
+      + 'l’organisme », « Tel qu’il figure sur votre certificat », « Le nom de l’entreprise », « Quatorze chiffres »',
+    egalEnsembles(phG, ['organismePlaceholder', 'intitulePlaceholder']) && egalEnsembles(phS, ['nomPlaceholder', 'siretPlaceholder'])
+      && enDurs(fg).length === 0 && enDurs(fs).length === 0
+      && [TL.organismePlaceholder, TL.intitulePlaceholder, TS.nomPlaceholder, TS.siretPlaceholder].every((p) => typeof p === 'string'
+        && p.length > 0 && !/\d/.test(p))
+      && /const X = TEXTES_SIGNES_DE_QUALITE;/.test(fg) && /const X = TEXTES_SOUS_TRAITANTS;/.test(fs)
+      && ['formulaire', 'trompeuse', 'organisme', 'intitule', 'reference', 'travaux', 'travauxAide', 'fin', 'finAide', 'joindre',
+        'joindreAide'].every((k) => fg.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fg.includes(`: X.${k}}`))
+      && ['formulaire', 'tiers', 'nom', 'siret', 'detient', 'non', 'oui', 'retraitDuLabel', 'travaux', 'fin', 'joindre', 'joindreAide',
+        'retirerCoute'].every((k) => fs.includes(`{X.${k}}`)) && ['enregistrer', 'retirer'].every((k) => fs.includes(`: X.${k}}`)),
+    `FicheLabel : ${phG.join(', ')} | ${enDurs(fg).join(', ')} ; FicheSousTraitant : ${phS.join(', ')} | ${enDurs(fs).join(', ')}`);
+    /* CHAQUE CHAMP PORTE LA LONGUEUR DE SA COLONNE (CTL-11 de 2b-5), et le
+       SIRET 17 caractères : quatorze chiffres et les trois espaces que
+       `formaterSiret` pose. */
+    const maxDans = (c, nomRef) => ((balises(c, 'ChampLocal').map((b) => b.texte.replace(/\s+/g, ' '))
+      .find((b) => b.includes(`ref={${nomRef}}`)) || '').match(/maxLength=\{([^}]+)\}/) || [])[1] || null;
+    verifier('…chaque champ porte le `maxLength` de SA colonne (`LONGUEUR_MAX`), et le SIRET 17 (quatorze chiffres et trois espaces)',
+      maxDans(fg, 'organisme') === 'L.organisme' && maxDans(fg, 'intitule') === 'L.intitule' && maxDans(fg, 'reference') === 'L.reference'
+      && maxDans(fs, 'nom') === 'L.raison_sociale' && maxDans(fs, 'siret') === '17'
+      && /const L = LONGUEUR_MAX\.emetteur_labels;/.test(fg) && /const L = LONGUEUR_MAX\.emetteur_sous_traitants;/.test(fs)
+      && balises(fg, 'ChampLocal').length === 3 && balises(fs, 'ChampLocal').length === 2,
+    `${maxDans(fg, 'organisme')} · ${maxDans(fg, 'intitule')} · ${maxDans(fg, 'reference')} · ${maxDans(fs, 'nom')} · ${maxDans(fs, 'siret')}`);
+    /* LES MÊMES REFUS QUE LA BASE, AVANT TOUT ENVOI — et, pour un
+       sous-traitant, la CLÉ du SIRET en plus, que seul l'écran vérifie (la
+       base non : l'exception de La Poste) : `validerSousTraitant(v, proId)`
+       SANS `{ cleSiret: false }`, et la phrase de la clé fausse s'affiche
+       telle quelle (`r.message`). */
+    verifier('…les mêmes refus que la base, avant tout envoi (`validerLabel`, `validerSousTraitant`) ; la clé du SIRET refusée PAR '
+      + 'L’ÉCRAN (`cleSiret` laissé à vrai, la phrase de `MESSAGE_SIRET_FAUX` affichée telle quelle) ; le SIRET sur le pavé numérique',
+    /const r = validerLabel\(v, proId\);/.test(fg) && /messageDeContrainte\(r\.contrainte\)/.test(fg)
+      && /const r = validerSousTraitant\(v, proId\);/.test(fs) && !/cleSiret\s*:/.test(fs)
+      && /const message = r\.message \|\| messageDeContrainte\(r\.contrainte\);/.test(fs)
+      && balises(fs, 'ChampLocal').some((b) => /ref=\{siret\}/.test(b.texte) && /keyboardType="number-pad"/.test(b.texte)
+        && !/returnKeyType=/.test(b.texte))
+      && !!E && E.validerSousTraitant({ raison_sociale: 'S', siret: '000 004 960 00018', label_detient: false }, 'p').message
+        === E.MESSAGE_SIRET_FAUX
+      && E.validerSousTraitant({ raison_sociale: 'S', siret: '000 004 960 00019', label_detient: false }, 'p').ok === true,
+    'une clé fausse enregistrée ferait imprimer un SIRET qui n’existe pas — et la base ne la refuserait pas');
+    /* RIEN DE COCHÉ NI DE CHOISI D'OFFICE (« Opus propose, l'artisan
+       confirme ») : les travaux partent de la ligne enregistrée, ou de rien ;
+       la réponse « Détient-il un label RGE ? » aussi ; les cases ne changent
+       que par `categoriesApresAppui`, depuis un appui ; aucun effet
+       (`useEffect`) qui choisirait à la place de l'artisan ; aucune `Option`
+       ni case allumée en dur. */
+    const casesEnDur = (c) => balises(c, 'Interrupteur').some((b) => /actif=\{true\}|\bactif\b(?!\s*=)/.test(b.texte))
+      || balises(c, 'Option').some((b) => /choisi=\{true\}|\bchoisi\b(?!\s*=)/.test(b.texte));
+    verifier('…rien n’est coché ni choisi d’office (2b-6) : les travaux et la réponse au label partent de la ligne ENREGISTRÉE, ou de '
+      + 'rien ; une case ne change que par `categoriesApresAppui`, depuis un appui ; aucun `useEffect` ; dix-neuf cases tirées de '
+      + '`TRAVAUX_ENERGIE`, leurs exemples en aide',
+    /useState\(label && Array\.isArray\(label\.categories\) \? \[\.\.\.label\.categories\] : null\)/.test(fg)
+      && /useState\(Array\.isArray\(st0\.label_categories\) \? \[\.\.\.st0\.label_categories\] : null\)/.test(fs)
+      && /useState\(reponseDe\(sousTraitant\)\)/.test(fs)
+      && [fg, fs].every((c) => (c.match(/\bsetCategories\(/g) || []).length === 1
+        && /setCategories\(\(liste\) => categoriesApresAppui\(liste, cle\)\);/.test(c)
+        && /onPress=\{\(\) => toucherTravail\(t\.cle\)\}/.test(c) && /TRAVAUX_ENERGIE\.map\(\(t\) => \(/.test(c)
+        && /aide=\{t\.exemples \|\| undefined\}/.test(c) && !/useEffect/.test(c) && !casesEnDur(c))
+      && (fs.match(/\bsetDetient\(/g) || []).length === 1 && /const repondre = \(oui\) => \{\s*setDetient\(oui\);/.test(fs)
+      && /onPress=\{\(\) => repondre\(false\)\}/.test(fs) && /onPress=\{\(\) => repondre\(true\)\}/.test(fs)
+      && !/PillToggle/.test(fs),
+    'un travail coché à la place de l’artisan s’imprimerait sur ses devis comme couvert — c’est précisément ce que la loi sanctionne');
+    /* SOUS « NON » (BASE-7, ÉCRAN-13) : les champs du label se TAISENT mais
+       restent dans le formulaire ; ce qui part est vide hors « Oui » (le
+       déclencheur l'effacerait de toute façon) ; le justificatif ne
+       s'envoie que sous « Oui » ; et si un label était rangé, la phrase dit
+       AVANT d'enregistrer qu'il sera retiré. */
+    const lireS = corps(fs, 'const lireValeurs = () => {');
+    verifier('…sous « Non », le label d’un sous-traitant se tait sans se perdre, part VIDE, son justificatif ne s’envoie pas, et la '
+      + 'phrase « En enregistrant, son label et son justificatif seront retirés de cette fiche. » le dit AVANT, si un label était rangé',
+    /const oui = detient === true;/.test(lireS) && /label_categories: oui && categories && categories\.length \? \[\.\.\.categories\] : null,/
+      .test(lireS)
+      && /label_valide_jusquau: oui \? valideJusquau \|\| null : null,/.test(lireS)
+      && /label_justificatif_chemin: oui \? chemin \|\| null : null,/.test(lireS)
+      && /\{detient === false && avaitUnLabel && <Text style=\{s\.avis\}>\{X\.retraitDuLabel\}<\/Text>\}/.test(fs)
+      && /const avaitUnLabel = reponseDe\(sousTraitant\) === true;/.test(fs)
+      && /\{detient === true && \(/.test(fs) && /await onEnregistrer\(v, detient === true \? fichier : null\);/.test(fs)
+      && /if \(doc && valeurs\.label_detient === true\) chemin = await api\.envoyerJustificatif\(doc\);/.test(me)
+      && TS.retraitDuLabel === 'En enregistrant, son label et son justificatif seront retirés de cette fiche.',
+    'un « Non » qui effacerait le label sans le dire, ou qui enverrait le justificatif d’un tiers pour rien, laisserait un document '
+    + 'orphelin dans l’espace privé');
+    /* LA DATE DE FIN PAR LE CALENDRIER, EN LIGNE, AVEC SES FLÈCHES
+       « ANNÉE » (T30) — dans ces deux formulaires SEULEMENT : aucun autre
+       écran ne passe `annees`. */
+    const fichiersSrc5 = (await import('node:child_process')).execFileSync('git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
+      .split('\n').filter((f) => f.endsWith('.js'));
+    const avecAnnees = fichiersSrc5.filter((f) => balises(sansCommentaires(lireSiExiste(f) || ''), 'Calendrier')
+      .some((b) => /\bannees\b/.test(b.texte)));
+    verifier('…la date de fin par le calendrier EN LIGNE, avec ses flèches « année » (T30), dans ces deux formulaires SEULEMENT — '
+      + 'jamais `FeuilleDates` par-dessus la fenêtre',
+    egalEnsembles(avecAnnees, ['src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js'])
+      && [fg, fs].every((c) => balises(c, 'Calendrier').length === 1 && !/FeuilleDates/.test(c)
+        && /import \{ Calendrier \} from '\.\/Calendrier';/.test(c)),
+    `écrans qui passent \`annees\` : ${avecAnnees.join(', ') || 'aucun'}`);
+    /* LE FICHIER D'ABORD, LA LIGNE ENSUITE ; UN SEUL RETRAIT ; DEUX APPUIS. */
+    const enregistrerLabelMe = corps(me, 'const enregistrerLabel = async (valeurs, doc) => {');
+    const enregistrerStMe = corps(me, 'const enregistrerSousTraitant = async (valeurs, doc) => {');
+    const retirerLabelMe = corps(me, 'const retirerLabel = async (g) => {');
+    const retirerStMe = corps(me, 'const retirerSousTraitant = async (st) => {');
+    verifier('`MonEntreprise` : le certificat ou le justificatif part D’ABORD, la ligne ENSUITE ; la liste suit ce que la base a rendu ; '
+      + 'on revient sur la section ; chaque retrait ne part qu’UNE fois (son propre garde), en deux appuis dans son formulaire',
+    enregistrerLabelMe.indexOf('api.envoyerCertificat(doc)') > 0
+      && enregistrerLabelMe.indexOf('api.envoyerCertificat(doc)') < enregistrerLabelMe.indexOf('api.enregistrerLabel(')
+      && enregistrerStMe.indexOf('api.envoyerJustificatif(doc)') > 0
+      && enregistrerStMe.indexOf('api.envoyerJustificatif(doc)') < enregistrerStMe.indexOf('api.enregistrerSousTraitant(')
+      && /revenirAuFormulaire\('labels'\);/.test(enregistrerLabelMe) && /revenirAuFormulaire\('sousTraitants'\);/.test(enregistrerStMe)
+      && /if \(retraitLabelEnCours\.current\) return;\s*retraitLabelEnCours\.current = true;/.test(retirerLabelMe)
+      && /retraitLabelEnCours\.current = false;/.test(retirerLabelMe.slice(retirerLabelMe.indexOf('finally')))
+      && /if \(retraitSousTraitantEnCours\.current\) return;\s*retraitSousTraitantEnCours\.current = true;/.test(retirerStMe)
+      && /retraitSousTraitantEnCours\.current = false;/.test(retirerStMe.slice(retirerStMe.indexOf('finally')))
+      && /'Sous-traitant retiré\. Les brouillons qui le citaient l’ont perdu\.'/.test(retirerStMe)
+      && [fg, fs].every((c) => /if \(!confirmeRetrait\) \{ setConfirmeRetrait\(true\); return; \}\s*if \(enCours\.current\) return;/
+        .test(corps(c, 'const retirer = async () => {')) && /onOccupe\(oui\)/.test(c))
+      && /\{confirmeRetrait && <Text style=\{s\.aide\}>\{X\.retirerCoute\}<\/Text>\}/.test(fs),
+    'une ligne qui pointerait un fichier pas encore arrivé serait un lien mort ; un double appui enverrait deux suppressions');
+    /* LES DEUX MODES, LE BROUILLON, « QUITTER SANS ENREGISTRER ». */
+    verifier('`MonEntreprise` : les modes `label` et `sousTraitant` montent leur formulaire, gardent le brouillon, demandent avant de '
+      + 'quitter, et reviennent sur LEUR section ; `FICHE_EN_LECTURE` les tient NON LUS (`null`)',
+    /\{mode === 'label' && \(\s*<FicheLabel/.test(me) && /\{mode === 'sousTraitant' && \(\s*<FicheSousTraitant/.test(me)
+      && /onAnnuler=\{\(\) => revenirAuFormulaire\('labels'\)\}/.test(me)
+      && /onAnnuler=\{\(\) => revenirAuFormulaire\('sousTraitants'\)\}/.test(me)
+      && /setBrouillon\(fiche\.current \? fiche\.current\.instantane\(\) : brouillon\);/.test(corps(me, 'const ouvrirLabel = (g) => {'))
+      && /setBrouillon\(fiche\.current \? fiche\.current\.instantane\(\) : brouillon\);/.test(corps(me, 'const ouvrirSousTraitant = (st) => {'))
+      && /if \(mode === 'label' && ficheLabel\.current && ficheLabel\.current\.aDesChangements\(\)\) return true;/.test(me)
+      && /if \(mode === 'sousTraitant' && ficheSousTraitant\.current && ficheSousTraitant\.current\.aDesChangements\(\)\) return true;/.test(me)
+      && /mode === 'label' \|\| mode === 'sousTraitant' \|\| mode === 'mediateur'\) \{/.test(me)
+      && /labels: null, sousTraitants: null,/.test(me)
+      && /labels=\{donnees\.labels\}/.test(me) && /sousTraitants=\{donnees\.sousTraitants\}/.test(me)
+      && /useImperativeHandle\(ref, \(\) => \(\{\s*aDesChangements:/.test(fg) && /useImperativeHandle\(ref, \(\) => \(\{\s*aDesChangements:/.test(fs)
+      && /COLONNES_ECRITES\.emetteur_labels\.every\(/.test(fg),
+    'sans le brouillon, partir ajouter un signe de qualité effaçait ce qu’on venait de taper dans « Mon entreprise »');
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  5c. LES DEUX PORTES, ET UNE SEULE FENÊTRE                          */
   /* ------------------------------------------------------------------ */
   const app = sansCommentaires(lire('src/OpusApp.js'));
@@ -2789,13 +3354,35 @@ const lireSiExiste = (f) => { try { return lire(f); } catch { return null; } };
       && appM.includes('setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null);')
       && appM.includes('setMonRegime({ echec: true }); setMesAssurances(undefined); setMesLieux(undefined);')
       && (app.match(/\bsetMesLieux\(/g) || []).length === 3
-      && recevoir.length > 20 && /const recevoirEmetteur = useCallback\(\(emetteur, lieux\) => \{/.test(app)
+      /* 2b-6 (cahier §3.7 bis, ÉCRAN-4, DÉCIDÉ) : la signature devient
+         `(emetteur, listes = {})` — un OBJET `{ lieux, labels, sousTraitants }`
+         —, et `lireFiche` le passe par `listesLues(d)`. */
+      && recevoir.length > 20 && /const recevoirEmetteur = useCallback\(\(emetteur, listes = \{\}\) => \{/.test(app)
+      && /const \{ lieux, labels, sousTraitants \} = listes \|\| \{\};/.test(recevoir)
       && (recevoir.match(/MesLieux/g) || []).length === 1
       && /if \(Array\.isArray\(lieux\) \|\| lieux === null\) setMesLieux\(lieux\);/.test(recevoir)
-      && /if \(surEmetteur\) surEmetteur\(d\.emetteur \|\| null, Array\.isArray\(d\.lieux\) \? d\.lieux : null\);/.test(me)
+      && /if \(surEmetteur\) surEmetteur\(d\.emetteur \|\| null, listesLues\(d\)\);/.test(me)
+      && /lieux: Array\.isArray\(d\.lieux\) \? d\.lieux : null,/.test(me)
       && balises(app, 'SaisieDevisScreen').some((b) => /\blieux=\{mesLieux\}/.test(b.texte))
       && /lireRegime\(/.test(surFermer),
     'un échec qui garderait les lieux d’avant ferait cocher, dans un devis, des lieux qu’on n’a pas pu relire');
+    /* 2b-6 (cahier §3.7 bis, T24) : LES MÊMES TROIS RÈGLES pour les signes
+       de qualité et les sous-traitants — `undefined` au départ et après un
+       échec (pas lus), une liste ou `null` à la réponse (non lus : jamais un
+       `[]` inventé, sinon la carte du devis proposerait « Je n’en détiens
+       aucun » à un artisan qui en a un), posés par `recevoirEmetteur` quand
+       c'est un tableau ou `null`, et passés à la saisie. */
+    verifier('`OpusApp` : `mesLabels` et `mesSousTraitants` suivent les trois règles de `mesLieux` (2b-6, T24) — `undefined` au départ '
+      + 'et après un échec, une liste ou `null` à la réponse, jamais un `[]` inventé, posés par `recevoirEmetteur`, passés à la saisie',
+    [['Labels', 'labels'], ['SousTraitants', 'sousTraitants']].every(([N, n]) => appM.includes(`const [mes${N}, setMes${N}] = useState(undefined);`)
+      && appM.includes(`setMes${N}(r && Array.isArray(r.${n}) ? r.${n} : null);`)
+      && appM.includes(`setMes${N}(undefined);`)
+      && (app.match(new RegExp(`\\bsetMes${N}\\(`, 'g')) || []).length === 3
+      && recevoir.includes(`if (Array.isArray(${n}) || ${n} === null) setMes${N}(${n});`)
+      && /listesLues/.test(me) && new RegExp(`${n}: Array\\.isArray\\(d\\.${n}\\) \\? d\\.${n} : null,`).test(me)
+      && balises(app, 'SaisieDevisScreen').some((b) => new RegExp(`\\b${n}=\\{mes${N}\\}`).test(b.texte)))
+      && !/setMes(?:Labels|SousTraitants)\(\[\]\)/.test(app),
+    'une liste inventée vide ferait dire à la carte du devis que l’artisan n’a aucun signe de qualité, au moment où on n’a pas pu le lire');
   }
 
   const fichiersSrc = (await import('node:child_process')).execFileSync('git',

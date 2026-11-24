@@ -141,11 +141,18 @@ import {
   /* 2b-5 : les déchets du chantier — la rangée, ses gabarits, ses champs, le
      point qui ouvre la carte SUR sa rubrique, la vibration de la carte. */
   CHAMPS_DES_DECHETS, GABARITS_DES_DECHETS, LES_DECHETS, resumeDesDechets, rubriqueDuPoint, vibrerPourLesDechets,
+  /* 2b-6 : les travaux d'énergie et le label RGE — la rangée, ses
+     vingt-quatre gabarits, ses quatre champs, la rubrique de chacun (une
+     table À PART de celle des déchets), le point qui ouvre la carte SUR sa
+     rubrique. */
+  CHAMPS_DE_L_ENERGIE, GABARITS_DE_L_ENERGIE, LE_LABEL, RUBRIQUE_DE_L_ENERGIE, resumeDeLEnergie,
+  rubriqueDeLEnergieDuPoint,
 } from '../lib/devis';
 import { memeValeur } from '../lib/meme-valeur';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
 import ConditionsDevis from '../components/ConditionsDevis';
 import DechetsDevis from '../components/DechetsDevis';
+import EnergieDevis from '../components/EnergieDevis';
 import ChantierDevis from '../components/ChantierDevis';
 import FeuilleAQuelTitre from '../components/FeuilleAQuelTitre';
 import FeuilleChantierNeuf from '../components/FeuilleChantierNeuf';
@@ -196,6 +203,15 @@ const NOMS_ENTETE = Object.freeze({
   dechetsLieux: 'Lieux de dépôt des déchets',
   dechetsSansDepot: 'Lieux de dépôt des déchets',
   dechetsCoutCentimes: 'Coût estimé des déchets',
+  /* 2b-6 : les quatre champs de la carte « Énergie et label RGE ». Aucun ne
+     se TAPE (chaque appui écrit) : l'écran ne peut en refuser aucun ; ils
+     sont nommés quand même, par cohérence — un nom absent ferait dire à la
+     bande de la garde la clé brute (cahier §3.7 bis, point 4). Les
+     sous-traitants et leur question, une écriture chacun, ont un seul nom. */
+  energieTravaux: 'Travaux d’énergie',
+  energieSansLabel: 'Label RGE',
+  energieSousTraitance: 'Sous-traitance',
+  energieSousTraitants: 'Sous-traitance',
 });
 
 /* LES CHAMPS DE LA CARTE « CONDITIONS » (lot 2a) : « Corriger » rouvre la
@@ -230,6 +246,13 @@ const RUBRIQUE_DU_CHAMP = Object.freeze({
   dechetsCoutCentimes: 'cout',
 });
 
+/* LES CHAMPS DE LA CARTE « ÉNERGIE ET LABEL RGE » (2b-6, cahier §3.7 bis) : la
+   liste de `devis.js`, UNE écriture (`CHAMPS_DE_L_ENERGIE`) ; « Corriger »
+   rouvre la carte SUR la rubrique du champ, par SA table
+   (`RUBRIQUE_DE_L_ENERGIE`, `devis.js`) — jamais par `RUBRIQUE_DU_CHAMP`, qui
+   reste celle des déchets. */
+const CHAMPS_ENERGIE = CHAMPS_DE_L_ENERGIE;
+
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
    d'une LIGNE, `CARTE_CONDITIONS`, ou `CARTE_POUR_REMETTRE` (lot 2b-1,
    « ce qu'il manque pour remettre ce devis »). Une seule valeur, jamais
@@ -245,6 +268,11 @@ const CARTE_CHANTIER = 'chantier';
    lieux de dépôt et le coût estimé. Elle porte des CHAMPS (la quantité, le
    coût) : `enregistrerCarte` la lit, comme « Conditions ». */
 const CARTE_DECHETS = 'dechets';
+/* …et `CARTE_ENERGIE` (étape 2b-6) : la carte « Énergie et label RGE » — les
+   travaux d'économies d'énergie, le label de l'artisan travail par travail,
+   la sous-traitance. Elle n'a AUCUN champ tapé : chaque appui écrit, comme
+   « Le chantier » — `enregistrerCarte` ne la lit pas. */
+const CARTE_ENERGIE = 'energie';
 
 /* « Rien en route, rien en échec » : l'état de départ d'un ensemble de
    champs, avant le premier événement de la file. */
@@ -444,6 +472,10 @@ function BasDuDevis({
      par la saisie avec l'état de la file et la liste des lieux) et ce
      qu'elle ouvre. */
   resumeDechets = null, onOuvrirDechets = null,
+  /* 2b-6 : la rangée « Énergie (label RGE) » — son résumé
+     (`resumeDeLEnergie`, calculé par la saisie avec l'état de la file et les
+     deux listes de « Mon entreprise ») et ce qu'elle ouvre. */
+  resumeEnergie = null, onOuvrirEnergie = null,
 }) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
@@ -637,6 +669,44 @@ function BasDuDevis({
         </Pressable>
       )}
 
+      {/* « ÉNERGIE (LABEL RGE) » (étape 2b-6, cahier §3.7) — entre « Déchets »
+          et « Conditions ». Toujours là, même pour un client qui commande
+          pour son entreprise : elle dit alors « Sans objet pour ce client »
+          — elle ne SAUTE pas d'un client à l'autre. SON TITRE n'est pas
+          répété par le résumé ; AUCUNE ligne sous elle. SA HAUTEUR NE BOUGE
+          JAMAIS : ses vingt-quatre résumés possibles (huit × trois suffixes)
+          sont posés en gabarits invisibles (`GABARITS_DE_L_ENERGIE`), le
+          résumé lu par-dessus — la règle de « Déchets ». */}
+      {!!resumeEnergie && (
+        <Pressable
+          onPress={onOuvrirEnergie}
+          accessibilityRole="button"
+          accessibilityLabel={`${LE_LABEL.rangee} : ${resumeEnergie}. Ouvrir`}
+          style={({ pressed }) => [s.resume, pressed && APPUI.discret]}
+        >
+          <View style={s.resumeTexte}>
+            <Text style={s.replieTexte}>{LE_LABEL.rangee}</Text>
+            <View style={s.superpose}>
+              {GABARITS_DE_L_ENERGIE.map((g, i) => (
+                <View
+                  key={`gabarit-${i}`}
+                  style={[s.couche, i > 0 && s.coucheSuivante, s.gabarit]}
+                  aria-hidden
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={s.aide}>{g}</Text>
+                </View>
+              ))}
+              <View style={[s.couche, s.coucheSuivante]}>
+                <Text style={s.aide}>{resumeEnergie}</Text>
+              </View>
+            </View>
+          </View>
+          <ChevronRight size={16} color={C.accent2} />
+        </Pressable>
+      )}
+
       {/* LES CONDITIONS — une rangée qui les RÉSUME et ouvre leur carte
           (lot 2a). Ce qui manque passe d'abord ; un champ refusé se dit. */}
       <Pressable
@@ -694,6 +764,13 @@ export default function SaisieDevisScreen({
      état (en lecture, en échec, vide, lus) se tire de celui du régime
      (`etatDesLieux`). Jamais un `[]` inventé : « aucun lieu » dirait à un
      artisan qui en a qu'il n'en a pas. */
+  /* 2b-6 (cahier §3.7 bis, point 2) : les signes de qualité et les
+     sous-traitants de « Mon entreprise », lus par la MÊME lecture que le
+     régime (`OpusApp`, `mesLabels`, `mesSousTraitants`) — pour la carte
+     « Énergie et label RGE », sa rangée et l'avis du label. SANS valeur par
+     défaut, pour la même raison que les lieux : `undefined` = pas encore
+     lus, `null` = pas pu l'être. */
+  labels, sousTraitants,
   lieux,
   onRelireRegime, onMonEntreprise, onChargerClients, onNouveauClient,
   onCarte, onRanger, onSupprime, onErreur,
@@ -770,7 +847,7 @@ export default function SaisieDevisScreen({
   const [attente, setAttente] = useState({
     nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
     etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT,
-    etatDechets: AUCUN_ETAT,
+    etatDechets: AUCUN_ETAT, etatEnergie: AUCUN_ETAT,
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
@@ -800,6 +877,8 @@ export default function SaisieDevisScreen({
   const refConditions = useRef(null);
   /* 2b-5 : la carte « Déchets du chantier ». */
   const refDechets = useRef(null);
+  /* 2b-6 : la carte « Énergie et label RGE ». */
+  const refEnergie = useRef(null);
   /* Le TEXTE tapé dans la carte « Conditions » quand une valeur y a été
      refusée : la carte rouverte par « Corriger » le montre encore, au lieu
      de la dernière valeur enregistrée. */
@@ -866,6 +945,10 @@ export default function SaisieDevisScreen({
      question, la quantité, le tri, ce qui reste sur le chantier, le lieu, le
      coût — ou `null` (en haut). */
   const [rubriqueDechets, setRubriqueDechets] = useState(null);
+  /* …et celle sur laquelle « Énergie et label RGE » s'ouvre (2b-6) : la
+     question des travaux, le label, la sous-traitance — ou `null` (en
+     haut). */
+  const [rubriqueEnergie, setRubriqueEnergie] = useState(null);
   const [focusDemande, setFocusDemande] = useState(null);
   /* Les rappels d'`OpusApp`, toujours les derniers : la file écoute depuis
      son ouverture, et un rappel capturé ce jour-là serait périmé. */
@@ -975,6 +1058,10 @@ export default function SaisieDevisScreen({
          (`memeValeur`, T4), jamais par `Object.is` : un tableau relu est
          toujours un tableau neuf. */
       etatDechets: etatDesChampsDuDevis(entrees, CHAMPS_DECHETS),
+      /* 2b-6 (cahier §3.7 bis, point 4) : la carte « Énergie et label RGE »
+         — un septième appel, sur ses quatre champs ; ses trois listes se
+         comparent par leur VALEUR, comme celles des déchets. */
+      etatEnergie: etatDesChampsDuDevis(entrees, CHAMPS_ENERGIE),
     });
   };
 
@@ -1471,6 +1558,19 @@ export default function SaisieDevisScreen({
     return r;
   };
 
+  /* « ÉNERGIE ET LABEL RGE » (2b-6, cahier §3.7 bis) — la carte écrit À
+     L'APPUI, comme « Le chantier » : ce qu'elle porte part par la file de
+     l'en-tête. Elle n'a aucun champ tapé, donc aucune faute de l'écran
+     (`erreursSaisie` est toujours vide) ni texte à garder ; on ne vibre que
+     pour un refus NOUVEAU de l'en-tête (`vibrerPourLaCarte`) — pas à chaque
+     appui qui suit un refus déjà dit. */
+  const enregistrerEnergie = (changements, erreursSaisie, textes, geste = 'fermer') => {
+    const deja = CHAMPS_ENERGIE.filter((k) => refusEntete.current[k]);
+    const r = enregistrerEntete(changements, { vibrer: false });
+    if (vibrerPourLaCarte(geste, Object.keys(r.refus || {}), deja)) retour.echec();
+    return r;
+  };
+
   /* La carte ouverte : lue, puis enregistrée — ou oubliée si elle n'a jamais
      rien été. */
   const enregistrerCarte = () => {
@@ -1486,8 +1586,10 @@ export default function SaisieDevisScreen({
       return;
     }
     /* La liste « Pour le remettre » ne porte aucun champ : rien à lire. La
-       carte « Le chantier » non plus : chaque pastille écrit à l'appui. */
-    if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER) return;
+       carte « Le chantier » non plus : chaque pastille écrit à l'appui — ni
+       « Énergie et label RGE » (2b-6), qui écrit à chaque appui. Sans cette
+       sortie, elle tomberait sur `refCarte`, la carte d'une LIGNE. */
+    if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE) return;
     if (!id || !refCarte.current) return;
     const lu = refCarte.current.lire();
     const f = fileRef.current;
@@ -1591,6 +1693,33 @@ export default function SaisieDevisScreen({
      relit (`retourEntreprise`). */
   const ouvrirMesLieux = () => {
     if (onMonEntreprise) onMonEntreprise('lieux');
+  };
+
+  /* « ÉNERGIE ET LABEL RGE » (2b-6, cahier §3.7) — une carte comme
+     « Déchets » : la carte ouverte s'enregistre d'abord, ce qui est tapé
+     dans l'en-tête part ; et le clavier se FERME, comme pour « Le
+     chantier » : il n'y a rien à taper. `rubrique` : celle sur laquelle elle
+     s'ouvre (`null`, en haut). */
+  const ouvrirEnergie = (rubrique = null) => {
+    if (carteRef.current && carteRef.current !== CARTE_ENERGIE) enregistrerCarte();
+    if (refEntete.current) refEntete.current.enregistrer();
+    Keyboard.dismiss();
+    poserRetour(null);
+    setRubriqueEnergie(rubrique || null);
+    poserCarte(CARTE_ENERGIE);
+    setCleCarte((k) => k + 1);
+    if (rappels.current.onCarte) rappels.current.onCarte(LE_LABEL.titre);
+  };
+  /* LES DEUX PORTES DE LA CARTE : elle s'est enregistrée (elle le fait avant
+     d'appeler) ; « Mon entreprise » s'ouvre PAR-DESSUS la saisie, sur la
+     section des signes de qualité ou des sous-traitants — le chemin des
+     lieux de dépôt. À la fermeture, les deux listes reviennent par les
+     props, et la carte, restée ouverte dessous, les montre. */
+  const ouvrirMesSignes = () => {
+    if (onMonEntreprise) onMonEntreprise('labels');
+  };
+  const ouvrirMesSousTraitants = () => {
+    if (onMonEntreprise) onMonEntreprise('sousTraitants');
   };
 
   /* LA LISTE « POUR LE REMETTRE » (lot 2b-1). Ce qui est tapé dans
@@ -1869,6 +1998,14 @@ export default function SaisieDevisScreen({
         ouvrirDechets(rubriqueDuPoint(point, { devis: devisRef.current, lieux }));
         poserRetour(CARTE_POUR_REMETTRE);
         return;
+      /* 2b-6 : la carte « Énergie et label RGE », SUR la question pour une
+         liste de travaux vide (`devis_energie`), sur la PREMIÈRE rubrique qui
+         manque sinon — lue sur le devis et les deux listes de l'ÉCRAN
+         (`rubriqueDeLEnergieDuPoint`) ; et « ‹ » ramène à la liste. */
+      case 'energie':
+        ouvrirEnergie(rubriqueDeLEnergieDuPoint(point, { devis: devisRef.current, labels, sousTraitants }));
+        poserRetour(CARTE_POUR_REMETTRE);
+        return;
       case 'ligne':
         if (!lignesRef.current.some((l) => String(l.id) === String(e.ligneId))) return;
         ouvrirCarte(e.ligneId);
@@ -2104,6 +2241,9 @@ export default function SaisieDevisScreen({
     /* 2b-5 : un champ des déchets rouvre la carte SUR sa rubrique — on vient
        de la garde, pas de la liste : son retour revient au devis. */
     if (CHAMPS_DECHETS.includes(champ)) { ouvrirDechets(RUBRIQUE_DU_CHAMP[champ] || null); return; }
+    /* 2b-6 : un champ de l'énergie rouvre la carte SUR sa rubrique, par SA
+       table (`RUBRIQUE_DE_L_ENERGIE`). */
+    if (CHAMPS_ENERGIE.includes(champ)) { ouvrirEnergie(RUBRIQUE_DE_L_ENERGIE[champ] || null); return; }
     if (!refListe.current) return;
     refListe.current.scrollToOffset({ offset: 0, animated: true });
   };
@@ -2266,7 +2406,7 @@ export default function SaisieDevisScreen({
      le devis payant face aux tarifs affichés et le gratuit avec déplacement
      suivent l'écran (T16). UN appel, et un seul. */
   const avis = avisDuDevis({
-    devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste.reponseVue, regime, assurances, tarifs,
+    devis, lignes, totaux, etat: etatListe, pasCompte, client, reponseVue: liste.reponseVue, regime, assurances, tarifs, labels,
   });
   let erreurListe = null;
   if (liste.erreur) {
@@ -2301,6 +2441,17 @@ export default function SaisieDevisScreen({
     enRoute: attente.etatDechets.enRoute,
     enEchec: attente.etatDechets.enEchec,
     refuse: CHAMPS_DECHETS.some((k) => !!erreursEntete[k]),
+  });
+  /* « ÉNERGIE (LABEL RGE) » (2b-6, cahier §3.7) — ce que l'écran a, avec
+     l'état de son écriture et les deux listes telles qu'`OpusApp` les tient
+     (non lues : « Labels ou sous-traitants non lus », jamais « dits »). */
+  const resumeEnergie = resumeDeLEnergie({
+    devis,
+    labels,
+    sousTraitants,
+    enRoute: attente.etatEnergie.enRoute,
+    enEchec: attente.etatEnergie.enEchec,
+    refuse: CHAMPS_ENERGIE.some((k) => !!erreursEntete[k]),
   });
   /* La ligne du haut et la rangée du bas : le MÊME composant, la même
      règle — deux écritures de la même vérité finiraient par se contredire
@@ -2448,6 +2599,8 @@ export default function SaisieDevisScreen({
       onOuvrirChantier={ouvrirChantier}
       resumeDechets={resumeDechets}
       onOuvrirDechets={() => ouvrirDechets(null)}
+      resumeEnergie={resumeEnergie}
+      onOuvrirEnergie={() => ouvrirEnergie(null)}
     />
   );
 
@@ -2780,6 +2933,38 @@ export default function SaisieDevisScreen({
           depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
           onRelireLieux={onRelireRegime}
           onMesLieux={ouvrirMesLieux}
+        />
+      )}
+
+      {/* « ÉNERGIE ET LABEL RGE » (2b-6) — une carte comme « Déchets » : elle
+          dit elle-même l'écriture en cours et l'échec, et reçoit les deux
+          listes VIVANTES de « Mon entreprise » et le régime (leur état en est
+          tiré, comme celui des lieux). Elle n'a aucun champ tapé : ni refus de
+          l'écran, ni textes gardés. */}
+      {carte === CARTE_ENERGIE && (
+        <EnergieDevis
+          key={`energie-${cleCarte}`}
+          ref={refEnergie}
+          devis={devis}
+          regime={regime}
+          labels={labels}
+          sousTraitants={sousTraitants}
+          etatEcriture={{
+            enCours: attente.enCours,
+            echec: attente.devisErreur
+              ? `${phraseEchecDuDevis({ enBase: attente.devisEnBase, erreur: attente.devisErreur, retenue: attente.devisRetenue })} ${
+                typeof attente.devisErreur === 'object' ? messageDEcritureDuDevis(attente.devisErreur, 'entete') : ''}`.trim()
+              : null,
+            reessayable: !!attente.devisErreur && !estUnRefusDefinitif(attente.devisErreur),
+          }}
+          onReessayer={() => fileRef.current && fileRef.current.reessayer('devis')}
+          onEnregistrer={enregistrerEnergie}
+          onFermer={fermerCarte}
+          rubriqueInitiale={rubriqueEnergie}
+          depuisLaListe={retourCarte === CARTE_POUR_REMETTRE}
+          onRelireListes={onRelireRegime}
+          onMesSignes={ouvrirMesSignes}
+          onMesSousTraitants={ouvrirMesSousTraitants}
         />
       )}
 

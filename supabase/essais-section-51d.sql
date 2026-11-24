@@ -485,7 +485,7 @@ rollback;
 -- ==========================================================================
 --  J. L'export
 -- ==========================================================================
-\echo '--- J1. Les clés de l export, en LISTE FERMÉE — depuis 2b-5, mes_lieux_de_depot (section 46.2 bis) en plus (attendu : 49 | t | t)'
+\echo '--- J1. Les clés de l export, en LISTE FERMÉE — depuis 2b-5, mes_lieux_de_depot (section 46.2 bis) en plus ; depuis 2b-6, mes_signes_de_qualite et mes_sous_traitants (46.2 ter et quater) (attendu : 51 | t | t)'
 begin;
 set local role authenticated;
 set local request.jwt.claim.sub = 'a51d0000-0000-4000-8000-000000000001';
@@ -498,7 +498,8 @@ select (select count(*) from jsonb_object_keys(e.j)) as nb_cles,
                  'entreprise_registre', 'export_du', 'fiche_professionnelle', 'journal_ia',
                  'limites_de_l_export', 'ma_base_de_postes', 'ma_disponibilite_urgences',
                  'mes_assurances_professionnelles', 'mes_demandes_de_metier', 'mes_j_aime',
-                 'mes_lieux_de_depot', 'mes_notifications', 'mes_remontees', 'mes_specialites_proposees', 'mes_tarifs',
+                 'mes_lieux_de_depot', 'mes_notifications', 'mes_remontees', 'mes_signes_de_qualite',
+                 'mes_sous_traitants', 'mes_specialites_proposees', 'mes_tarifs',
                  'messages', 'messages_recus', 'metadonnees_d_inscription', 'mon_entreprise',
                  'mon_numero_de_tva', 'partenariats', 'personnes_bloquees', 'publications',
                  'publications_enregistrees', 'publications_vues', 'rappels', 'reponses_que_j_ai_ecrites',
@@ -508,7 +509,7 @@ select (select count(*) from jsonb_object_keys(e.j)) as nb_cles,
   from e;
 rollback;
 
-\echo '--- J1 quater. (2b-2) Un n° de TVA DÉCLARÉ SUR L HONNEUR s exporte sous la MÊME clé, avec son texte et sa date, mais SANS reconnu_le ni vies_le — l export ne dit jamais « reconnu » pour une déclaration ; et la liste fermée des clés ne bouge pas (attendu : t | 49 — 48 jusqu’à 2b-4, mes_lieux_de_depot en plus depuis 2b-5)'
+\echo '--- J1 quater. (2b-2) Un n° de TVA DÉCLARÉ SUR L HONNEUR s exporte sous la MÊME clé, avec son texte et sa date, mais SANS reconnu_le ni vies_le — l export ne dit jamais « reconnu » pour une déclaration ; et la liste fermée des clés ne bouge pas (attendu : t | 51 — 48 jusqu’à 2b-4, mes_lieux_de_depot en plus depuis 2b-5, mes_signes_de_qualite et mes_sous_traitants en plus depuis 2b-6)'
 begin;
 set local role service_role;
 insert into public.preuves_tva (pro_id, siren, numero, source, declaration_texte)
@@ -521,7 +522,7 @@ select (e.j -> 'mon_numero_de_tva' ->> 'source') = 'declaration'
          and e.j -> 'mon_numero_de_tva' ? 'declare_le' and e.j -> 'mon_numero_de_tva' ? 'declaration_texte'
          and not (e.j -> 'mon_numero_de_tva' ? 'reconnu_le') and not (e.j -> 'mon_numero_de_tva' ? 'vies_le')
          as declaration_exportee_sans_reconnu_attendu_t,
-       (select count(*) from jsonb_object_keys(e.j)) as nb_cles_attendu_49
+       (select count(*) from jsonb_object_keys(e.j)) as nb_cles_attendu_51
   from e;
 rollback;
 

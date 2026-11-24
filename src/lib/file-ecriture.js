@@ -178,8 +178,11 @@
  * réponses dans le désordre — ce qu'aucun navigateur ne reproduit à la
  * demande. `memeValeur` y entre parce que l'en-tête porte depuis 2b-5 trois
  * LISTES (les déchets triés, ce qui reste sur le chantier, les lieux de
- * dépôt) : deux listes égales ne sont jamais `Object.is` l'une à l'autre, et
- * la file aurait renvoyé une liste revenue à sa valeur enregistrée. La règle
+ * dépôt), et depuis 2b-6 trois de plus (les travaux d'énergie cochés, ceux
+ * déclarés sans label RGE, les sous-traitants choisis) : deux listes égales
+ * ne sont jamais `Object.is`
+ * l'une à l'autre, et la file aurait renvoyé une liste revenue à sa valeur
+ * enregistrée. La règle
  * vit dans un fichier à elle pour n'être écrite qu'UNE fois : `devis.js` et
  * la saisie l'importent aussi.
  *

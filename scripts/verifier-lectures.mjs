@@ -1264,8 +1264,14 @@ const EMPREINTES = {
      `mes_lieux_de_depot` (les lieux de dépôt des déchets, section 46.2 bis),
      triée par `created_at, id` et filtrée sur l'artisan ; sa FORME est
      comparée à la lettre plus bas. Rien d'autre n'a changé ; essais 51d (J1
-     et J1 quater : 49 clés) et 46 (cas 31) rejoués. */
-  mes_donnees: 'bcd55733dd8400f6085a20c79c48747bafaa366655aff1374799f198d60fb794',
+     et J1 quater : 49 clés) et 46 (cas 31) rejoués.
+     2b-6 (cahier 2b-6, §2.5) : deux clés de plus dans le SECOND objet,
+     `mes_signes_de_qualite` (le label RGE, section 46.2 ter) et
+     `mes_sous_traitants` (section 46.2 quater), triées par `created_at, id`
+     et filtrées sur l'artisan ; leur FORME est comparée à la lettre plus
+     bas. Rien d'autre n'a changé ; essais 51d (J1 et J1 quater : 51 clés)
+     et 46 rejoués. */
+  mes_donnees: '9480b0e7a69b43237572a0bf5fad4f17bd6067ce46b73f9d105215b4eb968bb9',
 };
 for (const [nom, attendue] of Object.entries(EMPREINTES)) {
   const f = fonctionSql(nom);
@@ -1436,6 +1442,23 @@ verifier('l’export rend `mes_lieux_de_depot` : les lieux de dépôt de l’art
   && (corpsExport.match(/emetteur_lieux_depot/g) || []).length === 1
   && objetsDuHaut.length === 2 && argumentsDuPremierNiveau(objetsDuHaut[1].interieur).includes("'mes_lieux_de_depot'"),
   'Un filtre élargi (ou absent) rendrait les lieux d’un autre artisan dans l’export — la RLS ne le dirait pas.');
+/* LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS (2b-6, sections 46.2 ter et
+   46.2 quater) : LEUR FORME, à la lettre, sur le modèle exact des lieux de
+   dépôt ci-dessus — et pour la même raison : sous la RLS, « l'export de B
+   ne contient rien de A » ne discrimine rien. Les sous-traitants sont des
+   données sur des TIERS, rangées par l'artisan : elles reviennent à lui
+   seul. Chaque table n'est nommée qu'UNE fois dans l'export, et chaque clé
+   vit dans le SECOND objet. */
+verifier('l’export rend `mes_signes_de_qualite` : les signes de qualité de l’artisan SEUL (`x.pro_id = auth.uid()`), triés par `created_at, id`, dans le second objet',
+  /'mes_signes_de_qualite'\s*,\s*coalesce\(\(select\s+jsonb_agg\(to_jsonb\(x\)\s+order\s+by\s+x\.created_at,\s*x\.id\)\s+from\s+public\.emetteur_labels\s+x\s+where\s+x\.pro_id\s*=\s*auth\.uid\(\)\),\s*'\[\]'::jsonb\)/i.test(corpsExport)
+  && (corpsExport.match(/emetteur_labels/g) || []).length === 1
+  && objetsDuHaut.length === 2 && argumentsDuPremierNiveau(objetsDuHaut[1].interieur).includes("'mes_signes_de_qualite'"),
+  'Un filtre élargi (ou absent) rendrait le label d’un autre artisan dans l’export — la RLS ne le dirait pas.');
+verifier('l’export rend `mes_sous_traitants` : les sous-traitants de l’artisan SEUL (`x.pro_id = auth.uid()`), triés par `created_at, id`, dans le second objet',
+  /'mes_sous_traitants'\s*,\s*coalesce\(\(select\s+jsonb_agg\(to_jsonb\(x\)\s+order\s+by\s+x\.created_at,\s*x\.id\)\s+from\s+public\.emetteur_sous_traitants\s+x\s+where\s+x\.pro_id\s*=\s*auth\.uid\(\)\),\s*'\[\]'::jsonb\)/i.test(corpsExport)
+  && (corpsExport.match(/emetteur_sous_traitants/g) || []).length === 1
+  && objetsDuHaut.length === 2 && argumentsDuPremierNiveau(objetsDuHaut[1].interieur).includes("'mes_sous_traitants'"),
+  'Un filtre élargi (ou absent) rendrait les sous-traitants d’un autre artisan — des données sur des tiers — dans l’export.');
 verifier('exclusion 7 — aucune fiche de carnet ni aucun devis qu’un AUTRE artisan tient sur moi',
   !/from public\.clients x where (?!x\.pro_id = auth\.uid\(\))/.test(corpsExport)
   && !/from public\.devis x where (?!x\.pro_id = auth\.uid\(\))/.test(corpsExport));

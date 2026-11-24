@@ -36,7 +36,7 @@
  * À RELANCER, et le fichier à COMMITER, dès que la règle de la base change.
  *
  * LE FORMAT DE CHAQUE CAS (un par ligne, lisible dans un diff) :
- *   { n, nom, devis, lignes, regime, motifsEmetteur, assurances, lieux, attendu }
+ *   { n, nom, devis, lignes, regime, motifsEmetteur, assurances, lieux, labels, sousTraitants, attendu }
  *   - `devis` : la ligne de la base passée par `rowToDevis` (`devis.js`),
  *     ses deux dates retirées (`createdAt`, `modifieLe` à `null`) — elles
  *     changeraient à chaque génération, et la règle ne les lit pas ;
@@ -64,6 +64,21 @@
  *     pas à l'entreprise du devis, et un identifiant du devis qui ne
  *     désigne aucun lieu (un lieu retiré : « orphelin ») ne compte pas. Rangés
  *     par `proId` puis `id` ; `[]` quand la base n'en a aucun ;
+ *   - `labels` (2b-6) : TOUS les signes de qualité de la base
+ *     (`emetteur_labels`), relus en superutilisateur, en LIGNES DE LA BASE
+ *     (les noms des colonnes, comme `assurances` : c'est ainsi que « Mon
+ *     entreprise » les lit, `select('*')`) réduites à ce que la règle lit —
+ *     `{ id, pro_id, categories, valide_jusquau, justificatif_chemin }` —,
+ *     ceux de A ET ceux d'un autre artisan (B) : le miroir doit écarter, comme
+ *     la base (`g.pro_id = v_pro`), ce qui n'est pas à l'entreprise du devis.
+ *     Rangés par `pro_id` puis `id` ; `[]` quand la base n'en a aucun. LES
+ *     DATES SONT FIXES (2001 ou 2999), comme pour les assurances ;
+ *   - `sousTraitants` (2b-6) : TOUS les sous-traitants de la base
+ *     (`emetteur_sous_traitants`), de même — `{ id, pro_id, label_detient,
+ *     label_categories, label_valide_jusquau, label_justificatif_chemin }` —,
+ *     ceux de A ET ceux de B ; un identifiant du devis qui ne désigne aucun
+ *     sous-traitant (« orphelin ») ne compte pas. Ni le nom, ni le SIRET : la
+ *     règle ne les lit pas. Mêmes dates fixes ;
  *   - `attendu` : les lignes de la fonction, dans son ordre de sortie —
  *     `{ rang, cle, phrase, nature, ligne_id }`, où `ligne_id` est remplacé
  *     par l'INDICE de la ligne désignée dans `lignes` (ou `null`).
@@ -195,10 +210,16 @@ const ENTREPRISES = {
 // et les 139 cas d'avant changeraient de sens. Même procédé que le prix du
 // devis lui-même en 2b-4 : `VIDE` NE LE REÇOIT PAS, et les situations qui
 // veulent la réponse vide l'écrivent (`dechets_concerne: null`).
+// 2b-6 : « complet » répond aussi « Aucun de ces travaux » aux travaux
+// d'énergie (`energie_travaux` = {aucun}) — sans quoi `devis_energie` (rang
+// 14, une prudence) s'ajouterait à chaque situation, et les 184 cas d'avant
+// changeraient de sens. Même procédé : `VIDE` NE LE REÇOIT PAS, et les
+// situations qui veulent la réponse vide l'écrivent (`energie_travaux: null`).
 const COMPLET = {
   client_id: C1, lieu_adresse: '4 rue de l’Essai', lieu_code_postal: '13410', lieu_ville: 'Lambesc',
   delai_execution: 'Dans les 30 jours suivant la signature', validite_jours: 30,
   pour_qui: 'consommateur', pour_qui_client: C1, cout_devis_centimes: 0, dechets_concerne: false,
+  energie_travaux: ['aucun'],
 };
 const VIDE = {
   client_id: null, lieu_adresse: null, lieu_code_postal: null, lieu_ville: null,
@@ -243,6 +264,31 @@ const DECHETS = {
   dechets_concerne: true, dechets_quantite_milliemes: 2500, dechets_unite: 'm3', dechets_flux: ['bois', 'platre'],
   dechets_lieux: [LA1], dechets_cout_centimes: 15000,
 };
+// 2b-6 : les SIGNES DE QUALITÉ (46.2 ter) et les SOUS-TRAITANTS (46.2 quater)
+// d'une situation, posés en superutilisateur dans son savepoint (`labels`,
+// `sousTraitants`), AVANT de devenir A. Des identifiants FIXES : GA1 et GA2
+// à A, GB1 à B ; TA1 et TA2 à A, TB1 à B ; TX jamais posé (l'ORPHELIN). Les
+// dates sont FIXES (2001 ou 2999, la garde des assurances) : les cas « au
+// jour de Paris » vivent dans l'essai 49-remise seul. Aucune ligne dans le
+// décor : les 184 cas d'avant répondent « Aucun » et ne lisent rien.
+const GA1 = 'b4960000-0000-4000-8000-0000000002a1';
+const GA2 = 'b4960000-0000-4000-8000-0000000002a2';
+const GB1 = 'b4960000-0000-4000-8000-0000000002b1';
+const TA1 = 'b4960000-0000-4000-8000-0000000003a1';
+const TA2 = 'b4960000-0000-4000-8000-0000000003a2';
+const TB1 = 'b4960000-0000-4000-8000-0000000003b1';
+const TX = 'b4960000-0000-4000-8000-0000000003ff';
+// Un signe : (identifiant, travaux couverts, date de fin, certificat joint ?, entreprise).
+const signe = (id, categories, fin, joint = true, pro = A) => ({ id, pro, categories, fin, joint });
+// Un sous-traitant : (identifiant, son label — null, false ou true —, ses travaux, sa
+// date, justificatif joint ?, entreprise). Sous « Oui », les travaux et la date sont
+// obligatoires (la croisée `emetteur_sous_traitant_complet_check`).
+const sousTraitant = (id, detient, { categories = null, fin = null, joint = false } = {}, pro = A) =>
+  ({ id, pro, detient, categories, fin, joint });
+// Les combles cochés, la sous-traitance « Non » : la base des situations du rang 14.
+const COMBLES = { energie_travaux: ['isolation_combles'], energie_sous_traitance: false };
+// Les combles DÉCLARÉS sans label : seule la sous-traitance peut encore parler.
+const COMBLES_DECLARES = { energie_travaux: ['isolation_combles'], energie_sans_label: ['isolation_combles'] };
 
 const SITUATIONS = [
   // --- rien ne manque, et ce qui ne compte pas
@@ -693,6 +739,139 @@ const SITUATIONS = [
     e: 'franchise', devis: { ...DECHETS, dechets_flux: ['aucune'], dechets_lieux: null }, lignes: UN_POSTE_0 },
   { nom: 'DROIT-R2 : SANS RÉPONSE, {aucune}, « Aucun dépôt » VIDE, aucun lieu : devis_dechets', e: 'franchise',
     devis: { ...DECHETS, dechets_concerne: null, dechets_flux: ['aucune'], dechets_lieux: null }, lignes: UN_POSTE_0 },
+  // --- 2b-6, À LA FIN pour que les numéros des cas déjà là ne bougent pas.
+  //     Le rang 14 : les travaux d'énergie et le label RGE. « Aucun » tait le
+  //     rang ; les deux réponses « entreprise » aussi. `devis_energie` (une
+  //     prudence) quand les travaux ne sont pas dits ; une rubrique qui manque
+  //     rend `devis_energie_mentions` (la loi) à titre privé, sinon
+  //     `devis_energie_mentions_prudence`. Les cas « seuls » sont EN
+  //     FRANCHISE, sur une fiche complète, comme ceux du rang 13.
+  { nom: 'énergie : les travaux PAS DITS : devis_energie seul (une prudence)', e: 'franchise',
+    devis: { energie_travaux: null }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Aucun », avec une déclaration et des sous-traitants RESTÉS : rien ne manque (la lecture ne tourne pas)',
+    e: 'franchise', devis: { energie_travaux: ['aucun'], energie_sans_label: ['isolation_combles'], energie_sous_traitance: true,
+      energie_sous_traitants: [TX] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles, rien d’autre : devis_energie_mentions seul (la loi)', e: 'franchise',
+    devis: { energie_travaux: ['isolation_combles'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles déclarés sans label, « Non » : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, ...COMBLES_DECLARES }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles déclarés, la sous-traitance PAS DITE : devis_energie_mentions', e: 'franchise',
+    devis: COMBLES_DECLARES, lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles, la déclaration VIDE DE VALEUR, « Non » : devis_energie_mentions (`is not true`)', e: 'franchise',
+    devis: COMBLES, lignes: UN_POSTE_0 },
+  //     Les signes de qualité de A, puis de B.
+  { nom: 'énergie : un signe de A qui couvre les combles, joint, valable : rien ne manque', e: 'franchise',
+    devis: COMBLES, labels: [signe(GA1, ['isolation_combles'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A valable SANS certificat : devis_energie_mentions', e: 'franchise',
+    devis: COMBLES, labels: [signe(GA1, ['isolation_combles'], VALABLE, false)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A valable SANS certificat, ET la déclaration : devis_energie_mentions (on ne déclare pas ne pas détenir ce qu’on a dit détenir)',
+    e: 'franchise', devis: { ...COMBLES, ...COMBLES_DECLARES }, labels: [signe(GA1, ['isolation_combles'], VALABLE, false)],
+    lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A expiré (2001), joint, ET la déclaration : rien ne manque (un label expiré est déclarable)',
+    e: 'franchise', devis: { ...COMBLES, ...COMBLES_DECLARES }, labels: [signe(GA1, ['isolation_combles'], PASSEE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A expiré (2001), joint, sans déclaration : devis_energie_mentions', e: 'franchise',
+    devis: COMBLES, labels: [signe(GA1, ['isolation_combles'], PASSEE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A expiré ET sans certificat, ET la déclaration : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, ...COMBLES_DECLARES }, labels: [signe(GA1, ['isolation_combles'], PASSEE, false)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A d’une AUTRE catégorie (la ventilation) : devis_energie_mentions', e: 'franchise',
+    devis: COMBLES, labels: [signe(GA1, ['ventilation'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles et la ventilation, le signe couvre les combles, la ventilation déclarée : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['isolation_combles', 'ventilation'], energie_sans_label: ['ventilation'] },
+    labels: [signe(GA1, ['isolation_combles'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles et la ventilation, le signe couvre les combles, rien de plus : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['isolation_combles', 'ventilation'] },
+    labels: [signe(GA1, ['isolation_combles'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : deux signes de A, chacun couvre un des deux travaux : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['isolation_combles', 'ventilation'] },
+    labels: [signe(GA1, ['isolation_combles'], VALABLE), signe(GA2, ['ventilation'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : un signe de A sans certificat ET un second, complet : rien ne manque, même déclaré', e: 'franchise',
+    devis: { ...COMBLES, ...COMBLES_DECLARES },
+    labels: [signe(GA1, ['isolation_combles'], VALABLE, false), signe(GA2, ['isolation_combles'], VALABLE)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : le signe COMPLET de B, seul : devis_energie_mentions (il ne vaut jamais pour A)', e: 'franchise',
+    devis: COMBLES, labels: [signe(GB1, ['isolation_combles'], VALABLE, true, B)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : le signe de B SANS certificat, et la déclaration de A : rien ne manque (il n’empêche rien chez A)', e: 'franchise',
+    devis: { ...COMBLES, ...COMBLES_DECLARES }, labels: [signe(GB1, ['isolation_combles'], VALABLE, false, B)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : les combles déclarés, les fenêtres ajoutées : devis_energie_mentions (la déclaration ne vaut que pour ce qu’elle nomme)',
+    e: 'franchise', devis: { ...COMBLES, energie_travaux: ['isolation_combles', 'fenetres'], energie_sans_label: ['isolation_combles'] },
+    lignes: UN_POSTE_0 },
+  { nom: 'énergie : une clé déclarée pour un travail DÉCOCHÉ, sans effet : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, energie_sans_label: ['isolation_combles', 'ventilation'] }, lignes: UN_POSTE_0 },
+  //     Les deux travaux comptés par prudence (réponse P12).
+  { nom: 'énergie : le photovoltaïque seul, « Non » : devis_energie_mentions_prudence seul', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['photovoltaique'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : le désembouage seul, « Non » : devis_energie_mentions_prudence', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['desembouage'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : le photovoltaïque, la sous-traitance PAS DITE : devis_energie_mentions (la sous-traitance qui manque)', e: 'franchise',
+    devis: { energie_travaux: ['photovoltaique'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : le photovoltaïque et les combles, rien : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['photovoltaique', 'isolation_combles'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : le photovoltaïque et les combles, les combles déclarés : devis_energie_mentions_prudence', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['photovoltaique', 'isolation_combles'], energie_sans_label: ['isolation_combles'] },
+    lignes: UN_POSTE_0 },
+  { nom: 'énergie : le photovoltaïque déclaré, « Non » : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES, energie_travaux: ['photovoltaique'], energie_sans_label: ['photovoltaique'] }, lignes: UN_POSTE_0 },
+  //     Les sous-traitants (réponses P3 et P13).
+  { nom: 'énergie : « Oui », aucun sous-traitant choisi : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant de A complet, sans label : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1] },
+    sousTraitants: [sousTraitant(TA1, false)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant de A dont le label n’est PAS DIT : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1] },
+    sousTraitants: [sousTraitant(TA1, null)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant de A labellisé, valable, justifié : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1] },
+    sousTraitants: [sousTraitant(TA1, true, { categories: ['isolation_combles'], fin: VALABLE, joint: true })], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant de A labellisé, expiré (2001) : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1] },
+    sousTraitants: [sousTraitant(TA1, true, { categories: ['isolation_combles'], fin: PASSEE, joint: true })], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant de A labellisé, SANS justificatif : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1] },
+    sousTraitants: [sousTraitant(TA1, true, { categories: ['isolation_combles'], fin: VALABLE, joint: false })], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un sous-traitant complet ET un incomplet : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1, TA2] },
+    sousTraitants: [sousTraitant(TA1, false), sousTraitant(TA2, null)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », le même sous-traitant complet DEUX fois : rien ne manque (compté une fois)', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TA1, TA1] },
+    sousTraitants: [sousTraitant(TA1, false)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », un identifiant ORPHELIN seul choisi, A ayant un sous-traitant complet : devis_energie_mentions', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TX] },
+    sousTraitants: [sousTraitant(TA1, false)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Oui », le sous-traitant de B seul choisi : devis_energie_mentions (il ne vaut jamais pour A)', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: true, energie_sous_traitants: [TB1] },
+    sousTraitants: [sousTraitant(TB1, false, {}, B)], lignes: UN_POSTE_0 },
+  { nom: 'énergie : « Non », des identifiants de sous-traitants RESTÉS : rien ne manque', e: 'franchise',
+    devis: { ...COMBLES_DECLARES, energie_sous_traitance: false, energie_sous_traitants: [TB1, TX] },
+    sousTraitants: [sousTraitant(TB1, false, {}, B)], lignes: UN_POSTE_0 },
+  //     Les réponses « à quel titre ».
+  { nom: 'énergie : une association, les travaux pas dits : devis_energie (une prudence)', e: 'franchise',
+    devis: { pour_qui: 'non_professionnel', energie_travaux: null }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : une association, les combles, rien : devis_energie_mentions_prudence', e: 'franchise',
+    devis: { ...COMBLES, pour_qui: 'non_professionnel' }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : une association, le photovoltaïque : devis_energie_mentions_prudence', e: 'franchise',
+    devis: { ...COMBLES, pour_qui: 'non_professionnel', energie_travaux: ['photovoltaique'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : pour son entreprise, les combles, rien : rien ne manque (le rang se tait)', e: 'franchise',
+    devis: { pour_qui: 'professionnel', energie_travaux: ['isolation_combles'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : pour son entreprise, les travaux pas dits : rien ne manque', e: 'franchise',
+    devis: { pour_qui: 'professionnel', energie_travaux: null }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : une petite entreprise hors de son activité, les combles, rien : rien ne manque', e: 'franchise',
+    devis: { pour_qui: 'professionnel_hors_activite', energie_travaux: ['isolation_combles'] }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : la réponse « à quel titre » VIDE, les combles : devis_pour_qui, puis devis_energie_mentions_prudence', e: 'franchise',
+    devis: { ...COMBLES, pour_qui: null, pour_qui_client: null }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : sans client, les travaux pas dits : devis_client, puis devis_energie', e: 'franchise',
+    devis: { client_id: null, energie_travaux: null }, lignes: UN_POSTE_0 },
+  //     L'ordre des rangs.
+  { nom: 'énergie : les déchets sans réponse ET les travaux pas dits : les rangs 13 puis 14', e: 'franchise',
+    devis: { dechets_concerne: null, energie_travaux: null }, lignes: UN_POSTE_0 },
+  { nom: 'énergie : au réel, les travaux pas dits : le rang 14, puis conso_tva_intra', e: 'reel',
+    devis: { energie_travaux: null }, lignes: UN_POSTE_20 },
+  //     D4-c : l'origine ne change rien au rang 14.
+  { nom: 'D4-c : devis NEUF VIDE SANS RÉPONSE AUX TRAVAUX ouvert à la main', e: 'franchise',
+    devis: { ...VIDE, energie_travaux: null, source: 'manuelle' }, lignes: [] },
+  { nom: 'D4-c : devis NEUF VIDE SANS RÉPONSE AUX TRAVAUX venu d’une urgence', e: 'franchise',
+    devis: { ...VIDE, energie_travaux: null, sos_request_id: SA, source: 'urgence' }, lignes: [] },
+  { nom: 'D4-c : devis NEUF VIDE SANS RÉPONSE AUX TRAVAUX venu d’une demande ET d’une urgence', e: 'franchise',
+    devis: { ...VIDE, energie_travaux: null, quote_request_id: QA, sos_request_id: SA, source: 'demande' }, lignes: [] },
 ];
 
 /* ---------------------------------------------------------------------------
@@ -753,6 +932,19 @@ values ('${a.pro}', ${q(a.nature)}, 'Assureur d’essai', '1 rue de l’Essai', 
     sql += `insert into public.emetteur_lieux_depot (id, pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
 values ('${l.id}', '${l.pro}', 'Déchèterie d’essai ${i + 1}', '1 chemin de l’Essai', '13410', 'Lambesc', 'decheterie_pro');\n`;
   });
+  // 2b-6 : les signes de qualité et les sous-traitants de la situation,
+  // complets (les contraintes de 46.2 ter et quater), posés AVANT de devenir A.
+  (s.labels || []).forEach((g, i) => {
+    const chemin = g.joint ? `${g.pro}/certificat-${n}-${i + 1}.pdf` : null;
+    sql += `insert into public.emetteur_labels (id, pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+values ('${g.id}', '${g.pro}', 'Organisme d’essai', 'Label d’essai ${i + 1}', ${q(g.categories)}, ${q(g.fin)}, ${q(chemin)});\n`;
+  });
+  (s.sousTraitants || []).forEach((t, i) => {
+    const chemin = t.joint ? `${t.pro}/justificatif-${n}-${i + 1}.pdf` : null;
+    sql += `insert into public.emetteur_sous_traitants (id, pro_id, raison_sociale, siret, label_detient, label_categories,
+  label_valide_jusquau, label_justificatif_chemin)
+values ('${t.id}', '${t.pro}', 'Sous-traitant d’essai ${i + 1}', '00004910600016', ${q(t.detient)}, ${q(t.categories)}, ${q(t.fin)}, ${q(chemin)});\n`;
+  });
   sql += `set local role authenticated;\nset local request.jwt.claim.sub = '${A}';\n`;
   sql += `insert into public.devis (id, pro_id, ${noms.join(', ')}, generation) values ('${d}', '${A}', ${noms.map((c) => q(cols[c])).join(', ')}, 1);\n`;
   s.lignes.forEach((l, i) => {
@@ -781,6 +973,13 @@ select 'ASSUR|${n}|' || coalesce(json_agg(json_build_object('pro_id', a.pro_id, 
   from public.emetteur_assurances a;
 select 'LIEUX|${n}|' || coalesce(json_agg(json_build_object('id', l.id, 'proId', l.pro_id) order by l.pro_id, l.id)::text, '[]')
   from public.emetteur_lieux_depot l;
+select 'LABELS|${n}|' || coalesce(json_agg(json_build_object('id', g.id, 'pro_id', g.pro_id, 'categories', g.categories,
+       'valide_jusquau', g.valide_jusquau, 'justificatif_chemin', g.justificatif_chemin) order by g.pro_id, g.id)::text, '[]')
+  from public.emetteur_labels g;
+select 'STRAIT|${n}|' || coalesce(json_agg(json_build_object('id', t.id, 'pro_id', t.pro_id, 'label_detient', t.label_detient,
+       'label_categories', t.label_categories, 'label_valide_jusquau', t.label_valide_jusquau,
+       'label_justificatif_chemin', t.label_justificatif_chemin) order by t.pro_id, t.id)::text, '[]')
+  from public.emetteur_sous_traitants t;
 rollback to savepoint s${n};
 `;
 });
@@ -802,7 +1001,7 @@ try {
 
 const lu = {};
 for (const l of sortieBrute.split('\n')) {
-  const m = l.match(/^(DEVIS|LIGNES|REGIME|EMET|SORTIE|ASSUR|LIEUX)\|(\d+)\|(.*)$/);
+  const m = l.match(/^(DEVIS|LIGNES|REGIME|EMET|SORTIE|ASSUR|LIEUX|LABELS|STRAIT)\|(\d+)\|(.*)$/);
   if (m) (lu[m[2]] ||= {})[m[1]] = JSON.parse(m[3]);
 }
 
@@ -836,7 +1035,8 @@ const bruts = {};
 const cas = SITUATIONS.map((s, k) => {
   const n = k + 1;
   const r = lu[n];
-  if (!r || !r.DEVIS || !r.LIGNES || !('REGIME' in r) || !r.EMET || !r.SORTIE || !r.ASSUR || !r.LIEUX) {
+  if (!r || !r.DEVIS || !r.LIGNES || !('REGIME' in r) || !r.EMET || !r.SORTIE || !r.ASSUR || !r.LIEUX || !r.LABELS
+    || !r.STRAIT) {
     throw new Error(`cas ${n} (${s.nom}) : la base n’a pas tout rendu`);
   }
   /* La date du « Oui » au chantier neuf, posée par la base, change à chaque
@@ -866,8 +1066,29 @@ const cas = SITUATIONS.map((s, k) => {
      couverture des déchets la lisent, pour ne pas dépendre de ce que
      `rowToDevis` sait déjà traduire. */
   const lieux = r.LIEUX;
+  /* 2b-6 : les signes de qualité et les sous-traitants, des LIGNES de la base
+     réduites à ce que la règle lit — et la garde des dates des assurances :
+     2001 ou 2999 seulement. */
+  const labels = r.LABELS;
+  const sousTraitants = r.STRAIT;
+  for (const [quoi, d] of [...labels.map((g) => ['signe de qualité', g.valide_jusquau]),
+    ...sousTraitants.map((t) => ['sous-traitant', t.label_valide_jusquau])]) {
+    if (d !== null && !(d <= '2001-12-31' || d >= '2999-01-01')) {
+      throw new Error(`cas ${n} : une date de ${quoi} proche (${d}) — 2001 ou 2999 seulement`);
+    }
+  }
+  /* 2b-6 (cahier, §5.5 e) : `rowToDevis` doit connaître les QUATRE champs de
+     l'énergie AVANT la régénération — sans eux, le miroir lirait `undefined`
+     sur chaque cas, et la parité dirait vrai ou faux pour une mauvaise
+     raison (la leçon de 2b-4). */
+  for (const champ of ['energieTravaux', 'energieSansLabel', 'energieSousTraitance', 'energieSousTraitants']) {
+    if (!(champ in devis)) {
+      throw new Error(`rowToDevis (src/lib/devis.js) ne rend pas encore « ${champ} » : apprenez-lui les quatre champs de `
+        + 'l’énergie (2b-6, 49.4 septies) avant de régénérer ce fichier');
+    }
+  }
   bruts[n] = r.DEVIS;
-  return { n, nom: s.nom, devis, lignes, regime: r.REGIME, motifsEmetteur: r.EMET, assurances, lieux, attendu };
+  return { n, nom: s.nom, devis, lignes, regime: r.REGIME, motifsEmetteur: r.EMET, assurances, lieux, labels, sousTraitants, attendu };
 });
 
 /* Ce que le fichier doit couvrir, vérifié ici : chaque motif du devis seul
@@ -877,7 +1098,9 @@ const cas = SITUATIONS.map((s, k) => {
 const CLES_DU_DEVIS = ['devis_client', 'devis_pour_qui', 'devis_lignes', 'devis_taux_franchise', 'devis_taux_sans_tva',
   'devis_taux_reduit_neuf', 'devis_lieu', 'devis_delai', 'devis_validite', 'devis_acompte_nature', 'devis_acompte_ramene',
   'devis_reduction_ramenee', 'devis_acompte_signature', 'devis_decennale', 'devis_attestation_date', 'devis_attestation',
-  'devis_cout', 'devis_dechets', 'devis_dechets_rubriques'];
+  'devis_cout', 'devis_dechets', 'devis_dechets_rubriques',
+  /* 2b-6 : les trois clés du rang 14. */
+  'devis_energie', 'devis_energie_mentions', 'devis_energie_mentions_prudence'];
 for (const cle of CLES_DU_DEVIS) {
   if (!cas.some((c) => c.attendu.length > 0 && c.attendu.filter((m) => m.rang < 100).every((m) => m.cle === cle)
     && c.attendu.some((m) => m.cle === cle))) {
@@ -1059,13 +1282,98 @@ if (cas.some((c) => c.attendu.some((m) => (m.cle === 'devis_dechets' && m.nature
   }
 }
 
+/* 2b-6 (cahier, §5.5) : les gardes ÉCRITES D'AVANCE, celles que 2b-4 et 2b-5
+   ont dû écrire après coup.
+   (a) les 184 cas d'avant gardent leur numéro (rien n'est inséré avant eux)
+       — ET AUCUN NE PORTE LE RANG 14 : sans la seconde garde, `COMPLET` qui
+       oublierait « Aucun » ferait gagner `devis_energie` à tous, DES DEUX
+       CÔTÉS, et la parité resterait verte (la leçon S5 de 2b-4). */
+if (cas.length < 184 || cas.slice(0, 184).some((c, i) => c.n !== i + 1)) throw new Error('les 184 cas d’avant 2b-6 ont bougé');
+if (cas.slice(0, 184).some((c) => c.attendu.some((m) => m.rang === 14))) {
+  throw new Error('un des 184 cas d’avant porte le rang 14 : le décor « complet » ne répond plus « Aucun de ces travaux »');
+}
+/* (b) UNE SEULE CLÉ AU RANG 14, toujours — chacune avec sa nature. */
+if (cas.some((c) => c.attendu.filter((m) => m.rang === 14).length > 1)) throw new Error('le rang 14 a rendu plus d’une clé');
+{
+  const NATURE_14 = { devis_energie: 'prudence', devis_energie_mentions: 'loi', devis_energie_mentions_prudence: 'prudence' };
+  if (cas.some((c) => c.attendu.some((m) => m.rang === 14 && NATURE_14[m.cle] !== m.nature))) {
+    throw new Error('une clé du rang 14 n’a pas sa nature (ou une clé inconnue au rang 14)');
+  }
+}
+/* (c) la preuve D4-c du rang 14 : les trois devis neufs sans réponse aux
+   travaux, d'origines différentes, rendent la MÊME liste, `devis_energie`
+   compris. */
+{
+  const neufs = cas.filter((c) => /^D4-c : devis NEUF VIDE SANS RÉPONSE AUX TRAVAUX /.test(c.nom));
+  const listes = new Set(neufs.map((c) => JSON.stringify(c.attendu)));
+  if (neufs.length !== 3 || listes.size !== 1 || !neufs[0].attendu.some((m) => m.cle === 'devis_energie')) {
+    throw new Error('les trois devis neufs sans réponse aux travaux, d’origines différentes, ne rendent pas la même liste avec devis_energie');
+  }
+}
+/* (d) LA COUVERTURE, lue sur la ligne BRUTE du devis (les colonnes `energie_…`)
+   et sur les signes et sous-traitants que la base a rendus — écrite ICI à
+   nouveau, jamais importée de `devis.js` : la garde ne doit pas changer avec
+   la règle qu'elle couvre. Le cas « labellisé sans date » n'existe pas en
+   base (la croisée) : il vit dans l'essai 49-remise seul (V22). */
+{
+  const r14 = (c) => c.attendu.some((m) => m.rang === 14);
+  const rien = (c) => c.attendu.length === 0;
+  const br = (c) => bruts[c.n];
+  const travaux = (c) => br(c).energie_travaux || [];
+  const coche = (c) => travaux(c).length > 0 && !egalTableau(travaux(c), ['aucun']);
+  const declare = (c) => Array.isArray(br(c).energie_sans_label);
+  const aA = (x, c) => x.pro_id === br(c).pro_id;
+  const choisis = (c) => br(c).energie_sous_traitants || [];
+  const connus = (c) => new Map((c.sousTraitants || []).map((t) => [t.id, t.pro_id]));
+  const reponse = (c) => (br(c).client_id && br(c).pour_qui_client === br(c).client_id ? br(c).pour_qui : null);
+  const gardes = [
+    ['le signe de B SEUL, complet : le point reste', (c) => coche(c) && c.labels.length > 0 && c.labels.every((g) => !aA(g, c))
+      && c.labels.some((g) => g.justificatif_chemin !== null) && r14(c)],
+    ['le sous-traitant de B SEUL choisi : le point reste', (c) => br(c).energie_sous_traitance === true && choisis(c).length > 0
+      && choisis(c).every((id) => connus(c).has(id) && connus(c).get(id) !== br(c).pro_id) && r14(c)],
+    ['un sous-traitant ORPHELIN seul choisi, A en ayant un : le point reste', (c) => br(c).energie_sous_traitance === true
+      && choisis(c).length > 0 && choisis(c).every((id) => !connus(c).has(id))
+      && c.sousTraitants.some((t) => aA(t, c)) && r14(c)],
+    ['un signe de A valable SANS certificat, non déclaré : le point', (c) => coche(c) && !declare(c)
+      && c.labels.some((g) => aA(g, c) && g.justificatif_chemin === null && g.valide_jusquau >= '2999-01-01') && r14(c)],
+    ['un signe de A valable SANS certificat, DÉCLARÉ : le point reste', (c) => coche(c) && declare(c)
+      && c.labels.some((g) => aA(g, c) && g.justificatif_chemin === null && g.valide_jusquau >= '2999-01-01') && r14(c)],
+    ['un signe de A expiré, déclaré : rien', (c) => coche(c) && declare(c) && c.labels.length > 0
+      && c.labels.every((g) => aA(g, c) && g.valide_jusquau <= '2001-12-31') && rien(c)],
+    ['« Aucun », une déclaration et des sous-traitants RESTÉS : rien', (c) => egalTableau(travaux(c), ['aucun']) && declare(c)
+      && choisis(c).length > 0 && rien(c)],
+    ['« Non », des identifiants RESTÉS : rien', (c) => br(c).energie_sous_traitance === false && choisis(c).length > 0 && rien(c)],
+    ['pour son entreprise, un travail coché : rien', (c) => reponse(c) === 'professionnel' && coche(c) && rien(c)],
+    ['une petite entreprise hors de son activité, un travail coché : rien', (c) => reponse(c) === 'professionnel_hors_activite'
+      && coche(c) && rien(c)],
+    ['la réponse « à quel titre » vide, un travail coché : la prudence', (c) => reponse(c) === null && br(c).client_id && coche(c)
+      && c.attendu.some((m) => m.cle === 'devis_energie_mentions_prudence')],
+    ['une ligne de prudence SEULE, à titre privé : la prudence', (c) => reponse(c) === 'consommateur' && coche(c)
+      && travaux(c).every((k) => k === 'photovoltaique' || k === 'desembouage')
+      && c.attendu.some((m) => m.cle === 'devis_energie_mentions_prudence')],
+    ['une déclaration VIDE DE VALEUR, un travail non couvert : la loi', (c) => reponse(c) === 'consommateur' && coche(c)
+      && !declare(c) && c.labels.length === 0 && br(c).energie_sous_traitance === false
+      && c.attendu.some((m) => m.cle === 'devis_energie_mentions')],
+  ];
+  for (const [quoi, f] of gardes) if (!cas.some(f)) throw new Error(`aucun cas de l’énergie : ${quoi}`);
+}
+/* (e) le format : chaque cas porte ses `labels` et ses `sousTraitants` (des
+   listes, vides le plus souvent). */
+if (cas.some((c) => !Array.isArray(c.labels) || !Array.isArray(c.sousTraitants))) {
+  throw new Error('un cas ne porte pas ses labels ou ses sous-traitants');
+}
+
 const LISEZ_MOI = 'Engendré par scripts/generer-cas-remise.mjs : ce que motifs_refus_remise() (schema.sql, section 49.9) '
   + 'rend pour chaque situation, jouée par la VRAIE base (le devis et ses lignes écrits par le chemin d’un client, la '
   + 'fiche de l’entreprise posée en superutilisateur). Chaque cas : { n, nom, devis (rowToDevis, dates à null), lignes '
   + '(la traduction de rowToLigne, dans l’ordre où elles ont été ÉCRITES), regime (emetteur.regime_tva), motifsEmetteur '
   + '(la sortie de emetteur_incomplet, des « clé: phrase »), assurances (2b-3 : toutes les lignes de emetteur_assurances, '
   + 'celles d’un autre artisan comprises, aux dates FIXES 2001 ou 2999), lieux (2b-5 : tous les lieux de dépôt des déchets de '
-  + 'la base, en objets { id, proId }, ceux d’un autre artisan compris), attendu (les lignes de la fonction dans son ordre : rang, '
+  + 'la base, en objets { id, proId }, ceux d’un autre artisan compris), labels (2b-6 : tous les signes de qualité de la base, '
+  + 'en lignes { id, pro_id, categories, valide_jusquau, justificatif_chemin }, ceux d’un autre artisan compris, aux dates FIXES), '
+  + 'sousTraitants (2b-6 : tous les sous-traitants de la base, en lignes { id, pro_id, label_detient, label_categories, '
+  + 'label_valide_jusquau, label_justificatif_chemin }, ceux d’un autre artisan compris, aux dates FIXES), attendu (les lignes '
+  + 'de la fonction dans son ordre : rang, '
   + 'cle, phrase, nature, et ligne_id remplacé par l’INDICE de la ligne dans lignes, ou null) }. verifier-devis fait '
   + 'tourner motifsDeRemise (src/lib/devis.js) dessus et exige zéro écart. À relancer et commiter dès que la règle change.';
 const texte = `{"_lisez_moi": ${JSON.stringify(LISEZ_MOI)},\n"cas": [\n${cas.map((c) => JSON.stringify(c)).join(',\n')}\n]}\n`;

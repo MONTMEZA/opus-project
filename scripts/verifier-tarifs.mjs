@@ -1629,18 +1629,20 @@ const lecteursEnTrop = (texte) => propositionsDe(texte)
    le rend AVEUGLE à cette table — il rendrait sa sortie témoin sans plus la
    chercher —, et ce contrôle ne relisait pas l'essai. On vise la
    PROPRIÉTÉ : chaque alternation `(…|…)` du cas qui nomme l'une de ces
-   tables nomme les QUATRE (`emetteur_lieux_depot`, `tarifs_pro`,
-   `emetteur_assurances`, `emetteur`) — à UNE exception, écrite : la liste
-   `nomment_emetteur`, qui par construction ne cherche PAS `tarifs_pro`
-   (elle a sa propre liste juste au-dessus, `nomment_tarifs_pro`, dont les
-   lectrices ne sont pas les mêmes), nomme exactement les TROIS tables
-   d'émetteur. */
+   tables nomme les SIX (`emetteur_lieux_depot`, `emetteur_labels`,
+   `emetteur_sous_traitants`, `tarifs_pro`, `emetteur_assurances`,
+   `emetteur`) — à UNE exception, écrite : la liste `nomment_emetteur`, qui
+   par construction ne cherche PAS `tarifs_pro` (elle a sa propre liste
+   juste au-dessus, `nomment_tarifs_pro`, dont les lectrices ne sont pas les
+   mêmes), nomme exactement les CINQ tables d'émetteur. Depuis 2b-6 : les
+   signes de qualité et les sous-traitants (sections 46.2 ter et quater) y
+   sont entrés, EN LE DÉCIDANT — le tiret bas est une lettre de mot. */
 console.log('\nG. L’ESSAI SQL — le cas 14 cherche toutes les tables privées');
 {
   let brut47 = '';
   try { brut47 = lire('supabase/essais-section-47.sql'); } catch { brut47 = ''; }
   const cas14 = morceau(sqlSansCommentaires(brut47), '=== 14.', '=== 15.');
-  const TROIS = ['emetteur_lieux_depot', 'emetteur_assurances', 'emetteur'];
+  const TROIS = ['emetteur_lieux_depot', 'emetteur_labels', 'emetteur_sous_traitants', 'emetteur_assurances', 'emetteur'];
   const QUATRE = [...TROIS, 'tarifs_pro'];
   const alternationsDe = (ordre) => [...ordre.matchAll(/~\*?\s*'([^']*)'/g)]
     .flatMap((m) => [...m[1].matchAll(/\(([^()]*)\)/g)].map((g) => g[1].split('|').map((x) => x.trim())));
@@ -1656,11 +1658,11 @@ console.log('\nG. L’ESSAI SQL — le cas 14 cherche toutes les tables privées
       else fautives.push(`(${a.join('|')})`);
     }
   }
-  verifier('50. le cas 14 de l’essai 47 cherche TOUTES les tables privées : chaque alternation nomme les quatre — et la liste '
-    + '`nomment_emetteur` exactement les trois tables d’émetteur ; au moins trois alternations à quatre, au moins une à trois, aucune '
+  verifier('50. le cas 14 de l’essai 47 cherche TOUTES les tables privées : chaque alternation nomme les six — et la liste '
+    + '`nomment_emetteur` exactement les cinq tables d’émetteur ; au moins trois alternations à six, au moins une à cinq, aucune '
     + 'autre forme',
   cas14.length > 0 && aQuatre >= 3 && aTrois >= 1 && fautives.length === 0,
-  `${aQuatre} à quatre, ${aTrois} à trois ; fautives : ${fautives.join(' ; ') || 'aucune'}. Une table oubliée, et l’essai ne la `
+  `${aQuatre} à six, ${aTrois} à cinq ; fautives : ${fautives.join(' ; ') || 'aucune'}. Une table oubliée, et l’essai ne la `
   + 'cherche plus (banc B49).');
 }
 

@@ -401,10 +401,27 @@ console.log('\nLe SIRET : ce qu’il ouvre, ce qu’il ne prouve pas');
     'le plan l’a écartée : obtenue en trente secondes avec le numéro d’un autre, '
     + 'elle serait un outil d’hameçonnage — et les textes ne décrivent pas ce qui '
     + 'n’existe pas');
-  verifier('…ni rien qui suggère une caution publique (certifié, agréé, validé par l’État ou l’INSEE)',
-    !/certifi|agré[ée]|validée? par l.(État|INSEE)/i.test(
+  /* « CERTIFICAT » EST PERMIS, ET LUI SEUL (étape 2b-6, 24/11/2026, décidé
+     EN LE DISANT). Jusqu'ici la racine « certifi » entière était refusée.
+     Depuis 2b-6, les textes nomment la PIÈCE qu'un organisme délivre à
+     l'artisan — « le certificat » d'un signe de qualité (cahier 2b-6 §4 :
+     « Ce que nous collectons », « Vos documents professionnels », « Combien
+     de temps ») — et c'est le mot de l'écran (« Joindre le certificat »). Un
+     certificat est un document délivré par un TIERS, pas une caution d'Opus,
+     de l'État ni de l'INSEE. Ce qui reste refusé, et c'est le but de la
+     garde : « certifié », « certifie », « certifier », « certification »,
+     « certificateur »… — toute autre forme du mot (cahier 2b-6, T10). Le
+     motif est éprouvé juste en dessous : il doit refuser les unes et
+     laisser l'autre. */
+  const CERTIFI = /certifi(?!cats?(?![\p{L}_]))/iu;
+  verifier('…ni rien qui suggère une caution publique (certifié, agréé, validé par l’État ou l’INSEE) — « certificat », la pièce d’un organisme, seul permis',
+    !CERTIFI.test(tout.replace(/ni agrément ni (caution|une validation)[^.]*\./gi, ''))
+    && !/agré[ée]|validée? par l.(État|INSEE)/i.test(
       tout.replace(/ni agrément ni (caution|une validation)[^.]*\./gi, '')),
     'la Licence Ouverte interdit de suggérer une reconnaissance de l’INSEE');
+  verifier('…et le motif est éprouvé : il refuse « certifié », « certifie », « certification », « certifier », « certificateur », et laisse « certificat », « certificats »',
+    ['certifié', 'Certifiée', 'il certifie', 'la certification', 'certifier', 'un certificateur'].every((t) => CERTIFI.test(t))
+    && ['le certificat', 'les certificats de vos signes', 'Certificat.'].every((t) => !CERTIFI.test(t)));
 
   /* LA CONSULTATION NE S'AFFICHE PAS SUR LA FICHE PUBLIQUE — et c'est tout
      ce qu'on peut dire : « Mon profil », le rappel de vérification, « Mon
@@ -812,7 +829,20 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
      promesse que ces gardes tiennent pour elle est « Aucun écran d’Opus ne
      les montre à quelqu’un d’autre que vous » (« Ce que nous collectons »),
      et c'est la même menace — une lecture par-dessus les politiques. */
-  const PRIVEES = new RegExp(`\\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur|base_postes)\\b|${DEVIS_NOMME.source}`, 'i');
+  /* LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS, étape 2b-6 (sections 46.2
+     ter et 46.2 quater, 24/11/2026) : `emetteur_labels` et
+     `emetteur_sous_traitants` entrent ici, dans `LISTES` et dans
+     `PRIVEES_EDGE` plus bas, EN LE DÉCIDANT — pour la même raison que les
+     lieux : le trait de soulignement est une lettre de mot, `\bemetteur\b`
+     ne les voit pas, et une `definer`, une vue ou une fonction Edge qui ne
+     lirait qu'elles passerait au vert (cahier 2b-6 §2.8, n° 7). Ce ne sont
+     pas des prix : la promesse tenue pour elles est « Aucun écran d’Opus ne
+     les montre à quelqu’un d’autre que vous » (« Ce que nous collectons »),
+     et pour les sous-traitants ce sont, en plus, les données d'une AUTRE
+     entreprise. Et une PROPRIÉTÉ (CTL-11), après la garde des fonctions
+     Edge : chaque table créée dans la section 46 de `schema.sql` est vue par
+     ces trois listes — un oubli rougit de lui-même. */
+  const PRIVEES = new RegExp(`\\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|emetteur|base_postes)\\b|${DEVIS_NOMME.source}`, 'i');
   /* DEUX LISTES depuis le lot T : `artisans_urgence()` lit `tarifs_pro` — à
      travers « tarifs affiches », en `security invoker` — et elle seule de
      plus. Elle n'a rien à faire dans `emetteur` ni `emetteur_assurances`,
@@ -869,6 +899,20 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
        ne les couvre PAS (mot entier), et c'est voulu. */
     { tables: /\bemetteur_lieux_depot\b/,
       permises: ['tient_le_lieu_de_depot', 'mes_donnees', 'motifs_refus_remise'] },
+    /* LA SIXIÈME ET LA SEPTIÈME, à l'étape 2b-6 (sections 46.2 ter et 46.2
+       quater) : les signes de qualité et les sous-traitants. Leur
+       déclencheur (qui ne nomme aucune table : une permission, pas une
+       exigence), l'export, et `motifs_refus_remise`, qui lit, pour le rang
+       14, les signes de l'entreprise du devis et les sous-traitants CHOISIS
+       qui existent chez elle (filtre `pro_id = v_pro`, colonnes nommées —
+       la porte étroite est tenue par `verifier-emetteur`). Ni
+       `tient_l_emetteur`, ni `emetteur_incomplet`, ni une fonction
+       `admin_*` : aucune n'a à les lire, et la première entrée ne les
+       couvre PAS (mot entier), c'est voulu. */
+    { tables: /\bemetteur_labels\b/,
+      permises: ['tient_le_label', 'mes_donnees', 'motifs_refus_remise'] },
+    { tables: /\bemetteur_sous_traitants\b/,
+      permises: ['tient_le_sous_traitant', 'mes_donnees', 'motifs_refus_remise'] },
   ];
   const sansCommentairesSql = (t) => {
     let sortie = '';
@@ -1016,7 +1060,7 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
      pas une chaîne écrite en toutes lettres ne se relit pas : la table
      viendrait d'une variable. Seuls `storage.from(espace)` (le stockage,
      pas une table) et `Array.from(…)` y échappent. */
-  const PRIVEES_EDGE = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur|base_postes)\b|\bfrom\(\s*['"`]devis(_lignes|_tva)?['"`]|\bpublic\.devis(_lignes|_tva)?\b/;
+  const PRIVEES_EDGE = /\b(tarifs_pro|emetteur_assurances|emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|emetteur|base_postes)\b|\bfrom\(\s*['"`]devis(_lignes|_tva)?['"`]|\bpublic\.devis(_lignes|_tva)?\b/;
   const FROM_ILLISIBLE = /(?<!\bstorage|\bArray)\.from\(\s*(?!['"][\w.-]*['"]\s*\))/;
   const edgeQuiLisent = edge.filter((f) => {
     const src = sansCommentairesJs(readFileSync(f, 'utf8'));
@@ -1025,6 +1069,34 @@ const LIRE_OU_VOIR = /(^|[^\p{L}])(lire|lisent|lit|lisibles?|voir|voit|voient|co
   verifier(`…et aucune fonction Edge ne les nomme (${edge.length} fichiers lus) : la clé de service lirait tout`,
     edge.length >= 3 && edgeQuiLisent.length === 0,
     edgeQuiLisent.length ? edgeQuiLisent.join(', ') : 'moins de trois fichiers de fonctions Edge : le contrôle a perdu sa cible');
+
+  /* LA PROPRIÉTÉ « SECTION 46 » (étape 2b-6, cahier §2.8, critique CTL-11
+     et sa contradiction) : chaque table CRÉÉE dans la section 46 de
+     `schema.sql` (« Mon entreprise pour mes devis ») est vue par `PRIVEES`,
+     par au moins une entrée de `LISTES`, et par `PRIVEES_EDGE`. Les trois
+     listes sont écrites à la main, et le trait de soulignement est une
+     lettre de mot : une table de plus, nommée `emetteur_…`, passait au
+     travers des trois sans que rien ne rougisse (la leçon B48/B49 de 2b-5,
+     et la moitié `verifier-legal` du sabotage S17 du cahier v1, qui passait
+     au vert). La portée est la SECTION, pas le classement : `clients` et
+     `preuves_tva` sont rangées « soi » ailleurs, et la fonction `tva` nomme
+     `preuves_tva` par construction. La section se lit entre ses deux
+     en-têtes, dans le schéma BRUT (les en-têtes sont des commentaires). */
+  const schemaBrut46 = readFileSync('supabase/schema.sql', 'utf8');
+  const debut46 = schemaBrut46.search(/^--\s+46\.\s+MON ENTREPRISE POUR MES DEVIS/m);
+  const fin46 = schemaBrut46.search(/^--\s+47\.\s+LES TARIFS RÉUNIS/m);
+  const tables46 = debut46 < 0 || fin46 < debut46 ? []
+    : [...new Set([...sansCommentairesSql(schemaBrut46.slice(debut46, fin46))
+      .matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?\s*\(/gi)]
+      .map((m) => m[1].toLowerCase()))];
+  const malVues46 = tables46.filter((t) => !PRIVEES.test(`select 1 from public.${t}`)
+    || !LISTES.some((l) => l.tables.test(`select 1 from public.${t}`))
+    || !PRIVEES_EDGE.test(`supabase.from('${t}')`));
+  verifier(`…et chaque table créée dans la section 46 de \`schema.sql\` est vue par \`PRIVEES\`, \`LISTES\` et \`PRIVEES_EDGE\` (${tables46.length} tables : ${tables46.join(', ')})`,
+    tables46.length >= 6 && malVues46.length === 0,
+    tables46.length < 6
+      ? 'moins de six tables trouvées dans la section 46 (entre « 46. MON ENTREPRISE POUR MES DEVIS » et « 47. LES TARIFS RÉUNIS ») : ce contrôle a perdu sa cible'
+      : `${malVues46.join(', ')} : une table de la section 46 qu’une des trois listes ne voit pas — une \`definer\`, une vue ou une fonction Edge qui la lirait passerait au vert`);
 }
 
 /* ==================================================================
@@ -2238,8 +2310,15 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
     /* Étape 2b-2 (10/11/2026) : la déclaration sur l'honneur — gardée,
        effacée par son retrait, remplacée, jointe — et le compte des
        silences de VIES, retenu un jour (annexe A.7, VERSION 2026-11-10). */
+    /* Étape 2b-6 (24/11/2026, cahier 2b-6 §4, critique DROIT-11, VERSION
+       2026-11-24) : UNE phrase de plus, mot pour mot celle du cahier, avant
+       les photos restées en ligne — « Un certificat, un justificatif ou une
+       attestation retiré d’une fiche reste dans votre espace privé jusqu’à
+       la suppression de votre compte. » Rien d'autre (empreinte d'avant :
+       7120c2e7…, celle de 2b-2). La phrase est en plus gardée en toutes
+       lettres par la section « Étape 2b-6 », plus bas. */
     'CONFIDENTIALITE:Combien de temps': [section(CONFIDENTIALITE, 'Combien de temps').split(CE_QUI_RESTE_EN_LIGNE).join('[CE_QUI_RESTE_EN_LIGNE]'),
-      '7120c2e712207fd476300a4d97ee6054017557ffc591149cd97514fe3f6b504b'],
+      '2dcfa381db9bf6cfb8955f0cdf133a2e52d7fb74a7b640f063f481e270913ec2'],
     'CONFIDENTIALITE:Vos droits, et comment les exercer ICI': [section(CONFIDENTIALITE, 'Vos droits, et comment les exercer ICI').split('Opposition et limitation')[0],
       '5601e93511a41c2f30600cb8eedd899298e949fc8306d2796ecefef119413556'],
     'CONFIDENTIALITE:Cookies et traceurs': [section(CONFIDENTIALITE, 'Cookies et traceurs'),
@@ -2276,9 +2355,24 @@ console.log('\nLa position du téléphone : la promesse et le paquet ne se contr
        3d67dfe0…, celle de 2b-4). La relecture du 21/11 (DROIT-R7) y a
        ajouté « ou non » : « s’il s’agit ou non de travaux sur un bâtiment ou
        de jardinage » — sans lui, la phrase se lisait comme une condition
-       (empreinte de la construction : a29287d0…). */
+       (empreinte de la construction : a29287d0…).
+       Étape 2b-6 (24/11/2026, cahier 2b-6 §4, VERSION 2026-11-24) : DEUX
+       insertions et UNE phrase élargie, rien d'autre dans la section —
+       dans la phrase de « Mon entreprise », après les lieux de dépôt et
+       avant « et vos tarifs », « vos signes de qualité (label RGE : …) » et
+       « vos sous-traitants (…) » ; dans la phrase des devis, après les
+       déchets et avant « leurs lignes », « les travaux d’économies
+       d’énergie ou d’énergie renouvelable qu’ils comportent, ceux pour
+       lesquels vous déclarez ne pas détenir de label RGE, et si une autre
+       entreprise fera une partie ou la totalité de leurs travaux, et
+       laquelle » ; et « Les attestations jointes, comme vos autres documents
+       professionnels, sont aussi lisibles par l’administration d’Opus »
+       nomme les certificats des signes de qualité et les justificatifs des
+       sous-traitants. Les trois sont gardés en toutes lettres par la
+       section « Étape 2b-6 » (empreinte d'avant : e07dd3e2…, celle de
+       2b-5). */
     'CONFIDENTIALITE:Ce que nous collectons': [section(CONFIDENTIALITE, 'Ce que nous collectons'),
-      'e07dd3e20a9a1ecd46bc035c711968463281816810f680028006d78bf21d15b8'],
+      'da2007fb55170563e66d5b49639c51a188d38018995abc1aee60fa5479de1020'],
     /* Étape M2 (02/11/2026) : la section qui dit qui lit quoi. */
     'CONFIDENTIALITE:Ce que les autres voient de vous': [section(CONFIDENTIALITE, 'Ce que les autres voient de vous'),
       'fa6e62b210a174b5d925a939dfa3518cfa2382304bf33ab9c7c38c8047eaa5ec'],
@@ -2471,6 +2565,21 @@ console.log('\n« Ce que les autres voient de vous » : chaque table, chaque rè
        rougir le jour où une politique l'ouvrirait à l'administration. */
     ['emetteur_lieux_depot', 'soi', null, [ENTREPRISE],
       'ses lieux de dépôt des déchets : lui seul (« Ce que nous collectons »)'],
+    /* Étape 2b-6 (sections 46.2 ter et 46.2 quater) : deux RAISONS, pas
+       de phrase, sur le modèle des lieux (cahier 2b-6 §2.8, n° 8) — « Ce
+       que les autres voient de vous » garde son empreinte (la décision T29 :
+       la « Certification RGE » de la fiche publique ne bouge pas), et ce qui
+       est vrai se lit dans « Ce que nous collectons » : « Aucun écran d’Opus
+       ne les montre à quelqu’un d’autre que vous ». La forme exacte de la
+       règle (`est_mon_entreprise(pro_id)`, rien d'autre) fait rougir le
+       jour où une politique les ouvrirait à l'administration ou à d'autres.
+       Ce que cette garde ne couvre PAS, et que les textes disent : le
+       certificat et le justificatif eux-mêmes, rangés dans `documents`,
+       que l'administration lit comme toute pièce de cet espace. */
+    ['emetteur_labels', 'soi', null, [ENTREPRISE],
+      'ses signes de qualité (label RGE) : lui seul (« Ce que nous collectons »)'],
+    ['emetteur_sous_traitants', 'soi', null, [ENTREPRISE],
+      'ses sous-traitants, les données d’une autre entreprise : lui seul (« Ce que nous collectons », « Les clients que vous enregistrez »)'],
     ['preuves_tva', 'soi', null, [ENTREPRISE], 'sa preuve de TVA : lui seul'],
     ['entreprise_registre', 'soi+admin', 'l’entreprise rattachée à chaque compte professionnel', [`${ENTREPRISE}orest_admin()`],
       'son entreprise lue au répertoire : lui et l’administration'],
@@ -2697,8 +2806,14 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
 
   /* « CERTIFIÉ » NULLE PART, et LA CASE JAMAIS RECOPIÉE. */
   const { DECLARATION_TVA, SANS_REPONSE_TVA, REFUS_RETENU_MS } = await import('../src/lib/tva.js');
-  verifier('aucun texte légal ne dit « certifi… » (constantes servies aux écrans comprises)',
-    !/certifi/i.test(tousTextes2b2));
+  /* …À UN MOT PRÈS, depuis 2b-6 (24/11/2026) : « certificat », la PIÈCE
+     qu'un organisme délivre (le certificat d'un signe de qualité, cahier
+     2b-6 §4), est permis — et lui seul. « Certifié », « je certifie »,
+     « certification » restent refusés : c'est la case de la déclaration
+     qui fait certifier l'artisan, jamais Opus (le motif est éprouvé dans
+     la section du SIRET, plus haut, `CERTIFI`). */
+  verifier('aucun texte légal ne dit « certifi… », sauf « certificat » (la pièce d’un organisme) (constantes servies aux écrans comprises)',
+    !/certifi(?!cats?(?![\p{L}_]))/iu.test(tousTextes2b2));
   verifier('…et la phrase de la case (`DECLARATION_TVA`) n’y est jamais recopiée, ni sa fin',
     typeof DECLARATION_TVA === 'string' && DECLARATION_TVA.length > 40
     && !tousTextes2b2.includes(DECLARATION_TVA)
@@ -2789,6 +2904,17 @@ console.log('\nÉtape 2b-2 — la déclaration sur l’honneur, à quel titre, l
     dechets_lieux: ', lieux de dépôt,',
     dechets_sans_depot: ', lieux de dépôt,',
     dechets_cout_centimes: ', coût estimé)',
+    /* 2b-6 (cahier 2b-6 §4, 49.4 septies) : les quatre colonnes de
+       l'énergie, chacune avec ses mots dans le fragment du cahier, mot pour
+       mot. La déclaration (`energie_sans_label`) se fait sur CE devis,
+       travail par travail (décision P11) : « ceux pour lesquels vous
+       déclarez » ; la sous-traitance est une réponse (`…_sous_traitance`,
+       vide, « Non » ou « Oui ») puis un choix dans « Mes sous-traitants »
+       (`…_sous_traitants`, des identifiants) : « et laquelle ». */
+    energie_travaux: 'les travaux d’économies d’énergie ou d’énergie renouvelable qu’ils comportent',
+    energie_sans_label: 'ceux pour lesquels vous déclarez ne pas détenir de label RGE',
+    energie_sous_traitance: 'si une autre entreprise fera une partie ou la totalité de leurs travaux',
+    energie_sous_traitants: 'de leurs travaux, et laquelle,',
     total_ht_centimes: 'leurs totaux',
     total_tva_centimes: 'leurs totaux',
     total_ttc_centimes: 'leurs totaux',
@@ -3122,8 +3248,18 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
      la décision Q3 avec elle. */
   verifier('aucun texte ne parle de services à la personne (réponse Q3 : pas pour l’instant)',
     !tous2b4.some((t) => /services? à la personne/i.test(t)));
-  const avecRge = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /\bRGE\b/.test(b.texte)).map((b) => b.titre);
-  verifier('…et le label RGE ne se lit que là où il se lisait avant 2b-4 (« Ce que les autres voient de vous », le numéro déclaré sur la fiche) : le RGE du devis est l’étape 2b-6',
+  /* LA GARDE « RGE » EST RÉCRITE à l'étape 2b-6 (24/11/2026), EN LE
+     DÉCIDANT (cahier 2b-6 §4, critique CTL-15) : le RGE du devis est arrivé,
+     et « Ce que nous collectons » le nomme désormais, dans ses deux
+     fragments de 2b-6. Elle n'est ni retirée ni relâchée : HORS de cette
+     section, le RGE ne se lit toujours que là où il se lisait avant 2b-4 —
+     « Ce que les autres voient de vous », le numéro déclaré sur la fiche
+     publique, que 2b-6 ne touche pas (décision T29). Que, DANS la
+     collecte, il ne se lise QUE dans les deux fragments est tenu par la
+     section « Étape 2b-6 », plus bas, sur le modèle de « déchet ». */
+  const avecRge = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /\bRGE\b/.test(b.texte)).map((b) => b.titre)
+    .filter((t) => t !== 'Ce que nous collectons');
+  verifier('…et, hors de « Ce que nous collectons » (le RGE du devis, étape 2b-6), le label RGE ne se lit que là où il se lisait avant 2b-4 : « Ce que les autres voient de vous », le numéro déclaré sur la fiche',
     avecRge.length === 1 && avecRge[0] === 'Ce que les autres voient de vous', avecRge.join(' · ') || 'aucun');
 }
 
@@ -3144,8 +3280,10 @@ console.log('\nÉtape 2b-4 — le prix du devis lui-même : les textes et ce qui
        bâtiment ou de jardinage », les mots de l'écran) et « ce que
        deviendront leurs déchets (quantité, tri, lieux de dépôt, coût
        estimé) », la parenthèse du cahier, AVANT « leurs lignes », comme
-       2b-2 à 2b-4. Elle est gardée ici, MOT POUR MOT et ENTIÈRE : elle a
-       quitté la section 2b-4, comme celle de 2b-3 avait quitté la sienne.
+       2b-2 à 2b-4. Elle était gardée ici, MOT POUR MOT et ENTIÈRE : elle
+       avait quitté la section 2b-4, comme celle de 2b-3 avait quitté la
+       sienne — et depuis 2b-6 elle a quitté celle-ci à son tour : seul son
+       FRAGMENT y reste, avec son ordre.
    Et ce qui la tient :
      - chaque colonne de `devis` (la liste `NOMMEES_DEVIS`, section 2b-2
        plus haut) ET chaque colonne de `emetteur_lieux_depot`, LUES DANS LE
@@ -3196,18 +3334,21 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
   verifier('…et il est suivi de la version précédente, celle de 2b-4',
     finHist5 > 0 && sourceLegal2b5.slice(finHist5 + 2).trimStart().startsWith("/* VERSION PRÉCÉDENTE : '2026-11-17'. */"));
 
-  /* LA PHRASE DES DEVIS, ENTIÈRE (2a, 2b-2, 2b-3, 2b-4 et 2b-5). Il n'en
-     existe qu'UNE écriture : la changer se DÉCIDE — VERSION, son bloc
-     d'historique, l'empreinte de « Ce que nous collectons » et cette
-     constante, dans le même lot. */
-  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il s’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.';
-  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase des devis de 2b-5 (avec 2a, 2b-2, 2b-3 et 2b-4)',
-    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(560, 760)}… »`);
-  /* …UNE phrase : `NOMMEES_DEVIS` (section 2b-2) la découpe de « devis en
-     préparation » au point suivant ; un point au milieu en couperait la
-     fin, et les colonnes nommées après lui seraient déclarées absentes. */
-  verifier('…et elle reste UNE phrase (aucun « . » avant sa fin) : la découpe de `NOMMEES_DEVIS` va jusqu’à « d’où ils viennent »',
-    PHRASE_DEVIS.indexOf('. ') < 0 && PHRASE_DEVIS.endsWith('d’où ils viennent.'));
+  /* LA PHRASE DES DEVIS, ENTIÈRE, a quitté cette section à l'étape 2b-6
+     (24/11/2026), comme celle de 2b-4 avait quitté la sienne à 2b-5 : elle
+     s'est allongée (« les travaux d’économies d’énergie ou d’énergie
+     renouvelable qu’ils comportent, ceux pour lesquels vous déclarez ne pas
+     détenir de label RGE, et si une autre entreprise fera une partie ou la
+     totalité de leurs travaux, et laquelle »), et elle est gardée mot pour
+     mot, ENTIÈRE, par la section « Étape 2b-6 » plus bas — avec les déchets
+     de 2b-5, qui en font toujours partie, et la vérification « UNE
+     phrase ». Ce qui reste ici : le FRAGMENT de 2b-5, en toutes lettres,
+     juste après le moment du paiement, et son ORDRE (l'insertion de 2b-6
+     vient après les déchets, avant « leurs lignes » : elle ne le dérange
+     pas). */
+  const FRAGMENT_2B5 = 'quand l’acompte ou les arrhes sont payés, s’il s’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), ';
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot, le fragment de 2b-5 (la question, puis ce que deviendront les déchets), juste après le moment du paiement — la phrase ENTIÈRE est gardée par la section 2b-6',
+    collecte.includes(FRAGMENT_2B5), `attendu : « …${FRAGMENT_2B5}… »`);
   const iDevis5 = collecte.indexOf('devis en préparation');
   const REPERES = ['quand l’acompte ou les arrhes sont payés', 's’il s’agit ou non de travaux sur un bâtiment ou de jardinage',
     'ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé)', 'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
@@ -3341,6 +3482,312 @@ console.log('\nÉtape 2b-5 — les déchets du chantier : les textes et ce qui l
   verifier('aucun texte ne promet que les déchets s’imprimeront sur le devis (rien ne sort avant 2c)',
     propositionsDechets.length > 0 && propositionsDechets.every((p) => !/imprim|mention|figur/i.test(p)),
     propositionsDechets.filter((p) => /imprim|mention|figur/i.test(p)).join(' | ') || 'aucune proposition ne nomme les déchets');
+}
+
+/* ==================================================================
+   ÉTAPE 2b-6 DU DEVIS (24/11/2026) — le label RGE et les sous-traitants
+   (cahier 2b-6 §4 ; sections 46.2 ter, 46.2 quater et 49 de `schema.sql` :
+   les tables privées `emetteur_labels` et `emetteur_sous_traitants`, et les
+   quatre colonnes `devis.energie_*`, 49.4 septies ; décisions du
+   propriétaire du 23/11 — Q5, P1, P3 — et du 24/11 — P11 à P14).
+
+   Ce qui change, et chaque phrase reste UNE phrase :
+     - « Ce que nous collectons » : dans la phrase de « Mon entreprise »,
+       « vos signes de qualité (label RGE : …) » et « vos sous-traitants
+       (…) », après les lieux de dépôt (intacts) et avant « et vos tarifs »,
+       donc avant « Aucun écran d’Opus ne les montre » ; dans la phrase des
+       devis, ce que les devis disent de l'énergie, après les déchets et
+       avant « leurs lignes » ; et la phrase des pièces lisibles par
+       l'administration nomme les certificats et les justificatifs. La
+       phrase des devis est gardée ici, MOT POUR MOT et ENTIÈRE : elle a
+       quitté la section 2b-5, comme celle de 2b-4 avait quitté la sienne ;
+     - « Vos documents professionnels » : les deux pièces nouvelles, et leur
+       finalité, vos devis (critique DROIT-11) ;
+     - « Combien de temps » : une pièce retirée d'une fiche reste dans
+       l'espace privé jusqu'à la suppression du compte ;
+     - « Les clients que vous enregistrez » : les sous-traitants, dans les
+       DEUX branches ; dans la branche affichée, APRÈS la garantie, qui
+       reste limitée au carnet et aux devis, et le texte le dit (la
+       contradiction de DROIT-11) ;
+     - « Ce qui est interdit » : la phrase (b) de la décision P14, MOT POUR
+       MOT.
+   Et ce qui la tient :
+     - chaque colonne de `devis` (`NOMMEES_DEVIS`, section 2b-2 plus haut)
+       ET chaque colonne des deux tables, LUES DANS LE SCHÉMA, ont leurs
+       mots dans LEUR fragment, ou une raison technique ; et le schéma range
+       bien ce que les phrases annoncent (les quatre colonnes et leurs
+       types) ;
+     - la base ferme les deux tables à tout autre que leur titulaire (une
+       politique chacune, `est_mon_entreprise` des deux côtés, rien pour
+       `anon`) — c'est ce qui rend vraie « Aucun écran d’Opus ne les
+       montre » ; `CLASSEMENT`, plus haut, tient la forme de la lecture ;
+     - « RGE » ne se lit QUE dans « Ce que les autres voient de vous » (la
+       fiche publique, qui ne change pas : T29) et, dans « Ce que nous
+       collectons », QUE dans les trois fragments de 2b-6 — la garde de 2b-4
+       récrite EN LE DÉCIDANT (critique CTL-15), sur le modèle de
+       « déchet » : la phrase de P14 ne dit pas « RGE », et ne l'exige pas ;
+     - RIEN D'AUTRE (cahier §4, CTL-15) : « Une décision automatique » ne
+       parle ni du label, ni d'un signe de qualité, ni d'un sous-traitant —
+       le point du rang 14 est un motif, pas une décision ; aucun texte ne
+       promet que le label, les sous-traitants ou leurs pièces
+       s'imprimeront (rien ne sort avant 2c) ; aucun ne dit « certifié »,
+       « agréé » ni « Reconnu garant de l'environnement » (T10).
+   ================================================================== */
+console.log('\nÉtape 2b-6 — le label RGE et les sous-traitants : les textes et ce qui les tient');
+{
+  const plat = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const bloc = (liste, titre) => (liste.find((b) => b.titre === titre) || {}).texte || '';
+  const collecte = bloc(CONFIDENTIALITE, 'Ce que nous collectons');
+  const decision = bloc(CONFIDENTIALITE, 'Une décision automatique, et comment la faire revoir');
+  const documents = bloc(CONFIDENTIALITE, 'Vos documents professionnels');
+  const combien = bloc(CONFIDENTIALITE, 'Combien de temps');
+  const clients = bloc(CONFIDENTIALITE, 'Les clients que vous enregistrez');
+  const interdit = bloc(CGU, 'Ce qui est interdit');
+
+  /* UNE VERSION NOUVELLE, plus récente que celle de 2b-5. */
+  verifier('VERSION est plus récente que celle de 2b-5 (21/11/2026) : des données nouvelles collectées (signes de qualité, sous-traitants, l’énergie des devis), sous une version nouvelle',
+    VERSION > '2026-11-21', `VERSION = ${VERSION}`);
+
+  /* LE BLOC D'HISTOIRE DE 2b-6, cherché par son TITRE, suivi de la version
+     d'avant. */
+  const sourceLegal2b6 = readFileSync('src/data/legal.js', 'utf8');
+  const iHist6 = sourceLegal2b6.indexOf('LE LABEL RGE ET LES SOUS-TRAITANTS (étape 2b-6');
+  const finHist6 = iHist6 < 0 ? -1 : sourceLegal2b6.indexOf('*/', iHist6);
+  const histoire2b6 = finHist6 < 0 ? '' : plat(sourceLegal2b6.slice(iHist6, finHist6));
+  const ATTENDUS_HISTOIRE = ['vos signes de qualité', 'vos sous-traitants', 'ne pas détenir de label RGE',
+    'si une autre entreprise fera une partie ou la totalité', 'DES PIÈCES DE TIERS', '« Combien de temps »',
+    '« Les clients que vous enregistrez »', "la garantie reste limitée au carnet et aux devis", '« Ce qui est interdit »',
+    "RIEN D'AUTRE", "« Ce que les autres voient de vous » ne change pas d'un mot", '« Vos tarifs et vos prix » non plus',
+    'LA MÊME LIMITE', 'ré-accepter', '2019/1150'];
+  verifier('le bloc d’historique de 2b-6 nomme les faits (signes de qualité, sous-traitants, l’énergie des devis, les pièces de tiers, les sous-traitants dans « Les clients », l’interdiction), « RIEN D’AUTRE » et la limite connue',
+    ATTENDUS_HISTOIRE.every((x) => histoire2b6.includes(x)),
+    histoire2b6 ? ATTENDUS_HISTOIRE.filter((x) => !histoire2b6.includes(x)).map((x) => `« ${x} » manque`).join(' · ')
+      : 'bloc introuvable (« LE LABEL RGE ET LES SOUS-TRAITANTS (étape 2b-6 »)');
+  verifier('…et il est suivi de la version précédente, celle de 2b-5',
+    finHist6 > 0 && sourceLegal2b6.slice(finHist6 + 2).trimStart().startsWith("/* VERSION PRÉCÉDENTE : '2026-11-21'. */"));
+
+  /* LA PHRASE DES DEVIS, ENTIÈRE (2a, 2b-2, 2b-3, 2b-4, 2b-5 et 2b-6). Il
+     n'en existe qu'UNE écriture : la changer se DÉCIDE — VERSION, son bloc
+     d'historique, l'empreinte de « Ce que nous collectons » et cette
+     constante, dans le même lot. */
+  const FRAGMENT_ENERGIE = 'les travaux d’économies d’énergie ou d’énergie renouvelable qu’ils comportent, ceux pour lesquels vous déclarez ne pas détenir de label RGE, et si une autre entreprise fera une partie ou la totalité de leurs travaux, et laquelle';
+  const PHRASE_DEVIS = 'et vos devis en préparation eux-mêmes : leur objet, le lieu et le délai des travaux, une éventuelle retenue de garantie, leur réduction, leur acompte et sa nature, leur durée de validité, s’ils sont gratuits ou payants, et ce que coûte un devis payant, à quel titre le client commande, si les travaux portent sur un bâtiment neuf ou une transformation importante (et la date à laquelle vous l’avez confirmé), et s’ils font partie d’un chantier qui crée un bâtiment neuf, pour la TVA, si leurs travaux peuvent engager votre garantie décennale, quand l’acompte ou les arrhes sont payés, s’il s’agit ou non de travaux sur un bâtiment ou de jardinage, ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé), '
+    + `${FRAGMENT_ENERGIE}, leurs lignes — et, pour chacune, si c’est une réparation urgente expressément demandée par le client —, leurs prix et leurs totaux, le client de votre carnet auquel ils sont rattachés et, s’il y a lieu, la demande ou l’urgence d’où ils viennent.`;
+  verifier('« Ce que nous collectons (devis) » porte, mot pour mot et ENTIÈRE, la phrase des devis de 2b-6 (avec 2a et 2b-2 à 2b-5)',
+    collecte.includes(PHRASE_DEVIS), `attendu : « …${PHRASE_DEVIS.slice(720, 980)}… »`);
+  /* …UNE phrase : `NOMMEES_DEVIS` (section 2b-2) la découpe de « devis en
+     préparation » au point suivant ; un point au milieu en couperait la
+     fin, et les colonnes nommées après lui seraient déclarées absentes. */
+  verifier('…et elle reste UNE phrase (aucun « . » avant sa fin) : la découpe de `NOMMEES_DEVIS` va jusqu’à « d’où ils viennent »',
+    PHRASE_DEVIS.indexOf('. ') < 0 && PHRASE_DEVIS.endsWith('d’où ils viennent.'));
+  const iDevis6 = collecte.indexOf('devis en préparation');
+  const REPERES = ['ce que deviendront leurs déchets (quantité, tri, lieux de dépôt, coût estimé)', FRAGMENT_ENERGIE,
+    'leurs lignes', 'leurs prix et leurs totaux', 'base de postes'];
+  const positions = REPERES.map((x) => collecte.indexOf(x, Math.max(0, iDevis6)));
+  verifier('…dans l’ORDRE : l’énergie juste après les déchets, avant « leurs lignes » — la base de postes toujours après',
+    iDevis6 >= 0 && positions.every((p, k) => p > (k === 0 ? iDevis6 : positions[k - 1]))
+    && collecte.includes(`coût estimé), ${FRAGMENT_ENERGIE}, leurs lignes`),
+    REPERES.map((x, k) => `${x.slice(0, 40)} : ${positions[k]}`).join(' · '));
+
+  /* LA PHRASE DE « MON ENTREPRISE » : les signes de qualité puis les
+     sous-traitants, JUSTE après les lieux de dépôt (dont le fragment reste
+     intact) et juste avant « et vos tarifs » — donc avant les devis et
+     avant « Aucun écran d’Opus ne les montre », dont la promesse les couvre. */
+  const FRAGMENT_LIEUX = 'vos lieux de dépôt des déchets (raison sociale, adresse, type d’installation)';
+  const FRAGMENT_SIGNES = 'vos signes de qualité (label RGE : l’organisme, l’intitulé, le numéro, les travaux couverts, la date de fin et le certificat)';
+  const FRAGMENT_ST = 'vos sous-traitants (nom ou raison sociale, numéro SIRET, s’ils détiennent un label RGE, pour quels travaux, jusqu’à quand, et leur justificatif)';
+  const iPro6 = collecte.indexOf('Si vous êtes professionnel, pour vos devis');
+  const enchaine = `${FRAGMENT_LIEUX}, ${FRAGMENT_SIGNES}, ${FRAGMENT_ST}, et vos tarifs (frais de déplacement`;
+  const iEnchaine = collecte.indexOf(enchaine);
+  const iAucunEcran = collecte.indexOf('Aucun écran d’Opus ne les montre');
+  verifier('« Ce que nous collectons » nomme, mot pour mot, les signes de qualité puis les sous-traitants dans la phrase de « Mon entreprise » : juste après les lieux de dépôt (intacts), juste avant « et vos tarifs », donc avant « Aucun écran d’Opus ne les montre »',
+    iPro6 >= 0 && iEnchaine > iPro6 && collecte.slice(iPro6, iEnchaine).indexOf('. ') < 0
+    && iAucunEcran > iEnchaine && collecte.indexOf('et vos devis en préparation') > iEnchaine,
+    `attendu : « …${enchaine}… »`);
+
+  /* LES PIÈCES LISIBLES PAR L'ADMINISTRATION (cahier §4, DROIT-11) : la
+     phrase des attestations nomme aussi les certificats et les
+     justificatifs, et elle vient APRÈS « Aucun écran d’Opus ne les
+     montre », qu'elle corrige pour les pièces. */
+  const ADMIN_PIECES = 'Les attestations jointes, les certificats de vos signes de qualité et les justificatifs de vos sous-traitants, comme vos autres documents professionnels, sont aussi lisibles par l’administration d’Opus.';
+  verifier('…et la phrase des pièces lisibles par l’administration nomme, mot pour mot, les certificats et les justificatifs, après « Aucun écran d’Opus ne les montre »',
+    collecte.indexOf(ADMIN_PIECES) > iAucunEcran && iAucunEcran > 0, `attendu : « ${ADMIN_PIECES} »`);
+
+  /* LE SCHÉMA RANGE CE QUE LES PHRASES ANNONCENT. */
+  const schema2b6 = readFileSync('supabase/schema.sql', 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const COLONNES_2B6 = {
+    energie_travaux: 'text[]', energie_sans_label: 'text[]',
+    energie_sous_traitance: 'boolean', energie_sous_traitants: 'uuid[]',
+  };
+  const ajoutsDevis6 = [...schema2b6.matchAll(/alter table (?:only )?public\.devis\b([^;]*);/g)].map((m) => m[1]).join('\n');
+  const manquentAuSchema6 = Object.entries(COLONNES_2B6).filter(([c, t]) =>
+    !new RegExp(`add column (?:if not exists )?${c}\\s+${t.replace('[', '\\[').replace(']', '\\]')}(?![\\w\\[])`).test(ajoutsDevis6));
+  verifier('…et le schéma range bien ce que la phrase des devis annonce : les quatre colonnes `devis.energie_*` et leurs types (49.4 septies)',
+    manquentAuSchema6.length === 0, manquentAuSchema6.map(([c, t]) => `\`${c} ${t}\` absente`).join(' · ')
+      + ' — la phrase annoncerait une donnée que la base ne range pas');
+
+  /* CHAQUE COLONNE DES DEUX TABLES, lue dans le schéma, a ses mots dans
+     SON fragment (pas ailleurs dans la collecte : « le numéro » se lit
+     partout), ou une raison technique. Le modèle des lieux. */
+  const colonnesDe = (table) => {
+    const corps = (schema2b6.match(new RegExp(`create table if not exists public\\.${table}\\s*\\(([\\s\\S]*?)\\n\\);`)) || [])[1] || '';
+    return [...new Set([
+      ...corps.split('\n').map((l) => (l.match(/^\s+([a-z_][a-z0-9_]*)\s+/) || [])[1])
+        .filter((c) => c && !['constraint', 'references', 'primary', 'unique', 'check', 'foreign'].includes(c)),
+      ...[...schema2b6.matchAll(new RegExp(`alter table (?:only )?public\\.${table}\\b([^;]*);`, 'g'))]
+        .flatMap((m) => [...m[1].matchAll(/add column (?:if not exists )?([a-z_][a-z0-9_]*)/g)].map((x) => x[1])),
+    ])];
+  };
+  const TECHNIQUES_2B6 = {
+    id: 'un identifiant, qui ne dit rien de personne',
+    pro_id: 'le compte lui-même, déjà nommé',
+    created_at: 'une date technique, posée par la base',
+  };
+  const TABLES_2B6 = [
+    ['emetteur_labels', FRAGMENT_SIGNES, {
+      organisme: 'l’organisme', intitule: 'l’intitulé',
+      /* Le numéro du certificat, facultatif. */
+      reference: 'le numéro',
+      categories: 'les travaux couverts', valide_jusquau: 'la date de fin',
+      justificatif_chemin: 'le certificat',
+    }],
+    ['emetteur_sous_traitants', FRAGMENT_ST, {
+      raison_sociale: 'nom ou raison sociale', siret: 'numéro SIRET',
+      label_detient: 's’ils détiennent un label RGE', label_categories: 'pour quels travaux',
+      label_valide_jusquau: 'jusqu’à quand', label_justificatif_chemin: 'leur justificatif',
+    }],
+  ];
+  for (const [table, fragment, nommees] of TABLES_2B6) {
+    const colonnes = colonnesDe(table);
+    const sansPlace = colonnes.filter((c) => !(c in nommees) && !(c in TECHNIQUES_2B6));
+    const absentes = Object.entries(nommees).filter(([c, mot]) => colonnes.includes(c) && !fragment.includes(mot));
+    verifier(`« Ce que nous collectons » nomme chaque colonne de \`${table}\`, lue dans le schéma (${colonnes.length} colonnes), dans SON fragment`,
+      colonnes.length >= 9 && collecte.includes(fragment) && sansPlace.length === 0 && absentes.length === 0,
+      colonnes.length < 9
+        ? `la table \`${table}\` est introuvable dans le schéma : ce contrôle a perdu sa cible`
+        : [...sansPlace.map((c) => `\`${c}\` n’a de place ni dans le texte ni parmi les colonnes techniques`),
+          ...absentes.map(([c, mot]) => `« ${mot} » (\`${c}\`) manque`)].join(' · ') || 'le fragment manque à la collecte');
+  }
+
+  /* « AUCUN ÉCRAN D’OPUS NE LES MONTRE À QUELQU’UN D’AUTRE QUE VOUS » EST
+     TENU PAR LA BASE pour les deux tables — le modèle des lieux : dans
+     TOUT le fichier, UNE politique chacune, `to authenticated`,
+     `est_mon_entreprise(pro_id)` des deux côtés, sans `true`, ni
+     `est_admin`, ni `auth.uid()`, ni `anon` ; `anon` n'a aucun droit de
+     table, et rien ne le lui rend. */
+  const sql6 = schema2b6.replace(/"([a-z_][a-z0-9_]*)"/g, '$1');
+  for (const [table] of TABLES_2B6) {
+    const politiques = [...sql6.matchAll(new RegExp(String.raw`create\s+policy\s+(?:"[^"]+"|[a-z_][\w$]*)\s+on\s+(?:only\s+)?(?:public\s*\.\s*)?${table}\b[\s\S]*?;`, 'gi'))].map((m) => m[0]);
+    const ouvertes = politiques.filter((x) => !/\bto authenticated\b/.test(x) || /\bto (anon|public)\b/.test(x)
+      || /\(\s*true\s*\)|\btrue\b|est_admin|auth\.uid\(\)/.test(x) || (x.match(/public\.est_mon_entreprise\(pro_id\)/g) || []).length !== 2);
+    verifier(`…et la base ferme \`${table}\` à tout autre que son titulaire : ${politiques.length} politique(s) dans tout le fichier, `
+      + 'par `est_mon_entreprise(pro_id)` en lecture comme en écriture, sans `true`, ni `est_admin`, ni `anon` — et `anon` n’a aucun droit de table',
+    politiques.length === 1 && ouvertes.length === 0
+      && new RegExp(String.raw`revoke\s+all\s+on\s+public\.${table}\s+from\s+anon\s*;`, 'i').test(sql6)
+      && !new RegExp(String.raw`grant\s+[^;]*\bon\s+(?:table\s+)?(?:public\s*\.\s*)?${table}\b[^;]*\bto\b[^;]*\b(anon|public)\b`, 'i').test(sql6),
+    ouvertes.map((x) => x.replace(/\s+/g, ' ').slice(0, 120)).join(' | ') || `${politiques.length} politique(s) au lieu de 1`);
+  }
+
+  /* « VOS DOCUMENTS PROFESSIONNELS » (cahier §4, DROIT-11) : les deux
+     pièces nouvelles dans la liste de l'espace privé, et leur finalité —
+     accompagner vos devis. */
+  verifier('« Vos documents professionnels » range dans l’espace PRIVÉ les certificats de vos signes de qualité et les justificatifs de vos sous-traitants, et leur donne la finalité de l’attestation : accompagner vos devis',
+    documents.includes('l’attestation d’assurance, les certificats de vos signes de qualité et les justificatifs de vos sous-traitants sont rangés dans un espace PRIVÉ, lisible par vous et par l’administration d’Opus seulement')
+    && documents.includes('pour l’attestation d’assurance, les certificats et les justificatifs que vous joignez dans « Mon entreprise », à accompagner vos devis.'),
+    documents.slice(0, 200));
+
+  /* « COMBIEN DE TEMPS » : une pièce retirée d'une fiche reste (aucun
+     client ne retire un fichier de `documents`, lot S-a). Vrai aussi des
+     attestations, que les textes taisaient. */
+  const PIECE_RETIREE = 'Un certificat, un justificatif ou une attestation retiré d’une fiche reste dans votre espace privé jusqu’à la suppression de votre compte.';
+  verifier('« Combien de temps » dit, mot pour mot, qu’un certificat, un justificatif ou une attestation retiré d’une fiche reste dans l’espace privé jusqu’à la suppression du compte',
+    combien.includes(PIECE_RETIREE), `attendu : « ${PIECE_RETIREE} »`);
+
+  /* « LES CLIENTS QUE VOUS ENREGISTREZ » : la phrase des sous-traitants
+     dans les DEUX branches (l'autre est FAITE TOURNER sur une copie de
+     `legal.js`, drapeau basculé, comme au lot P) ; et dans la branche qui
+     porte la garantie, la phrase vient APRÈS elle, la garantie ne nomme
+     pas les sous-traitants, et la phrase qui suit la dit limitée au carnet
+     et aux devis (la contradiction de DROIT-11). */
+  const PHRASE_ST = 'Il en va de même de vos sous-traitants : leur nom, leur numéro SIRET et leur justificatif concernent une autre entreprise, qui n’a souvent pas de compte Opus.';
+  const LIMITE = 'Mais la garantie qui précède ne vaut que pour votre carnet et vos devis : le justificatif d’un sous-traitant, comme vos autres documents professionnels, est aussi lisible par l’administration d’Opus.';
+  const autreBranche = await (async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const drapeau = /contratSousTraitance:\s*(true|false)\s*,/;
+    const valeur = (sourceLegal2b6.match(drapeau) || [])[1];
+    if (!valeur) return '';
+    const dossier = mkdtempSync(join(tmpdir(), 'legal-2b6-'));
+    const fichier = join(dossier, 'legal.mjs');
+    writeFileSync(fichier, sourceLegal2b6.replace(drapeau, `contratSousTraitance: ${valeur === 'true' ? 'false' : 'true'},`));
+    try {
+      const m = await import(pathToFileURL(fichier).href);
+      return bloc(m.CONFIDENTIALITE, 'Les clients que vous enregistrez');
+    } finally {
+      rmSync(dossier, { recursive: true, force: true });
+    }
+  })();
+  verifier('« Les clients que vous enregistrez » nomme les sous-traitants, mot pour mot, dans ses DEUX branches (avec et sans contrat de sous-traitance)',
+    clients.includes(PHRASE_ST) && autreBranche.length > 0 && autreBranche.includes(PHRASE_ST),
+    autreBranche.length === 0 ? 'l’autre branche n’a pas pu être lue (le drapeau `contratSousTraitance` est introuvable)'
+      : `attendu dans les deux : « ${PHRASE_ST} »`);
+  const avecGarantie = [clients, autreBranche].find((t) => t.includes('Ce qui est déjà garanti')) || '';
+  const iGarantie = avecGarantie.indexOf('Ce qui est déjà garanti');
+  const iFinGarantie = avecGarantie.indexOf('ni dans l’espace d’administration', iGarantie);
+  const iPhraseSt = avecGarantie.indexOf(PHRASE_ST);
+  const garantie = iGarantie < 0 || iPhraseSt < 0 ? '' : avecGarantie.slice(iGarantie, iPhraseSt);
+  verifier('…et, dans la branche qui porte la garantie, la phrase vient APRÈS « … ni dans l’espace d’administration », la garantie ne nomme aucun sous-traitant, et la phrase suivante la dit limitée au carnet et aux devis — le justificatif est lisible par l’administration',
+    iGarantie >= 0 && iFinGarantie > iGarantie && iPhraseSt > iFinGarantie
+    && !/vos sous-traitants|d’un sous-traitant|leur justificatif/.test(garantie)
+    && avecGarantie.indexOf(LIMITE) > iPhraseSt
+    && avecGarantie.slice(iPhraseSt, avecGarantie.indexOf(LIMITE)).indexOf('\n') < 0,
+    iGarantie < 0 ? 'aucune branche ne porte « Ce qui est déjà garanti » : ce contrôle a perdu sa cible'
+      : `attendu, après la garantie : « ${PHRASE_ST} … ${LIMITE} »`);
+
+  /* « CE QUI EST INTERDIT » : la phrase (b) de la décision P14, MOT POUR
+     MOT, juste après celle du n° de TVA dont elle suit le modèle. */
+  const PHRASE_P14B = 'Déclarer dans « Mon entreprise » un signe de qualité que son entreprise ne détient pas, ou pour des travaux qu’il ne couvre pas : le compte peut être fermé.';
+  verifier('« Ce qui est interdit » porte, mot pour mot, la phrase (b) de la décision P14 du 24/11 (un signe de qualité déclaré à tort), juste après celle du n° de TVA',
+    interdit.includes(`attribué à son entreprise : le compte peut être fermé. ${PHRASE_P14B}`),
+    `attendu : « ${PHRASE_P14B} »`);
+
+  /* « RGE » NE SE LIT QUE LÀ — la garde de 2b-4 récrite EN LE DÉCIDANT
+     (CTL-15), sur le modèle de « déchet » : deux sections en tout ; dans
+     « Ce que les autres voient de vous », le numéro déclaré sur la fiche
+     publique (une fois, et la section garde son empreinte) ; dans « Ce que
+     nous collectons », QUE dans les trois fragments de 2b-6. Un « RGE » de
+     plus ailleurs serait une promesse que le cahier n'a pas décidée. */
+  const tous2b6 = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].map((b) => b.texte)
+    .concat([CE_QUI_EST_GARDE, CE_QUI_RESTE_EN_LIGNE, CE_QUE_LA_SUPPRESSION_GARDE, EXCLUSIONS_DE_L_EXPORT, BORNES_DE_L_EXPORT]);
+  const blocsRge = [...MENTIONS, ...CGU, ...CONFIDENTIALITE].filter((b) => /\bRGE\b/.test(b.texte)).map((b) => b.titre).sort();
+  const autres = bloc(CONFIDENTIALITE, 'Ce que les autres voient de vous');
+  const resteCollecte = collecte.split(FRAGMENT_SIGNES).join('').split(FRAGMENT_ST).join('').split(FRAGMENT_ENERGIE).join('');
+  const nbRge = tous2b6.join(' ').split(/\bRGE\b/).length - 1;
+  verifier('« RGE » ne se lit QUE dans « Ce que les autres voient de vous » (une fois : le numéro déclaré sur la fiche) et dans les trois fragments de 2b-6 de « Ce que nous collectons » — quatre occurrences en tout',
+    blocsRge.join(' · ') === 'Ce que les autres voient de vous · Ce que nous collectons'
+    && (autres.split(/\bRGE\b/).length - 1) === 1 && !/\bRGE\b/.test(resteCollecte) && nbRge === 4,
+    `${blocsRge.join(' · ') || 'aucun bloc'} ; ${nbRge} occurrence(s)${/\bRGE\b/.test(resteCollecte) ? ' ; un « RGE » hors des fragments dans « Ce que nous collectons »' : ''}`);
+
+  /* RIEN D'AUTRE (cahier §4, CTL-15) : aucune décision automatique, aucune
+     promesse d'impression, aucun mot de caution. */
+  verifier('« Une décision automatique » ne parle ni du label, ni d’un signe de qualité, ni d’un sous-traitant : le point du rang 14 est un motif, pas une décision',
+    decision.length > 0 && !/\bRGE\b|\blabel|signes? de qualité|sous-traitan|certificat/i.test(decision));
+  const propositionsLabel = tous2b6.flatMap((t) => t.split(/[.;:!?]\s+|\s+—\s+/))
+    .filter((p) => /\blabel|signes? de qualité|vos sous-traitants|d’un sous-traitant|certificats?(?![\p{L}])/iu.test(p));
+  verifier('aucun texte ne promet que le label, les sous-traitants ou leurs pièces s’imprimeront sur le devis (rien ne sort avant 2c)',
+    propositionsLabel.length > 0 && propositionsLabel.every((p) => !/imprim|mention|figur/i.test(p)),
+    propositionsLabel.filter((p) => /imprim|mention|figur/i.test(p)).join(' | ') || 'aucune proposition ne nomme le label');
+  const fautes6 = [];
+  const toutJoint = tous2b6.join(' ');
+  if (/certifiée?s?\s+RGE|RGE\s+certifiée?s?/i.test(toutJoint)) fautes6.push('« certifié RGE »');
+  if (/reconnu\s+garant/i.test(toutJoint)) fautes6.push('« Reconnu garant de l’environnement »');
+  if (/(?<![\p{L}])agré\p{L}*/iu.test(toutJoint.replace(/ni agrément ni (caution|une validation)[^.]*\./gi, ''))) fautes6.push('« agréé »');
+  if (/certifi(?!cats?(?![\p{L}_]))/iu.test(toutJoint)) fautes6.push('« certifié » ou une autre forme que « certificat »');
+  verifier('le vocabulaire (T10) : jamais « certifié RGE », « agréé » ni « Reconnu garant de l’environnement » — de la famille « certifi », seul « certificat », la pièce',
+    fautes6.length === 0, fautes6.join(' · '));
 }
 
 console.log('');

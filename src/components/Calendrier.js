@@ -45,20 +45,38 @@ import {
   C, F, T, S, R, TOUCHE, viser, interligne,
 } from '../theme';
 import {
-  JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, nomMois,
+  JOURS_COURTS, SEMAINES_MAX, grilleMois, moisDe, moisDecale, anneeDecalee, nomMois,
   dansIntervalle, libelleDates, jourCourant,
 } from '../lib/formats';
-import { ChevronLeft, ChevronRight } from './icons';
+import {
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+} from './icons';
 import FeuilleBas from './FeuilleBas';
 
 /* ==========================================================================
  *  LA GRILLE SEULE — réutilisable ailleurs (un planning de chantier, un
  *  jour de disponibilité) sans traîner la feuille avec elle.
  * ========================================================================== */
-export function Calendrier({ debut, fin, minimum = null, onJour }) {
+/*
+ * `annees` (étape 2b-6, choix T30 du cahier) : DEUX FLÈCHES « ANNÉE » de
+ * plus, sous l'en-tête du mois. Un signe de qualité (label RGE) vaut jusqu'à
+ * quatre ans, et sa date de fin est obligatoire : sans elles, une date en
+ * 2030 demandait une quarantaine d'appuis sur « Mois suivant ». Derrière une
+ * prop, pour les deux formulaires de « Mon entreprise » qui en ont besoin
+ * (un signe de qualité, un sous-traitant) — les autres écrans ne changent
+ * pas d'un pixel. Ce sont des boutons de navigation, jamais des pastilles
+ * « dans 1 an » : elles ressembleraient à un choix de date, et rien ne se
+ * choisit sans un appui sur un JOUR. Le calcul est `anneeDecalee`
+ * (`formats.js`), que `verifier-annonces` fait tourner.
+ */
+export function Calendrier({
+  debut, fin, minimum = null, onJour, annees = false,
+}) {
   const [mois, setMois] = useState(moisDe(debut) || moisDe(jourCourant()));
   const semaines = grilleMois(mois);
   const aujourdhui = jourCourant();
+  const anneeAvant = annees ? anneeDecalee(mois, -1) : null;
+  const anneeApres = annees ? anneeDecalee(mois, 1) : null;
 
   return (
     <View>
@@ -86,6 +104,34 @@ export function Calendrier({ debut, fin, minimum = null, onJour }) {
           <ChevronRight size={20} color={C.ink} />
         </Pressable>
       </View>
+
+      {/* LES DEUX FLÈCHES « ANNÉE » (2b-6, T30), sur leur PROPRE rangée : à
+          320 points, quatre flèches autour du nom du mois ne lui laisseraient
+          plus la place de tenir sur une ligne, et l'en-tête sauterait d'un
+          mois à l'autre. Chaque bouton DIT où il mène (« 2025 », « 2027 »),
+          et fait 44 points par sa boîte, jamais par un `hitSlop`. */}
+      {annees && !!anneeAvant && !!anneeApres && (
+        <View style={s.annees}>
+          <Pressable
+            onPress={() => setMois(anneeAvant)}
+            style={({ pressed }) => [s.annee, pressed && s.flechePressee]}
+            accessibilityRole="button"
+            accessibilityLabel={`Année précédente, ${nomMois(anneeAvant)}`}
+          >
+            <ChevronsLeft size={18} color={C.ink} />
+            <Text style={s.anneeTexte}>{anneeAvant.slice(0, 4)}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMois(anneeApres)}
+            style={({ pressed }) => [s.annee, pressed && s.flechePressee]}
+            accessibilityRole="button"
+            accessibilityLabel={`Année suivante, ${nomMois(anneeApres)}`}
+          >
+            <Text style={s.anneeTexte}>{anneeApres.slice(0, 4)}</Text>
+            <ChevronsRight size={18} color={C.ink} />
+          </Pressable>
+        </View>
+      )}
 
       {/* LES INITIALES DES JOURS. Deux « M » de suite paraissent fautifs, et
           c'est pourtant juste : mardi et mercredi. `importantForAccessibility`
@@ -255,6 +301,17 @@ const s = StyleSheet.create({
     borderRadius: R.gelule,
   },
   flechePressee: { backgroundColor: C.bg },
+  /* Les flèches « année » (2b-6) : des boutons qui FLOTTENT — arrondis, une
+     bordure de champ pour dire où appuyer, 44 points de haut par leur boîte. */
+  annees: {
+    flexDirection: 'row', justifyContent: 'space-between', gap: S.sm, marginBottom: S.sm,
+  },
+  annee: {
+    flexDirection: 'row', alignItems: 'center', gap: S.xs, minHeight: TOUCHE, minWidth: TOUCHE,
+    paddingHorizontal: S.md, borderWidth: 1, borderColor: C.bordChamp, borderRadius: R.gelule,
+    justifyContent: 'center',
+  },
+  anneeTexte: { fontFamily: F.oswald6, fontSize: T.courant, color: C.ink },
   mois: {
     flex: 1, minWidth: 0, textAlign: 'center',
     fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink,

@@ -46,6 +46,29 @@
 --  la petite pour le code postal), le libellé effacé hors « autre », la date
 --  posée par la base, B qui ne lit rien, l'export, le compte qui part — puis
 --  cinq refus (31 b à f). Sept erreurs de plus.
+--
+--  CE QUE 2b-6 A AJOUTÉ (24/11/2026) : une CINQUIÈME et une SIXIÈME tables
+--  privées, `emetteur_labels` (46.2 ter, les signes de qualité — le label
+--  RGE) et `emetteur_sous_traitants` (46.2 quater). Elles entrent, EN LE
+--  DÉCIDANT, dans chaque liste de ce fichier, sur le modèle exact des lieux
+--  de dépôt : B n'y écrit pas au nom de A (cas 22 quinquies et sexies), un
+--  visiteur n'y a aucun droit (cas 24 e et f), leurs déclencheurs ne
+--  s'appellent pas et `authenticated` n'a ni `truncate`, ni `references`,
+--  ni `trigger` (cas 26), aucune fonction hors d'une liste fermée ne les
+--  nomme, et chacune a SA liste fermée — l'export et la liste des motifs
+--  (cas 26 bis) —, leurs neuf contraintes sont en `_check` (cas 29), rien
+--  n'y est `not null` hors des clés (cas 30) ; et deux cas nouveaux. Le 32 :
+--  un signe de qualité « sale » nettoyé (la grande classe de blancs pour
+--  l'organisme, l'intitulé et le numéro, invisibles compris ; la PETITE
+--  pour le chemin du certificat, un chemin vide valant « aucun
+--  certificat »), un signe complet SANS certificat accepté, la date posée
+--  par la base, B qui ne lit rien, l'export, le compte qui part — puis huit
+--  refus (32 b à i). Le 33 : un sous-traitant « sale » nettoyé (le SIRET
+--  réduit à ses chiffres), les champs du label EFFACÉS sous « Non », un
+--  sous-traitant sans réponse sur son label accepté, B qui ne lit rien,
+--  l'export (des données sur des tiers, qui reviennent à l'artisan), le
+--  compte qui part — puis six refus (33 b à g). Le SIRET d'un sous-traitant
+--  est celui de D, fictif, propre à ce fichier. Dix-huit erreurs de plus.
 -- ==========================================================================
 
 \set A '''a4600000-0000-4000-8000-00000000000a'''
@@ -828,6 +851,24 @@ insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_p
 values (:A, 'Déchèterie d’essai', '1 rue de l’Essai', '13004', 'Marseille', 'decheterie_publique');
 rollback;
 
+\echo ''
+\echo '=== 22 quinquies. …un signe de qualite au nom de A -> RLS sur "emetteur_labels" (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau)
+values (:A, 'Organisme d’essai', 'Label d’essai', array['isolation_combles'], '2999-12-31');
+rollback;
+
+\echo ''
+\echo '=== 22 sexies. …un sous-traitant au nom de A -> RLS sur "emetteur_sous_traitants" (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :B;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient)
+values (:A, 'Sous-traitant d’essai', '00004603700016', false);
+rollback;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -873,6 +914,20 @@ set local role anon;
 select count(*) from public.emetteur_lieux_depot;
 rollback;
 
+\echo ''
+\echo '=== 24 e. …sur "emetteur_labels" (ERREUR attendue) ==='
+begin;
+set local role anon;
+select count(*) from public.emetteur_labels;
+rollback;
+
+\echo ''
+\echo '=== 24 f. …sur "emetteur_sous_traitants" (ERREUR attendue) ==='
+begin;
+set local role anon;
+select count(*) from public.emetteur_sous_traitants;
+rollback;
+
 
 -- --------------------------------------------------------------------------
 \echo ''
@@ -906,7 +961,8 @@ rollback;
 -- --------------------------------------------------------------------------
 select f, r, has_function_privilege(r, f, 'execute') as execute_attendu_f
   from unnest(array['public.tient_l_emetteur()', 'public.tient_l_assurance()',
-                    'public.tient_les_tarifs()', 'public.tient_le_lieu_de_depot()']) f,
+                    'public.tient_les_tarifs()', 'public.tient_le_lieu_de_depot()',
+                    'public.tient_le_label()', 'public.tient_le_sous_traitant()']) f,
        unnest(array['anon', 'authenticated']) r
  order by 1, 2;
 select has_function_privilege('anon', 'public.emetteur_incomplet(uuid)', 'execute') as anon_attendu_f,
@@ -915,7 +971,8 @@ select has_function_privilege('anon', 'public.emetteur_incomplet(uuid)', 'execut
 select t, has_table_privilege('anon', t, 'select') as anon_select_attendu_f,
        has_table_privilege('authenticated', t, 'truncate') as truncate_attendu_f
   from unnest(array['public.emetteur', 'public.emetteur_assurances', 'public.tarifs_pro',
-                    'public.emetteur_lieux_depot']) t
+                    'public.emetteur_lieux_depot', 'public.emetteur_labels',
+                    'public.emetteur_sous_traitants']) t
  order by 1;
 -- 2b-5 : la table des lieux révoque EN TOUTES LETTRES ce que la RLS ne tient
 -- pas (son balayage de 42 bis n'est pas dans la migration) ; RLS activée,
@@ -925,11 +982,24 @@ select has_table_privilege('authenticated', 'public.emetteur_lieux_depot', 'refe
        (select c.relrowsecurity from pg_class c where c.oid = 'public.emetteur_lieux_depot'::regclass) as lieux_rls_attendu_t,
        (select count(*) from pg_policies where schemaname = 'public' and tablename = 'emetteur_lieux_depot')
          as lieux_une_politique_attendu_1;
+-- 2b-6 : les deux tables nouvelles, sur le même modèle — les droits que la
+-- RLS ne tient pas révoqués EN TOUTES LETTRES, RLS activée, une seule
+-- politique chacune.
+select has_table_privilege('authenticated', 'public.emetteur_labels', 'references') as labels_references_attendu_f,
+       has_table_privilege('authenticated', 'public.emetteur_labels', 'trigger') as labels_trigger_attendu_f,
+       (select c.relrowsecurity from pg_class c where c.oid = 'public.emetteur_labels'::regclass) as labels_rls_attendu_t,
+       (select count(*) from pg_policies where schemaname = 'public' and tablename = 'emetteur_labels')
+         as labels_une_politique_attendu_1;
+select has_table_privilege('authenticated', 'public.emetteur_sous_traitants', 'references') as st_references_attendu_f,
+       has_table_privilege('authenticated', 'public.emetteur_sous_traitants', 'trigger') as st_trigger_attendu_f,
+       (select c.relrowsecurity from pg_class c where c.oid = 'public.emetteur_sous_traitants'::regclass) as st_rls_attendu_t,
+       (select count(*) from pg_policies where schemaname = 'public' and tablename = 'emetteur_sous_traitants')
+         as st_une_politique_attendu_1;
 
 
 -- --------------------------------------------------------------------------
 \echo ''
-\echo '=== 26 bis. Personne d autre ne lit ces trois tables : une liste FERMEE de fonctions, aucune security definer, aucune vue ==='
+\echo '=== 26 bis. Personne d autre ne lit ces six tables : une liste FERMEE de fonctions, aucune security definer, aucune vue ==='
 -- C'est ce que promet « Vos tarifs et vos prix » (src/data/legal.js) :
 -- aucun écran ne montre les prix d'un artisan à quelqu'un d'autre. Une
 -- fonction `security definer` sous n'importe quel nom, ou une vue, les
@@ -974,7 +1044,7 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
          as hors_liste_attendu_aucune
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public'
-   and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M'
+   and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M'
    and p.proname <> all (array['tient_l_emetteur', 'tient_l_assurance', 'tient_les_tarifs',
                                'emetteur_incomplet', 'mes_donnees', 'artisans_urgence', 'tient_l_urgence',
                                'motifs_refus_remise', 'tient_le_lieu_de_depot']);
@@ -984,11 +1054,11 @@ select count(*) filter (where p.prosecdef) as definer_attendu_0,
        string_agg(p.proname, ', ' order by p.proname)
          = 'artisans_urgence, emetteur_incomplet, mes_donnees, motifs_refus_remise, tient_l_urgence' as liste_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
- where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M';
+ where ns.nspname = 'public' and p.prosrc ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M';
 select (select count(*) from pg_views
-         where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M')
+         where definition ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M')
      + (select count(*) from pg_matviews
-         where definition ~ '\m(emetteur_lieux_depot|tarifs_pro|emetteur_assurances|emetteur)\M') as vues_attendu_0;
+         where definition ~ '\m(emetteur_lieux_depot|emetteur_labels|emetteur_sous_traitants|tarifs_pro|emetteur_assurances|emetteur)\M') as vues_attendu_0;
 -- ET DEPUIS 2b-5 (21/11/2026) : `emetteur_lieux_depot` (46.2 bis), sa propre
 -- liste — la lisent l'export (`mes_donnees`) et la liste des motifs
 -- (`motifs_refus_remise`, une lecture filtrée par `l.pro_id = v_pro`) ; son
@@ -999,6 +1069,23 @@ select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)') as n
          = 'mes_donnees, motifs_refus_remise' as lieux_liste_fermee_attendu_t
   from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
  where ns.nspname = 'public' and p.prosrc ~ '\memetteur_lieux_depot\M';
+-- ET DEPUIS 2b-6 (24/11/2026) : `emetteur_labels` (46.2 ter) et
+-- `emetteur_sous_traitants` (46.2 quater), chacune SA liste — les lisent
+-- l'export (`mes_donnees`) et la liste des motifs (`motifs_refus_remise`,
+-- une lecture filtrée par `g.pro_id = v_pro` et une par `s.pro_id =
+-- v_pro`) ; leurs déclencheurs ne les nomment pas. Les deux tables entrent
+-- aussi dans les alternations ci-dessus : le tiret bas est une lettre de
+-- mot, et `emetteur` cherché entier ne les voyait pas.
+select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)') as nomment_les_labels,
+       coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
+         = 'mes_donnees, motifs_refus_remise' as labels_liste_fermee_attendu_t
+  from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+ where ns.nspname = 'public' and p.prosrc ~ '\memetteur_labels\M';
+select coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)') as nomment_les_sous_traitants,
+       coalesce(string_agg(p.proname, ', ' order by p.proname), '(aucune)')
+         = 'mes_donnees, motifs_refus_remise' as sous_traitants_liste_fermee_attendu_t
+  from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+ where ns.nspname = 'public' and p.prosrc ~ '\memetteur_sous_traitants\M';
 
 
 -- --------------------------------------------------------------------------
@@ -1050,16 +1137,19 @@ rollback;
 -- section 47 pose cinq contraintes de plus sur `tarifs_pro` (le taux
 -- horaire, la majoration, le prix du devis, le décompte, l'affichage).
 -- PUIS PAR 2b-5 : 29 — les quatre de `emetteur_lieux_depot` (code postal,
--- complet, longueurs, type).
+-- complet, longueurs, type). PUIS PAR 2b-6 : 38 — les quatre de
+-- `emetteur_labels` (catégories, chemin, complet, longueurs) et les cinq de
+-- `emetteur_sous_traitants` (les mêmes, et le SIRET).
 -- --------------------------------------------------------------------------
 select count(*) filter (where conname !~ '_check$') as mal_nommees_attendu_0,
        count(*) filter (where conname ~ '_check[0-9]+$') as anonymes_attendu_0,
        count(*) filter (where conname = 'emetteur_paiement_check') as paiement_attendu_0,
-       count(*) as contraintes_check_attendu_29
+       count(*) as contraintes_check_attendu_38
   from pg_constraint
  where contype = 'c'
    and conrelid in ('public.emetteur'::regclass, 'public.emetteur_assurances'::regclass,
-                    'public.tarifs_pro'::regclass, 'public.emetteur_lieux_depot'::regclass);
+                    'public.tarifs_pro'::regclass, 'public.emetteur_lieux_depot'::regclass,
+                    'public.emetteur_labels'::regclass, 'public.emetteur_sous_traitants'::regclass);
 
 
 -- --------------------------------------------------------------------------
@@ -1070,7 +1160,8 @@ select string_agg(table_name || '.' || column_name, ', ' order by table_name, co
          as seules_les_cles
   from information_schema.columns
  where table_schema = 'public'
-   and table_name in ('emetteur', 'emetteur_assurances', 'tarifs_pro', 'emetteur_lieux_depot')
+   and table_name in ('emetteur', 'emetteur_assurances', 'tarifs_pro', 'emetteur_lieux_depot',
+                      'emetteur_labels', 'emetteur_sous_traitants')
    and is_nullable = 'NO';
 
 -- --------------------------------------------------------------------------
@@ -1162,6 +1253,237 @@ set local role authenticated;
 set local request.jwt.claim.sub = :A;
 insert into public.emetteur_lieux_depot (pro_id, raison_sociale, adresse, code_postal, ville, type_installation, libelle)
 values (:A, 'Ressourcerie d’essai', '2 rue de l’Essai', '13410', 'Lambesc', 'autre', '  ');
+rollback;
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 32. LES SIGNES DE QUALITE (2b-6, 46.2 ter) : A range un label « sale » — la base le nettoie (la grande classe de blancs pour l organisme, l intitule et le numero, invisibles compris ; la PETITE pour le chemin du certificat), pose SA date ; un label complet SANS certificat est accepte ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses labels avec lui ==='
+-- Les lignes de A existent d'abord, et A les lit : c'est ce qui rend les
+-- « 0 » de B crédibles. Le chemin suivi d'une espace est rogné (la petite
+-- classe) ; un chemin fait de blancs vaut « aucun certificat » (vide de
+-- valeur), au lieu d'être refusé par la contrainte du chemin.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, reference, categories, valide_jusquau,
+                                    justificatif_chemin, created_at)
+values (:A, chr(8203) || ' Organisme d’essai ' || chr(160), '  Label d’essai' || chr(65279),
+        chr(10) || ' N° 46-001 ' || chr(9), array['isolation_combles', 'isolation_toiture'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000a/certificat.pdf ', '2001-01-01T00:00:00Z');
+select organisme = 'Organisme d’essai' as organisme_rogne_attendu_t,
+       intitule = 'Label d’essai' as intitule_rogne_attendu_t,
+       reference = 'N° 46-001' as numero_rogne_attendu_t,
+       justificatif_chemin = 'a4600000-0000-4000-8000-00000000000a/certificat.pdf' as chemin_rogne_attendu_t,
+       created_at > '2020-01-01' as date_forcee_ignoree_label_attendu_t
+  from public.emetteur_labels where pro_id = :A;
+select created_at as g1 from public.emetteur_labels where pro_id = :A \gset
+update public.emetteur_labels set created_at = '2001-01-01', reference = ' ' || chr(160) where pro_id = :A;
+select created_at = :'g1' as ordre_des_labels_garde_attendu_t, reference is null as numero_blanc_vide_attendu_t
+  from public.emetteur_labels where pro_id = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+values (:A, 'Organisme d’essai', 'Second label', array['photovoltaique'], '2999-12-31', ' ' || chr(9));
+select justificatif_chemin is null as chemin_blanc_aucun_certificat_attendu_t
+  from public.emetteur_labels where pro_id = :A and intitule = 'Second label';
+select count(*) as a_lit_ses_labels_attendu_2 from public.emetteur_labels;
+set local request.jwt.claim.sub = :B;
+select count(*) as b_lit_les_labels_attendu_0 from public.emetteur_labels;
+update public.emetteur_labels set organisme = 'Ailleurs' where pro_id = :A;
+delete from public.emetteur_labels where pro_id = :A;
+select jsonb_array_length(d -> 'mes_signes_de_qualite') as export_labels_de_b_attendu_0
+  from (select public.mes_donnees() as d) x;
+set local request.jwt.claim.sub = :A;
+select count(*) as labels_intacts_attendu_2,
+       bool_and(organisme = 'Organisme d’essai') as rien_n_a_change_chez_a_labels_attendu_t
+  from public.emetteur_labels where pro_id = :A;
+select jsonb_array_length(d -> 'mes_signes_de_qualite') as export_labels_de_a_attendu_2,
+       d -> 'mes_signes_de_qualite' -> 0 ->> 'intitule' = 'Label d’essai' as export_labels_dans_l_ordre_attendu_t
+  from (select public.mes_donnees() as d) x;
+reset role;
+delete from auth.users where id = :A;
+select count(*) as labels_partis_avec_le_compte_attendu_0 from public.emetteur_labels where pro_id = :A;
+rollback;
+
+\echo ''
+\echo '=== 32 b. Des travaux couverts VIDES (le tableau vide) -> emetteur_label_categories_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau)
+values (:A, 'Organisme d’essai', 'Label d’essai', '{}', '2999-12-31');
+rollback;
+
+\echo ''
+\echo '=== 32 c. « aucun » n est pas une categorie d un label -> emetteur_label_categories_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau)
+values (:A, 'Organisme d’essai', 'Label d’essai', array['aucun'], '2999-12-31');
+rollback;
+
+\echo ''
+\echo '=== 32 d. Un certificat dans le dossier de B -> emetteur_label_chemin_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+values (:A, 'Organisme d’essai', 'Label d’essai', array['isolation_combles'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000b/certificat.pdf');
+rollback;
+
+\echo ''
+\echo '=== 32 e. Un certificat a DEUX niveaux sous le dossier de A -> emetteur_label_chemin_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+values (:A, 'Organisme d’essai', 'Label d’essai', array['isolation_combles'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000a/labels/certificat.pdf');
+rollback;
+
+\echo ''
+\echo '=== 32 f. Un label sans date de fin -> emetteur_label_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories)
+values (:A, 'Organisme d’essai', 'Label d’essai', array['isolation_combles']);
+rollback;
+
+\echo ''
+\echo '=== 32 g. Un organisme fait de blancs INVISIBLES -> emetteur_label_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau)
+values (:A, chr(8203) || ' ' || chr(65279), 'Label d’essai', array['isolation_combles'], '2999-12-31');
+rollback;
+
+\echo ''
+\echo '=== 32 h. Un intitule de 121 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, categories, valide_jusquau)
+values (:A, 'Organisme d’essai', repeat('x', 121), array['isolation_combles'], '2999-12-31');
+rollback;
+
+\echo ''
+\echo '=== 32 i. Un numero de 61 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_labels (pro_id, organisme, intitule, reference, categories, valide_jusquau)
+values (:A, 'Organisme d’essai', 'Label d’essai', repeat('9', 61), array['isolation_combles'], '2999-12-31');
+rollback;
+
+-- --------------------------------------------------------------------------
+\echo ''
+\echo '=== 33. LES SOUS-TRAITANTS (2b-6, 46.2 quater) : A range un sous-traitant « sale » — la base le nettoie (le nom par la grande classe, le justificatif par la petite, le SIRET reduit a ses chiffres), pose SA date ; sous « Non », les champs du label sont EFFACES ; un sous-traitant sans reponse sur son label est accepte ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses sous-traitants avec lui ==='
+-- Le SIRET du sous-traitant est celui de D, FICTIF, propre à ce fichier :
+-- un sous-traitant est une AUTRE entreprise, jamais un compte Opus.
+-- --------------------------------------------------------------------------
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient, label_categories,
+                                            label_valide_jusquau, label_justificatif_chemin, created_at)
+values (:A, chr(8203) || ' Sous-traitant d’essai ' || chr(160), ' 000 046 037 00016 ', true,
+        array['isolation_combles'], '2999-12-31', 'a4600000-0000-4000-8000-00000000000a/justificatif.pdf' || chr(10), '2001-01-01T00:00:00Z');
+select raison_sociale = 'Sous-traitant d’essai' as raison_sociale_rognee_st_attendu_t,
+       siret = '00004603700016' as siret_chiffres_seuls_attendu_t,
+       label_justificatif_chemin = 'a4600000-0000-4000-8000-00000000000a/justificatif.pdf' as justificatif_rogne_attendu_t,
+       label_categories = array['isolation_combles'] and label_valide_jusquau = '2999-12-31' as label_garde_sous_oui_attendu_t,
+       created_at > '2020-01-01' as date_forcee_ignoree_st_attendu_t
+  from public.emetteur_sous_traitants where pro_id = :A;
+select created_at as s1 from public.emetteur_sous_traitants where pro_id = :A \gset
+update public.emetteur_sous_traitants set created_at = '2001-01-01', label_detient = false where pro_id = :A;
+select created_at = :'s1' as ordre_des_sous_traitants_garde_attendu_t,
+       label_detient is false as non_garde_attendu_t,
+       label_categories is null and label_valide_jusquau is null and label_justificatif_chemin is null
+         as label_efface_sous_non_attendu_t
+  from public.emetteur_sous_traitants where pro_id = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret)
+values (:A, 'Second sous-traitant', '00004603700016');
+select label_detient is null as sans_reponse_sur_le_label_acceptee_attendu_t
+  from public.emetteur_sous_traitants where pro_id = :A and raison_sociale = 'Second sous-traitant';
+select count(*) as a_lit_ses_sous_traitants_attendu_2 from public.emetteur_sous_traitants;
+set local request.jwt.claim.sub = :B;
+select count(*) as b_lit_les_sous_traitants_attendu_0 from public.emetteur_sous_traitants;
+update public.emetteur_sous_traitants set raison_sociale = 'Ailleurs' where pro_id = :A;
+delete from public.emetteur_sous_traitants where pro_id = :A;
+select jsonb_array_length(d -> 'mes_sous_traitants') as export_sous_traitants_de_b_attendu_0
+  from (select public.mes_donnees() as d) x;
+set local request.jwt.claim.sub = :A;
+select count(*) as sous_traitants_intacts_attendu_2,
+       bool_and(raison_sociale <> 'Ailleurs') as rien_n_a_change_chez_a_sous_traitants_attendu_t
+  from public.emetteur_sous_traitants where pro_id = :A;
+select jsonb_array_length(d -> 'mes_sous_traitants') as export_sous_traitants_de_a_attendu_2,
+       d -> 'mes_sous_traitants' -> 0 ->> 'raison_sociale' = 'Sous-traitant d’essai'
+         as export_sous_traitants_dans_l_ordre_attendu_t
+  from (select public.mes_donnees() as d) x;
+reset role;
+delete from auth.users where id = :A;
+select count(*) as sous_traitants_partis_avec_le_compte_attendu_0
+  from public.emetteur_sous_traitants where pro_id = :A;
+rollback;
+
+\echo ''
+\echo '=== 33 b. Un SIRET de trois chiffres -> emetteur_sous_traitant_siret_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient)
+values (:A, 'Sous-traitant d’essai', '123', false);
+rollback;
+
+\echo ''
+\echo '=== 33 c. Un sous-traitant sans SIRET -> emetteur_sous_traitant_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, label_detient)
+values (:A, 'Sous-traitant d’essai', false);
+rollback;
+
+\echo ''
+\echo '=== 33 d. « Oui » sans date de fin -> emetteur_sous_traitant_complet_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient, label_categories)
+values (:A, 'Sous-traitant d’essai', '00004603700016', true, array['isolation_combles']);
+rollback;
+
+\echo ''
+\echo '=== 33 e. Un justificatif dans le dossier de B -> emetteur_sous_traitant_chemin_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient, label_categories,
+                                            label_valide_jusquau, label_justificatif_chemin)
+values (:A, 'Sous-traitant d’essai', '00004603700016', true, array['isolation_combles'], '2999-12-31',
+        'a4600000-0000-4000-8000-00000000000b/justificatif.pdf');
+rollback;
+
+\echo ''
+\echo '=== 33 f. Un nom de 121 caracteres -> emetteur_sous_traitant_longueurs_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient)
+values (:A, repeat('x', 121), '00004603700016', false);
+rollback;
+
+\echo ''
+\echo '=== 33 g. « aucun » dans les travaux de son label -> emetteur_sous_traitant_categories_check (ERREUR attendue) ==='
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+insert into public.emetteur_sous_traitants (pro_id, raison_sociale, siret, label_detient, label_categories,
+                                            label_valide_jusquau)
+values (:A, 'Sous-traitant d’essai', '00004603700016', true, array['aucun'], '2999-12-31');
 rollback;
 
 deallocate fiche_complete_a;

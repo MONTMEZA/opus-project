@@ -6,7 +6,9 @@
 --  réparation urgente (49.3 bis), l'acompte à la signature et l'attestation
 --  décennale (49.4 quater, rangs 10 et 11) — et l'étape 2b-4 (16/11/2026) :
 --  le prix du devis lui-même (49.4 quinquies, rang 12) — et l'étape 2b-5
---  (21/11/2026) : les déchets du chantier (49.4 sexies, rang 13)
+--  (21/11/2026) : les déchets du chantier (49.4 sexies, rang 13) — et
+--  l'étape 2b-6 (24/11/2026) : les travaux d'énergie et le label RGE
+--  (49.4 septies, rang 14)
 --
 --  À lancer sur un PostgreSQL ordinaire, après `local-prelude.sql` puis
 --  `schema.sql` rejoué DEUX fois :
@@ -20,14 +22,14 @@
 --  tête : les trois fichiers 49 peuvent se jouer l'un après l'autre sur la
 --  même base. A est une SARL en siège (5499), SANS n° de TVA connu.
 --
---  TRENTE-HUIT CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de sécurité
---  qui ne montre aucun refus n'éprouve rien. Joué comme ci-dessus sur une
---  base neuve, ce fichier écrit EXACTEMENT 38 lignes `psql:… ERROR`
---  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 38). Un autre compte est un ÉCHEC,
+--  CINQUANTE-TROIS CAS ATTENDENT UNE ERREUR, et c'est le but : un essai de
+--  sécurité qui ne montre aucun refus n'éprouve rien. Joué comme ci-dessus
+--  sur une base neuve, ce fichier écrit EXACTEMENT 53 lignes `psql:… ERROR`
+--  (`… 2>&1 | grep -c '^psql:.*ERROR:'` → 53). Un autre compte est un ÉCHEC,
 --  même quand toutes les colonnes valent `t`. Les onze de 2b-1, tous au cas
 --  12, puis les deux de 2b-2 (cas 15 g et 18 b), puis les six de 2b-3 (cas
 --  19 a à f), puis les deux de 2b-4 (cas 25 h), puis les dix-sept de 2b-5
---  (cas 26 e) :
+--  (cas 26 e), puis les quinze de 2b-6 (cas 27 d) :
 --
 --     1  12 a   A demande la liste du devis de B             → OP027
 --     2  12 b   A, un identifiant inventé                     → OP027
@@ -67,25 +69,79 @@
 --    36  26 e   une quantité de 0                              → devis_dechets_quantite_check (23514)
 --    37  26 e   une unité « kg »                               → devis_dechets_unite_check (23514)
 --    38  26 e   « Aucun dépôt » écrit FAUX                     → devis_dechets_sans_depot_check (23514)
+--    39  27 d   des travaux d'énergie VIDES (`'{}'`)           → devis_energie_travaux_check (23514)
+--    40  27 d   {aucun,chaudiere} : « aucun » n'est pas seul   → devis_energie_travaux_check (23514)
+--    41  27 d   {menuiseries}, hors de la liste               → devis_energie_travaux_check (23514)
+--    42  27 d   l'ancienne clé {entretien_chauffage}          → devis_energie_travaux_check (23514)
+--    43  27 d   des travaux à DEUX dimensions                  → devis_energie_travaux_check (23514)
+--    44  27 d   des travaux, borne basse 0                     → devis_energie_travaux_check (23514)
+--    45  27 d   un travail VIDE dans la liste                  → devis_energie_travaux_check (23514)
+--    46  27 d   une déclaration VIDE (`'{}'`)                  → devis_energie_sans_label_check (23514)
+--    47  27 d   {aucun} déclaré sans label                     → devis_energie_sans_label_check (23514)
+--    48  27 d   {menuiseries} déclaré                          → devis_energie_sans_label_check (23514)
+--    49  27 d   un élément VIDE dans la déclaration            → devis_energie_sans_label_check (23514)
+--    50  27 d   une déclaration à DEUX dimensions              → devis_energie_sans_label_check (23514)
+--    51  27 d   des sous-traitants VIDES (`'{}'`)              → devis_energie_sous_traitants_check (23514)
+--    52  27 d   onze sous-traitants                            → devis_energie_sous_traitants_check (23514)
+--    53  27 d   un sous-traitant VIDE dans la liste            → devis_energie_sous_traitants_check (23514)
 --
 --  ET CHACUN EST JUGÉ EN SQL, pas à l'œil (la leçon de RBM-1, lot 2a) :
 --  `:ERROR`, `LAST_ERROR_SQLSTATE` et `LAST_ERROR_MESSAGE` sont relevés
 --  juste après l'ordre, puis comparés, la transaction annulée, au code et au
 --  message attendus — le MÊME message pour les dix OP027. Un refus qui
---  manque laisse un `f`, pas seulement une ligne de moins. Les cent quatorze
---  variables (trente-trois de 2b-1, six de 2b-2, dix-huit de 2b-3, six de 2b-4,
---  cinquante et une de 2b-5) sont DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
+--  manque laisse un `f`, pas seulement une ligne de moins. Les cent
+--  cinquante-neuf variables (trente-trois de 2b-1, six de 2b-2, dix-huit de
+--  2b-3, six de 2b-4, cinquante et une de 2b-5, quarante-cinq de 2b-6) sont
+--  DÉCLARÉES D'AVANCE (« jamais relevé ») : un cas retiré
 --  entier laisse un `f` à sa place, au lieu d'une erreur de syntaxe qui
 --  remplacerait la sienne dans le compte (constat T01 de la vérification du
 --  lot 2b-1 : le cas 12 h retiré, le fichier écrivait encore 11 erreurs).
 --
---  ET IL JUGE EXACTEMENT 364 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
---  puis une 365e qui les compte (cas 27) : chaque valeur jugée passe par
+--  ET IL JUGE EXACTEMENT 471 VALEURS, ANNONCÉES ICI (`VALEURS_ANNONCEES`),
+--  puis une 472e qui les compte (cas 28) : chaque valeur jugée passe par
 --  `pg_temp.v(…)`, qui avance une séquence temporaire — qu'aucun `rollback`
 --  n'annule. Une valeur qui ne s'est pas calculée (un ordre en erreur, une
---  transaction déjà annulée, un cas retiré) manque au compte, et le cas 27
---  vaut `f`. Joué comme ci-dessus, le juge relit 365 colonnes `…_attendu_`
+--  transaction déjà annulée, un cas retiré) manque au compte, et le cas 28
+--  vaut `f`. Joué comme ci-dessus, le juge relit 472 colonnes `…_attendu_`
 --  et AUCUN écart ; une autre somme est un ÉCHEC.
+--
+--  CE QUE 2b-6 A AJOUTÉ (24/11/2026) : `devis_complet` RÉPOND « AUCUN DE CES
+--  TRAVAUX » aux travaux d'énergie (`energie_travaux = {aucun}`) — sans lui,
+--  la réponse vide, `devis_energie` (rang 14, une prudence) sortait dans
+--  CHAQUE cas qui part d'un devis complet, et leurs attendus perdaient leur
+--  sens (la leçon de 2b-3, 2b-4 et 2b-5). Le devis du cas 10 reçoit le même
+--  `{aucun}`, et le dit : il reste « les neuf rangs ». Les cas 13, 23 et 26 d
+--  (D4-c) restent SANS réponse, et `devis_energie` entre dans leurs listes
+--  attendues : la preuve D4-c couvre ainsi le rang 14 contre l'origine. Le
+--  cas 24 devient « LES QUATORZE RANGS À LA FOIS » (VINGT-DEUX clés sur
+--  quatorze rangs, les trois phrases du rang 14 au caractère près, chacune
+--  sous 200 caractères). Le cas 14 c est ROUVERT, en le décidant : le corps
+--  nomme désormais AUSSI `emetteur_labels` et `emetteur_sous_traitants` (UNE
+--  lecture chacune, filtrée par `g.pro_id = v_pro` et `s.pro_id = v_pro` : la
+--  porte reste étroite), et ses mots interdits gagnent ceux du badge public
+--  (`rge`, `rge_declare`, `rge_expire`, `rge_url`, `rge_numero` : décision Q5)
+--  et de l'identité d'un signe ou d'un sous-traitant (`label_categories`,
+--  `raison_sociale`, `siret`, `organisme`, `intitule`, `reference`) ; sa
+--  phrase sur les lieux de dépôt renvoie au cas 26 c, et non plus au 27 c,
+--  qu'elle nommait avant la renumérotation de 2b-5. Un cas nouveau, 27 (« les
+--  travaux d'énergie ») — les 58 situations des annexes B.1 et B.3 du cahier
+--  2b-6, sous la forme de ce fichier (`prepare … execute`, `set local role`
+--  dans son propre ordre, jamais dans un `do`) : a. les travaux et la
+--  déclaration, allumés et éteints par le chemin d'un client, A rangeant ses
+--  signes de qualité lui-même — un signe valable SANS certificat qui empêche
+--  la déclaration de taire le point, un signe expiré déclarable, le jour de
+--  PARIS, les deux travaux comptés par prudence, les quatre réponses « à quel
+--  titre », les totaux INCHANGÉS ; b. les sous-traitants — aucun choisi, un
+--  complet, un incomplet, un identifiant INVENTÉ, un doublon, celui de B, « Non »
+--  avec des identifiants restés, B qui ne lit ni n'écrit rien chez A, un
+--  sous-traitant RETIRÉ qui laisse un identifiant ORPHELIN ; b bis. la croisée
+--  retirée dans la transaction : un sous-traitant labellisé sans date compte
+--  encore incomplet (`is not true`, la seconde barrière) ; c. les filtres
+--  `g.pro_id = v_pro` et `s.pro_id = v_pro` prouvés par une ENVELOPPE
+--  `security definer` (sous la RLS, retirer ces filtres passerait au vert) ;
+--  d. les quinze refus des trois contraintes, JUGÉS EN SQL ; e. les bornes
+--  acceptées. Cent sept valeurs de plus (364 → 471), quinze refus de plus
+--  (38 → 53). Le compte est devenu le cas 28.
 --
 --  CE QUE 2b-5 A AJOUTÉ (21/11/2026) : `devis_complet` RÉPOND « NON » AUX
 --  DÉCHETS (`dechets_concerne = false`) — sans lui, la réponse vide comptant
@@ -258,17 +314,30 @@
 \set LB '''b4930000-0000-4000-8000-0000000001b1'''
 \set LC '''b4930000-0000-4000-8000-0000000001c1'''
 \set LX '''b4930000-0000-4000-8000-0000000001ff'''
+-- 2b-6 : les signes de qualité de A (deux) et de B, les sous-traitants de A (deux) et
+-- de B, et un identifiant de sous-traitant INVENTÉ.
+\set GA1 '''b4940000-0000-4000-8000-0000000002a1'''
+\set GA2 '''b4940000-0000-4000-8000-0000000002a2'''
+\set GB1 '''b4940000-0000-4000-8000-0000000002b1'''
+\set TA1 '''b4940000-0000-4000-8000-0000000003a1'''
+\set TA2 '''b4940000-0000-4000-8000-0000000003a2'''
+\set TB1 '''b4940000-0000-4000-8000-0000000003b1'''
+\set TX '''b4940000-0000-4000-8000-0000000003ff'''
+-- 2b-6 : les trois phrases du rang 14, au caractère près (celles de MOTIFS_DEVIS).
+\set PH_ENERGIE 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.'
+\set PH_MENTIONS 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou partie de ce devis : la loi le demande pour un client qui commande à titre privé.'
+\set PH_PRUDENCE 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.'
 
 -- Le message d'OP027, écrit une fois : celui que tous les refus doivent porter.
 \set MSG_OP027 'Ce devis n’existe pas, ou il n’est pas le vôtre.'
 
--- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 364. Toute valeur
+-- LE NOMBRE DE VALEURS JUGÉES, ANNONCÉ (voir l'en-tête) : 471. Toute valeur
 -- jugée passe par `pg_temp.v(…)`, qui avance une SÉQUENCE temporaire — une
 -- séquence n'est pas annulée par `rollback` : une valeur calculée dans un
 -- cas annulé compte, une valeur qui n'a pas pu se calculer (un ordre en
 -- erreur, une transaction déjà annulée, une variable indéfinie) ne compte
--- pas. Le jugement final (cas 27) compare le compte à l’annonce.
-\set VALEURS_ANNONCEES 364
+-- pas. Le jugement final (cas 28) compare le compte à l’annonce.
+\set VALEURS_ANNONCEES 471
 create temporary sequence essai_valeurs;
 -- `security definer` : la séquence appartient à `postgres`, et la valeur se
 -- calcule aussi sous `authenticated`, `service_role` et `anon`. Elle vit dans
@@ -286,7 +355,7 @@ language sql volatile as $c$
   select case when is_called then last_value else 0 end from pg_temp.essai_valeurs;
 $c$;
 
--- LES TRENTE-HUIT REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
+-- LES CINQUANTE-TROIS REFUS ATTENDUS, DÉCLARÉS D'AVANCE : un cas retiré ne rend pas son
 -- jugement illisible (une variable indéfinie ferait échouer l'ordre — une
 -- AUTRE erreur à la place de la sienne, et six valeurs de moins), il laisse
 -- un `f` à sa place.
@@ -404,6 +473,51 @@ $c$;
 \set e26q_err 'jamais relevé'
 \set e26q_code 'jamais relevé'
 \set e26q_msg 'jamais relevé'
+\set e27a_err 'jamais relevé'
+\set e27a_code 'jamais relevé'
+\set e27a_msg 'jamais relevé'
+\set e27b_err 'jamais relevé'
+\set e27b_code 'jamais relevé'
+\set e27b_msg 'jamais relevé'
+\set e27c_err 'jamais relevé'
+\set e27c_code 'jamais relevé'
+\set e27c_msg 'jamais relevé'
+\set e27d_err 'jamais relevé'
+\set e27d_code 'jamais relevé'
+\set e27d_msg 'jamais relevé'
+\set e27e_err 'jamais relevé'
+\set e27e_code 'jamais relevé'
+\set e27e_msg 'jamais relevé'
+\set e27f_err 'jamais relevé'
+\set e27f_code 'jamais relevé'
+\set e27f_msg 'jamais relevé'
+\set e27g_err 'jamais relevé'
+\set e27g_code 'jamais relevé'
+\set e27g_msg 'jamais relevé'
+\set e27h_err 'jamais relevé'
+\set e27h_code 'jamais relevé'
+\set e27h_msg 'jamais relevé'
+\set e27i_err 'jamais relevé'
+\set e27i_code 'jamais relevé'
+\set e27i_msg 'jamais relevé'
+\set e27j_err 'jamais relevé'
+\set e27j_code 'jamais relevé'
+\set e27j_msg 'jamais relevé'
+\set e27k_err 'jamais relevé'
+\set e27k_code 'jamais relevé'
+\set e27k_msg 'jamais relevé'
+\set e27l_err 'jamais relevé'
+\set e27l_code 'jamais relevé'
+\set e27l_msg 'jamais relevé'
+\set e27m_err 'jamais relevé'
+\set e27m_code 'jamais relevé'
+\set e27m_msg 'jamais relevé'
+\set e27n_err 'jamais relevé'
+\set e27n_code 'jamais relevé'
+\set e27n_msg 'jamais relevé'
+\set e27o_err 'jamais relevé'
+\set e27o_code 'jamais relevé'
+\set e27o_msg 'jamais relevé'
 
 -- --------------------------------------------------------------------------
 --  LE MÉNAGE DE TÊTE — le fichier se rejoue (en local seulement).
@@ -474,13 +588,16 @@ prepare frais_a as
 -- prix du devis lui-même : GRATUIT (0) — sans lui, `devis_cout` (rang 12)
 -- sortirait partout. Et, depuis 2b-5, la réponse aux DÉCHETS : « Non »
 -- (`dechets_concerne = false`) — sans elle, la réponse vide comptant
--- « Oui » par prudence, `devis_dechets` (rang 13) sortirait partout.
+-- « Oui » par prudence, `devis_dechets` (rang 13) sortirait partout. Et,
+-- depuis 2b-6, la réponse aux TRAVAUX D'ÉNERGIE : « Aucun de ces travaux »
+-- (`energie_travaux = {aucun}`) — sans elle, la réponse vide, `devis_energie`
+-- (rang 14) sortirait partout.
 prepare devis_complet(uuid) as
   insert into public.devis (id, pro_id, client_id, objet, lieu_adresse, lieu_code_postal, lieu_ville,
                             delai_execution, validite_jours, pour_qui, pour_qui_client, cout_devis_centimes,
-                            dechets_concerne, generation)
+                            dechets_concerne, energie_travaux, generation)
   values ($1, :A, :C1, 'Salle de bain', '4 rue de l''Essai', '13410', 'Lambesc',
-          'Dans les 30 jours suivant la signature', 30, 'consommateur', :C1, 0, false, 1);
+          'Dans les 30 jours suivant la signature', 30, 'consommateur', :C1, 0, false, array['aucun'], 1);
 -- UNE SECONDE FICHE DU CARNET DE A (une entreprise), posée DANS les cas 2b-2
 -- qui en ont besoin, en superutilisateur, et annulée avec eux.
 prepare client_c2 as
@@ -506,6 +623,24 @@ prepare titre(uuid, uuid, integer, text, bigint) as
 prepare lieu_de(uuid, uuid) as
   insert into public.emetteur_lieux_depot (id, pro_id, raison_sociale, adresse, code_postal, ville, type_installation)
   values ($1, $2, 'Déchèterie d’essai', '1 rue de l’Essai', '13410', 'Lambesc', 'decheterie_publique');
+-- 2b-6 : un SIGNE DE QUALITÉ (id, entreprise, travaux couverts, date de fin, chemin du
+-- certificat ou vide) et un SOUS-TRAITANT (id, entreprise, son label : vide, faux ou vrai ;
+-- ses travaux, sa date, son justificatif), posés dans les cas qui en ont besoin — en
+-- superutilisateur, ou par l'artisan lui-même (sa politique). Le SIRET d'un
+-- sous-traitant est celui de B, FICTIF : un sous-traitant est une AUTRE entreprise.
+prepare label_de(uuid, uuid, text[], date, text) as
+  insert into public.emetteur_labels (id, pro_id, organisme, intitule, categories, valide_jusquau, justificatif_chemin)
+  values ($1, $2, 'Organisme d’essai', 'Label d’essai', $3, $4, $5);
+prepare sous_traitant_de(uuid, uuid, boolean, text[], date, text) as
+  insert into public.emetteur_sous_traitants (id, pro_id, raison_sociale, siret, label_detient, label_categories,
+                                              label_valide_jusquau, label_justificatif_chemin)
+  values ($1, $2, 'Sous-traitant d’essai', '00004910600016', $3, $4, $5, $6);
+-- 2b-6 : le motif du rang 14, EXACT — une seule ligne, sa clé, sa nature, sa phrase au
+-- caractère près, et aucune ligne désignée.
+prepare rang14(uuid, text, text, text) as
+  select pg_temp.v(count(*) = 1 and bool_and(m.cle = $2 and m.nature = $3 and m.phrase = $4 and m.ligne_id is null))
+           as rang_14_exact_attendu_t
+    from public.motifs_refus_remise($1) m where m.rang = 14;
 
 -- Ce qu'on relit : les clés, dans l'ordre de SORTIE de la fonction, et leur
 -- comparaison à l'attendu (« — » = aucune ligne).
@@ -877,8 +1012,8 @@ rollback;
 \echo '    un devis NEUF de A (franchise, entreprise complète) : aucun client, aucun lieu, ni délai, ni validité ;'
 \echo '    une OPTION à 20 % (fautive en franchise, et pas un poste) ; un acompte de 50,00 € sans nature'
 \echo '    (ramené : le TTC vaut 0) ; une réduction de 1,00 € (ramenée : le brut vaut 0) ; 2b-4 : le prix du devis'
-\echo '    lui-même GRATUIT (0), et 2b-5 : « Non » aux déchets, pour rester les NEUF rangs (les rangs 12 et 13 sont'
-\echo '    éprouvés aux cas 24, 25 et 27)'
+\echo '    lui-même GRATUIT (0), 2b-5 : « Non » aux déchets, et 2b-6 : « Aucun » aux travaux d’énergie, pour rester'
+\echo '    les NEUF rangs (les rangs 12, 13 et 14 sont éprouvés aux cas 24 à 27)'
 \echo '    attendu : rangs 1,2,3,4,5,6,7,8,9 (le rang 3 sous sa clé de franchise) ; chaque phrase = celle du contrat'
 \echo '              (annexe B.2 du cahier 2b, revue le 05/11 au soir, plus les deux clés de 2b-2 : DOUZE clés sur neuf rangs) ;'
 \echo '              ligne_id posée sur le seul motif 3 ; aucune phrase ne porte de chiffre, d’euro,'
@@ -889,9 +1024,11 @@ execute fiche_a('franchise');
 execute frais_a;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
--- 2b-4 : gratuit, et 2b-5 : « Non » aux déchets, pour rester les NEUF rangs.
-insert into public.devis (id, pro_id, acompte_centimes, remise_centimes, cout_devis_centimes, dechets_concerne, generation)
-values (:D1, :A, 5000, 100, 0, false, 1);
+-- 2b-4 : gratuit, 2b-5 : « Non » aux déchets, et 2b-6 : « Aucun » aux
+-- travaux d'énergie, pour rester les NEUF rangs.
+insert into public.devis (id, pro_id, acompte_centimes, remise_centimes, cout_devis_centimes, dechets_concerne,
+                          energie_travaux, generation)
+values (:D1, :A, 5000, 100, 0, false, array['aucun'], 1);
 execute chiffree(:L1, :D1, 1000, 'option', 10000, 2000, false, 2);
 execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee');
 with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)),
@@ -1163,9 +1300,11 @@ select pg_temp.v(:'e12f1_err' = 'true' and :'e12f1_code' = 'OP027' and :'e12f1_m
 \echo '             le voit pas (c’est la REMISE de 2c qui refusera) ; état 2 : tout corrigé, la réponse donnée.'
 \echo '             2b-4 : les trois devis restent SANS prix du devis lui-même — devis_cout (rang 12) est dans les'
 \echo '             trois listes, et la preuve D4-c le couvre contre l’origine.'
-\echo '             2b-5 : ils restent aussi SANS réponse aux déchets — devis_dechets (rang 13, prudence) clôt les'
+\echo '             2b-5 : ils restent aussi SANS réponse aux déchets — devis_dechets (rang 13, prudence) est dans les'
 \echo '             trois listes, et la preuve D4-c couvre de même le motif nouveau contre l’origine.'
-\echo '             attendu : non vide, non vide, devis_cout,devis_dechets, et X = Y = Z à chaque fois (t ×3)'
+\echo '             2b-6 : et SANS réponse aux travaux d’énergie — devis_energie (rang 14, prudence) clôt les trois'
+\echo '             listes : la preuve D4-c couvre le rang 14 contre l’origine.'
+\echo '             attendu : non vide, non vide, devis_cout,devis_dechets,devis_energie, et X = Y = Z à chaque fois (t ×3)'
 -- ==========================================================================
 begin;
 execute fiche_a('franchise');
@@ -1187,18 +1326,18 @@ execute chiffree('f4930000-0000-4000-8000-0000000000b2', :DY, 2000, 'option', 10
 execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste',  100000, 0,    false, 2);
 execute chiffree('f4930000-0000-4000-8000-0000000000c2', :DZ, 2000, 'option', 10000,  2000, false, 3);
 \echo '-- état 1 (attendu : cles_attendu_t t, x_y_z_identiques_attendu_t t)'
-execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets');
+execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets,devis_energie');
 \echo '-- état 1, après que P a bloqué A (attendu : t, t — la liste ne voit pas le blocage)'
 set local request.jwt.claim.sub = :P;
 insert into public.blocages (bloqueur_id, bloque_id) values (:P, :A);
 set local request.jwt.claim.sub = :A;
-execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets');
-\echo '-- état 2, tout corrigé sur les trois devis SAUF le prix du devis lui-même et les déchets (attendu : cles « devis_cout,devis_dechets », t, t)'
+execute trois_listes(:DX, :DY, :DZ, 'devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets,devis_energie');
+\echo '-- état 2, tout corrigé sur les trois devis SAUF le prix du devis lui-même, les déchets et les travaux d’énergie (attendu : cles « devis_cout,devis_dechets,devis_energie », t, t)'
 update public.devis set delai_execution = 'Deux semaines', validite_jours = 30, acompte_nature = 'arrhes',
                         pour_qui = 'consommateur', pour_qui_client = :C1, generation = 4
  where id in (:DX, :DY, :DZ);
 update public.devis_lignes set taux_tva_centiemes = 0, generation = 5 where type = 'option' and devis_id in (:DX, :DY, :DZ);
-execute trois_listes(:DX, :DY, :DZ, 'devis_cout,devis_dechets');
+execute trois_listes(:DX, :DY, :DZ, 'devis_cout,devis_dechets,devis_energie');
 rollback;
 
 
@@ -1234,8 +1373,13 @@ select pg_temp.v(p.proacl::text !~ '(^\{|,)=X') as pas_public_attendu_t,
 \echo '          ni des lectures entières (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de'
 \echo '          rien) ; ni `chantier_neuf_conso`, de nouveau depuis le 13/11 : sortie en 2b-3 pour le motif de l’acompte,'
 \echo '          elle n’y permet plus rien (CCH L. 271-1, L. 271-2) ; et, depuis 2b-5, emetteur_lieux_depot (les lieux de'
-\echo '          dépôt, UNE lecture filtrée par pro_id — cas 27 c) entre dans la liste, et dechets_sur_place, qui ne'
-\echo '          complète JAMAIS le tri, dans les mots interdits — attendu : la liste exacte, puis 0 | 0 | 0 | t'
+\echo '          dépôt, UNE lecture filtrée par pro_id — cas 26 c) entre dans la liste, et dechets_sur_place, qui ne'
+\echo '          complète JAMAIS le tri, dans les mots interdits ; et, depuis 2b-6, emetteur_labels et'
+\echo '          emetteur_sous_traitants (les signes de qualité et les sous-traitants, UNE lecture chacune, filtrée par'
+\echo '          pro_id — cas 27 c) entrent dans la liste, et les mots du badge public (rge, rge_declare, rge_expire,'
+\echo '          rge_url, rge_numero) et de l’identité d’un signe ou d’un sous-traitant (label_categories,'
+\echo '          raison_sociale, siret, organisme, intitule, reference) dans les mots interdits — attendu : la liste'
+\echo '          exacte, puis 0 | 0 | 0 | t'
 with corps as (
   select regexp_replace(
            regexp_replace(
@@ -1249,9 +1393,9 @@ with corps as (
 )
 select pg_temp.v((select string_agg(distinct x[1], ',' order by x[1])
           from regexp_matches(src, 'public\s*\.\s*([a-z_][a-z0-9_]*)', 'g') as x)
-         = 'devis,devis_lignes,emetteur,emetteur_assurances,emetteur_incomplet,emetteur_lieux_depot,est_mon_entreprise') as nomme_exactement_attendu_t,
+         = 'devis,devis_lignes,emetteur,emetteur_assurances,emetteur_incomplet,emetteur_labels,emetteur_lieux_depot,emetteur_sous_traitants,est_mon_entreprise') as nomme_exactement_attendu_t,
        pg_temp.v((select count(*) from regexp_matches(src,
-          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients|chantier_neuf_conso|dechets_sur_place)\M',
+          '\m(quote_request_id|sos_request_id|source|quote_requests|sos_requests|callback_requests|demandes|demande_reponses|peut_faire_un_devis|to_jsonb|row_to_json|jsonb_populate_record|hstore|devis_tva|tarifs_pro|users|professional_profiles|preuves_tva|entreprise_registre|clients|chantier_neuf_conso|dechets_sur_place|rge|rge_declare|rge_expire|rge_url|rge_numero|label_categories|raison_sociale|siret|organisme|intitule|reference)\M',
           'gi'))) as mots_interdits_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(src, '(%\s*rowtype|select\s+\*|\.\s*\*)', 'gi'))) as lectures_entieres_attendu_0,
        pg_temp.v((select count(*) from regexp_matches(brut, '''(qr|visite|dossier)''', 'gi'))) as mots_d_origine_attendu_0,
@@ -1912,11 +2056,12 @@ select pg_temp.v(count(*)) as enveloppe_retiree_22_attendu_0 from pg_proc where 
 \echo '=== 23. D4-c, ENCORE (2b-3) — l’urgence est un FAIT DE LIGNE, jamais l’origine : trois devis identiques sauf leurs liens et'
 \echo '        la façon dont ils ont été ouverts (manuelle ; demande + urgence ; urgence seule), « à la signature », un acompte,'
 \echo '        à titre privé, A sans décennale, rendent la MÊME liste ==='
-\echo '    2b-4 : les trois devis restent SANS prix du devis lui-même — devis_cout (rang 12) — et, 2b-5, SANS réponse aux'
-\echo '    déchets — devis_dechets (rang 13, prudence) clôt chaque liste ;'
-\echo '    état 1 : un poste urgent et un poste NON urgent → devis_acompte_signature,devis_decennale,devis_cout,devis_dechets ;'
-\echo '    état 2 : les deux urgents → devis_decennale,devis_cout,devis_dechets ; état 3 : « Non » à la décennale →'
-\echo '    devis_cout,devis_dechets (t, t à chaque fois)'
+\echo '    2b-4 : les trois devis restent SANS prix du devis lui-même — devis_cout (rang 12) —, 2b-5, SANS réponse aux'
+\echo '    déchets — devis_dechets (rang 13, prudence) —, et, 2b-6, SANS réponse aux travaux d’énergie — devis_energie'
+\echo '    (rang 14, prudence) clôt chaque liste ;'
+\echo '    état 1 : un poste urgent et un poste NON urgent → devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,'
+\echo '    devis_energie ; état 2 : les deux urgents → devis_decennale,devis_cout,devis_dechets,devis_energie ; état 3 : « Non »'
+\echo '    à la décennale → devis_cout,devis_dechets,devis_energie (t, t à chaque fois)'
 -- ==========================================================================
 begin;
 execute fiche_a('franchise');
@@ -1944,21 +2089,21 @@ execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste', 150
 execute chiffree('f4930000-0000-4000-8000-0000000000c2', :DZ, 2000, 'poste', 9000,  0, false, 3);
 update public.devis_lignes set urgence = true, generation = 4 where ordre = 1000 and devis_id in (:DX, :DY, :DZ);
 \echo '-- état 1 (attendu : t, t)'
-execute trois_listes(:DX, :DY, :DZ, 'devis_acompte_signature,devis_decennale,devis_cout,devis_dechets');
+execute trois_listes(:DX, :DY, :DZ, 'devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,devis_energie');
 \echo '-- état 2 (attendu : t, t)'
 update public.devis_lignes set urgence = true, generation = 5 where ordre = 2000 and devis_id in (:DX, :DY, :DZ);
-execute trois_listes(:DX, :DY, :DZ, 'devis_decennale,devis_cout,devis_dechets');
-\echo '-- état 3 (attendu : devis_cout,devis_dechets, t, t)'
+execute trois_listes(:DX, :DY, :DZ, 'devis_decennale,devis_cout,devis_dechets,devis_energie');
+\echo '-- état 3 (attendu : devis_cout,devis_dechets,devis_energie, t, t)'
 update public.devis set engage_decennale = false, generation = 6 where id in (:DX, :DY, :DZ);
-execute trois_listes(:DX, :DY, :DZ, 'devis_cout,devis_dechets');
+execute trois_listes(:DX, :DY, :DZ, 'devis_cout,devis_dechets,devis_energie');
 rollback;
 
 
 -- ==========================================================================
 \echo ''
-\echo '=== 24. LES TREIZE RANGS À LA FOIS (2b-3, 2b-4, 2b-5) — le devis du cas 10, plus « à la signature », A sans décennale,'
-\echo '        le prix du devis lui-même VIDE et les déchets SANS réponse : rangs 1 à 13,'
-\echo '        chaque phrase celle du contrat (DIX-NEUF clés sur treize rangs), ligne_id posée sur le seul motif 3 ; aucune'
+\echo '=== 24. LES QUATORZE RANGS À LA FOIS (2b-3, 2b-4, 2b-5, 2b-6) — le devis du cas 10, plus « à la signature », A sans'
+\echo '        décennale, le prix du devis lui-même VIDE, les déchets et les travaux d’énergie SANS réponse : rangs 1 à 14,'
+\echo '        chaque phrase celle du contrat (VINGT-DEUX clés sur quatorze rangs), ligne_id posée sur le seul motif 3 ; aucune'
 \echo '        phrase ne porte d’euro, d’apostrophe droite, d’espace insécable ni de barre oblique, et le seul chiffre est'
 \echo '        le « 8e » de « Dès le 8e jour » (le libellé de la pastille) ==='
 -- ==========================================================================
@@ -1969,10 +2114,11 @@ delete from public.emetteur_assurances where pro_id = :A;
 set local role authenticated;
 set local request.jwt.claim.sub = :A;
 -- 2b-5 : aucune réponse aux déchets (vide = « Oui », par prudence) : devis_dechets, rang 13.
+-- 2b-6 : aucune réponse aux travaux d'énergie : devis_energie, rang 14.
 insert into public.devis (id, pro_id, acompte_centimes, remise_centimes, acompte_a_la_signature, generation)
 values (:D1, :A, 5000, 100, true, 1);
 execute chiffree(:L1, :D1, 1000, 'option', 10000, 2000, false, 2);
-execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee,devis_acompte_signature,devis_decennale,devis_cout,devis_dechets');
+execute motifs(:D1, 'devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee,devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,devis_energie');
 with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(rang, cle, phrase, nature, ligne_id, o)),
      contrat(rang, cle, nature, phrase) as (values
   (1, 'devis_client',            'regle_opus', 'Ce devis ne s’adresse encore à personne : choisissez le client. La loi demande son nom pour un dépannage, une réparation ou un entretien signé dans vos locaux, et pour les services à la personne ; Opus le demande pour tous vos devis.'),
@@ -1993,12 +2139,15 @@ with m as (select * from public.motifs_refus_remise(:D1) with ordinality as x(ra
   (11, 'devis_decennale',         'prudence',  'Joignez dans « Mon entreprise » votre attestation décennale et sa date de fin, ou répondez « Non » dans « Le chantier » si ces travaux ne peuvent pas engager votre décennale.'),
   (12, 'devis_cout',              'prudence',  'Dites si le devis lui-même est gratuit ou payant. La loi le demande au moins pour un dépannage, une réparation ou un entretien signé dans vos locaux ; Opus ne sait pas encore si ce devis en est un.'),
   (13, 'devis_dechets',           'prudence',  'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.'),
-  (13, 'devis_dechets_rubriques', 'loi',       'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'))
-select pg_temp.v((select count(*) from m)) as lignes_attendu_13,
-       pg_temp.v((select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9,10,11,12,13') as rangs_dans_l_ordre_attendu_t,
+  (13, 'devis_dechets_rubriques', 'loi',       'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».'),
+  (14, 'devis_energie',           'prudence',  'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.'),
+  (14, 'devis_energie_mentions',  'loi',       'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou partie de ce devis : la loi le demande pour un client qui commande à titre privé.'),
+  (14, 'devis_energie_mentions_prudence', 'prudence', 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.'))
+select pg_temp.v((select count(*) from m)) as lignes_attendu_14,
+       pg_temp.v((select string_agg(rang::text, ',' order by o) from m) = '1,2,3,4,5,6,7,8,9,10,11,12,13,14') as rangs_dans_l_ordre_attendu_t,
        pg_temp.v((select count(*) from m join contrat c using (rang)
-         where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase)) as conformes_au_contrat_attendu_13,
-       pg_temp.v((select count(*) from contrat) = 19 and (select count(distinct rang) from contrat) = 13) as dix_neuf_cles_treize_rangs_attendu_t,
+         where m.cle = c.cle and m.nature = c.nature and m.phrase = c.phrase)) as conformes_au_contrat_attendu_14,
+       pg_temp.v((select count(*) from contrat) = 22 and (select count(distinct rang) from contrat) = 14) as vingt_deux_cles_quatorze_rangs_attendu_t,
        pg_temp.v((select bool_and((m.ligne_id is not null) = (m.rang = 3)) from m)) as ligne_id_seulement_au_3_attendu_t,
        pg_temp.v((select bool_and(position('€' in phrase) = 0 and position('''' in phrase) = 0
                         and position(chr(160) in phrase) = 0 and position(chr(8239) in phrase) = 0
@@ -2314,7 +2463,8 @@ select pg_temp.v(count(*)) as enveloppe_retiree_26_attendu_0 from pg_proc where 
 
 \echo '    d. D4-c, ENCORE (2b-5) — les déchets ne dépendent pas de l’origine : trois devis identiques sauf leurs liens'
 \echo '       et la façon dont ils ont été ouverts (manuelle ; demande + urgence ; urgence seule) rendent la MÊME liste —'
-\echo '       vide → devis_dechets ; « Oui » et la quantité seule → devis_dechets_rubriques ; tout rempli → « — » (t, t ×3)'
+\echo '       vide → devis_dechets ; « Oui » et la quantité seule → devis_dechets_rubriques ; tout rempli → « — » (t, t ×3) ;'
+\echo '       2b-6 : les trois devis restent SANS réponse aux travaux d’énergie — devis_energie (rang 14) suit chaque liste'
 begin;
 execute fiche_a('franchise');
 execute frais_a;
@@ -2337,16 +2487,16 @@ execute chiffree('f4930000-0000-4000-8000-0000000000a1', :DX, 1000, 'poste', 100
 execute chiffree('f4930000-0000-4000-8000-0000000000b1', :DY, 1000, 'poste', 100000, 0, false, 2);
 execute chiffree('f4930000-0000-4000-8000-0000000000c1', :DZ, 1000, 'poste', 100000, 0, false, 2);
 \echo '-- état 1, sans réponse (attendu : t, t)'
-execute trois_listes(:DX, :DY, :DZ, 'devis_dechets');
+execute trois_listes(:DX, :DY, :DZ, 'devis_dechets,devis_energie');
 \echo '-- état 2, « Oui » et la quantité seule (attendu : t, t)'
 update public.devis set dechets_concerne = true, dechets_quantite_milliemes = 1500, dechets_unite = 't', generation = 3
  where id in (:DX, :DY, :DZ);
-execute trois_listes(:DX, :DY, :DZ, 'devis_dechets_rubriques');
-\echo '-- état 3, tout rempli (attendu : « — », t, t)'
+execute trois_listes(:DX, :DY, :DZ, 'devis_dechets_rubriques,devis_energie');
+\echo '-- état 3, tout rempli (attendu : devis_energie, t, t)'
 update public.devis set dechets_flux = array['mineral', 'dangereux'], dechets_lieux = array[:LA]::uuid[],
                         dechets_cout_centimes = 30000, generation = 4
  where id in (:DX, :DY, :DZ);
-execute trois_listes(:DX, :DY, :DZ, '—');
+execute trois_listes(:DX, :DY, :DZ, 'devis_energie');
 rollback;
 
 \echo '    e. LES CONTRAINTES, chacune refusée SOUS SON NOM (23514) derrière un savepoint — les TROIS tableaux : vide'
@@ -2523,9 +2673,486 @@ select pg_temp.v(:'e26j_err' = 'true' and :'e26j_code' = '23514'
 
 -- ==========================================================================
 \echo ''
-\echo '=== 27. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
+\echo '=== 27. LES TRAVAUX D’ÉNERGIE ET LE LABEL RGE (2b-6, 49.4 septies, rang 14) — UNE clé au plus : devis_energie'
+\echo '        (les travaux PAS DITS, prudence), devis_energie_mentions (à titre privé, la loi) ou'
+\echo '        devis_energie_mentions_prudence ; « Aucun de ces travaux » tait tout ; les deux réponses « entreprise »'
+\echo '        aussi. Une rubrique manque : un travail coché qu’aucun signe de qualité valable et JOINT de A ne couvre,'
+\echo '        et que A ne déclare pas sans label (un signe valable SANS certificat empêche la déclaration de le taire) ;'
+\echo '        la sous-traitance pas dite ; « Oui » et aucun sous-traitant de A, ou l’un d’eux incomplet ==='
+\echo '    a. LES TRAVAUX ET LA DÉCLARATION, allumés et éteints par le chemin d’un client — A range, change et retire'
+\echo '       ses signes de qualité lui-même (sa politique) ; le jour de PARIS pour la date de fin ; les deux travaux'
+\echo '       comptés par prudence (photovoltaïque, désembouage) ; les quatre réponses « à quel titre » ; les'
+\echo '       totaux INCHANGÉS (le label ne touche pas la TVA)'
+\echo '    attendu : t partout, et les listes annoncées'
+-- ==========================================================================
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+execute client_c2;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+select pg_temp.v(energie_travaux = array['aucun'] and energie_sans_label is null and energie_sous_traitance is null
+                 and energie_sous_traitants is null) as aucun_dans_le_decor_attendu_t from public.devis where id = :D1;
+select pg_temp.v(total_ht_centimes = 100000 and total_ttc_centimes = 100000) as totaux_de_depart_attendu_t
+  from public.devis where id = :D1;
+\echo '-- 01. « Aucun de ces travaux » (le décor) : rien'
+execute liste(:D1, '—');
+\echo '-- 00. les travaux PAS DITS : devis_energie (rang 14, prudence, la phrase, aucune ligne)'
+update public.devis set energie_travaux = null, generation = 3 where id = :D1;
+execute liste(:D1, '14:devis_energie=prudence');
+execute rang14(:D1, 'devis_energie', 'prudence', :'PH_ENERGIE');
+\echo '-- 02. les combles, rien d’autre : devis_energie_mentions (la loi, la phrase)'
+update public.devis set energie_travaux = array['isolation_combles'], generation = 4 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+execute rang14(:D1, 'devis_energie_mentions', 'loi', :'PH_MENTIONS');
+\echo '-- V18. la sous-traitance « Non », la déclaration VIDE DE VALEUR, les combles non couverts : la loi (`is not true`)'
+update public.devis set energie_sous_traitance = false, generation = 5 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 03. les combles DÉCLARÉS sans label : rien'
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 6 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 04. la sous-traitance pas dite : la loi revient'
+update public.devis set energie_sous_traitance = null, generation = 7 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.devis set energie_sous_traitance = false, generation = 8 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 01 bis. « Aucun » avec la déclaration et des sous-traitants RESTÉS : rien (la lecture ne tourne pas)'
+update public.devis set energie_travaux = array['aucun'], energie_sous_traitance = true, energie_sous_traitants = array[:TX]::uuid[], generation = 9 where id = :D1;
+select pg_temp.v(energie_sans_label = array['isolation_combles'] and energie_sous_traitants = array[:TX]::uuid[])
+         as restes_sous_aucun_attendu_t from public.devis where id = :D1;
+execute liste(:D1, '—');
+\echo '-- V07. les combles déclarés, les fenêtres ajoutées : la loi (la déclaration ne vaut que pour ce qu’elle nomme)'
+update public.devis set energie_travaux = array['isolation_combles', 'fenetres'], energie_sous_traitance = false, energie_sous_traitants = null, generation = 10 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V11. une clé déclarée pour un travail DÉCOCHÉ reste, sans effet : rien'
+update public.devis set energie_travaux = array['isolation_combles'], energie_sans_label = array['isolation_combles', 'ventilation'], generation = 11 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- V10. la ventilation déclarée, puis la ventilation ET les combles cochés : la loi'
+update public.devis set energie_travaux = array['ventilation', 'isolation_combles'], energie_sans_label = array['ventilation'], generation = 12 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 05. un signe de qualité de A qui couvre les combles, JOINT et valable : rien'
+update public.devis set energie_travaux = array['isolation_combles'], energie_sans_label = null, generation = 13 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+execute label_de(:GA1, :A, array['isolation_combles'], '2999-12-31', :A || '/label-1.pdf');
+select pg_temp.v(count(*)) as le_signe_de_a_existe_attendu_1 from public.emetteur_labels where id = :GA1;
+execute liste(:D1, '—');
+\echo '-- 35. …et la déclaration en plus, inutile : rien'
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 14 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- V01. le signe valable SANS certificat, et la déclaration : la loi (on ne déclare pas ne pas détenir ce qu’on a dit détenir)'
+update public.emetteur_labels set justificatif_chemin = null where id = :GA1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 06. …sans la déclaration : la loi'
+update public.devis set energie_sans_label = null, generation = 15 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V06. un SECOND signe, complet, couvre les combles : rien, même avec la déclaration'
+execute label_de(:GA2, :A, array['isolation_combles'], '2999-12-31', :A || '/label-2.pdf');
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 16 where id = :D1;
+execute liste(:D1, '—');
+delete from public.emetteur_labels where id = :GA2;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V02. le signe JOINT mais expiré HIER (jour de Paris), et la déclaration : rien (un label à date passée est déclarable)'
+update public.emetteur_labels set justificatif_chemin = :A || '/label-1.pdf', valide_jusquau = (now() at time zone 'Europe/Paris')::date - 1 where id = :GA1;
+execute liste(:D1, '—');
+\echo '-- 07. …sans la déclaration : la loi'
+update public.devis set energie_sans_label = null, generation = 17 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 08. le signe valable jusqu’au jour de Paris : rien'
+update public.emetteur_labels set valide_jusquau = (now() at time zone 'Europe/Paris')::date where id = :GA1;
+execute liste(:D1, '—');
+\echo '-- V03. le signe expiré ET sans certificat, et la déclaration : rien'
+update public.emetteur_labels set valide_jusquau = (now() at time zone 'Europe/Paris')::date - 1, justificatif_chemin = null where id = :GA1;
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 18 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 09. un signe d’une AUTRE catégorie (la ventilation) : la loi'
+update public.emetteur_labels set categories = array['ventilation'], valide_jusquau = '2999-12-31',
+                                  justificatif_chemin = :A || '/label-1.pdf' where id = :GA1;
+update public.devis set energie_sans_label = null, generation = 19 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 11. les combles ET la ventilation, le signe couvre la ventilation : la loi ; 10. les combles déclarés : rien'
+update public.devis set energie_travaux = array['isolation_combles', 'ventilation'], generation = 20 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 21 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 12. deux signes qui couvrent chacun un des deux travaux : rien'
+update public.devis set energie_sans_label = null, generation = 22 where id = :D1;
+execute label_de(:GA2, :A, array['isolation_combles'], '2999-12-31', :A || '/label-2.pdf');
+execute liste(:D1, '—');
+\echo '-- V04. la ventilation non portée et les combles sans certificat, les DEUX déclarés : la loi ; V05. la ventilation seule déclarée : la loi'
+delete from public.emetteur_labels where id = :GA2;
+update public.emetteur_labels set categories = array['isolation_combles'], justificatif_chemin = null where id = :GA1;
+update public.devis set energie_sans_label = array['isolation_combles', 'ventilation'], generation = 23 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.devis set energie_sans_label = array['ventilation'], generation = 24 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V08. l’extérieur couvert puis expiré, les combles seuls déclarés : la loi'
+update public.emetteur_labels set categories = array['isolation_exterieur'], justificatif_chemin = :A || '/label-1.pdf',
+                                  valide_jusquau = (now() at time zone 'Europe/Paris')::date - 1 where id = :GA1;
+update public.devis set energie_travaux = array['isolation_combles', 'isolation_exterieur'], energie_sans_label = array['isolation_combles'], generation = 25 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V09. tout était couvert, le signe RETIRÉ, aucune déclaration : la loi'
+update public.emetteur_labels set categories = array['isolation_combles'], valide_jusquau = '2999-12-31' where id = :GA1;
+update public.devis set energie_travaux = array['isolation_combles'], energie_sans_label = null, generation = 26 where id = :D1;
+execute liste(:D1, '—');
+delete from public.emetteur_labels where id = :GA1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V12, V13. le photovoltaïque SEUL, puis le désembouage seul, « Non » : devis_energie_mentions_prudence (la phrase)'
+update public.devis set energie_travaux = array['photovoltaique'], generation = 27 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
+execute rang14(:D1, 'devis_energie_mentions_prudence', 'prudence', :'PH_PRUDENCE');
+update public.devis set energie_travaux = array['desembouage'], generation = 28 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
+\echo '-- V14. le photovoltaïque, la sous-traitance pas dite : la loi (la sous-traitance qui manque)'
+update public.devis set energie_travaux = array['photovoltaique'], energie_sous_traitance = null, generation = 29 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V15. le photovoltaïque et les combles, rien : la loi ; V16. les combles déclarés : la prudence ; V17. le photovoltaïque déclaré : rien'
+update public.devis set energie_sous_traitance = false, energie_travaux = array['photovoltaique', 'isolation_combles'], generation = 30 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.devis set energie_sans_label = array['isolation_combles'], generation = 31 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
+update public.devis set energie_travaux = array['photovoltaique'], energie_sans_label = array['photovoltaique'], generation = 32 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 27, 28, V19. pour une association, une copropriété, une société civile : les travaux pas dits → devis_energie ;'
+\echo '--     les combles, rien → la prudence ; le photovoltaïque → la prudence'
+update public.devis set pour_qui = 'non_professionnel', energie_travaux = null, energie_sans_label = null, generation = 33 where id = :D1;
+execute liste(:D1, '14:devis_energie=prudence');
+update public.devis set energie_travaux = array['isolation_combles'], generation = 34 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
+update public.devis set energie_travaux = array['photovoltaique'], generation = 35 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions_prudence=prudence');
+\echo '-- 29, 30, 34. « pour son entreprise » (les deux réponses) : rien, les travaux dits ou non'
+update public.devis set pour_qui = 'professionnel', energie_travaux = null, generation = 36 where id = :D1;
+execute liste(:D1, '—');
+update public.devis set pour_qui = 'professionnel_hors_activite', energie_travaux = array['isolation_combles'], generation = 37 where id = :D1;
+execute liste(:D1, '—');
+update public.devis set pour_qui = 'professionnel', generation = 38 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 31. la réponse VIDE, les combles : devis_pour_qui, puis la prudence'
+update public.devis set pour_qui = null, generation = 39 where id = :D1;
+execute liste(:D1, '1:devis_pour_qui=regle_opus,14:devis_energie_mentions_prudence=prudence');
+\echo '-- 32. la réponse donnée pour un AUTRE client, les travaux pas dits : devis_pour_qui, puis devis_energie'
+update public.devis set pour_qui = 'consommateur', energie_travaux = null, generation = 40 where id = :D1;
+execute liste(:D1, '14:devis_energie=prudence');
+update public.devis set client_id = :C2, generation = 41 where id = :D1;
+execute liste(:D1, '1:devis_pour_qui=regle_opus,14:devis_energie=prudence');
+\echo '-- 33. sans client : devis_client, puis devis_energie'
+update public.devis set client_id = null, generation = 42 where id = :D1;
+execute liste(:D1, '1:devis_client=regle_opus,14:devis_energie=prudence');
+select pg_temp.v(total_ht_centimes = 100000 and total_ttc_centimes = 100000) as totaux_inchanges_attendu_t
+  from public.devis where id = :D1;
+rollback;
+
+\echo '    b. LES SOUS-TRAITANTS : « Oui » et aucun choisi ; un complet sans label ; sans réponse sur son label ; un label'
+\echo '       valable et joint ; expiré hier ; jusqu’au jour de Paris ; sans justificatif ; un complet ET un incomplet ; un'
+\echo '       identifiant INVENTÉ ; un doublon ; le sous-traitant de B (la RLS) ; « Non » avec des identifiants RESTÉS ;'
+\echo '       B ne lit ni n’écrit rien chez A ; un sous-traitant RETIRÉ laisse un identifiant orphelin, et le point revient'
+\echo '    attendu : t partout, et les listes annoncées'
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+execute sous_traitant_de(:TB1, :B, false, null, null, null);
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+\echo '-- 15. « Oui », aucun sous-traitant choisi : la loi'
+update public.devis set energie_travaux = array['isolation_combles'], energie_sans_label = array['isolation_combles'], energie_sous_traitance = true, generation = 3 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 16. un sous-traitant de A, complet, sans label : rien'
+execute sous_traitant_de(:TA1, :A, false, null, null, null);
+update public.devis set energie_sous_traitants = array[:TA1]::uuid[], generation = 4 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 17. son label pas dit : la loi'
+update public.emetteur_sous_traitants set label_detient = null where id = :TA1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 18. un label valable et JOINT : rien'
+update public.emetteur_sous_traitants set label_detient = true, label_categories = array['isolation_combles'],
+       label_valide_jusquau = '2999-12-31', label_justificatif_chemin = :A || '/st-1.pdf' where id = :TA1;
+execute liste(:D1, '—');
+\echo '-- 19. expiré HIER (jour de Paris) : la loi ; jusqu’au jour de Paris : rien'
+update public.emetteur_sous_traitants set label_valide_jusquau = (now() at time zone 'Europe/Paris')::date - 1 where id = :TA1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.emetteur_sous_traitants set label_valide_jusquau = (now() at time zone 'Europe/Paris')::date where id = :TA1;
+execute liste(:D1, '—');
+\echo '-- 20. sans justificatif : la loi (réponse P13) ; le justificatif remis : rien'
+update public.emetteur_sous_traitants set label_valide_jusquau = '2999-12-31', label_justificatif_chemin = null where id = :TA1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.emetteur_sous_traitants set label_justificatif_chemin = :A || '/st-1.pdf' where id = :TA1;
+execute liste(:D1, '—');
+\echo '-- 21. un complet ET un incomplet (son label pas dit) : la loi'
+execute sous_traitant_de(:TA2, :A, null, null, null, null);
+update public.devis set energie_sous_traitants = array[:TA1, :TA2]::uuid[], generation = 5 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 25. un doublon du même complet : rien (compté DISTINCT)'
+update public.devis set energie_sous_traitants = array[:TA1, :TA1]::uuid[], generation = 6 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 24. un identifiant INVENTÉ seul : la loi ; avec le complet : rien (aucun oracle)'
+update public.devis set energie_sous_traitants = array[:TX]::uuid[], generation = 7 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+update public.devis set energie_sous_traitants = array[:TA1, :TX]::uuid[], generation = 8 where id = :D1;
+execute liste(:D1, '—');
+\echo '-- 22. le sous-traitant de B, seul : la loi (la RLS ne le montre pas, et le filtre ne le compte pas)'
+update public.devis set energie_sous_traitants = array[:TB1]::uuid[], generation = 9 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 26. « Non » avec des identifiants RESTÉS : rien'
+update public.devis set energie_sous_traitance = false, generation = 10 where id = :D1;
+select pg_temp.v(energie_sous_traitance is false and energie_sous_traitants = array[:TB1]::uuid[])
+         as identifiants_restes_sous_non_attendu_t from public.devis where id = :D1;
+execute liste(:D1, '—');
+\echo '-- B ne lit ni n’écrit rien chez A (0, 0, 0), et rien n’a changé'
+set local request.jwt.claim.sub = :B;
+select pg_temp.v((select count(*) from public.emetteur_sous_traitants where pro_id = :A)) as b_lit_les_sous_traitants_de_a_attendu_0;
+with u as (update public.emetteur_sous_traitants set label_detient = false where pro_id = :A returning 1)
+select pg_temp.v(count(*)) as b_ecrit_un_sous_traitant_de_a_attendu_0 from u;
+with u as (update public.devis set energie_sous_traitants = array[:TB1]::uuid[], energie_sous_traitance = true,
+                                   generation = 11 where id = :D1 returning 1)
+select pg_temp.v(count(*)) as b_ecrit_les_sous_traitants_du_devis_de_a_attendu_0 from u;
+set local request.jwt.claim.sub = :A;
+select pg_temp.v(energie_sous_traitance is false and generation = 10) as rien_n_a_change_chez_a_27_attendu_t
+  from public.devis where id = :D1;
+\echo '-- le sous-traitant complet RETIRÉ par A : son identifiant reste ORPHELIN dans le devis, et le point revient'
+update public.devis set energie_sous_traitance = true, energie_sous_traitants = array[:TA1]::uuid[], generation = 12 where id = :D1;
+execute liste(:D1, '—');
+delete from public.emetteur_sous_traitants where id = :TA1;
+select pg_temp.v(energie_sous_traitants = array[:TA1]::uuid[]) as orphelin_garde_par_le_devis_27_attendu_t
+  from public.devis where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+rollback;
+
+\echo '    b bis. V22 — un sous-traitant labellisé SANS date ne peut pas exister (la croisée) ; elle RETIRÉE dans la'
+\echo '       transaction, la forme `is not true` du rang 14 le compte encore incomplet (la seconde barrière) : la loi'
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+alter table public.emetteur_sous_traitants drop constraint emetteur_sous_traitant_complet_check;
+insert into public.emetteur_sous_traitants (id, pro_id, raison_sociale, siret, label_detient, label_categories,
+                                            label_justificatif_chemin)
+values (:TA1, :A, 'Sous-traitant d’essai', '00004910600016', true, array['isolation_combles'], :A || '/st-1.pdf');
+select pg_temp.v(label_detient is true and label_valide_jusquau is null) as labellise_sans_date_pose_attendu_t
+  from public.emetteur_sous_traitants where id = :TA1;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+update public.devis set energie_travaux = array['isolation_combles'], energie_sans_label = array['isolation_combles'], energie_sous_traitance = true, energie_sous_traitants = array[:TA1]::uuid[], generation = 3 where id = :D1;
+execute liste(:D1, '14:devis_energie_mentions=loi');
+rollback;
+
+\echo '    c. LES FILTRES `g.pro_id = v_pro` ET `s.pro_id = v_pro`, éprouvés par une ENVELOPPE security definer (le'
+\echo '       modèle des cas 22 et 26 c) : comme la remise de 2c l’appellera, la RLS ne filtre plus, et seuls ces filtres'
+\echo '       séparent le signe et le sous-traitant de B de ceux de A (attendu : la loi par l’enveloppe ET en direct'
+\echo '       avec le signe complet de B, puis avec son sous-traitant ; « — » des deux côtés avec le signe SANS certificat'
+\echo '       de B et la déclaration de A, puis avec le signe complet de A ; puis l’enveloppe retirée, 0)'
+begin;
+execute fiche_a('franchise');
+execute frais_a;
+execute label_de(:GB1, :B, array['isolation_combles'], '2999-12-31', :B || '/label-b.pdf');
+execute sous_traitant_de(:TB1, :B, false, null, null, null);
+select pg_temp.v((select count(*) from public.emetteur_labels where id = :GB1)
+                 + (select count(*) from public.emetteur_sous_traitants where id = :TB1)) as deux_lignes_de_b_attendu_2;
+create function public.essai_remise_enveloppe(p uuid)
+returns table (cle text)
+language plpgsql
+security definer
+set search_path = public
+as $enveloppe$
+begin
+  return query select m.cle from public.motifs_refus_remise(p) m;
+end;
+$enveloppe$;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+execute chiffree(:L1, :D1, 1000, 'poste', 100000, 0, false, 2);
+\echo '-- 13, 14. le signe complet de B ne couvre pas les combles de A'
+update public.devis set energie_travaux = array['isolation_combles'], energie_sous_traitance = false, generation = 3 where id = :D1;
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = 'devis_energie_mentions') as enveloppe_signe_de_b_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- 22, 23. le sous-traitant de B ne compte pas pour A'
+update public.devis set energie_sans_label = array['isolation_combles'], energie_sous_traitance = true, energie_sous_traitants = array[:TB1]::uuid[], generation = 4 where id = :D1;
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = 'devis_energie_mentions') as enveloppe_sous_traitant_de_b_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+execute liste(:D1, '14:devis_energie_mentions=loi');
+\echo '-- V20, V21. le signe de B SANS certificat n’empêche pas la déclaration de A'
+reset role;
+update public.emetteur_labels set justificatif_chemin = null where id = :GB1;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+update public.devis set energie_sous_traitance = false, generation = 5 where id = :D1;
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = '—') as enveloppe_signe_sans_certificat_de_b_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+execute liste(:D1, '—');
+\echo '-- le signe complet de A, sans déclaration : rien des deux côtés'
+update public.devis set energie_sans_label = null, generation = 6 where id = :D1;
+execute label_de(:GA1, :A, array['isolation_combles'], '2999-12-31', :A || '/label-1.pdf');
+select pg_temp.v(coalesce(string_agg(cle, ','), '—') = '—') as enveloppe_signe_de_a_attendu_t
+  from public.essai_remise_enveloppe(:D1);
+execute liste(:D1, '—');
+rollback;
+select pg_temp.v(count(*)) as enveloppe_retiree_27_attendu_0 from pg_proc where proname = 'essai_remise_enveloppe';
+
+\echo '    d. LES CONTRAINTES, chacune refusée SOUS SON NOM (23514) derrière un savepoint — les travaux : vide, {aucun,'
+\echo '       chaudiere}, {menuiseries}, l’ancienne clé {entretien_chauffage}, deux dimensions, borne basse 0, un élément'
+\echo '       vide (refus 39 à 45/53) ; la déclaration : vide, {aucun}, {menuiseries}, un élément vide, deux dimensions'
+\echo '       (46 à 50/53) ; les sous-traitants : vide, onze, un élément vide (51 à 53/53) — jugés en SQL plus bas'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+savepoint s;
+update public.devis set energie_travaux = '{}', generation = 2 where id = :D1;
+\set e27a_err :ERROR
+\set e27a_code :LAST_ERROR_SQLSTATE
+\set e27a_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = array['aucun', 'chaudiere'], generation = 2 where id = :D1;
+\set e27b_err :ERROR
+\set e27b_code :LAST_ERROR_SQLSTATE
+\set e27b_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = array['menuiseries'], generation = 2 where id = :D1;
+\set e27c_err :ERROR
+\set e27c_code :LAST_ERROR_SQLSTATE
+\set e27c_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = array['entretien_chauffage'], generation = 2 where id = :D1;
+\set e27d_err :ERROR
+\set e27d_code :LAST_ERROR_SQLSTATE
+\set e27d_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = '{{chaudiere},{ventilation}}', generation = 2 where id = :D1;
+\set e27e_err :ERROR
+\set e27e_code :LAST_ERROR_SQLSTATE
+\set e27e_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = '[0:0]={chaudiere}', generation = 2 where id = :D1;
+\set e27f_err :ERROR
+\set e27f_code :LAST_ERROR_SQLSTATE
+\set e27f_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_travaux = array['chaudiere', null], generation = 2 where id = :D1;
+\set e27g_err :ERROR
+\set e27g_code :LAST_ERROR_SQLSTATE
+\set e27g_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sans_label = '{}', generation = 2 where id = :D1;
+\set e27h_err :ERROR
+\set e27h_code :LAST_ERROR_SQLSTATE
+\set e27h_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sans_label = array['aucun'], generation = 2 where id = :D1;
+\set e27i_err :ERROR
+\set e27i_code :LAST_ERROR_SQLSTATE
+\set e27i_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sans_label = array['menuiseries'], generation = 2 where id = :D1;
+\set e27j_err :ERROR
+\set e27j_code :LAST_ERROR_SQLSTATE
+\set e27j_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sans_label = array['chaudiere', null], generation = 2 where id = :D1;
+\set e27k_err :ERROR
+\set e27k_code :LAST_ERROR_SQLSTATE
+\set e27k_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sans_label = '{{chaudiere},{ventilation}}', generation = 2 where id = :D1;
+\set e27l_err :ERROR
+\set e27l_code :LAST_ERROR_SQLSTATE
+\set e27l_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sous_traitants = '{}', generation = 2 where id = :D1;
+\set e27m_err :ERROR
+\set e27m_code :LAST_ERROR_SQLSTATE
+\set e27m_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sous_traitants = array(select gen_random_uuid() from generate_series(1, 11)), generation = 2 where id = :D1;
+\set e27n_err :ERROR
+\set e27n_code :LAST_ERROR_SQLSTATE
+\set e27n_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+update public.devis set energie_sous_traitants = array[:TX, null]::uuid[], generation = 2 where id = :D1;
+\set e27o_err :ERROR
+\set e27o_code :LAST_ERROR_SQLSTATE
+\set e27o_msg :LAST_ERROR_MESSAGE
+rollback to savepoint s;
+rollback;
+
+\echo '    e. LES BORNES ACCEPTÉES — les dix-neuf travaux, la déclaration de trois clés dont les deux de prudence, dix'
+\echo '       sous-traitants ; {desembouage} seul ; {aucun} seul — puis LE JUGEMENT des quinze refus (attendu : t ×18)'
+begin;
+set local role authenticated;
+set local request.jwt.claim.sub = :A;
+execute devis_complet(:D1);
+update public.devis set energie_travaux = array['chaudiere', 'solaire_thermique', 'bois_chaudiere', 'bois_poele', 'pac_chauffage',
+                                                 'pac_eau_chaude', 'emetteurs_electriques', 'ventilation', 'fenetres', 'fenetres_toit',
+                                                 'isolation_interieur', 'isolation_exterieur', 'isolation_toiture', 'isolation_combles',
+                                                 'isolation_plancher', 'geothermie', 'renovation_ensemble', 'photovoltaique', 'desembouage'],
+                        energie_sans_label = array['isolation_combles', 'photovoltaique', 'desembouage'],
+                        energie_sous_traitance = true,
+                        energie_sous_traitants = array(select gen_random_uuid() from generate_series(1, 10)), generation = 2
+ where id = :D1;
+select pg_temp.v(cardinality(energie_travaux) = 19 and cardinality(energie_sans_label) = 3
+                 and cardinality(energie_sous_traitants) = 10 and energie_sous_traitance is true)
+         as dix_neuf_travaux_et_dix_sous_traitants_acceptes_attendu_t from public.devis where id = :D1;
+update public.devis set energie_travaux = array['desembouage'], generation = 3 where id = :D1;
+select pg_temp.v(energie_travaux = array['desembouage']) as desembouage_seul_accepte_attendu_t from public.devis where id = :D1;
+update public.devis set energie_travaux = array['aucun'], generation = 4 where id = :D1;
+select pg_temp.v(energie_travaux = array['aucun']) as aucun_seul_accepte_attendu_t from public.devis where id = :D1;
+rollback;
+select pg_temp.v(:'e27a_err' = 'true' and :'e27a_code' = '23514'
+         and :'e27a_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as travaux_vides_refuses_attendu_t,
+       pg_temp.v(:'e27b_err' = 'true' and :'e27b_code' = '23514'
+         and :'e27b_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as aucun_et_chaudiere_refuses_attendu_t,
+       pg_temp.v(:'e27c_err' = 'true' and :'e27c_code' = '23514'
+         and :'e27c_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as menuiseries_refusees_attendu_t,
+       pg_temp.v(:'e27d_err' = 'true' and :'e27d_code' = '23514'
+         and :'e27d_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as ancienne_cle_refusee_attendu_t,
+       pg_temp.v(:'e27e_err' = 'true' and :'e27e_code' = '23514'
+         and :'e27e_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as travaux_deux_dimensions_refuses_attendu_t,
+       pg_temp.v(:'e27f_err' = 'true' and :'e27f_code' = '23514'
+         and :'e27f_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as travaux_borne_zero_refuses_attendu_t,
+       pg_temp.v(:'e27g_err' = 'true' and :'e27g_code' = '23514'
+         and :'e27g_msg' = 'new row for relation "devis" violates check constraint "devis_energie_travaux_check"')
+         as travail_vide_refuse_attendu_t,
+       pg_temp.v(:'e27h_err' = 'true' and :'e27h_code' = '23514'
+         and :'e27h_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sans_label_check"')
+         as declaration_vide_refusee_attendu_t,
+       pg_temp.v(:'e27i_err' = 'true' and :'e27i_code' = '23514'
+         and :'e27i_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sans_label_check"')
+         as aucun_declare_refuse_attendu_t,
+       pg_temp.v(:'e27j_err' = 'true' and :'e27j_code' = '23514'
+         and :'e27j_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sans_label_check"')
+         as menuiseries_declarees_refusees_attendu_t,
+       pg_temp.v(:'e27k_err' = 'true' and :'e27k_code' = '23514'
+         and :'e27k_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sans_label_check"')
+         as declaration_element_vide_refusee_attendu_t,
+       pg_temp.v(:'e27l_err' = 'true' and :'e27l_code' = '23514'
+         and :'e27l_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sans_label_check"')
+         as declaration_deux_dimensions_refusee_attendu_t,
+       pg_temp.v(:'e27m_err' = 'true' and :'e27m_code' = '23514'
+         and :'e27m_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"')
+         as sous_traitants_vides_refuses_attendu_t,
+       pg_temp.v(:'e27n_err' = 'true' and :'e27n_code' = '23514'
+         and :'e27n_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"')
+         as onze_sous_traitants_refuses_attendu_t,
+       pg_temp.v(:'e27o_err' = 'true' and :'e27o_code' = '23514'
+         and :'e27o_msg' = 'new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"')
+         as sous_traitant_vide_refuse_attendu_t;
+
+-- ==========================================================================
+\echo ''
+\echo '=== 28. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ==='
 \echo '    Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs'
-\echo '    manquent, et ceci vaut f. C’est la 365e colonne « …_attendu_ » du fichier.'
+\echo '    manquent, et ceci vaut f. C’est la 472e colonne « …_attendu_ » du fichier.'
 -- ==========================================================================
 select pg_temp.valeurs_jugees() = :VALEURS_ANNONCEES as toutes_les_valeurs_jugees_attendu_t,
        pg_temp.valeurs_jugees() as valeurs_jugees;

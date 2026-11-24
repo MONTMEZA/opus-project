@@ -67,6 +67,34 @@ console.log('\nLes noms sont inventés, et le restent');
   verifier('aucun ancien nom d’entreprise réelle ne revient dans les données',
     trouves.length === 0, trouves.join('\n      '));
 
+  /* 2b-6 (cahier T26, CTL-4) : AUCUN ORGANISME RÉEL dans la démonstration,
+     ni dans les deux formulaires de « Mon entreprise » qui la montrent. Un
+     signe de qualité de démonstration au nom de Qualibat ou de Qualit’EnR
+     ferait dire à une capture publicitaire qu'un organisme réel a qualifié
+     une entreprise inventée — et pour un label RGE, c'est exactement la
+     pratique commerciale trompeuse que l'écran dénonce (L. 121-4). Les noms
+     sont ceux des organismes et des marques de qualification du bâtiment
+     et de l'énergie, cherchés EN MOTS ENTIERS (une frontière posée à la
+     main : `\b` ne voit pas une lettre accentuée), sans tenir compte de la
+     casse — « Qualifications de démonstration » n'en est pas un. Les
+     commentaires sont retirés : celui de `emetteur-demo.js` les nomme pour
+     les INTERDIRE. */
+  const ORGANISMES = ['qualibat', 'qualit[\'’ ]?enr', 'qualipac', 'qualisol', 'qualibois', 'qualipv', 'qualifelec', 'certibat',
+    'cequami', 'cerqual', 'afnor', 'eco[ -]?artisan', 'pros de la performance énerg[ée]tique', 'promotelec'];
+  const motOrganisme = new RegExp(`(^|[^\\p{L}])(${ORGANISMES.join('|')})(?![\\p{L}])`, 'iu');
+  const fichiersOrganismes = [
+    'src/data/demo.js', 'src/data/siret-demo.js', 'src/data/tarifs-demo.js', 'src/data/devis-demo.js',
+    'src/data/emetteur-demo.js', 'src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js',
+  ].filter(existsSync);
+  const organismesTrouves = fichiersOrganismes.map((f) => [f, sansCommentaires(lire(f)).match(motOrganisme)])
+    .filter(([, m]) => m).map(([f, m]) => `${f} : « ${m[2]} »`);
+  verifier('aucun organisme réel de qualification (Qualibat, Qualit’EnR, Qualifelec…) dans la démonstration ni dans les deux formulaires '
+    + 'des signes de qualité et des sous-traitants (2b-6, CTL-4)',
+  organismesTrouves.length === 0 && fichiersOrganismes.length === 7
+    && motOrganisme.test('Qualibat') && motOrganisme.test('QUALIT’ENR') && motOrganisme.test('certifié par Qualifelec.')
+    && !motOrganisme.test('Qualifications de démonstration') && !motOrganisme.test('qualibatiment'),
+  `${organismesTrouves.join('\n      ')} | ${fichiersOrganismes.length} fichiers relus`);
+
   const nomsPros = new Set(Object.values(pros).map((p) => p.nom));
   const clients = [
     ...demo.initialDemandesRecues.map((d) => d.nom),

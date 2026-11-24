@@ -31,8 +31,8 @@
  *     la somme des lignes de ce taux (3 × 33,33 € à 10 % : 10,00 € de TVA,
  *     et non 9,99 € ligne par ligne).
  *
- * CE FICHIER N'IMPORTE QUE CINQ FICHIERS PURS
- * -------------------------------------------
+ * CE FICHIER N'IMPORTE QUE SIX FICHIERS PURS
+ * ------------------------------------------
  * `./centimes.js` (l'écriture d'un montant, la seule du projet),
  * `./entreprise.js` (pour `dateFrancaise()` et `isoLisible()` : une date
  * d'horodatage se lit à l'heure du téléphone, jamais par ses dix premiers
@@ -48,8 +48,13 @@
  * déchets triés, ce qui reste sur le chantier, les lieux de dépôt —, et deux
  * listes égales ne sont jamais `Object.is` l'une à l'autre ; la règle n'est
  * écrite qu'à UN endroit, que la file d'écriture et la saisie importent
- * aussi ; `meme-valeur.js` n'importe RIEN). Aucun des cinq ne charge React
- * Native : `node` fait tourner ce fichier, et un contrôle qui plante ne
+ * aussi ; `meme-valeur.js` n'importe RIEN) et, depuis 2b-6,
+ * `../data/travaux-energie.js` (pour `TRAVAUX_ENERGIE` : les dix-neuf
+ * travaux d'économies d'énergie que le devis coche et que les signes de
+ * qualité de « Mon entreprise » couvrent, avec les MÊMES clés — une seule
+ * source, que `emetteur.js` importe aussi, puisque ces deux fichiers ne
+ * s'importent pas l'un l'autre ; il n'importe RIEN). Aucun des six ne charge
+ * React Native : `node` fait tourner ce fichier, et un contrôle qui plante ne
  * vérifie rien. `verifier-devis` tient cette liste.
  *
  * LES NOMS
@@ -63,6 +68,7 @@ import { dateFrancaise, isoLisible } from './entreprise.js';
 import { cleDeRapprochement, aPlat } from './rapprochement.js';
 import { joursEntre } from './formats.js';
 import { memeValeur } from './meme-valeur.js';
+import { TRAVAUX_ENERGIE } from '../data/travaux-energie.js';
 
 /* ================================================================== */
 /*  LES CONSTANTES — chacune a son miroir dans la base                  */
@@ -192,13 +198,16 @@ export const CONTRAINTES_LIGNE = Object.freeze([
   'devis_ligne_urgence_check',
 ]);
 
-/** Les vingt-six contraintes de `devis`, triées de même (dix au lot 1, sept
+/** Les vingt-neuf contraintes de `devis`, triées de même (dix au lot 1, sept
  *  au lot 2a, une à 2b-2 : la réponse « à quel titre » ; une à 2b-4 : le
  *  prix du devis lui-même, `devis_cout_check`, rangée entre `calculs` et
  *  `delai` — PostgreSQL nomme la première dans cet ordre, et une ligne à
  *  « −1 » ET une validité fausse est nommée `devis_cout_check` des deux
  *  côtés ; sept à 2b-5 : les déchets du chantier, `devis_dechets_…_check`,
- *  rangées entre `cout` et `delai` — « dec » vient avant « del »).
+ *  rangées entre `cout` et `delai` — « dec » vient avant « del » ; trois à
+ *  2b-6 : les travaux d'énergie et le label RGE, `devis_energie_…_check`,
+ *  rangées entre `delai` et `lieu` — « de » vient avant « en », et « sa »,
+ *  « so », « tr » dans cet ordre).
  *  `validerDevis()` teste celles qui portent sur ce que l'artisan écrit ;
  *  `devis_plafond_check` est tenu par `totauxDevis()` ;
  *  `devis_totaux_check` et `devis_calculs_check` par la base seule. */
@@ -216,6 +225,9 @@ export const CONTRAINTES_DEVIS = Object.freeze([
   'devis_dechets_sur_place_check',
   'devis_dechets_unite_check',
   'devis_delai_check',
+  'devis_energie_sans_label_check',
+  'devis_energie_sous_traitants_check',
+  'devis_energie_travaux_check',
   'devis_lieu_adresse_check',
   'devis_lieu_code_postal_check',
   'devis_lieu_ville_check',
@@ -367,6 +379,21 @@ export const CHAMPS_DEVIS = Object.freeze([
      par `Object.is`. Aucune date. */
   'dechetsConcerne', 'dechetsQuantiteMilliemes', 'dechetsUnite', 'dechetsFlux', 'dechetsSurPlace', 'dechetsLieux',
   'dechetsSansDepot', 'dechetsCoutCentimes',
+  /* 2b-6 (49.4 septies) : LES TRAVAUX D'ÉNERGIE ET LE LABEL RGE, quatre faits
+     de la carte « Énergie et label RGE » — les travaux d'économies d'énergie
+     ou d'énergie renouvelable que ce devis comporte (une LISTE fermée,
+     jamais vide : vide de valeur = rien de dit, `aucun` = « Aucun de ces
+     travaux », exclusif), ceux pour lesquels l'artisan déclare, SUR CE
+     DEVIS, ne pas détenir de label (une liste de clés : une déclaration ne
+     vaut que pour ce qu'elle nomme), la réponse à « Une autre entreprise
+     fera-t-elle une partie, ou la totalité, des travaux de ce devis ? »
+     (vide = rien de dit), et les sous-traitants choisis (des identifiants,
+     jamais vide). AUCUNE PAIRE (T23) : « Aucun de ces travaux » ne vide ni
+     les déclarations ni les sous-traitants, décocher un travail ne retire
+     pas sa déclaration, « Non » ne vide pas les sous-traitants — tout reste
+     gardé, sans effet. Trois listes : la file et la saisie les comparent par
+     `memeValeur`. Aucune date. */
+  'energieTravaux', 'energieSansLabel', 'energieSousTraitance', 'energieSousTraitants',
 ]);
 /** LES PAIRES qui s'écrivent ENSEMBLE, en une écriture (relecture BASE-2) :
  *  la réduction (pourcentage OU montant), l'acompte (pourcentage OU montant,
@@ -1041,6 +1068,16 @@ const REGLES_DEVIS = {
     ? null : 'dechetsUnite'),
   devis_delai_check: (d) => (!present(d.delaiExecution) || longueur(d.delaiExecution) <= LONGUEURS.delaiExecution
     ? null : 'delaiExecution'),
+  /* 2b-6 (49.5) : les trois contraintes des travaux d'énergie, LES MIROIRS
+     EXACTS de la base — un tableau VIDE refusé (la forme `case … else
+     false`), `aucun` seul ou absent, une clé hors de la liste refusée, un
+     doublon accepté (le rang 14 compte les travaux DISTINCTS). */
+  devis_energie_sans_label_check: (d) => (!present(d.energieSansLabel) || sansLabelRecevable(d.energieSansLabel)
+    ? null : 'energieSansLabel'),
+  devis_energie_sous_traitants_check: (d) => (!present(d.energieSousTraitants)
+    || sousTraitantsRecevables(d.energieSousTraitants) ? null : 'energieSousTraitants'),
+  devis_energie_travaux_check: (d) => (!present(d.energieTravaux) || travauxRecevables(d.energieTravaux)
+    ? null : 'energieTravaux'),
   devis_lieu_adresse_check: (d) => (!present(d.lieuAdresse) || longueur(d.lieuAdresse) <= LONGUEURS.lieuAdresse
     ? null : 'lieuAdresse'),
   devis_lieu_code_postal_check: (d) => (!present(d.lieuCodePostal) || /^[0-9]{5}$/.test(d.lieuCodePostal)
@@ -1941,6 +1978,14 @@ export function rowToDevis(d) {
     dechetsLieux: d.dechets_lieux ?? null,
     dechetsSansDepot: d.dechets_sans_depot ?? null,
     dechetsCoutCentimes: nombreOuNul(d.dechets_cout_centimes),
+    /* 2b-6 (49.4 septies) : les travaux d'énergie et le label RGE, relus tels
+       que la base les garde — `null` compris (vide de valeur = rien de dit).
+       Les trois listes arrivent en tableaux (un `text[]` et un `uuid[]`,
+       les identifiants en minuscules), la réponse en booléen. */
+    energieTravaux: d.energie_travaux ?? null,
+    energieSansLabel: d.energie_sans_label ?? null,
+    energieSousTraitance: d.energie_sous_traitance ?? null,
+    energieSousTraitants: d.energie_sous_traitants ?? null,
     generation: nombreOuNul(d.generation),
     createdAt: d.created_at ?? null,
     modifieLe: d.modifie_le ?? null,
@@ -2537,6 +2582,11 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
   devis_dechets_sur_place_check: 'Ce qui reste sur le chantier n’a pas pu être enregistré.',
   devis_dechets_unite_check: 'L’unité des déchets n’a pas pu être enregistrée.',
   devis_delai_check: 'Le délai d’exécution n’a pas pu être enregistré.',
+  /* 2b-6 : les trois contraintes de la carte « Énergie et label RGE »
+     (annexe A.7 du cahier 2b-6), chacune nommant SON champ. */
+  devis_energie_sans_label_check: 'Votre déclaration sur le label RGE n’a pas pu être enregistrée.',
+  devis_energie_sous_traitants_check: 'Les sous-traitants de ce devis n’ont pas pu être enregistrés.',
+  devis_energie_travaux_check: 'Les travaux d’énergie n’ont pas pu être enregistrés.',
   devis_lieu_adresse_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_lieu_code_postal_check: 'Le lieu des travaux n’a pas pu être enregistré.',
   devis_lieu_ville_check: 'Le lieu des travaux n’a pas pu être enregistré.',
@@ -2566,13 +2616,14 @@ const ECHEC_PAR_CONTRAINTE = Object.freeze({
  * conditions » (2b-3, E2 : « À quel titre ? » manquait depuis 2b-2, et « Le
  * chantier » gagne une colonne ; 2b-5 : la carte « Déchets du chantier »
  * écrit aussi l'en-tête — sans « les déchets », une coupure pendant son
- * enregistrement aurait nommé tout SAUF ce que l'artisan venait de toucher).
+ * enregistrement aurait nommé tout SAUF ce que l'artisan venait de toucher ;
+ * 2b-6 : la carte « Énergie et label RGE » aussi — « les travaux d'énergie »).
  */
 export function phraseEchecDuDevis({ enBase = false, erreur = null, retenue = null } = {}) {
   if (!enBase) return 'Le brouillon n’a pas pu être enregistré.';
   const p = ECHEC_PAR_CONTRAINTE[contrainteDuDevis(erreur)]
     || 'L’en-tête du devis n’a pas pu être enregistré : l’objet, le lieu, le délai, « À quel titre ? », « Le chantier », '
-      + 'les déchets ou les conditions.';
+      + 'les déchets, les travaux d’énergie ou les conditions.';
   /* CE QUI RESTE TENU À PART (relecture finale, ÉCRAN-F1) : une autre
      écriture de l'en-tête a échoué depuis (une coupure) — la réduction que
      le plafond a refusée n'est toujours pas en base, et la phrase le dit
@@ -3962,11 +4013,13 @@ export function avertissementDelai(texte) {
 export const NATURES_DE_MOTIF = Object.freeze(['loi', 'prudence', 'regle_opus']);
 
 /**
- * LES DIX-NEUF MOTIFS DU DEVIS, SUR TREIZE RANGS (annexe B.2 du cahier 2b, A.1
- * du cahier 2b-2, et A.1 du cahier 2b-3 : le rang 10, « à la signature », et le
- * rang 11, l'attestation décennale — trois clés EXCLUSIVES, comme le rang 1 ;
- * A.1 du cahier 2b-4 : le rang 12, le prix du devis lui-même ; A.1 du cahier
- * 2b-5 : le rang 13, les déchets du chantier, deux clés EXCLUSIVES),
+ * LES VINGT-DEUX MOTIFS DU DEVIS, SUR QUATORZE RANGS (annexe B.2 du cahier 2b,
+ * A.1 du cahier 2b-2, et A.1 du cahier 2b-3 : le rang 10, « à la signature »,
+ * et le rang 11, l'attestation décennale — trois clés EXCLUSIVES, comme le
+ * rang 1 ; A.1 du cahier 2b-4 : le rang 12, le prix du devis lui-même ; A.1
+ * du cahier 2b-5 : le rang 13, les déchets du chantier, deux clés
+ * EXCLUSIVES ; A.1 du cahier 2b-6 : le rang 14, les travaux d'énergie et le
+ * label RGE, trois clés EXCLUSIVES),
  * recopiés OCTET POUR OCTET de la fonction de la base : le
  * rang (l'ordre de la liste), la nature, la phrase. Le rang 1 porte DEUX clés,
  * exclusives (2b-2) : sans client, `devis_client` ; avec un client mais sans
@@ -4175,6 +4228,46 @@ export const MOTIFS_DEVIS = Object.freeze({
     nature: 'loi',
     phrase: 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
       + 'rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».',
+  }),
+  /* 2b-6 (réponses du 23/11 et du 24/11 ; annexe A.1 du cahier 2b-6) — le
+     rang 14, au plus UNE de ces trois clés, et seulement pour un client qui
+     commande à titre privé, pour une association, une copropriété ou une
+     société civile, ou sans réponse VALABLE à « À quel titre ? » (L. 224-114
+     vit dans une section que L. 221-3 n'étend pas aux petites entreprises) :
+       - `devis_energie` (PRUDENCE) : les travaux d'énergie ne sont pas dits
+         (vide) — Opus ne sait pas si ce devis en relève ;
+       - `devis_energie_mentions` (LA LOI) : à titre privé, et ce qui manque
+         touche un travail du décret (le label n'est ni couvert ni déclaré
+         absent, ou un signe valable n'a pas son certificat) ou la
+         sous-traitance (pas de réponse, « Oui » sans sous-traitant choisi
+         chez l'entreprise, ou un choisi incomplet) ;
+       - `devis_energie_mentions_prudence` (PRUDENCE) : une association, une
+         copropriété, une société civile, une réponse vide — ou, à titre
+         privé, quand seules les deux lignes comptées par prudence (les
+         panneaux photovoltaïques, le désembouage) manquent de label.
+     La nature se choisit par la CLÉ (une nature par clé, que la base écrit).
+     Aucun montant, aucun chiffre ; la première dit « si vous détenez »,
+     jamais « votre label » (la loi : « s'il détient ou non »). 188, 187 et
+     194 caractères ; octet pour octet celles de la base. LA RÈGLE est
+     `motifDeLEnergie`, plus bas, sur `rubriquesDeLEnergie` : UNE écriture,
+     que la rangée et le point lisent aussi. */
+  devis_energie: Object.freeze({
+    rang: 14,
+    nature: 'prudence',
+    phrase: 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi demande '
+      + 'alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.',
+  }),
+  devis_energie_mentions: Object.freeze({
+    rang: 14,
+    nature: 'loi',
+    phrase: 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou '
+      + 'partie de ce devis : la loi le demande pour un client qui commande à titre privé.',
+  }),
+  devis_energie_mentions_prudence: Object.freeze({
+    rang: 14,
+    nature: 'prudence',
+    phrase: 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout ou partie de '
+      + 'ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.',
   }),
 });
 
@@ -4515,7 +4608,14 @@ export function etatDeLAttestation(assurances, jour = jourDuTelephone(), { proId
  * base, `{ id, pro_id, … }`) — le miroir ne compte que ceux du devis
  * (`proId`), comme `l.pro_id = v_pro` dans la base. `undefined` = pas
  * transmis : comme si aucun lieu n'existait (seuls la démonstration et
- * `cas-remise.json` les passent).
+ * `cas-remise.json` les passent). Depuis 2b-6, `labels` et `sousTraitants` :
+ * les signes de qualité et les sous-traitants de l'entreprise, des LIGNES de
+ * la base (`emetteur_labels`, `emetteur_sous_traitants`, aux noms de la
+ * base : `{ id, pro_id, categories, valide_jusquau, justificatif_chemin }`,
+ * `{ id, pro_id, label_detient, label_categories, label_valide_jusquau,
+ * label_justificatif_chemin }`) — le miroir ne compte que ceux de
+ * l'entreprise du devis (`v.pro_id = v_pro` dans la base). `undefined` = pas
+ * transmis : comme si aucun n'existait, la règle des lieux.
  *
  * Sortie : `[{ rang, cle, phrase, nature, ligneId }]`, rangée comme la
  * base — le rang croissant, puis, pour les lignes fautives, l'ordre des
@@ -4537,6 +4637,7 @@ export function etatDeLAttestation(assurances, jour = jourDuTelephone(), { proId
  */
 export function motifsDeRemise({
   devis = null, lignes = [], regime = null, motifsEmetteur = [], assurances = [], jour = jourDuTelephone(), lieux = undefined,
+  labels = undefined, sousTraitants = undefined,
 } = {}) {
   const d = nettoyerDevis(devis || {});
   const sortie = [];
@@ -4599,6 +4700,13 @@ export function motifsDeRemise({
      lieu choisi n'y est alors jamais compté, comme si aucun n'existait. */
   const cleDechets = motifDesDechets(d, lieux);
   if (cleDechets) motif(cleDechets);
+  /* 2b-6, rang 14 : les travaux d'énergie et le label RGE —
+     `motifDeLEnergie`, LA règle (la même que la rangée « Énergie (label
+     RGE) »), avec la réponse VALABLE déjà calculée. Des listes pas
+     transmises ne prouvent rien : comme si aucun signe de qualité ni aucun
+     sous-traitant n'existait. */
+  const cleEnergie = motifDeLEnergie(d, labels, sousTraitants, jour, valable);
+  if (cleEnergie) motif(cleEnergie);
 
   /* Les motifs de l'entreprise : le rang garde sa position d'ORIGINE
      (`100 + position`), PUIS le filtre de la réponse valable — un trou,
@@ -4699,6 +4807,15 @@ export const ENDROIT_DU_MOTIF = Object.freeze({
      et `secondeActionDuPoint` ne change pas. */
   devis_dechets: Object.freeze({ endroit: 'dechets' }),
   devis_dechets_rubriques: Object.freeze({ endroit: 'dechets' }),
+  /* 2b-6 : la carte « Énergie et label RGE ». UN SEUL bouton (« Compléter :
+     énergie et label RGE », annexe A.1) : `devis_energie` l'ouvre sur la
+     question des travaux ; les deux autres sur la PREMIÈRE rubrique qui
+     manque, la question à défaut (`rubriqueDeLEnergieDuPoint`, plus bas).
+     Les portes vers « Mes signes de qualité » et « Mes sous-traitants »
+     vivent DANS la carte : aucun second bouton. */
+  devis_energie: Object.freeze({ endroit: 'energie' }),
+  devis_energie_mentions: Object.freeze({ endroit: 'energie' }),
+  devis_energie_mentions_prudence: Object.freeze({ endroit: 'energie' }),
 });
 
 /**
@@ -4932,6 +5049,13 @@ export const AVIS_DU_DEVIS = Object.freeze({
     + 'comptera, sauf si ce chantier est déjà ouvert : avec un permis de construire, une déclaration '
     + 'd’ouverture déposée ; sans permis, un premier ordre de service donné, ou, à défaut, des travaux déjà '
     + 'commencés. Demandez-la à votre assureur, et pensez à la donner à votre client.',
+  /* 2b-6 (annexe A.6, T31) — le signe de qualité qui couvre un travail coché
+     finit avant que ce devis puisse être signé : le jumeau de
+     `avis_attestation_echeance`. `{intitule}` et `{fin}` se remplissent dans
+     `avisDuDevis`, depuis `finDuLabel`. */
+  avis_label_echeance:
+    'Votre signe de qualité « {intitule} » est valable jusqu’au {fin}. Si ce devis est signé après cette date sans '
+    + 'que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.',
   avis_franchise_plafond: `Ce devis atteint à lui seul {montant}. ${SUITE_AVIS_FRANCHISE}`,
   avis_franchise_plafond_options: `Avec ses options, ce devis atteint {montant}. ${SUITE_AVIS_FRANCHISE}`,
 });
@@ -5012,10 +5136,20 @@ export const AVIS_DU_DEVIS = Object.freeze({
  *     au-delà → le second. Dans ce seul cas (aucun taux non nul),
  *     `ttcOptions` vaut le net plus les options, sans taxe (`tvaDe(base,
  *     null)` rend `null`, compté zéro). Jamais « HT » (DROIT-2, ÉCRAN-6).
+ *
+ * UN AVIS DE PLUS À 2b-6, et une entrée de plus : `labels` (les signes de
+ * qualité de « Mon entreprise », aux noms de la base), `undefined` par
+ * défaut — pas transmis, on se tait :
+ *   - `avis_label_echeance` (SUIT L'ÉCRAN, le modèle de l'attestation, T31 :
+ *     jamais la liste sûre) : un signe de qualité couvre un travail coché, et
+ *     la fin qui compte — le MINIMUM, sur les travaux cochés et couverts, de
+ *     la fin la plus TARDIVE qui couvre chacun — tombe avant l'horizon de
+ *     l'attestation (`finDuLabel`). Il lit la réponse « à quel titre » DE
+ *     L'ÉCRAN (`pourQuiValable`), et se tait pour une réponse « entreprise ».
  */
 export function avisDuDevis({
   devis = null, lignes = [], totaux = null, etat = null, pasCompte = null, client = undefined, reponseVue = null,
-  regime = undefined, assurances = undefined, tarifs = undefined, jour = jourDuTelephone(),
+  regime = undefined, assurances = undefined, tarifs = undefined, jour = jourDuTelephone(), labels = undefined,
 } = {}) {
   if (!devis) return [];
   const avis = [];
@@ -5059,6 +5193,16 @@ export function avisDuDevis({
   const fin = finDeLAttestation({ devis, assurances, jour });
   if (fin) {
     avis.push({ cle: 'avis_attestation_echeance', phrase: AVIS_DU_DEVIS.avis_attestation_echeance.replace('{fin}', dateFrancaise(fin)) });
+  }
+
+  /* 2b-6 — le signe de qualité qui arrive à sa fin (T31) : UN appel, sans
+     la liste sûre. */
+  const label = finDuLabel({ devis, labels, jour });
+  if (label) {
+    avis.push({
+      cle: 'avis_label_echeance',
+      phrase: AVIS_DU_DEVIS.avis_label_echeance.replace('{intitule}', label.intitule ?? '').replace('{fin}', dateFrancaise(label.fin)),
+    });
   }
 
   /* 2b-4 — le franchisé au-delà du plafond. */
@@ -5200,12 +5344,22 @@ export function phraseDesMentionsParticulier(reponseVue) {
  * dépôt acceptent ces déchets » (la loi demande de s'assurer que le
  * repreneur est autorisé ; Opus ne le sait pas). TOUJOURS SEPT faits : il
  * vient en DERNIER, et le « et » se déplace devant lui.
+ *
+ * 2b-6 (annexe A.8, décision T12) : « le label RGE pour des travaux
+ * d’énergie » SORT — le rang 14 demande désormais les travaux, le label
+ * travail par travail et la sous-traitance. Ce qu'Opus ne vérifie pas des
+ * labels ENTRE, à sa place (le quatrième) : « si les labels RGE déclarés,
+ * les vôtres et ceux de vos sous-traitants, existent, couvrent ces travaux
+ * et sont toujours en vigueur » — Opus constate une catégorie cochée, un
+ * chemin et une date ; il ne vérifie ni l'existence du signe, ni que le
+ * certificat nomme ces travaux, ni un retrait par l'organisme (DROIT-10).
+ * TOUJOURS SEPT faits, trois copies (ici, `verifier-devis`, `mesure-devis`).
  */
 export const PAS_ENCORE_VERIFIE = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
-  + 'vraiment, si ce devis relève des services à la personne, le label RGE pour des travaux d’énergie, les '
-  + 'conditions du taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre '
-  + 'attestation décennale couvre ces travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux '
-  + 'de dépôt acceptent ces déchets.';
+  + 'vraiment, si ce devis relève des services à la personne, si les labels RGE déclarés, les vôtres et ceux de vos '
+  + 'sous-traitants, existent, couvrent ces travaux et sont toujours en vigueur, les conditions du taux réduit de '
+  + 'TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces travaux '
+  + '(ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.';
 
 /** Rien ne manque pour CE devis — jamais « rien ne manque » tout court. */
 export const RIEN_NE_MANQUE_POUR_CE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
@@ -5805,6 +5959,11 @@ export const NOM_DES_SECTIONS = Object.freeze({
   /* 2b-5 : la section des lieux de dépôt des déchets — la porte « Mes lieux
      de dépôt » de la carte « Déchets » y mène (`ouvrirMonEntreprise('lieux')`). */
   lieux: 'Vos lieux de dépôt des déchets',
+  /* 2b-6 : les deux sections nouvelles de « Mon entreprise », après les
+     lieux — les portes « Mes signes de qualité » et « Mes sous-traitants » de
+     la carte « Énergie et label RGE » y mènent. */
+  labels: 'Vos signes de qualité (label RGE)',
+  sousTraitants: 'Vos sous-traitants',
   mediateur: 'Médiateur de la consommation',
   garanties: 'Garanties',
   conditions: 'Vos conditions',
@@ -5888,6 +6047,9 @@ export function actionDuPoint(point, { chiffrerPossible = false, ligneExiste = (
     /* 2b-5 (annexe A.1) : un seul bouton, pour les deux clés du rang 13 ;
        ce qu'il ouvre, `rubriqueDuPoint` le dit. */
     case 'dechets': return seul(LES_DECHETS.bouton);
+    /* 2b-6 (annexe A.1) : un seul bouton, pour les trois clés du rang 14 ;
+       ce qu'il ouvre, `rubriqueDeLEnergieDuPoint` le dit. */
+    case 'energie': return seul(LE_LABEL.bouton);
     case 'entreprise': {
       if (!e.section) return null;
       const libelle = 'Compléter dans « Mon entreprise »';
@@ -6012,10 +6174,14 @@ export const SUFFIXE_EN_ECHEC = ' — pas enregistré';
  * réponse : c’est la plus sûre. ». `resume` suit « Commande : ».
  */
 export const REPONSES_A_QUEL_TITRE = Object.freeze([
+  /* 2b-6 (T27, annexe A.9 ; DROIT-19) : une aide, parce qu'un artisan ou un
+     commerçant qui fait faire des travaux CHEZ LUI commande à titre privé —
+     sans elle, il se rangerait « pour son entreprise », et la question des
+     travaux d'énergie ne lui serait jamais posée. */
   Object.freeze({
     valeur: 'consommateur',
     rangee: 'À titre privé, pour lui-même',
-    aide: null,
+    aide: 'Y compris un artisan ou un commerçant pour son propre logement.',
     resume: 'à titre privé',
   }),
   Object.freeze({
@@ -6028,9 +6194,13 @@ export const REPONSES_A_QUEL_TITRE = Object.freeze([
   Object.freeze({
     valeur: 'professionnel_hors_activite',
     rangee: 'Pour son entreprise de 5\u00a0salariés au plus, hors de son activité principale',
+    /* 2b-6 (T27, annexe A.9 ; DROIT-8) : « sauf celles du label RGE » — la
+       section où vit L. 224-114 n'est pas de celles que L. 221-3 étend à
+       une petite entreprise hors de son activité principale ; sans ces
+       mots, l'aide dirait « toutes les mentions », faux dès 2b-6. */
     aide: 'Par exemple, une boulangerie qui fait refaire sa vitrine. Quand le devis est signé hors de vos locaux, la loi '
       + 'la protège comme un particulier (sauf pour un bâtiment neuf ou une transformation importante) ; Opus lui '
-      + 'compte, par prudence, toutes les mentions dues à un particulier.',
+      + 'compte, par prudence, les mentions dues à un particulier, sauf celles du label RGE, que la loi ne lui étend pas.',
     resume: 'pour son entreprise (5\u00a0salariés au plus), hors de son activité principale',
   }),
   Object.freeze({
@@ -7186,4 +7356,735 @@ export const GABARITS_DES_DECHETS = Object.freeze([
   RESUMES_DES_DECHETS.remplies,
   ...MANQUES_POSSIBLES.map((m) => `${RESUMES_DES_DECHETS.aCompleter}${m.map((k) => NOMS_DES_RUBRIQUES[k]).join(', ')}`),
   RESUMES_DES_DECHETS.nonLus,
+].flatMap((t) => ['', SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC].map((suffixe) => `${t}${suffixe}`)));
+
+/* ================================================================== */
+/*  LES TRAVAUX D'ÉNERGIE ET LE LABEL RGE (étape 2b-6, 24/11/2026)      */
+/* ================================================================== */
+/*
+ * CE QUE LA LOI DEMANDE (code de la consommation, L. 224-114 et L. 224-115 ;
+ * décret n° 2014-812) — quand un professionnel propose à un particulier des
+ * travaux d'économies d'énergie ou d'énergie renouvelable dans un logement,
+ * dont les aides exigent un label ou un signe de qualité, le contrat dit :
+ * s'il détient ou non un signe de qualité « pour les catégories de travaux
+ * concernés » (avec le justificatif, fourni avant la signature), et s'il
+ * fait réaliser tout ou partie du contrat par un sous-traitant — l'identité
+ * de chacun, et son signe de qualité. Sans ces informations, le contrat
+ * conclu avec un consommateur est NUL (L. 242-51), et l'entreprise s'expose
+ * à une amende administrative pour la première.
+ *
+ * CE QUE 2b-6 CONSTRUIT ICI (cahier 2b-6, §3.2) : les quatre faits de la
+ * carte « Énergie et label RGE » d'un devis (les travaux cochés, ceux pour
+ * lesquels l'artisan déclare ne pas détenir de label, la sous-traitance, les
+ * sous-traitants choisis), l'état de chaque travail coché d'après les signes
+ * de qualité rangés dans « Mon entreprise », et le point du rang 14 de
+ * « Pour le remettre ». Rien n'est imprimé avant 2c.
+ *
+ * QUATRE RÈGLES, et aucune n'est cosmétique :
+ *   - RIEN N'EST COCHÉ SANS UN APPUI (« Opus propose, l'artisan confirme ») :
+ *     ni un travail (pas d'après le métier, les lignes, l'origine du devis
+ *     ni son objet), ni la déclaration, ni un sous-traitant (même s'il n'y
+ *     en a qu'un), ni la réponse à la sous-traitance. `etatInitialEnergie`
+ *     ne lit QUE les quatre champs du devis (CTL-10) ;
+ *   - JAMAIS DE TABLEAU VIDE : « rien de dit » s'écrit VIDE DE VALEUR
+ *     (`null`) ; « Aucun de ces travaux » est une VALEUR à elle (`aucun`),
+ *     exclusive ; la dernière case décochée rend `null` ;
+ *   - UNE DÉCLARATION NE VAUT QUE POUR CE QU'ELLE NOMME (la leçon du témoin
+ *     `pour_qui_client`, BASE-1) : `energieSansLabel` est une liste de
+ *     travaux, une case par travail ; cocher un autre travail ne l'étend pas,
+ *     et un label valable SANS son certificat garde le point même déclaré
+ *     (on ne déclare pas « je n'en détiens pas » d'un signe qu'on détient :
+ *     on joint le certificat, ou on retire le signe) ;
+ *   - RIEN NE S'EFFACE SANS LE DOIGT SUR CETTE RUBRIQUE (T23) : « Aucun de
+ *     ces travaux » ne vide ni les déclarations ni les sous-traitants,
+ *     décocher un travail ne retire pas sa déclaration, « Non » à la
+ *     sous-traitance ne vide pas les sous-traitants choisis ; tout reste
+ *     gardé, sans effet. Un identifiant de sous-traitant ne s'efface que sous
+ *     le doigt, sur une liste LUE.
+ *
+ * LA RÈGLE DU RANG 14 EST ÉCRITE ICI, UNE FOIS (T26) : `etatsDesTravaux` dit
+ * l'état de chaque travail coché (couvert, sans certificat, expiré,
+ * absent) ; `rubriquesDeLEnergie` en tire les trois rubriques ;
+ * `motifDeLEnergie` (le miroir de la base), `resumeDeLEnergie` (la rangée),
+ * `rubriqueDeLEnergieDuPoint` (où le point ouvre la carte) et `finDuLabel`
+ * (l'avis) les lisent. Aucune autre fonction ne compare un signe de qualité
+ * à un travail : une seconde écriture finirait par dire autre chose, et
+ * `verifier-devis` la refuse. `etatDuLabel` (`emetteur.js`), qui dit l'état
+ * d'UNE ligne dans « Mon entreprise », est faite tourner d'accord avec
+ * `etatsDesTravaux` sur un même jeu (CTL-8).
+ *
+ * LA GARDE TVA (T9, §2.6 du cahier) : rien ici ne lit un taux, le régime de
+ * TVA ni la ventilation, et `tauxProposes` / `cleDuTauxDeLaLigne` ne
+ * reçoivent jamais un champ de l'énergie. Le label RGE n'est la condition
+ * d'aucun taux réduit de rénovation énergétique : un contrôle le tient.
+ *
+ * LA GARDE DU BADGE (CTL-5) : rien ici ne lit le badge public « Certification
+ * RGE » de la fiche (`rge`, `rgeDeclare`, `rgeExpire`, `rgePath`,
+ * `rgeNumero`) : un badge public ne dit rien des travaux de CE devis, et
+ * `motifs_refus_remise()` ne lit pas `professional_profiles`.
+ *
+ * Toutes ces fonctions sont PURES : `node` les fait tourner, la carte
+ * (`EnergieDevis.js`) ne fait que les appeler.
+ */
+
+/** « Aucun de ces travaux » — une VALEUR de `energieTravaux`, exclusive des
+ *  autres, écrite par sa SEULE pastille (jamais un tableau vide). Jamais une
+ *  catégorie d'un signe de qualité. */
+export const ENERGIE_AUCUN = 'aucun';
+/** Dix sous-traitants au plus par devis (`devis_energie_sous_traitants_check`). */
+export const SOUS_TRAITANTS_MAX = 10;
+/** Dix-neuf travaux au plus (la borne de `cardinality` des trois listes de
+ *  clés) : autant que de catégories dans `TRAVAUX_ENERGIE`. */
+export const TRAVAUX_ENERGIE_MAX = 19;
+/** Les deux lignes comptées PAR PRUDENCE (réponse P12 du 24/11 : les
+ *  panneaux photovoltaïques, le désembouage) — lues dans `TRAVAUX_ENERGIE`,
+ *  jamais recopiées : quand elles seules manquent, le point dit « Par
+ *  prudence ». La liste de prudence du rang 14 de la base est comparée à
+ *  celle-ci par `verifier-devis`. */
+export const CLES_PRUDENCE = Object.freeze(TRAVAUX_ENERGIE.filter((t) => t.prudence).map((t) => t.cle));
+/* Les dix-neuf clés, dans l'ORDRE CANONIQUE (celui du décret, puis les deux
+   lignes de prudence) ; et celles que le DEVIS accepte, `aucun` en tête — la
+   liste de `devis_energie_travaux_check`. */
+const CLES_TRAVAUX = Object.freeze(TRAVAUX_ENERGIE.map((t) => t.cle));
+const CLES_TRAVAUX_DU_DEVIS = Object.freeze([ENERGIE_AUCUN, ...CLES_TRAVAUX]);
+
+/** Les quatre champs de l'en-tête que la carte écrit — ce que
+ *  `etatDesChampsDuDevis` regarde pour la rangée « Énergie (label RGE) ». */
+export const CHAMPS_DE_L_ENERGIE = Object.freeze([
+  'energieTravaux', 'energieSansLabel', 'energieSousTraitance', 'energieSousTraitants',
+]);
+/** Les trois rubriques de la carte, dans son ordre. */
+export const RUBRIQUES_DE_L_ENERGIE = Object.freeze(['travaux', 'label', 'sousTraitance']);
+/** LA RUBRIQUE DE CHAQUE CHAMP — une table À PART de `RUBRIQUE_DU_CHAMP` (la
+ *  saisie), qui doit rester EXACTEMENT celle des déchets : « Corriger » un
+ *  champ de l'énergie ouvre la carte SUR sa rubrique. */
+export const RUBRIQUE_DE_L_ENERGIE = Object.freeze({
+  energieTravaux: 'travaux',
+  energieSansLabel: 'label',
+  energieSousTraitance: 'sousTraitance',
+  energieSousTraitants: 'sousTraitance',
+});
+
+/* LES MIROIRS DES TROIS CONTRAINTES DE TABLEAU (49.5) — y compris ce que la
+   base ACCEPTE (un doublon passe : le rang 14 compte les travaux DISTINCTS)
+   et ce qu'elle REFUSE (le tableau vide, par la forme `case … else false`).
+   `validerDevis` les lit. */
+function travauxRecevables(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= TRAVAUX_ENERGIE_MAX
+    && v.every((c) => CLES_TRAVAUX_DU_DEVIS.includes(c))
+    && (v.length === 1 || !v.includes(ENERGIE_AUCUN));
+}
+function sansLabelRecevable(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= TRAVAUX_ENERGIE_MAX && v.every((c) => CLES_TRAVAUX.includes(c));
+}
+function sousTraitantsRecevables(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= SOUS_TRAITANTS_MAX
+    && v.every((x) => typeof x === 'string' && x !== '');
+}
+
+/** L'ORDRE CANONIQUE d'une liste de travaux : celui de `TRAVAUX_ENERGIE` ;
+ *  sans doublon ; `aucun` et une clé inconnue sont écartés. Elle peut rendre
+ *  `[]` : ce sont les fonctions d'appui qui ne l'écrivent jamais. */
+export function ordonnerTravaux(liste) {
+  const vus = new Set(Array.isArray(liste) ? liste : []);
+  return CLES_TRAVAUX.filter((c) => vus.has(c));
+}
+
+/* « Aucun de ces travaux », et rien d'autre. */
+const estAucun = (v) => Array.isArray(v) && v.length === 1 && v[0] === ENERGIE_AUCUN;
+
+/**
+ * CE QU'ÉCRIT UN APPUI dans la question des travaux — `valeur` : la valeur
+ * de la carte ; `cle` : la case touchée, ou `ENERGIE_AUCUN` pour la pastille.
+ *   - la pastille « Aucun de ces travaux » : allumée, elle s'éteint (`null`,
+ *     rien de dit) ; éteinte, elle s'allume (`['aucun']`) et RETIRE les
+ *     travaux cochés — dans le même geste, et la carte l'annonce
+ *     (`annonceDesTravaux`) ;
+ *   - une case : elle se coche ou se décoche, la pastille tombe, l'ordre
+ *     canonique est remis ; la DERNIÈRE case décochée rend `null`, jamais
+ *     `[]` ;
+ *   - une clé inconnue ne change rien (un tableau vide se rend vide de
+ *     valeur : aucun chemin ne rend `[]`).
+ * Elle ne touche JAMAIS la liste des déclarations, ni les sous-traitants
+ * (T23). Toujours un tableau NEUF.
+ */
+export function travauxApresAppui(valeur, cle) {
+  const avant = Array.isArray(valeur) ? valeur : [];
+  if (cle === ENERGIE_AUCUN) return avant.includes(ENERGIE_AUCUN) ? null : [ENERGIE_AUCUN];
+  if (!CLES_TRAVAUX.includes(cle)) return avant.length ? valeur : null;
+  const sans = avant.filter((c) => c !== ENERGIE_AUCUN);
+  const apres = sans.includes(cle) ? sans.filter((c) => c !== cle) : [...sans, cle];
+  const range = ordonnerTravaux(apres);
+  return range.length ? range : null;
+}
+
+/** CE QUE LA CARTE ANNONCE quand la pastille « Aucun de ces travaux » vient
+ *  de retirer des travaux cochés : « un champ qui change sans geste doit
+ *  s'annoncer ». `null` sinon. */
+export function annonceDesTravaux(avant, apres) {
+  const retire = Array.isArray(avant) && avant.some((c) => c !== ENERGIE_AUCUN);
+  return retire && estAucun(apres) ? LE_LABEL.travaux.retires : null;
+}
+
+/**
+ * CE QU'ÉCRIT UN APPUI sur la case « Je ne détiens pas de label RGE pour ces
+ * travaux » sous UN travail — `liste` : la déclaration de la carte ; `cle` :
+ * le travail. Ajoute ou retire CETTE clé, et elle seule ; l'ordre canonique ;
+ * la dernière retirée rend `null`, jamais `[]` ; une clé inconnue ne change
+ * rien. Une clé déclarée pour un travail DÉCOCHÉ reste (T23) : elle est sans
+ * effet, et reviendra cochée si le travail est coché de nouveau — visible,
+ * sous lui (mesuré, V11).
+ */
+export function sansLabelApresAppui(liste, cle) {
+  if (!CLES_TRAVAUX.includes(cle)) return Array.isArray(liste) && liste.length ? liste : null;
+  const avant = Array.isArray(liste) ? liste.filter((c) => CLES_TRAVAUX.includes(c)) : [];
+  const apres = avant.includes(cle) ? avant.filter((c) => c !== cle) : [...avant, cle];
+  const range = ordonnerTravaux(apres);
+  return range.length ? range : null;
+}
+
+/* Les identifiants d'une liste LUE (des objets `{ id, … }`), dans son ordre,
+   sans doublon. */
+const idsDeLaListe = (lus) => [...new Set((Array.isArray(lus) ? lus : [])
+  .map((x) => (x && typeof x === 'object' ? x.id : null)).filter((x) => x != null))];
+
+/**
+ * CE QU'ÉCRIT UN APPUI sur la case d'un sous-traitant — `choix` : les
+ * identifiants que la carte tient (orphelins compris) ; `lus` : la liste de
+ * « Mon entreprise » TELLE QU'ELLE EST LUE, ou `undefined`/`null` tant
+ * qu'elle ne l'est pas ; `id` : le sous-traitant touché. Rend
+ * `{ sousTraitants, plafond }` :
+ *   - LISTE NON LUE : RIEN ne change (une liste qu'on n'a pas lue n'est
+ *     jamais « aucun sous-traitant ») ;
+ *   - un sous-traitant de la liste : il se coche ou se décoche ; le tableau
+ *     se REBÂTIT depuis la liste lue, dans SON ordre, ce qui retire les
+ *     orphelins (jamais montrés : leur retrait ne s'annonce pas) ; le
+ *     dernier décoché rend `null`, jamais `[]` ;
+ *   - un identifiant qui n'est pas dans la liste lue ne change rien ;
+ *   - LE PLAFOND (la leçon du onzième lieu) : un sous-traitant de PLUS,
+ *     quand la liste REBÂTIE dépasserait `SOUS_TRAITANTS_MAX`, ne s'ajoute
+ *     pas — le choix est rendu INCHANGÉ, avec `plafond: true`, et la carte
+ *     dit pourquoi sans rien écrire. On compte la liste rebâtie, jamais ce
+ *     que la carte garde : des orphelins ne comptent pas.
+ * C'est le SEUL endroit où `energieSousTraitants` se récrit.
+ */
+export function sousTraitantsApresAppui(choix, lus, id) {
+  const tel = Array.isArray(choix) && choix.length ? choix : null;
+  if (!Array.isArray(lus)) return { sousTraitants: tel, plafond: false };
+  const ids = idsDeLaListe(lus);
+  if (!ids.includes(id)) return { sousTraitants: tel, plafond: false };
+  const choisis = new Set(tel || []);
+  const ajout = !choisis.has(id);
+  if (ajout) choisis.add(id); else choisis.delete(id);
+  const range = ids.filter((v) => choisis.has(v));
+  if (ajout && range.length > SOUS_TRAITANTS_MAX) return { sousTraitants: tel, plafond: true };
+  return { sousTraitants: range.length ? range : null, plafond: false };
+}
+
+/**
+ * LE RANG 14 PARLE-T-IL POUR CETTE RÉPONSE ? — vrai pour une réponse
+ * « à quel titre » VALABLE vide (par prudence), « à titre privé » (la loi),
+ * ou « une association, une copropriété ou une société civile » (par
+ * prudence) ; faux pour les deux réponses « pour son entreprise » : L. 224-114
+ * vit dans la section 21 du chapitre IV, et L. 221-3 n'étend aux petites
+ * entreprises hors de leur activité principale que les sections 2, 3 et 6
+ * (T6). Le miroir de `v_valable is null or v_valable in ('consommateur',
+ * 'non_professionnel')` — jamais un `not in`.
+ */
+export function energieConcerne(valable) {
+  return valable === null || valable === undefined || valable === 'consommateur' || valable === 'non_professionnel';
+}
+
+/** LES TRAVAUX COCHÉS d'un devis : ses clés DISTINCTES, dans l'ordre où il
+ *  les porte ; `[]` pour « Aucun de ces travaux » ou rien de dit. */
+export function travauxCoches(devis) {
+  const v = devis && Array.isArray(devis.energieTravaux) ? devis.energieTravaux : null;
+  if (!v || !v.length || estAucun(v)) return [];
+  return [...new Set(v.filter((c) => c != null))];
+}
+
+/* L'entreprise d'une ligne de « Mon entreprise » : `proId` ou `pro_id`. Une
+   ligne qui ne dit pas son entreprise n'est pas écartée (la règle de
+   `etatDeLAttestation` : la démonstration et la lecture de l'application ne
+   rendent que les lignes de l'artisan). */
+const entrepriseDeLaLigne = (x) => (x ? (x.proId ?? x.pro_id ?? null) : null);
+const deLEntreprise = (x, pro) => pro == null || entrepriseDeLaLigne(x) == null
+  || String(entrepriseDeLaLigne(x)) === String(pro);
+
+/** Les quatre états d'un travail coché (T26). */
+export const ETATS_DU_TRAVAIL = Object.freeze(['couvert', 'sans_certificat', 'expire', 'absent']);
+
+/**
+ * L'ÉTAT DE CHAQUE TRAVAIL COCHÉ (T26) — `[{ cle, etat, intitule, fin }]`
+ * dans l'ordre des travaux du devis, ou `null` quand la liste des signes de
+ * qualité n'est pas LUE (`labels` n'est pas un tableau). `labels` : les
+ * lignes d'`emetteur_labels`, aux noms de la base ; seules celles de
+ * l'entreprise du devis comptent (`proId`, celui du devis par défaut — le
+ * miroir de `g.pro_id = v_pro`). Un signe « porte » un travail quand ses
+ * `categories` le nomment ; il est VALABLE quand sa date de fin est au moins
+ * `jour` (le jour du TÉLÉPHONE par défaut ; la base juge au jour de Paris) ;
+ * son certificat est JOINT quand son chemin est écrit.
+ *   - `couvert` : un signe valable et joint le porte — `fin` est la PLUS
+ *     TARDIVE de ces signes, `intitule` le sien ;
+ *   - `sans_certificat` : un signe valable le porte, mais aucun n'a son
+ *     certificat — le point reste, déclaré ou non (DROIT-1) ;
+ *   - `expire` : un signe le porte, mais aucun n'est valable (fin passée,
+ *     certificat joint ou non) — `fin`, la plus tardive ; la déclaration
+ *     reste possible : un signe à date passée n'est plus détenu ;
+ *   - `absent` : aucun signe de l'entreprise ne le porte.
+ */
+export function etatsDesTravaux(devis, labels, { proId = undefined, jour = jourDuTelephone() } = {}) {
+  if (!Array.isArray(labels)) return null;
+  const d = devis || {};
+  const pro = proId !== undefined ? proId : (d.proId ?? null);
+  const auJour = jourEcrit(jour) || jourDuTelephone();
+  const lesSiens = labels.filter((l) => l && typeof l === 'object' && deLEntreprise(l, pro));
+  const fin = (l) => jourEcrit(l.valide_jusquau);
+  /* Le plus tardif d'une liste : une fin absente compte la plus petite ; à
+     égalité, le premier de la liste. */
+  const plusTardif = (liste) => liste.reduce((m, l) => {
+    if (m === null) return l;
+    const a = fin(l); const b = fin(m);
+    return a !== null && (b === null || a > b) ? l : m;
+  }, null);
+  return travauxCoches(d).map((cle) => {
+    const portent = lesSiens.filter((l) => Array.isArray(l.categories) && l.categories.includes(cle));
+    const valables = portent.filter((l) => { const f = fin(l); return f !== null && f >= auJour; });
+    const joints = valables.filter((l) => cheminEcrit(l.justificatif_chemin));
+    let etat = 'absent';
+    let qui = null;
+    if (joints.length) { etat = 'couvert'; qui = plusTardif(joints); }
+    else if (valables.length) { etat = 'sans_certificat'; qui = plusTardif(valables); }
+    else if (portent.length) { etat = 'expire'; qui = plusTardif(portent); }
+    return { cle, etat, intitule: qui ? (qui.intitule ?? null) : null, fin: qui ? fin(qui) : null };
+  });
+}
+
+/**
+ * UN SOUS-TRAITANT EST-IL COMPLET ? (T20) — la question de son label a une
+ * réponse : « Non » (`label_detient === false`), ou « Oui » avec une date de
+ * fin au moins égale à `jour` et, si `justificatifExige` (réponse P13 du
+ * 24/11 : « Oui, dans Opus »), son justificatif joint. La date se juge « pas
+ * `fin >= jour` », jamais `fin < jour` : une date vide ne compte jamais
+ * valable (CTL-7). `proId` : l'entreprise du devis ; un sous-traitant d'une
+ * AUTRE entreprise n'est jamais complet (`rubriquesDeLEnergie` ne les lui
+ * passe pas : elle les écarte d'abord, comme la base).
+ *
+ * SON IDENTITÉ (nom ou raison sociale, SIRET) N'EST PAS JUGÉE ICI par
+ * défaut, et c'est la parité qui l'impose : le rang 14 de la base ne la lit
+ * pas, parce que la contrainte `emetteur_sous_traitant_complet_check` la
+ * GARANTIT — une ligne sans identité n'existe pas en base. L'exiger ici
+ * rendait « incomplet » chaque sous-traitant que la base lit sans ces deux
+ * colonnes (mesuré sur `cas-remise.json`, cas 213, 215 et 219 : le miroir
+ * disait `devis_energie_mentions`, la base rien). Un écran qui juge une
+ * fiche PAS ENCORE enregistrée passe `identiteExigee: true`.
+ */
+export function sousTraitantComplet(st, {
+  proId = null, jour = jourDuTelephone(), justificatifExige = true, identiteExigee = false,
+} = {}) {
+  if (!st || typeof st !== 'object') return false;
+  if (!deLEntreprise(st, proId)) return false;
+  if (identiteExigee && (texteNet(st.raison_sociale) === null || texteNet(st.siret) === null)) return false;
+  if (st.label_detient === false) return true;
+  if (st.label_detient !== true) return false;
+  const auJour = jourEcrit(jour) || jourDuTelephone();
+  const f = jourEcrit(st.label_valide_jusquau);
+  if (!(f !== null && f >= auJour)) return false;
+  return !justificatifExige || cheminEcrit(st.label_justificatif_chemin);
+}
+
+/**
+ * LES TROIS RUBRIQUES, PRÉSENTES OU NON — LA règle du rang 14, écrite ICI
+ * UNE FOIS (T26), la même que `motifs_refus_remise()` (49.9). Rend
+ * `{ travaux, label, sousTraitance, labelLoi, labelPrudence }` :
+ *   - `travaux` : la liste est dite (`['aucun']` compte) ;
+ *   - `label` : VRAI quand aucun travail coché ne MANQUE — un travail manque
+ *     quand il n'est pas couvert ET (qu'il est porté par un signe valable
+ *     sans certificat, OU qu'il n'est pas déclaré sans label) ; `labelLoi`
+ *     et `labelPrudence` comptent les travaux qui manquent, hors et parmi
+ *     les deux lignes de prudence ; `null` (INCONNU) quand la liste des
+ *     signes de qualité n'est pas lue ;
+ *   - `sousTraitance` : VRAI pour « Non », ou pour « Oui » quand au moins un
+ *     sous-traitant choisi existe CHEZ L'ENTREPRISE DU DEVIS et que TOUS
+ *     ceux-là sont complets (les identifiants DISTINCTS, un orphelin ou celui
+ *     d'une autre entreprise ne compte jamais) ; FAUX sans réponse, ou pour
+ *     « Oui » sans aucun identifiant ; `null` (INCONNU) pour « Oui » avec des
+ *     identifiants et une liste pas lue.
+ * Sous « Aucun de ces travaux », ou sans réponse aux travaux, `label` et
+ * `sousTraitance` sont vrais : la base ne fait alors pas la lecture 3 quater
+ * (ses compteurs restent à zéro). Le miroir (`motifDeLEnergie`) passe des
+ * listes LUES : une liste non transmise y vaut une liste vide.
+ */
+export function rubriquesDeLEnergie(devis, labels, sousTraitants, jour = jourDuTelephone()) {
+  const d = devis || {};
+  const travaux = Array.isArray(d.energieTravaux) && d.energieTravaux.length > 0;
+  if (!travaux || estAucun(d.energieTravaux)) {
+    return { travaux, label: true, sousTraitance: true, labelLoi: 0, labelPrudence: 0 };
+  }
+  const etats = etatsDesTravaux(d, labels, { jour });
+  let label = null;
+  let labelLoi = null;
+  let labelPrudence = null;
+  if (etats !== null) {
+    const declares = Array.isArray(d.energieSansLabel) ? d.energieSansLabel : [];
+    labelLoi = 0;
+    labelPrudence = 0;
+    etats.forEach((e) => {
+      const manque = e.etat !== 'couvert' && (e.etat === 'sans_certificat' || !declares.includes(e.cle));
+      if (!manque) return;
+      if (CLES_PRUDENCE.includes(e.cle)) labelPrudence += 1; else labelLoi += 1;
+    });
+    label = labelLoi + labelPrudence === 0;
+  }
+  let sousTraitance;
+  if (d.energieSousTraitance === false) sousTraitance = true;
+  else if (d.energieSousTraitance !== true) sousTraitance = false;
+  else {
+    const ids = Array.isArray(d.energieSousTraitants) ? d.energieSousTraitants.filter((v) => v != null) : [];
+    if (!ids.length) sousTraitance = false;
+    else if (!Array.isArray(sousTraitants)) sousTraitance = null;
+    else {
+      const pro = d.proId ?? null;
+      const vus = new Set();
+      const choisis = sousTraitants.filter((s) => {
+        if (!s || typeof s !== 'object' || s.id == null || !ids.includes(s.id) || !deLEntreprise(s, pro)) return false;
+        if (vus.has(String(s.id))) return false;
+        vus.add(String(s.id));
+        return true;
+      });
+      sousTraitance = choisis.length > 0 && choisis.every((s) => sousTraitantComplet(s, { proId: pro, jour }));
+    }
+  }
+  return { travaux, label, sousTraitance, labelLoi, labelPrudence };
+}
+
+/**
+ * LE MIROIR DU RANG 14 — la clé, ou `null`. `valable` : la réponse « à quel
+ * titre » VALABLE (celle de `pourQuiValable`, calculée par `motifsDeRemise`).
+ *   - la réponse n'est pas de celles où le rang parle (`energieConcerne`) :
+ *     rien ;
+ *   - les travaux ne sont pas dits : `devis_energie` (prudence) ;
+ *   - une rubrique manque : `devis_energie_mentions` (la loi) quand le
+ *     client commande à titre privé ET que ce qui manque touche un travail
+ *     du décret ou la sous-traitance ; `devis_energie_mentions_prudence`
+ *     sinon (une association, une copropriété, une société civile, une
+ *     réponse vide — ou seules les deux lignes de prudence qui manquent).
+ * UNE clé au plus. Des listes non transmises (`undefined`, `null`) valent
+ * des listes vides : un signe de qualité qu'on n'a pas lu ne couvre rien, la
+ * règle des lieux de 2b-5.
+ */
+export function motifDeLEnergie(devis, labels, sousTraitants, jour = jourDuTelephone(), valable = pourQuiValable(devis)) {
+  if (!energieConcerne(valable)) return null;
+  const r = rubriquesDeLEnergie(devis, Array.isArray(labels) ? labels : [],
+    Array.isArray(sousTraitants) ? sousTraitants : [], jour);
+  if (!r.travaux) return 'devis_energie';
+  const stManque = r.sousTraitance !== true;
+  if (r.labelLoi === 0 && r.labelPrudence === 0 && !stManque) return null;
+  return valable === 'consommateur' && (r.labelLoi > 0 || stManque)
+    ? 'devis_energie_mentions' : 'devis_energie_mentions_prudence';
+}
+
+/**
+ * OÙ LE POINT DU RANG 14 OUVRE LA CARTE : `'travaux'` pour `devis_energie`
+ * (la question, en haut : on répond d'abord) ; la PREMIÈRE rubrique qui
+ * manque (le label, puis la sous-traitance) pour les deux autres, et
+ * `'travaux'` à défaut (la liste de la base peut être plus récente que
+ * celles de l'écran) ; `null` pour tout autre point. Une rubrique INCONNUE
+ * (une liste pas lue) compte comme manquante.
+ */
+export function rubriqueDeLEnergieDuPoint(point, {
+  devis = null, labels = undefined, sousTraitants = undefined, jour = jourDuTelephone(),
+} = {}) {
+  const cle = point && typeof point.cle === 'string' ? point.cle : null;
+  if (cle === 'devis_energie') return 'travaux';
+  if (cle !== 'devis_energie_mentions' && cle !== 'devis_energie_mentions_prudence') return null;
+  const r = rubriquesDeLEnergie(devis, labels, sousTraitants, jour);
+  if (r.label !== true) return 'label';
+  if (r.sousTraitance !== true) return 'sousTraitance';
+  return 'travaux';
+}
+
+/**
+ * LA CASE « JE NE DÉTIENS PAS DE LABEL RGE POUR CES TRAVAUX » EST-ELLE
+ * MONTRÉE sous un travail ? (§3.8 du cahier) — `etat` : celui que rend
+ * `etatsDesTravaux` (`null` quand la liste n'est pas lue) ; `declaree` : la
+ * clé est déjà dans la déclaration.
+ *   - une case DÉJÀ COCHÉE est toujours montrée, quel que soit l'état : on
+ *     doit pouvoir la décocher (ses travaux viennent du devis) ;
+ *   - sinon, seulement sous un travail `expire` ou `absent` : jamais sous un
+ *     travail `sans_certificat` (on joint le certificat, ou on retire le
+ *     signe), ni `couvert`, ni sur une liste en lecture ou en échec — on ne
+ *     sait pas alors ce qui est couvert (ÉCRAN-10).
+ */
+export function declarationMontree({ etat = null, declaree = false } = {}) {
+  if (declaree === true) return true;
+  return etat === 'expire' || etat === 'absent';
+}
+
+/**
+ * LA FIN DE SIGNE DE QUALITÉ QUI FAIT PARLER L'AVIS `avis_label_echeance`
+ * (T31) — `{ fin, intitule }` (« AAAA-MM-JJ »), ou `null` quand l'avis se
+ * tait. Le jumeau de `finDeLAttestation` :
+ *   - il se tait pour une réponse « entreprise » (celle de l'ÉCRAN,
+ *     `pourQuiValable(devis)`, ou `valable` si on la passe), sous « Aucun de
+ *     ces travaux » ou sans travaux, si la liste des signes de qualité n'est
+ *     pas LUE, ou si la validité n'est pas dite ;
+ *   - la fin qui parle est le MINIMUM, sur les travaux cochés et COUVERTS, de
+ *     la fin la plus TARDIVE qui couvre chacun (`etatsDesTravaux`) — deux
+ *     signes qui couvrent le même travail ne font pas sonner un avis faux
+ *     (ÉCRAN-7) ; l'intitulé est celui du signe qui donne cette fin ;
+ *   - l'horizon est celui de l'attestation : la validité, plus
+ *     `JOURS_DU_DELAI_PAR_DEFAUT` quand le délai écrit est EXACTEMENT le
+ *     délai par défaut ; l'avis parle si la fin tombe AVANT.
+ * Un travail qui n'est pas couvert ne la fait pas parler : le point le dit
+ * déjà.
+ */
+export function finDuLabel({ devis = null, labels = undefined, jour = jourDuTelephone(), valable = undefined } = {}) {
+  const d = devis || {};
+  if (!energieConcerne(valable !== undefined ? valable : pourQuiValable(d))) return null;
+  if (!Array.isArray(labels)) return null;
+  if (!entier(d.validiteJours) || d.validiteJours < 1) return null;
+  const auJour = jourEcrit(jour) || jourDuTelephone();
+  const couverts = (etatsDesTravaux(d, labels, { jour: auJour }) || []).filter((e) => e.etat === 'couvert' && e.fin !== null);
+  if (!couverts.length) return null;
+  const premier = couverts.reduce((m, e) => (m === null || e.fin < m.fin ? e : m), null);
+  const parDefaut = texteNet(d.delaiExecution) === DELAI_PAR_DEFAUT.texte;
+  const horizon = d.validiteJours + (parDefaut ? JOURS_DU_DELAI_PAR_DEFAUT : 0);
+  const reste = joursEntre(auJour, premier.fin);
+  return reste !== null && reste < horizon ? { fin: premier.fin, intitule: premier.intitule } : null;
+}
+
+/**
+ * L'AMENDE QUE LA LOI PRÉVOIT pour les informations du label (L. 242-51 :
+ * le contrat conclu avec un consommateur est nul ; et, pour L. 224-114,
+ * l'amende administrative ; réponse P14 du 24/11 : « Les deux ») — écrite
+ * UNE fois, et seulement dans l'aide de la carte, jamais dans une phrase du
+ * point. La QUATRIÈME constante de ce fichier qui écrit « € » (après
+ * `AMENDE_DE_LA_LOI`, `AMENDE_DU_CODE_DE_LA_CONSTRUCTION` et
+ * `AMENDE_DES_DECHETS`), tenue par `verifier-devis` : une phrase de droit,
+ * pas un montant d'un devis. Espaces insécables entre les chiffres et devant
+ * « € » : un montant ne se coupe pas en fin de ligne.
+ * Et celle de la sous-traitance, qui ne nomme AUCUNE amende : la loi n'en
+ * prévoit pas pour L. 224-115 (DROIT-23).
+ */
+export const AMENDE_DU_LABEL = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul, et votre '
+  + 'entreprise s’expose à une amende administrative '
+  + 'pouvant aller jusqu’à 15\u00a0000\u00a0€, 75\u00a0000\u00a0€ pour une société.';
+export const AMENDE_DE_LA_SOUS_TRAITANCE = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.';
+
+/**
+ * LES TEXTES DE LA CARTE « ÉNERGIE ET LABEL RGE », DE SA RANGÉE ET DE SON
+ * POINT (annexes A.1, A.3 et A.4 du cahier 2b-6), mot pour mot. Ils parlent
+ * à l'ARTISAN : ce ne sont pas les textes imprimés (2c).
+ * LE VOCABULAIRE (T10) : « signe de qualité (label RGE) », « vous détenez »,
+ * « vous déclarez » ; jamais « certifié », « agréé », « vérifié »,
+ * « garanti », « Reconnu garant de l’environnement » — `verifier-devis` les
+ * refuse dans ces constantes. « Certificat » est permis : c'est la pièce.
+ * Les modèles à trous (`{intitule}`, `{fin}`) se remplissent dans
+ * `phraseDuTravail`.
+ */
+export const LE_LABEL = Object.freeze({
+  titre: 'Énergie et label RGE',
+  /* La rangée de la saisie (annexe A.4) : son titre, que le résumé ne répète
+     pas (VoiceOver dit « Titre : résumé. Ouvrir »). */
+  rangee: 'Énergie (label RGE)',
+  /* Le bouton du point, pour les trois clés du rang 14 (annexe A.1). */
+  bouton: 'Compléter : énergie et label RGE',
+  introduction: 'Pour des travaux d’économies d’énergie ou d’énergie renouvelable chez un client qui commande à titre '
+    + 'privé, la loi demande de dire sur le devis si vous détenez un label RGE, et qui fera les travaux.',
+  /* Pour une association, une copropriété, une société civile (DROIT-9). */
+  prudenceAssociation: 'Pour une association, une copropriété ou une société civile, la loi ne prévoit peut-être pas ces '
+    + 'mentions ; Opus les demande, par prudence.',
+  /* Pour une réponse « à quel titre » vide. */
+  prudenceSansReponse: 'Tant que vous n’avez pas dit à quel titre ce client commande, Opus les demande, par prudence.',
+  /* Pour un client « entreprise » : la seule phrase ; rien n'est effacé. */
+  entreprise: 'Ce client commande pour son entreprise : la loi ne demande pas ces mentions. Ce que vous avez déjà écrit '
+    + 'est gardé.',
+  /* Le sous-titre des rubriques : jamais « Pour la loi », qui ne vise qu'à
+     titre privé (DROIT-9). */
+  sousTitre: 'Pour les droits de votre client',
+  travaux: Object.freeze({
+    question: 'Quels travaux d’économies d’énergie ou d’énergie renouvelable ce devis comporte-t-il ?',
+    /* La pastille, EN TÊTE, sous la question (ÉCRAN-3), et sa phrase. */
+    aucun: 'Aucun de ces travaux',
+    sousAucun: 'Seulement si ce devis ne comporte aucun des travaux ci-dessous.',
+    /* P12 = 1 : la sous-traitance d'AUTRES travaux d'économies d'énergie
+       (L. 224-115 I ne pose pas la condition d'aide, DROIT-6). */
+    sousAucunSousTraitance: 'Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie de ce '
+      + 'devis, dites-le à votre client : la loi peut le demander.',
+    aide: 'Cochez ce que vous ferez dans un logement, même une petite partie : un doublage isolé, une VMC, une fenêtre. '
+      + 'Les deux dernières lignes sont comptées par prudence. Dans le doute, cochez : c’est le cas le plus sûr.',
+    /* Annoncé quand la pastille retire des cases cochées. */
+    retires: 'Les travaux cochés ont été retirés.',
+  }),
+  label: Object.freeze({
+    sousTitre: 'Votre label RGE',
+    /* Les quatre états d'un travail coché (`phraseDuTravail`). « Déclaré
+       dans », jamais « Couvert par » : Opus ne vérifie pas le signe
+       (DROIT-16). */
+    couvert: 'Déclaré dans « Mon entreprise » : {intitule}, valable jusqu’au {fin}',
+    sansCertificat: 'Votre signe de qualité « {intitule} » porte ces travaux, mais son certificat n’est pas joint : '
+      + 'joignez-le dans « Mon entreprise », ou retirez-le si vous ne le détenez plus.',
+    expire: 'Votre signe de qualité « {intitule} » portait ces travaux jusqu’au {fin} : renouvelez-le dans « Mon '
+      + 'entreprise » si vous le détenez encore.',
+    absent: 'Aucun de vos signes de qualité ne porte ces travaux.',
+    /* La case, sous un travail expiré ou absent, et son aide — sans
+       promesse sur les aides (DROIT-13). */
+    declaration: 'Je ne détiens pas de label RGE pour ces travaux',
+    aideDeclaration: 'Cochez seulement si c’est vrai : le devis le dira à votre client.',
+    echec: 'Vos signes de qualité n’ont pas pu être lus.',
+    reessayer: 'Réessayer',
+    vide: 'Vous n’avez déclaré aucun signe de qualité.',
+    /* La porte vers « Mon entreprise », section des signes de qualité. */
+    porte: 'Mes signes de qualité',
+  }),
+  sousTraitance: Object.freeze({
+    sousTitre: 'Sous-traitance',
+    /* « des travaux de ce devis » : la loi dit « l'exécution du contrat »
+       (DROIT-7). « Non » à GAUCHE, rien de choisi. */
+    question: 'Une autre entreprise fera-t-elle une partie, ou la totalité, des travaux de ce devis ?',
+    non: 'Non',
+    oui: 'Oui',
+    lesquelles: 'Laquelle, ou lesquelles ?',
+    echec: 'Vos sous-traitants n’ont pas pu être lus.',
+    reessayer: 'Réessayer',
+    vide: 'Vous n’avez encore aucun sous-traitant.',
+    ajouter: 'Ajouter un sous-traitant',
+    /* La porte vers « Mon entreprise », section des sous-traitants. */
+    porte: 'Mes sous-traitants',
+    /* Un sous-traitant de plus que `SOUS_TRAITANTS_MAX` : MONTRÉ juste sous
+       les cases, annoncé, rien n'est écrit. */
+    plafond: 'Dix sous-traitants au plus par devis : décochez-en un pour en choisir un autre.',
+    aide: 'La loi demande de nommer, avant la signature, chaque entreprise qui fera une partie des travaux de ce devis, '
+      + 'et de dire si elle détient un label RGE.',
+  }),
+  amende: AMENDE_DU_LABEL,
+  amendeSousTraitance: AMENDE_DE_LA_SOUS_TRAITANCE,
+});
+
+/** CE QUE LA CARTE DIT D'UN TRAVAIL COCHÉ, selon son état (`etatsDesTravaux`)
+ *  — `null` pour un état inconnu (une liste pas lue : rien n'est dit). La
+ *  date s'écrit « JJ/MM/AAAA ». */
+export function phraseDuTravail(e) {
+  if (!e || typeof e !== 'object') return null;
+  const L = LE_LABEL.label;
+  const remplir = (modele) => modele.replace('{intitule}', e.intitule ?? '').replace('{fin}', dateFrancaise(e.fin) ?? '');
+  if (e.etat === 'couvert') return remplir(L.couvert);
+  if (e.etat === 'sans_certificat') return remplir(L.sansCertificat);
+  if (e.etat === 'expire') return remplir(L.expire);
+  if (e.etat === 'absent') return L.absent;
+  return null;
+}
+
+/** L'INTRODUCTION DE LA CARTE selon la réponse « à quel titre » VALABLE de
+ *  l'écran (§3.8, DROIT-9) — une liste de phrases : à titre privé,
+ *  l'introduction ; pour une association, une copropriété ou une société
+ *  civile, l'introduction et la prudence ; sans réponse, l'introduction et
+ *  la prudence de la réponse vide ; pour un client « entreprise », la seule
+ *  phrase qui dit que la loi ne demande rien (rien n'est effacé). */
+export function introductionDeLEnergie(valable) {
+  if (!energieConcerne(valable)) return [LE_LABEL.entreprise];
+  if (valable === 'non_professionnel') return [LE_LABEL.introduction, LE_LABEL.prudenceAssociation];
+  if (valable === 'consommateur') return [LE_LABEL.introduction];
+  return [LE_LABEL.introduction, LE_LABEL.prudenceSansReponse];
+}
+
+/**
+ * L'ÉTAT DE LA CARTE À SON OUVERTURE (CTL-10) — `{ travaux, sansLabel,
+ * sousTraitance, sousTraitants }`, lu dans les QUATRE champs du devis, et
+ * rien d'autre : jamais `source`, `quoteRequestId`, `sosRequestId` ni
+ * `objet` (un devis venu d'une urgence « isolation des combles » ne coche
+ * rien), jamais le métier, jamais les signes de qualité de « Mon
+ * entreprise » (un artisan dont un label couvre les combles ne les voit pas
+ * cochés d'office). Sur un devis vierge, TOUT est vide. Les listes sont
+ * recopiées NEUVES, un tableau vide devient `null`.
+ */
+export function etatInitialEnergie(devis) {
+  const x = devis || {};
+  return {
+    travaux: tableauLu(x.energieTravaux),
+    sansLabel: tableauLu(x.energieSansLabel),
+    sousTraitance: x.energieSousTraitance === true ? true : (x.energieSousTraitance === false ? false : null),
+    sousTraitants: tableauLu(x.energieSousTraitants),
+  };
+}
+
+/**
+ * CE QUE LA CARTE PORTE À CET INSTANT (le modèle de `lireDechets`) —
+ * `changements` (les quatre champs TELS QUE LA CARTE LES TIENT : la saisie
+ * n'envoie que ce qui DIFFÈRE de l'en-tête, par `memeValeur`) et `textes`
+ * (les `choix` de la carte). La carte n'a AUCUN champ tapé : rien ne s'y
+ * refuse, donc aucune `erreurs`. AUCUNE normalisation des listes : un
+ * tableau vide (que les fonctions d'appui n'écrivent jamais) partirait tel
+ * quel, et la base le REFUSERAIT — un défaut visible, jamais un silence.
+ */
+export function lireEnergie({ choix = null, devis = {} } = {}) {
+  const c = choix || etatInitialEnergie(devis);
+  const changements = {};
+  if (c.travaux !== undefined) changements.energieTravaux = c.travaux;
+  if (c.sansLabel !== undefined) changements.energieSansLabel = c.sansLabel;
+  if (c.sousTraitance !== undefined) changements.energieSousTraitance = c.sousTraitance;
+  if (c.sousTraitants !== undefined) changements.energieSousTraitants = c.sousTraitants;
+  return { changements, erreurs: {}, textes: { choix: { ...c } } };
+}
+
+/** Les résumés de la rangée « Énergie (label RGE) » (annexe A.4) : son titre
+ *  est déjà dit par la rangée, le résumé ne le répète pas. */
+const RESUMES_DE_L_ENERGIE = Object.freeze({
+  sansObjet: 'Sans objet pour ce client',
+  aucun: 'Aucun de ces travaux',
+  aDire: 'Travaux d’énergie : à dire',
+  dits: 'Label et sous-traitance : dits',
+  aCompleter: 'À compléter : ',
+  nonLus: 'Labels ou sous-traitants non lus',
+});
+const NOMS_DES_RUBRIQUES_DE_L_ENERGIE = Object.freeze({ label: 'label', sousTraitance: 'sous-traitance' });
+
+/**
+ * LE RÉSUMÉ DE LA RANGÉE « ÉNERGIE (LABEL RGE) » (T25, annexe A.4) — un des
+ * HUIT résumés, suivi d'un des trois suffixes d'état :
+ *   - « Sans objet pour ce client » pour une réponse « entreprise » (la
+ *     rangée reste à sa place : elle ne saute pas) ;
+ *   - « Travaux d’énergie : à dire » quand la liste est vide ;
+ *   - « Aucun de ces travaux » ;
+ *   - « Labels ou sous-traitants non lus » quand une rubrique est INCONNUE —
+ *     jamais « dits », jamais « à compléter » sur une liste qu'on n'a pas
+ *     lue ;
+ *   - « Label et sous-traitance : dits » ;
+ *   - « À compléter : » suivi de ce qui manque SEULEMENT (label,
+ *     sous-traitance).
+ * Le suffixe : « — pas enregistré » quand un champ est refusé par l'écran
+ * (`refuse`), sinon l'état de l'écriture (`enRoute`, `enEchec`, que
+ * `etatDesChampsDuDevis` calcule sur `CHAMPS_DE_L_ENERGIE`). Les gabarits
+ * (`GABARITS_DE_L_ENERGIE`) comptent les trois : la hauteur ne bouge jamais.
+ */
+export function resumeDeLEnergie({
+  devis = null, labels = undefined, sousTraitants = undefined, enRoute = false, enEchec = false, refuse = false,
+  jour = jourDuTelephone(),
+} = {}) {
+  const d = devis || {};
+  const suffixe = refuse ? SUFFIXE_EN_ECHEC : suffixeDEtat({ enRoute, enEchec });
+  if (!energieConcerne(pourQuiValable(d))) return `${RESUMES_DE_L_ENERGIE.sansObjet}${suffixe}`;
+  const r = rubriquesDeLEnergie(d, labels, sousTraitants, jour);
+  if (!r.travaux) return `${RESUMES_DE_L_ENERGIE.aDire}${suffixe}`;
+  if (estAucun(d.energieTravaux)) return `${RESUMES_DE_L_ENERGIE.aucun}${suffixe}`;
+  if (r.label === null || r.sousTraitance === null) return `${RESUMES_DE_L_ENERGIE.nonLus}${suffixe}`;
+  const manquent = ['label', 'sousTraitance'].filter((k) => r[k] !== true);
+  if (!manquent.length) return `${RESUMES_DE_L_ENERGIE.dits}${suffixe}`;
+  return `${RESUMES_DE_L_ENERGIE.aCompleter}${manquent.map((k) => NOMS_DES_RUBRIQUES_DE_L_ENERGIE[k]).join(', ')}${suffixe}`;
+}
+
+/** LES VINGT-QUATRE GABARITS de la rangée : les huit résumés × les trois
+ *  suffixes (rien, « — enregistrement… », « — pas enregistré ») — la règle
+ *  « garder la grande place » : la rangée ne saute jamais. Le plus long fait
+ *  53 caractères, moins que ceux des déchets. */
+export const GABARITS_DE_L_ENERGIE = Object.freeze([
+  RESUMES_DE_L_ENERGIE.sansObjet,
+  RESUMES_DE_L_ENERGIE.aucun,
+  RESUMES_DE_L_ENERGIE.aDire,
+  RESUMES_DE_L_ENERGIE.dits,
+  `${RESUMES_DE_L_ENERGIE.aCompleter}${NOMS_DES_RUBRIQUES_DE_L_ENERGIE.label}`,
+  `${RESUMES_DE_L_ENERGIE.aCompleter}${NOMS_DES_RUBRIQUES_DE_L_ENERGIE.sousTraitance}`,
+  `${RESUMES_DE_L_ENERGIE.aCompleter}${NOMS_DES_RUBRIQUES_DE_L_ENERGIE.label}, ${NOMS_DES_RUBRIQUES_DE_L_ENERGIE.sousTraitance}`,
+  RESUMES_DE_L_ENERGIE.nonLus,
 ].flatMap((t) => ['', SUFFIXE_EN_ROUTE, SUFFIXE_EN_ECHEC].map((suffixe) => `${t}${suffixe}`)));

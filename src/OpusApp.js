@@ -4094,6 +4094,19 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      la FERMETURE de « Mon entreprise » qui les relit, avec le régime : c'est
      là que l'artisan les ajoute, les modifie, les retire. */
   const [mesLieux, setMesLieux] = useState(undefined);
+  /* MES SIGNES DE QUALITÉ (label RGE) ET MES SOUS-TRAITANTS (2b-6, cahier
+     T24 et §3.7 bis), lus par la MÊME lecture que le régime, les assurances
+     et les lieux (`monRegimeEtSaDate`) — aucune requête de plus. Les mêmes
+     trois règles que les lieux : `undefined` tant qu'ils ne sont pas lus,
+     GARDÉS pendant une relecture, REMPLACÉS à la réponse, REMIS à
+     `undefined` sur un échec ; une réponse qui ne les porte pas (la table pas
+     encore là) les pose à `null` — NON LUS, jamais `[]` : « aucun de vos
+     signes de qualité ne porte ces travaux » dirait faux à un artisan qui en
+     a un, et lui proposerait de déclarer qu'il n'en détient pas. La carte
+     « Énergie et label RGE » d'un devis en tire ses états et ses cases ;
+     c'est la FERMETURE de « Mon entreprise » qui les relit. */
+  const [mesLabels, setMesLabels] = useState(undefined);
+  const [mesSousTraitants, setMesSousTraitants] = useState(undefined);
 
   /* ================================================================== */
   /*  LA BASE DE POSTES — lot P du module devis (24/10/2026)             */
@@ -4229,6 +4242,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
       /* 2b-5 : les lieux de dépôt de la MÊME réponse — une liste, ou `null`
          (non lus). */
       setMesLieux(r && Array.isArray(r.lieux) ? r.lieux : null);
+      /* 2b-6 : les signes de qualité et les sous-traitants de la MÊME
+         réponse — une liste, ou `null` (non lus). */
+      setMesLabels(r && Array.isArray(r.labels) ? r.labels : null);
+      setMesSousTraitants(r && Array.isArray(r.sousTraitants) ? r.sousTraitants : null);
     }).catch(() => {});
     avecDelai(lecture, 8000, 'La lecture de votre régime de TVA')
       .catch(() => {
@@ -4239,6 +4256,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
         /* …et les lieux de dépôt (2b-5) : la carte « Déchets » dira « n'ont
            pas pu être lus », jamais « aucun lieu ». */
         setMesLieux(undefined);
+        /* …et les signes de qualité et les sous-traitants (2b-6) : la carte
+           « Énergie et label RGE » dira « n'ont pas pu être lus », jamais
+           « aucun ». */
+        setMesLabels(undefined);
+        setMesSousTraitants(undefined);
       });
   }, []);
 
@@ -4253,12 +4275,24 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
      (mesuré : une lecture de « Mon entreprise » qui répond après sa
      fermeture). `lieux` : le tableau lu (ou `null`, la table absente) quand
      « Mon entreprise » vient de LES lire ; `undefined` quand elle ne les
-     porte pas (un enregistrement de la fiche) — on n'y touche pas alors. */
-  const recevoirEmetteur = useCallback((emetteur, lieux) => {
+     porte pas (un enregistrement de la fiche) — on n'y touche pas alors.
+     DEPUIS 2b-6 (cahier §3.7 bis, ÉCRAN-4), UN OBJET : `{ lieux, labels,
+     sousTraitants }`, chaque clé posée SEULEMENT si elle est un tableau ou
+     `null`. Les signes de qualité et les sous-traitants sont dans le cas des
+     lieux, en pire : `lireRegime` GARDE les listes pendant une relecture, et
+     ce régime la JETTE — sans eux ici, la carte « Énergie et label RGE »
+     montrerait l'ANCIENNE liste, et dirait « aucun de vos signes de qualité
+     ne porte ces travaux » d'un label qu'on vient de ranger. Une liste
+     d'arguments qui s'allonge à chaque étape finirait par se décaler : un
+     objet nomme chaque liste. */
+  const recevoirEmetteur = useCallback((emetteur, listes = {}) => {
     generationRegime.current += 1;
     setMonRegime(emetteur && emetteur.regime_tva != null ? emetteur.regime_tva : null);
     setRegimeDeclareLe(emetteur && emetteur.regime_tva_declare_le ? emetteur.regime_tva_declare_le : null);
+    const { lieux, labels, sousTraitants } = listes || {};
     if (Array.isArray(lieux) || lieux === null) setMesLieux(lieux);
+    if (Array.isArray(labels) || labels === null) setMesLabels(labels);
+    if (Array.isArray(sousTraitants) || sousTraitants === null) setMesSousTraitants(sousTraitants);
   }, []);
 
   const ouvrirMesDevis = () => {
@@ -5373,6 +5407,11 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                `undefined` tant qu'ils ne sont pas lus, `null` s'ils n'ont pas
                pu l'être ; jamais un `[]` inventé. */
             lieux={mesLieux}
+            /* 2b-6 : les signes de qualité (label RGE) et les sous-traitants,
+               pour la carte « Énergie et label RGE » — les trois règles des
+               lieux : `undefined` (pas lus), `null` (non lus), une liste. */
+            labels={mesLabels}
+            sousTraitants={mesSousTraitants}
             clients={clients}
             clientsEtat={clientsEtat}
             onGarde={inscrireGarde}
@@ -5595,7 +5634,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
                la même lecture. Discrète quand le régime est déjà connu, comme
                les trois autres appels. Depuis 2b-5, les LIEUX DE DÉPÔT des
                déchets reviennent par cette même lecture : c'est ici qu'un
-               lieu ajouté ou retiré atteint la carte « Déchets » d'un devis. */
+               lieu ajouté ou retiré atteint la carte « Déchets » d'un devis.
+               Depuis 2b-6, les SIGNES DE QUALITÉ et les SOUS-TRAITANTS aussi :
+               la carte « Énergie et label RGE » les retrouve à la fermeture. */
             lireRegime({ discret: typeof monRegime === 'string' });
           }}
           entreprise={monEntreprise}

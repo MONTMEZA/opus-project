@@ -110,6 +110,24 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   emetteur_lieu_longueurs_check: TEXTE_TROP_LONG,
   emetteur_lieu_type_check: 'ce type d’installation n’est pas connu d’Opus : rien n’a été enregistré. Mettez '
     + 'l’application à jour, puis réessayez.',
+  /* 2b-6 (46.2 ter et 46.2 quater) : un signe de qualité (label RGE) et un
+     sous-traitant, rangés dans « Mon entreprise » (annexe A.7 du cahier
+     2b-6). Les formulaires refusent AVANT d'envoyer (`validerLabel`,
+     `validerSousTraitant`, avec ces mêmes noms) ; les travaux ne viennent
+     que des cases d'Opus — une autre valeur vient d'une version en retard
+     (« mettez Opus à jour »). */
+  emetteur_label_categories_check: 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
+  emetteur_label_chemin_check: 'ce certificat n’est pas rangé dans votre espace : envoyez-le depuis ce formulaire.',
+  emetteur_label_complet_check: 'un signe de qualité s’écrit avec l’organisme qui l’a délivré, son intitulé, les travaux '
+    + 'qu’il couvre et sa date de fin : c’est ce que le devis doit porter. Le numéro du certificat, lui, est facultatif.',
+  emetteur_label_longueurs_check: TEXTE_TROP_LONG,
+  emetteur_sous_traitant_categories_check: 'ces travaux ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
+  emetteur_sous_traitant_chemin_check: 'ce justificatif n’est pas rangé dans votre espace : envoyez-le depuis ce '
+    + 'formulaire.',
+  emetteur_sous_traitant_complet_check: 'un sous-traitant s’écrit avec son nom ou sa raison sociale et son numéro SIRET ; '
+    + 's’il détient un label RGE, avec les travaux qu’il couvre et sa date de fin.',
+  emetteur_sous_traitant_longueurs_check: TEXTE_TROP_LONG,
+  emetteur_sous_traitant_siret_check: 'un numéro SIRET fait quatorze chiffres.',
   tarif_frais_check: 'les frais de déplacement s’écrivent comme un montant entre 0 et 10 000 €.',
   tarif_frais_zero_check: 'vous avez indiqué 0 € et des conditions. Si vous facturez selon des '
     + 'conditions, laissez le montant vide et écrivez-les ; si vous ne facturez jamais de '
@@ -247,6 +265,16 @@ export const MESSAGES_CONTRAINTE = Object.freeze({
   devis_dechets_sans_depot_check: 'cette réponse sur le dépôt des déchets n’est pas valable : mettez Opus à jour.',
   devis_dechets_sur_place_check: 'ce qui reste sur le chantier ne correspond pas à la liste d’Opus : mettez Opus à jour.',
   devis_dechets_unite_check: 'choisissez m³ ou tonnes.',
+  /* 2b-6 (49.4 septies) : les travaux d'énergie et le label RGE (annexe A.7
+     du cahier 2b-6). Les trois listes ne viennent que des cases de la carte
+     « Énergie et label RGE », jamais tapées : une valeur refusée vient d'une
+     version en retard (« mettez Opus à jour »). Un tableau vide, que la carte
+     n'écrit jamais, est refusé par la base sous ces noms. */
+  devis_energie_travaux_check: 'les travaux d’énergie cochés ne correspondent pas à la liste d’Opus : mettez Opus à jour.',
+  devis_energie_sans_label_check: 'les travaux déclarés sans label ne correspondent pas à la liste d’Opus : mettez Opus à '
+    + 'jour.',
+  devis_energie_sous_traitants_check: 'les sous-traitants de ce devis ne sont pas valables (dix au plus) : mettez Opus à '
+    + 'jour.',
   /* LE PLAFOND — LA PHRASE DE REPLI, vraie quel que soit le chemin. Trois
      écritures y mènent, et chacune a SA phrase (`PHRASES_DU_PLAFOND`, plus
      bas, que l'écran demande par `messageDEcritureDuDevis`) : une LIGNE, une

@@ -539,6 +539,12 @@ await ctx.addInitScript(({ pause, pausePostes, pauseLieux }) => {
      carte « Déchets » et la liste « Pour le remettre » lisent alors une
      liste vide, comme d'une base qui n'en a aucun. */
   window.__opusLieux = { vider: false, vides: 0 };
+  /* 2b-6 : DES SIGNES DE QUALITÉ ET DES SOUS-TRAITANTS VIDES, sur la même
+     règle — la copie de la fiche de démonstration rend ZÉRO ligne quand
+     `vider` est vrai. Une ligne de signe se reconnaît à `categories` (sans
+     `label_detient`), un sous-traitant à `label_detient`. */
+  window.__opusLabels = { vider: false, vides: 0 };
+  window.__opusSousTraitants = { vider: false, vides: 0 };
   const mapOrigine = Array.prototype.map;
   // eslint-disable-next-line no-extend-native
   Array.prototype.map = function mapTrace(...a) {
@@ -547,6 +553,20 @@ await ctx.addInitScript(({ pause, pausePostes, pauseLieux }) => {
       && Array.prototype.every.call(this, (x) => !!x && typeof x === 'object' && 'type_installation' in x)
       && String(new Error().stack).includes('copieEmetteur')) {
       lv.vides += 1;
+      return [];
+    }
+    const lb = window.__opusLabels;
+    if (lb && lb.vider && this && this.length > 0
+      && Array.prototype.every.call(this, (x) => !!x && typeof x === 'object' && 'categories' in x && !('label_detient' in x))
+      && String(new Error().stack).includes('copieEmetteur')) {
+      lb.vides += 1;
+      return [];
+    }
+    const sv = window.__opusSousTraitants;
+    if (sv && sv.vider && this && this.length > 0
+      && Array.prototype.every.call(this, (x) => !!x && typeof x === 'object' && 'label_detient' in x)
+      && String(new Error().stack).includes('copieEmetteur')) {
+      sv.vides += 1;
       return [];
     }
     const r = window.__opusRegime;
@@ -1191,12 +1211,16 @@ await section('« Mon profil » → « Mes devis »', async () => {
      devis » complet) et « Terrasse en bois » (la validité et la nature de
      l'acompte manquent) s'ajoutent aux deux du lot 1, pour que la liste
      « Pour le remettre » se voie dans ses deux états sans `.env`. Ils sont
-     plus anciens : la liste les range après. */
-  verifier(`quatre cartes de brouillon (${cartes})`, cartes === 4);
+     plus anciens : la liste les range après. CINQ depuis l'étape 2b-6 :
+     « Isolation des combles et des murs », le plus ancien, qui fait voir le
+     point `devis_energie_mentions` et l'avis du label. */
+  verifier(`cinq cartes de brouillon (${cartes})`, cartes === 5);
   const ordre = await page.locator('button[aria-label^="Ouvrir le brouillon "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
-  verifier('…dans l’ordre « Mes devis » (le plus récemment modifié d’abord) : les deux du lot 1, puis « Terrasse », puis « Muret »',
-    ordre.length === 4 && /Rénovation salle de bains|Sol du séjour/.test(ordre[0]) && /Rénovation salle de bains|Sol du séjour/.test(ordre[1])
-    && /Terrasse en bois/.test(ordre[2]) && /Muret de clôture/.test(ordre[3]), JSON.stringify(ordre));
+  verifier('…dans l’ordre « Mes devis » (le plus récemment modifié d’abord) : les deux du lot 1, puis « Terrasse », « Muret », puis '
+    + '« Isolation des combles et des murs » (2b-6)',
+    ordre.length === 5 && /Rénovation salle de bains|Sol du séjour/.test(ordre[0]) && /Rénovation salle de bains|Sol du séjour/.test(ordre[1])
+    && /Terrasse en bois/.test(ordre[2]) && /Muret de clôture/.test(ordre[3]) && /Isolation des combles et des murs/.test(ordre[4]),
+    JSON.stringify(ordre));
   verifier('deux pastilles « Brouillon »', (t.match(/\bBrouillon\b/g) || []).length >= 2);
   /* L'encre de la pastille se CALCULE (`surFond`) : on mesure son contraste. */
   const contraste = await page.evaluate(() => {
@@ -3767,11 +3791,28 @@ await section('« À quel titre ? » sur « Rénovation salle de bains », à 39
      « professionnel », les mentions dues à un particulier ne sont plus
      comptées (sauf l'adresse de l'établissement) — le compte de la ligne
      change SANS qu'on rouvre « Mon entreprise ». */
+  /* DEPUIS 2b-6 (24/11/2026), DÉCIDÉ EN LE DISANT : « ce devis » perd AUSSI
+     le point du rang 14. « Rénovation salle de bains » coche la ventilation
+     (cahier 2b-6 §3.9, T14), qu'aucun signe de qualité de la démonstration
+     ne porte : à titre privé, la loi demande de dire si l'artisan détient un
+     label RGE (`devis_energie_mentions`, « La loi ») ; pour un client qui
+     commande pour son entreprise, le rang 14 se tait (T6 : L. 224-114 ne
+     vise que le consommateur). C'est le SEUL point du devis qui suit cette
+     réponse — la liste elle-même le dit : la phrase est là à titre privé
+     (`tl1`, lue plus haut), et plus aucune phrase du rang 14 ensuite (`tl2`).
+     La phrase est écrite ici en toutes lettres : les constantes du rang 14
+     de ce fichier sont déclarées plus bas, après cette section. */
+  const POINT_LABEL_A_TITRE_PRIVE = 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou '
+    + 'partie de ce devis : la loi le demande pour un client qui commande à titre privé.';
   const c2 = await compteDeLaLigne();
-  verifier(`la réponse vue a changé : la partie « votre entreprise » est RELUE (${c1.entreprise} → ${c2.entreprise} points), « ce devis » ne bouge pas (${c2.devis})`,
-    c2.entreprise !== null && c2.entreprise < c1.entreprise && c2.devis === c1.devis, `${c1.libelle} | ${c2.libelle}`);
+  verifier(`la réponse vue a changé : la partie « votre entreprise » est RELUE (${c1.entreprise} → ${c2.entreprise} points), « ce devis » ne perd que le point du label RGE (${c1.devis} → ${c2.devis} ; 2b-6, T6)`,
+    c2.entreprise !== null && c2.entreprise < c1.entreprise && c2.devis === c1.devis - 1 && tl1.includes(POINT_LABEL_A_TITRE_PRIVE),
+    `${c1.libelle} | ${c2.libelle}`);
   await ouvrirLaListe();
   const tl2 = await texteLu();
+  verifier('…et la liste ne porte plus AUCUN point du rang 14 (le label RGE se tait pour un client qui commande pour son entreprise)',
+    !tl2.includes('Dites si vous détenez un label RGE') && !tl2.includes('Dites quels travaux d’énergie'),
+    tl2.slice(Math.max(0, tl2.indexOf(TITRE_LISTE)), Math.max(0, tl2.indexOf(TITRE_LISTE)) + 800));
   /* Les deux adresses de la démonstration sont complètes : pour une réponse
      « professionnel », il ne reste aucune mention due à un particulier, et la
      sous-partie (avec sa phrase) disparaît — la phrase de prudence aussi.
@@ -5123,11 +5164,17 @@ const AVIS_FRANCHISE_OPTIONS_2B4 = `Avec ses options, ce devis atteint 40 000,00
    payant » sort, « si ce devis relève des services à la personne » entre.
    2b-5 (annexe A.6, T18) : « les déchets de chantier » SORT — les déchets ont
    leur point —, « et si vos lieux de dépôt acceptent ces déchets » ENTRE, en
-   dernier : toujours sept faits. */
-const PAS_ENCORE_2B5 = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
-  + 'vraiment, si ce devis relève des services à la personne, le label RGE pour des travaux d’énergie, les conditions du '
-  + 'taux réduit de TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces '
-  + 'travaux (ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.';
+   dernier : toujours sept faits. 2b-6 (annexe A.8) : « le label RGE pour des
+   travaux d’énergie » SORT — le label a son point —, et « si les labels RGE
+   déclarés, les vôtres et ceux de vos sous-traitants, existent, couvrent ces
+   travaux et sont toujours en vigueur » ENTRE à sa place : toujours sept
+   faits. Écrit EN TOUTES LETTRES, jamais importé : une copie importée ne
+   verrait pas la phrase changée dans `devis.js`. */
+const PAS_ENCORE_2B6 = 'Pas encore vérifié : le moment de la signature, si une ligne marquée « réparation urgente » l’est '
+  + 'vraiment, si ce devis relève des services à la personne, si les labels RGE déclarés, les vôtres et ceux de vos '
+  + 'sous-traitants, existent, couvrent ces travaux et sont toujours en vigueur, les conditions du taux réduit de '
+  + 'TVA (l’ancienneté du logement, la certification du client), si votre attestation décennale couvre ces travaux '
+  + '(ses activités, la date où le chantier s’ouvrira), et si vos lieux de dépôt acceptent ces déchets.';
 
 /* ======================================================================== */
 /*  LES DÉCHETS DU CHANTIER (cahier 2b-5, §5.5)                             */
@@ -5154,6 +5201,16 @@ const POINT_DECHETS_PRUDENCE = 'Dites ce que deviendront les déchets : quantit�
   + 'rénover ou démolir un bâtiment, ou pour jardiner ; Opus ne sait pas encore si ce devis en relève.';
 const POINT_DECHETS_LOI = 'Dites ce que deviendront les déchets : quantité, tri, lieux, coût. La loi le demande pour construire, '
   + 'rénover ou démolir un bâtiment, ou pour jardiner, puisque vous avez répondu « Oui ».';
+/* 2b-6 (annexe A.1) : les trois phrases du rang 14, EN TOUTES LETTRES — la
+   règle de `POINT_DECHETS_PRUDENCE` : une copie importée de `devis.js` ne
+   verrait pas la phrase changée. */
+const POINT_ENERGIE_PRUDENCE = 'Dites quels travaux d’énergie de la liste ce devis comporte, ou « Aucun de ces travaux ». La loi '
+  + 'demande alors si vous détenez un label RGE ; Opus ne sait pas encore si ce devis en relève.';
+const POINT_ENERGIE_LOI = 'Dites si vous détenez un label RGE pour les travaux d’énergie cochés, et si un sous-traitant fera tout ou '
+  + 'partie de ce devis : la loi le demande pour un client qui commande à titre privé.';
+const POINT_ENERGIE_MENTIONS_PRUDENCE = 'Dites si vous détenez un label RGE pour les travaux cochés, et si un sous-traitant fera tout '
+  + 'ou partie de ce devis. La loi le demande à titre privé ; Opus ne sait pas encore si elle vise ce cas.';
+const BOUTON_ENERGIE = 'Compléter : énergie et label RGE';
 const NON_DECHETS = 'Non, ni l’un ni l’autre';
 const OUI_DEFAUT_DECHETS = 'Oui (par défaut)';
 const SOUS_NON_DECHETS = 'Ce devis ne dira rien des déchets. Ce que vous avez déjà écrit est gardé, au cas où vous changeriez d’avis.';
@@ -5404,8 +5461,9 @@ await section('« Pour le remettre » sur « Muret de clôture » : la ligne du 
        cahier §5.5 point 11) : « si le devis lui-même est payant » SORT (le
        point du rang 12 le demande), « si ce devis relève des services à la
        personne » ENTRE. 2b-5 (annexe A.6, T18) : « les déchets de chantier »
-       SORT, « si vos lieux de dépôt acceptent ces déchets » ENTRE. */
-    t.includes(PAS_ENCORE_2B5)
+       SORT, « si vos lieux de dépôt acceptent ces déchets » ENTRE. 2b-6
+       (annexe A.8) : le fait du label RGE est récrit. */
+    t.includes(PAS_ENCORE_2B6)
     && t.indexOf('Pas encore vérifié') > t.indexOf('rien ne manque'));
   /* 2b-2 (cahier §3.6, annexe A.3) : le Muret est commandé « à titre privé »
      — la démonstration porte la réponse POUR Mme Martin, et la base l'a vue
@@ -5601,20 +5659,26 @@ await section('Un brouillon NEUF : aucune lecture avant qu’il soit en base, pu
   /* 2b-4 (cahier §5.5 point 10, critique ÉCRAN-9) : un brouillon NEUF naît
      sans prix du devis lui-même — CINQ points, celui du rang 12 compris.
      2b-5 (cahier §5.5) : et sans rien dire des déchets — SIX points, celui
-     du rang 13 compris, « Par prudence » (aucune réponse). */
-  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité, prix du devis lui-même, déchets — « ce devis — 6 points »',
-    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '6 points' && (await lectures()) - avant >= 1, l2);
+     du rang 13 compris, « Par prudence » (aucune réponse). 2b-6 (cahier
+     §5.6) : et sans rien dire des travaux d'énergie — SEPT points, celui du
+     rang 14 compris, « Par prudence » (la réponse « à quel titre » est
+     vide). */
+  verifier('…la liste ARRIVE au premier enregistrement : client, poste, lieu, validité, prix du devis lui-même, déchets, travaux '
+    + 'd’énergie — « ce devis — 7 points »',
+    COMPTE.test(l2) && COMPTE.exec(l2)[1] === '7 points' && (await lectures()) - avant >= 1, l2);
   await toucher(ligneHaut());
   const t = await texte();
-  verifier('la carte : les six points (2b-4 : « Dites si le devis lui-même est gratuit ou payant… », 2b-5 : « Dites ce que deviendront '
-    + 'les déchets… », « Par prudence » tous deux, dans cet ordre), puis l’AVIS '
+  verifier('la carte : les sept points (2b-4 : « Dites si le devis lui-même est gratuit ou payant… », 2b-5 : « Dites ce que deviendront '
+    + 'les déchets… », 2b-6 : « Dites quels travaux d’énergie… », « Par prudence » tous trois, dans cet ordre), puis l’AVIS '
     + '« pas de titre », À PART, après la liste — et jamais compté',
     t.includes('Ce devis ne s’adresse encore à personne') && t.includes('Ce devis ne chiffre encore aucun travail')
     && t.includes('Écrivez le lieu des travaux.') && t.includes('Choisissez la durée de validité')
     && t.includes(POINT_COUT_2B4) && t.slice(Math.max(0, t.indexOf(POINT_COUT_2B4) - 40), t.indexOf(POINT_COUT_2B4)).includes('Par prudence')
     && t.includes(POINT_DECHETS_PRUDENCE) && t.indexOf(POINT_DECHETS_PRUDENCE) > t.indexOf(POINT_COUT_2B4)
     && t.slice(Math.max(0, t.indexOf(POINT_DECHETS_PRUDENCE) - 40), t.indexOf(POINT_DECHETS_PRUDENCE)).includes('Par prudence')
-    && t.includes('Ce devis — 6 points') && t.includes('À vérifier')
+    && t.includes(POINT_ENERGIE_PRUDENCE) && t.indexOf(POINT_ENERGIE_PRUDENCE) > t.indexOf(POINT_DECHETS_PRUDENCE)
+    && t.slice(Math.max(0, t.indexOf(POINT_ENERGIE_PRUDENCE) - 40), t.indexOf(POINT_ENERGIE_PRUDENCE)).includes('Par prudence')
+    && t.includes('Ce devis — 7 points') && t.includes('À vérifier')
     && t.includes('Ce devis n’a pas de titre : le document dira seulement « Devis ».')
     && t.indexOf('À vérifier') > t.indexOf('Mentions dues à un particulier'));
   await jugerLaCarte('la carte du brouillon neuf');
@@ -9178,7 +9242,13 @@ await section('2b-5 : une lecture des lieux EN COURS n’est jamais dite « en �
      fonction, avec ce que `lireFiche` lui passe. */
   await page.evaluate(async () => {
     const f = await window.__opusModule('src/lib/api.js').monEmetteur();
-    window.__surEmetteurGarde(f.emetteur || null, Array.isArray(f.lieux) ? f.lieux : null);
+    /* 2b-6 (§3.7 bis) : la seconde moitié est un OBJET, comme `listesLues(d)`
+       de `MonEntreprise` — les lieux, les signes de qualité, les sous-traitants. */
+    window.__surEmetteurGarde(f.emetteur || null, {
+      lieux: Array.isArray(f.lieux) ? f.lieux : null,
+      labels: Array.isArray(f.labels) ? f.labels : null,
+      sousTraitants: Array.isArray(f.sousTraitants) ? f.sousTraitants : null,
+    });
   });
   await attendre(200);
   await page.evaluate(() => { window.__opusRegime.retenir = false; window.__opusRegime.retenues.splice(0).forEach((f) => f()); });
@@ -9489,6 +9559,719 @@ await section('2b-5 : l’invariant — le brouillon de mesure supprimé, les br
     if (JSON.stringify(d) !== JSON.stringify(AVANT_2B5.devis[o])) ecarts.push(`${o} : ${JSON.stringify([AVANT_2B5.devis[o], d])}`);
   }
   verifier(`les déchets de « Rénovation », « Muret » et « Terrasse » : identiques (${ecarts.length} écart(s))`, ecarts.length === 0, ecarts.join(' | '));
+});
+
+/* ======================================================================== */
+/*  2b-6 — LA CARTE « ÉNERGIE ET LABEL RGE », SA RANGÉE ET SON POINT       */
+/* ======================================================================== */
+/* Les textes (annexes A.1, A.3, A.4, A.6), EN TOUTES LETTRES : une copie
+   importée de `devis.js` ne verrait pas une phrase changée là-bas. Les
+   espaces insécables de l'amende se lisent en espaces ordinaires (`net`). */
+const OBJET_ENERGIE = 'Énergie (mesure)';
+const TITRE_ENERGIE = 'Énergie et label RGE';
+const RETOUR_ENERGIE_DEVIS = 'Enregistrer l’énergie et le label RGE et revenir au devis';
+const RETOUR_ENERGIE_LISTE = 'Enregistrer l’énergie et le label RGE et revenir à ce qu’il manque pour remettre ce devis';
+const INTRO_ENERGIE = 'Pour des travaux d’économies d’énergie ou d’énergie renouvelable chez un client qui commande à titre privé, la '
+  + 'loi demande de dire sur le devis si vous détenez un label RGE, et qui fera les travaux.';
+const ENTREPRISE_ENERGIE = 'Ce client commande pour son entreprise : la loi ne demande pas ces mentions. Ce que vous avez déjà écrit '
+  + 'est gardé.';
+const SOUS_TITRE_ENERGIE = 'Pour les droits de votre client';
+const QUESTION_ENERGIE = 'Quels travaux d’économies d’énergie ou d’énergie renouvelable ce devis comporte-t-il ?';
+const AUCUN_TRAVAUX = 'Aucun de ces travaux';
+const TRAVAUX_RETIRES = 'Les travaux cochés ont été retirés.';
+const TITRE_LABEL = 'Votre label RGE';
+const TITRE_SOUS_TRAITANCE = 'Sous-traitance';
+const ABSENT_LABEL = 'Aucun de vos signes de qualité ne porte ces travaux.';
+const DECLARATION_LABEL = 'Je ne détiens pas de label RGE pour ces travaux';
+const LABELS_ECHEC = 'Vos signes de qualité n’ont pas pu être lus.';
+const LABELS_VIDE = 'Vous n’avez déclaré aucun signe de qualité.';
+const ST_ECHEC = 'Vos sous-traitants n’ont pas pu être lus.';
+const ST_VIDE = 'Vous n’avez encore aucun sous-traitant.';
+const LESQUELLES = 'Laquelle, ou lesquelles ?';
+const PLAFOND_ST = 'Dix sous-traitants au plus par devis : décochez-en un pour en choisir un autre.';
+const PORTE_SIGNES = 'Mes signes de qualité : ouvrir « Mon entreprise » sur vos signes de qualité';
+const PORTE_ST = 'Mes sous-traitants : ouvrir « Mon entreprise » sur vos sous-traitants';
+const AJOUTER_ST_CARTE = 'Ajouter un sous-traitant : ouvrir « Mon entreprise » sur vos sous-traitants';
+const RELIRE_SIGNES = 'Relire vos signes de qualité';
+const RELIRE_ST = 'Relire vos sous-traitants';
+const AMENDE_LABEL = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul, et votre entreprise '
+  + 's’expose à une amende administrative pouvant aller jusqu’à 15 000 €, 75 000 € pour une société.';
+const AMENDE_ST = 'Pour un client qui commande à titre privé, sans ces informations, le contrat est nul.';
+const ST_DEMO = 'Isolations de démonstration';
+const SIRET_ST_DEMO = '000 004 960 00019';
+const TITRE_SIGNES_ME = 'Vos signes de qualité (label RGE)';
+const TITRE_ST_ME = 'Vos sous-traitants';
+const RESUMES_ENERGIE = {
+  sansObjet: 'Sans objet pour ce client', aucun: 'Aucun de ces travaux', aDire: 'Travaux d’énergie : à dire',
+  dits: 'Label et sous-traitance : dits', label: 'À compléter : label', st: 'À compléter : sous-traitance',
+  deux: 'À compléter : label, sous-traitance', nonLus: 'Labels ou sous-traitants non lus',
+};
+const libelleEnergie = (resume) => `Énergie (label RGE) : ${resume}. Ouvrir`;
+const rangeeEnergie = () => page.getByRole('button', { name: /^Énergie \(label RGE\) : / }).first();
+const resumeEnergie = async () => net((await rangeeEnergie().getAttribute('aria-label', { timeout: 3000 }).catch(() => '')) || '');
+const hauteurEnergie = async () => {
+  const b = await rangeeEnergie().boundingBox().catch(() => null);
+  return b ? Math.round(b.height * 10) / 10 : null;
+};
+const HAUTEURS_ENERGIE = { 393: [], 320: [] };
+const noterHauteurEnergie = async (largeur, etat) => {
+  const h = await hauteurEnergie();
+  HAUTEURS_ENERGIE[largeur].push([etat, h, (await resumeEnergie()).slice(20, 80)]);
+  return h;
+};
+const caseEnergie = (debut) => page.getByRole('switch', { name: new RegExp(`^${echapper(debut)}`) });
+const pastilleEnergie = (nom) => page.locator(`[role="button"][aria-label="${nom}"]`).first();
+const ouvrirLEnergie = async () => {
+  await toucher(rangeeEnergie());
+  await page.getByText(TITRE_ENERGIE, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(600);
+};
+const fermerLEnergie = async (libelle = RETOUR_ENERGIE_DEVIS) => {
+  await toucher(parLibelle(libelle));
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+};
+/** Les quatre colonnes de l'énergie du devis dont l'objet COMMENCE par
+ *  `objet`, LUES par la porte de l'application. */
+const energieEnBase = (objet) => page.evaluate(async (o) => {
+  const api = window.__opusModule('src/lib/api.js');
+  const l = await api.mesDevis();
+  const dv = (l.devis || []).find((x) => (x.objet || '').startsWith(o));
+  if (!dv) return null;
+  const r = await api.unDevis(dv.id);
+  const d = r.devis;
+  return { id: dv.id, travaux: d.energieTravaux, sansLabel: d.energieSansLabel, sousTraitance: d.energieSousTraitance, sousTraitants: d.energieSousTraitants };
+}, objet);
+/* LE PASSAGE COMPLET N'EST PAS UNE DÉMONSTRATION NEUVE (intégration 2b-6,
+   24/11/2026, trouvé en jouant le fichier EN ENTIER : les sections 2b-6
+   n'avaient été jouées que seules). Deux sections plus anciennes laissent
+   leur trace, et c'est voulu : la section 2b-2 « À quel titre ? » répond
+   « à titre privé » sur « Rénovation salle de bains » (on ne peut pas
+   revenir à « rien de dit » à l'écran), et « Supprimer ce brouillon, deux
+   appuis » SUPPRIME « Sol du séjour ». Les sections 2b-6 lisent donc l'état
+   réel de la démonstration, par la porte de l'application, au lieu de le
+   supposer. */
+/** La réponse « À quel titre ? » VALABLE d'un devis de démonstration
+ *  (`pourQuiValable`, la règle de la base), ou `undefined` s'il n'existe pas. */
+const pourQuiVu = (objet) => page.evaluate(async (o) => {
+  const api = window.__opusModule('src/lib/api.js');
+  const l = await api.mesDevis();
+  const dv = (l.devis || []).find((x) => (x.objet || '').startsWith(o));
+  if (!dv) return undefined;
+  const r = await api.unDevis(dv.id);
+  return window.__opusModule('src/lib/devis.js').pourQuiValable(r.devis);
+}, objet);
+/** L'objet d'un brouillon de « Mes devis » dont la question des travaux est
+ *  VIDE et où le rang 14 parle (réponse « À quel titre ? » vide, à titre
+ *  privé, ou une association…) : « Sol du séjour » d'abord, s'il existe
+ *  encore ; sinon le premier autre, dans l'ordre de « Mes devis ». `null` si
+ *  aucun : un échec, jamais un silence. */
+const devisAQuestionVide = () => page.evaluate(async () => {
+  const api = window.__opusModule('src/lib/api.js');
+  const D = window.__opusModule('src/lib/devis.js');
+  const l = await api.mesDevis();
+  const candidats = [];
+  for (const x of (l.devis || [])) {
+    if (!x.objet) continue;
+    const d = (await api.unDevis(x.id)).devis;
+    const v = D.pourQuiValable(d);
+    if (d.energieTravaux == null && (v == null || v === 'consommateur' || v === 'non_professionnel')) candidats.push(x.objet);
+  }
+  return candidats.find((o) => o.startsWith('Sol du séjour')) || candidats[0] || null;
+});
+/** Les signes de qualité et les sous-traitants de la fiche de démonstration, LUS par la porte de l'application. */
+const signesEtSousTraitantsDemo = () => page.evaluate(async () => {
+  const f = await window.__opusModule('src/lib/api.js').monEmetteur();
+  return JSON.parse(JSON.stringify({ labels: f.labels, sousTraitants: f.sousTraitants }));
+});
+const jjmmaaaa = (iso) => (/^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '') || []).slice(1).reverse().join('/');
+/** La boîte, à l'écran, d'une pastille ou d'un titre de la carte, et la fenêtre. */
+const boiteDeLibelle = (libelle) => page.evaluate((l) => {
+  const e = [...document.querySelectorAll('[aria-label]')].find((x) => x.getAttribute('aria-label') === l && !x.closest('[aria-hidden="true"]'));
+  if (!e) return null;
+  const b = e.getBoundingClientRect();
+  return { y: Math.round(b.top), bas: Math.round(b.bottom), h: Math.round(b.height), l: Math.round(b.width), x: Math.round(b.left), fenetre: window.innerHeight };
+}, libelle);
+/** La place, DANS LE CONTENU qui défile, d'un élément visé par son
+ *  étiquette : un appui qui fait défiler la carte ne la change pas — seul ce
+ *  qui arrive AU-DESSUS la ferait bouger. */
+const placeDansLaCarte = (libelle) => page.evaluate((l) => {
+  const e = [...document.querySelectorAll('[aria-label]')].find((x) => x.getAttribute('aria-label') === l && !x.closest('[aria-hidden="true"]'));
+  if (!e) return null;
+  let d = e.parentElement;
+  while (d && !/(auto|scroll)/.test(getComputedStyle(d).overflowY)) d = d.parentElement;
+  const r = e.getBoundingClientRect();
+  return d ? Math.round((r.top - d.getBoundingClientRect().top + d.scrollTop) * 10) / 10 : null;
+}, libelle);
+/** Les cibles DE LA CARTE « Énergie » (la saisie reste montée dessous). */
+const ciblesDeLEnergie = () => page.evaluate((retours) => {
+  let carte = retours.map((r) => document.querySelector(`[aria-label="${r}"]`)).find(Boolean) || null;
+  while (carte && carte.parentElement && getComputedStyle(carte).position !== 'absolute') carte = carte.parentElement;
+  if (!carte) return null;
+  return {
+    cibles: [...carte.querySelectorAll('[role="button"],[role="switch"],button,input')].map((e) => {
+      const b = e.getBoundingClientRect();
+      return { l: (e.getAttribute('aria-label') || e.innerText || '').slice(0, 60), w: Math.round(b.width), h: Math.round(b.height) };
+    }).filter((c) => c.w > 0 && c.h > 0),
+    imbriques: carte.querySelectorAll('[role="button"] [role="button"], [role="switch"] [role="switch"], button button').length,
+  };
+}, [RETOUR_ENERGIE_DEVIS, RETOUR_ENERGIE_LISTE]);
+const jugerLEnergie = async (ou) => {
+  const c = await ciblesDeLEnergie();
+  const petites = c ? c.cibles.filter((x) => x.w < TOUCHE - 0.5 || x.h < TOUCHE - 0.5) : [];
+  verifier(`${ou} : ${c ? c.cibles.length : 0} cible(s), toutes de ${TOUCHE} points au moins par leur BOÎTE, aucune dans une autre`,
+    !!c && c.cibles.length > 0 && petites.length === 0 && c.imbriques === 0,
+    c ? `${JSON.stringify(petites)} ; imbriquées : ${c.imbriques}` : 'la carte est introuvable');
+};
+const BROUILLONS_AVANT_2B6 = { liste: null };
+const AVANT_2B6 = { fiche: null, devis: null, questionVide: null };
+const DEVIS_SUIVIS_2B6 = ['Rénovation salle de bains', 'Sol du séjour', 'Muret de clôture', 'Terrasse en bois', 'Isolation des combles et des murs'];
+
+await section('2b-6 : le compte des brouillons, les signes de qualité, les sous-traitants et l’énergie des devis de démonstration AVANT les sections 2b-6 (§5.6)', async () => {
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  BROUILLONS_AVANT_2B6.liste = await brouillonsDeMesDevis();
+  AVANT_2B6.fiche = await signesEtSousTraitantsDemo();
+  AVANT_2B6.devis = {};
+  for (const o of DEVIS_SUIVIS_2B6) AVANT_2B6.devis[o] = await energieEnBase(o);
+  AVANT_2B6.questionVide = await devisAQuestionVide();
+  noter('les brouillons avant les sections 2b-6', JSON.stringify(BROUILLONS_AVANT_2B6.liste));
+  noter('l’énergie des cinq devis suivis', JSON.stringify(AVANT_2B6.devis));
+  noter('le brouillon dont la question des travaux est vide, mesuré plus bas', JSON.stringify(AVANT_2B6.questionVide));
+  /* « Sol du séjour » ABSENT n'est accepté que s'il a quitté « Mes devis »
+     (supprimé plus tôt dans le passage complet) : sinon, c'est un défaut. */
+  const solSupprime = AVANT_2B6.devis['Sol du séjour'] === null
+    && !BROUILLONS_AVANT_2B6.liste.some((l) => l.startsWith('Ouvrir le brouillon Sol du séjour'));
+  const suivis = DEVIS_SUIVIS_2B6.filter((o) => !(o === 'Sol du séjour' && solSupprime));
+  const f = AVANT_2B6.fiche;
+  verifier('UN signe de qualité de démonstration (l’isolation des murs, certificat joint) et UN sous-traitant (« Isolations de '
+    + `démonstration », sans label), et les devis suivis lus (« Sol du séjour » ${solSupprime ? 'supprimé plus tôt, hors de « Mes devis »' : 'compris'})`,
+  !!f && Array.isArray(f.labels) && f.labels.length === 1 && f.labels[0].categories.join() === 'isolation_exterieur'
+    && !!f.labels[0].justificatif_chemin && Array.isArray(f.sousTraitants) && f.sousTraitants.length === 1
+    && f.sousTraitants[0].raison_sociale === ST_DEMO && f.sousTraitants[0].label_detient === false
+    && suivis.every((o) => !!AVANT_2B6.devis[o]), JSON.stringify(f));
+  verifier('« Muret » et « Terrasse » : « Aucun de ces travaux » ; « Sol du séjour » : rien ; « Rénovation » : la ventilation ; « Isolation » : '
+    + 'l’isolation des murs et des combles, rien d’autre (T14)',
+  JSON.stringify(AVANT_2B6.devis['Muret de clôture'].travaux) === '["aucun"]'
+    && JSON.stringify(AVANT_2B6.devis['Terrasse en bois'].travaux) === '["aucun"]'
+    && (solSupprime || AVANT_2B6.devis['Sol du séjour'].travaux === null)
+    && JSON.stringify(AVANT_2B6.devis['Rénovation salle de bains'].travaux) === '["ventilation"]'
+    && JSON.stringify(AVANT_2B6.devis['Isolation des combles et des murs'].travaux) === '["isolation_exterieur","isolation_combles"]'
+    && suivis.every((o) => AVANT_2B6.devis[o].sousTraitance === null && AVANT_2B6.devis[o].sousTraitants === null
+      && AVANT_2B6.devis[o].sansLabel === null), JSON.stringify(AVANT_2B6.devis));
+  verifier(`un brouillon dont la question des travaux est vide, pour la mesure du point « Par prudence » : « ${AVANT_2B6.questionVide} »`,
+    typeof AVANT_2B6.questionVide === 'string' && (!AVANT_2B6.devis['Sol du séjour'] || AVANT_2B6.questionVide.startsWith('Sol du séjour')));
+});
+
+await section('2b-6 : la rangée « Énergie (label RGE) » — entre « Déchets » et « Conditions », ses résumés sur les devis de démonstration, et « Sol du séjour » : le point « Par prudence » qui ouvre la carte SUR la question (§5.6)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  for (const [o, attendu] of [['Muret de clôture', RESUMES_ENERGIE.aucun], ['Terrasse en bois', RESUMES_ENERGIE.aucun],
+    ['Rénovation salle de bains', RESUMES_ENERGIE.deux], ['Isolation des combles et des murs', RESUMES_ENERGIE.deux]]) {
+    await ouvrirLeDevis(o);
+    await jusqua(async () => (await resumeEnergie()) === libelleEnergie(attendu), 6000);
+    verifier(`« ${o} » : « ${libelleEnergie(attendu)} »`, (await resumeEnergie()) === libelleEnergie(attendu), await resumeEnergie());
+    await noterHauteurEnergie(393, `${o} : ${attendu}`);
+    await quitterLaSaisie();
+  }
+  /* « Rénovation salle de bains » coche la ventilation (T14), qu'aucun signe
+     ne porte. Sans réponse « à quel titre » (la démonstration neuve), c'est
+     la troisième clé du rang 14, « Par prudence » ; dans le PASSAGE COMPLET,
+     la section 2b-2 y a répondu « à titre privé », et la ventilation est un
+     travail du décret : c'est alors « La loi » (T5). La règle ne change pas,
+     seul l'état de départ : la réponse attendue se lit dans la démonstration. */
+  const vuR = await pourQuiVu('Rénovation salle de bains');
+  const aTitrePriveR = vuR === 'consommateur';
+  const attenduR = aTitrePriveR ? POINT_ENERGIE_LOI : POINT_ENERGIE_MENTIONS_PRUDENCE;
+  const natureR = aTitrePriveR ? 'La loi' : 'Par prudence';
+  const autresR = [POINT_ENERGIE_LOI, POINT_ENERGIE_MENTIONS_PRUDENCE, POINT_ENERGIE_PRUDENCE].filter((p) => p !== attenduR);
+  await ouvrirLeDevis('Rénovation salle de bains');
+  await ouvrirLaListe();
+  const tR = await texteLu();
+  const iR = tR.indexOf(attenduR);
+  verifier(`« Rénovation salle de bains » (« à quel titre » : ${JSON.stringify(vuR ?? null)}) : « ${attenduR.slice(0, 60)}… », ENTIÈRE, « ${natureR} », `
+    + 'UN bouton « Compléter : énergie et label RGE », et aucun autre point du rang 14',
+  (vuR == null || vuR === 'consommateur' || vuR === 'non_professionnel')
+    && iR >= 0 && tR.slice(Math.max(0, iR - 40), iR).includes(natureR) && autresR.every((p) => !tR.includes(p))
+    && (await page.getByRole('button', { name: BOUTON_ENERGIE, exact: true }).count()) === 1, tR.slice(Math.max(0, iR - 60), iR + 40));
+  await fermerLaListe();
+  await quitterLaSaisie();
+  /* LA QUESTION VIDE : « Sol du séjour » s'il existe encore, sinon le
+     brouillon relevé par la section d'avant (même propriété). */
+  const vide = AVANT_2B6.questionVide;
+  await ouvrirLeDevis(vide);
+  const bd = await rangeeDechets().boundingBox();
+  const be = await rangeeEnergie().boundingBox();
+  const bk = await page.getByLabel(/^Conditions : /).first().boundingBox();
+  verifier(`la rangée « Énergie » est ENTRE « Déchets » (y = ${bd && Math.round(bd.y)}) et « Conditions » (y = ${bk && Math.round(bk.y)}) : y = ${be && Math.round(be.y)}`,
+    !!bd && !!be && !!bk && bd.y < be.y && be.y < bk.y);
+  verifier(`…et ${TOUCHE} points au moins (${be && Math.round(be.height)})`, !!be && be.height >= TOUCHE - 0.5);
+  verifier(`« ${vide} » : « ${libelleEnergie(RESUMES_ENERGIE.aDire)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.aDire),
+    await resumeEnergie());
+  await noterHauteurEnergie(393, 'Sol : à dire');
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iP = tL.indexOf(POINT_ENERGIE_PRUDENCE);
+  verifier('la liste : « Dites quels travaux d’énergie… », ENTIÈRE, « Par prudence », et UN bouton « Compléter : énergie et label RGE »',
+    iP >= 0 && tL.slice(Math.max(0, iP - 40), iP).includes('Par prudence')
+    && (await page.getByRole('button', { name: BOUTON_ENERGIE, exact: true }).count()) === 1, tL.slice(Math.max(0, iP - 60), iP + 40));
+  await amenerAuTexte('Dites quels travaux d’énergie');
+  await capture('2b6-point-prudence');
+  await toucher(bouton(BOUTON_ENERGIE));
+  await page.getByText(TITRE_ENERGIE, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tq = await boiteDuTexte(SOUS_TITRE_ENERGIE);
+  const ba = await boiteDeLibelle(AUCUN_TRAVAUX);
+  verifier(`le bouton ouvre la carte SUR la question (« ${SOUS_TITRE_ENERGIE} » à y = ${tq && Math.round(tq.y)}), « ${AUCUN_TRAVAUX} » à l’écran (bas ${ba && ba.bas}, fenêtre ${ba && ba.fenetre}), et son retour dit « ‹ Liste »`,
+    !!tq && tq.y >= 0 && tq.bas <= tq.fenetre && !!ba && ba.y >= 0 && ba.bas <= ba.fenetre
+    && (await parLibelle(RETOUR_ENERGIE_LISTE).count()) === 1 && (await texteLu()).includes('‹ Liste'));
+  await toucher(parLibelle(RETOUR_ENERGIE_LISTE));
+  await jusqua(enCarte, 4000);
+  verifier('…sans rien toucher, « ‹ Liste » ramène à la liste, et le point est toujours là', (await enCarte()) && (await texteLu()).includes(POINT_ENERGIE_PRUDENCE));
+  await fermerLaListe();
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : « Isolation des combles et des murs » — le point « La loi » qui ouvre la carte SUR le label, un travail déclaré dans « Mon entreprise », un autre qu’aucun signe ne porte et sa case, l’avis du label (§5.6)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  const fiche = await signesEtSousTraitantsDemo();
+  const signe = fiche.labels[0];
+  const COUVERT = `Déclaré dans « Mon entreprise » : ${signe.intitule}, valable jusqu’au ${jjmmaaaa(signe.valide_jusquau)}`;
+  const AVIS_LABEL = `Votre signe de qualité « ${signe.intitule} » est valable jusqu’au ${jjmmaaaa(signe.valide_jusquau)}. Si ce devis est `
+    + 'signé après cette date sans que vous l’ayez renouvelé, votre client peut perdre des aides : renouvelez-le à temps.';
+  await allerAMesDevis();
+  await ouvrirLeDevis('Isolation des combles et des murs');
+  await ouvrirLaListe();
+  const tL = await texteLu();
+  const iP = tL.indexOf(POINT_ENERGIE_LOI);
+  verifier('la liste : « Dites si vous détenez un label RGE pour les travaux d’énergie cochés… », ENTIÈRE, « La loi », UN bouton, et rien '
+    + 'd’autre pour « Ce devis » (« Ce devis — 1 point »)',
+  iP >= 0 && tL.slice(Math.max(0, iP - 30), iP).includes('La loi') && tL.includes('Ce devis — 1 point')
+    && (await page.getByRole('button', { name: BOUTON_ENERGIE, exact: true }).count()) === 1, tL.slice(Math.max(0, iP - 60), iP + 40));
+  verifier('…et l’avis du label, ENTIER, sous « À vérifier » : le signe finit avant la fin de validité du devis (+ le délai par défaut)',
+    tL.includes(AVIS_LABEL) && tL.indexOf(AVIS_LABEL) > tL.indexOf('À vérifier'), AVIS_LABEL);
+  await capture('2b6-isolation-liste');
+  await toucher(bouton(BOUTON_ENERGIE));
+  await page.getByText(TITRE_ENERGIE, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const tl = await boiteDuTexte(TITRE_LABEL);
+  verifier(`le bouton ouvre la carte SUR « ${TITRE_LABEL} » (y = ${tl && Math.round(tl.y)}, fenêtre ${tl && tl.fenetre}), la rubrique qui manque`,
+    !!tl && tl.y >= 0 && tl.bas <= tl.fenetre && (await parLibelle(RETOUR_ENERGIE_LISTE).count()) === 1);
+  const t = await texteLu();
+  verifier('l’isolation des murs : « Déclaré dans « Mon entreprise » : … valable jusqu’au … » — jamais « Couvert par » ; l’isolation des '
+    + 'combles : « Aucun de vos signes de qualité ne porte ces travaux. »',
+  t.includes(COUVERT) && t.includes(ABSENT_LABEL) && !/Couvert par/.test(t), COUVERT);
+  verifier('UNE seule case « Je ne détiens pas… » — sous les combles, pas sous les murs — non cochée ; la sous-traitance : « Non » et '
+    + '« Oui », aucun choisi',
+  (await caseEnergie(DECLARATION_LABEL).count()) === 1 && !(await coche(caseEnergie(DECLARATION_LABEL).first()))
+    && !(await choisie(pastilleEnergie('Sous-traitance : Non'))) && !(await choisie(pastilleEnergie('Sous-traitance : Oui'))));
+  verifier('l’amende du label et celle de la sous-traitance (sans amende), ENTIÈRES, à la fin',
+    t.includes(AMENDE_LABEL) && t.includes(AMENDE_ST) && t.indexOf(AMENDE_ST) > t.indexOf(AMENDE_LABEL));
+  await capture('2b6-isolation-carte');
+  /* La case touchée, puis décochée : rien ne reste écrit. */
+  const e0 = await ecrituresDemo();
+  await toucher(caseEnergie(DECLARATION_LABEL).first());
+  await attendre(PAUSE_DEMO + 400);
+  const d1 = await energieEnBase('Isolation des combles et des murs');
+  verifier(`la case touchée : une écriture (${(await ecrituresDemo()) - e0}), la base dit « les combles » (${JSON.stringify(d1 && d1.sansLabel)})`,
+    (await ecrituresDemo()) - e0 === 1 && !!d1 && JSON.stringify(d1.sansLabel) === '["isolation_combles"]');
+  await toucher(caseEnergie(DECLARATION_LABEL).first());
+  await attendre(PAUSE_DEMO + 400);
+  const d2 = await energieEnBase('Isolation des combles et des murs');
+  verifier(`…décochée : la base revient à rien (${JSON.stringify(d2 && d2.sansLabel)}), jamais une liste vide`, !!d2 && d2.sansLabel === null);
+  await fermerLEnergie(RETOUR_ENERGIE_LISTE);
+  await jusqua(enCarte, 4000);
+  await fermerLaListe();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.deux)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.deux), await resumeEnergie());
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : la carte « Énergie et label RGE » sur un brouillon NEUF, à 393 et 320 — « Aucun de ces travaux » à l’écran à l’ouverture, rien de coché, un travail puis un autre, la case qui éteint le label, « Oui » et le sous-traitant, « Non » qui garde, « Aucun » qui retire et s’annonce (§5.6)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await allerAMesDevis();
+  await toucher(bouton('Nouveau devis'));
+  await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+  await attendre(600);
+  await viderEtTaper(parLibelle('Objet du devis'), OBJET_ENERGIE);
+  await toucher(parLibelle('Ajouter un premier poste chiffré'));
+  await taper('Isolation (mesure)');
+  await toucher(parLibelle('forfait'));
+  await viderEtTaper(parLibelle('Quantité'), '1');
+  await viderEtTaper(parLibelle('Prix unitaire HT'), '1000');
+  await toucher(parLibelle('TVA à 20 %'));
+  await fermerCarte();
+  await ecrituresEnRepos();
+  await choisirAuCarnet('Mme Martin', 'mart');
+  await toucher(bouton('Oui, à titre privé'));
+  await reponseVue(REPONSE_PRIVE);
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  const d0 = await energieEnBase(OBJET_ENERGIE);
+  exiger(!!d0 && [d0.travaux, d0.sansLabel, d0.sousTraitance, d0.sousTraitants].every((v) => v === null),
+    `le brouillon neuf « ${OBJET_ENERGIE} » ne dit RIEN de l’énergie (les quatre colonnes vides)`);
+  verifier(`la rangée : « ${libelleEnergie(RESUMES_ENERGIE.aDire)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.aDire), await resumeEnergie());
+  await noterHauteurEnergie(393, 'neuf : à dire');
+
+  /* À L'OUVERTURE, à 393 × 852 puis à 320 × 568 : la question et « Aucun de
+     ces travaux » sont DANS l'écran, avant les dix-neuf cases (ÉCRAN-3). */
+  for (const [l, h] of [[393, 852], [320, 568]]) {
+    await page.setViewportSize({ width: l, height: h });
+    await attendre(500);
+    await ouvrirLEnergie();
+    const ba = await boiteDeLibelle(AUCUN_TRAVAUX);
+    const bq = await boiteDuTexte(QUESTION_ENERGIE);
+    const cases = page.getByRole('switch');
+    const n = await cases.count();
+    const cochees = await cases.evaluateAll((es) => es.filter((e) => e.getAttribute('aria-checked') === 'true').length);
+    verifier(`${l} × ${h} : à l’ouverture, la question (y = ${bq && Math.round(bq.y)}) puis « ${AUCUN_TRAVAUX} » (bas ${ba && ba.bas}) DANS l’écran (${ba && ba.fenetre}) ; ${n} cases, ${cochees} cochée(s) — rien d’office`,
+      !!bq && !!ba && bq.y >= 0 && ba.y > bq.y && ba.bas <= ba.fenetre && n === 19 && cochees === 0
+      && !(await texteLu()).includes(TITRE_LABEL) && !(await texteLu()).includes(TITRE_SOUS_TRAITANCE));
+    if (l === 393) {
+      const t0 = await texteLu();
+      verifier('la carte : « Énergie et label RGE », « ‹ Devis », l’introduction, « Pour les droits de votre client », la question, la phrase sous '
+        + '« Aucun », celle sur la sous-traitance d’autres travaux, l’aide de la liste',
+      (await parLibelle(RETOUR_ENERGIE_DEVIS).count()) === 1 && t0.includes('‹ Devis') && t0.includes(INTRO_ENERGIE)
+        && t0.includes(SOUS_TITRE_ENERGIE) && t0.includes(QUESTION_ENERGIE)
+        && t0.includes('Seulement si ce devis ne comporte aucun des travaux ci-dessous.')
+        && t0.includes('Même alors, si une autre entreprise fait une partie de travaux d’économies d’énergie de ce devis, dites-le à votre client : la loi peut le demander.'));
+    }
+    await jugerLEnergie(`la carte « Énergie », à ${l}`);
+    await capture(`2b6-carte-${l}`);
+    await fermerLEnergie();
+  }
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(500);
+  await ouvrirLEnergie();
+
+  /* UN TRAVAIL : la ventilation — le label et la sous-traitance arrivent
+     DESSOUS ; rien au-dessus ne bouge. */
+  const yAvant = await placeDansLaCarte(AUCUN_TRAVAUX);
+  const e0 = await ecrituresDemo();
+  await toucher(caseEnergie('Ventilation mécanique').first());
+  await attendre(PAUSE_DEMO + 400);
+  const yApres = await placeDansLaCarte(AUCUN_TRAVAUX);
+  const d1 = await energieEnBase(OBJET_ENERGIE);
+  const t1 = await texteLu();
+  verifier(`la ventilation cochée : une écriture (${(await ecrituresDemo()) - e0}), la base dit « ventilation » ; « ${TITRE_LABEL} » et « ${TITRE_SOUS_TRAITANCE} » arrivent DESSOUS — « Aucun » ne bouge pas DANS la carte (${yAvant} → ${yApres})`,
+    (await ecrituresDemo()) - e0 === 1 && !!d1 && JSON.stringify(d1.travaux) === '["ventilation"]' && t1.includes(TITRE_LABEL)
+    && t1.includes(TITRE_SOUS_TRAITANCE) && yAvant !== null && yAvant === yApres);
+  verifier('…sous elle : « Aucun de vos signes de qualité ne porte ces travaux. » et la case « Je ne détiens pas… », non cochée',
+    t1.includes(ABSENT_LABEL) && (await caseEnergie(DECLARATION_LABEL).count()) === 1 && !(await coche(caseEnergie(DECLARATION_LABEL).first())));
+  /* UN AUTRE : l'isolation des murs, que le signe de démonstration porte. */
+  await toucher(caseEnergie('Isolation des murs par l’extérieur').first());
+  await attendre(PAUSE_DEMO + 400);
+  const d2 = await energieEnBase(OBJET_ENERGIE);
+  verifier('l’isolation des murs cochée : la base dit « ventilation, isolation des murs » (l’ordre du décret), et TOUJOURS une seule case '
+    + '« Je ne détiens pas… » — un travail déclaré dans « Mon entreprise » n’en a pas',
+  !!d2 && JSON.stringify(d2.travaux) === '["ventilation","isolation_exterieur"]' && (await caseEnergie(DECLARATION_LABEL).count()) === 1
+    && (await texteLu()).includes('Déclaré dans « Mon entreprise » : '));
+  await fermerLEnergie();
+  verifier(`la rangée : « ${libelleEnergie(RESUMES_ENERGIE.deux)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.deux), await resumeEnergie());
+  await noterHauteurEnergie(393, 'neuf : label, sous-traitance');
+  await ouvrirLEnergie();
+  /* LA CASE : elle éteint le label. */
+  await toucher(caseEnergie(DECLARATION_LABEL).first());
+  await attendre(PAUSE_DEMO + 400);
+  const d3 = await energieEnBase(OBJET_ENERGIE);
+  verifier(`la case cochée : la base dit « ventilation » (${JSON.stringify(d3 && d3.sansLabel)})`, !!d3 && JSON.stringify(d3.sansLabel) === '["ventilation"]');
+  await fermerLEnergie();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.st)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.st), await resumeEnergie());
+  await noterHauteurEnergie(393, 'neuf : sous-traitance');
+  await ouvrirLaListe();
+  verifier('…la liste : le point du rang 14 est toujours là — la sous-traitance n’est pas dite (« La loi »)', (await texteLu()).includes(POINT_ENERGIE_LOI));
+  await toucher(bouton(BOUTON_ENERGIE));
+  await page.getByText(TITRE_ENERGIE, { exact: true }).first().waitFor({ timeout: 6000 });
+  await attendre(800);
+  const ts = await boiteDuTexte(TITRE_SOUS_TRAITANCE);
+  verifier(`le point ouvre la carte SUR « ${TITRE_SOUS_TRAITANCE} » (y = ${ts && Math.round(ts.y)}), la rubrique qui manque`,
+    !!ts && ts.y >= 0 && ts.bas <= ts.fenetre);
+  /* « NON » À GAUCHE, puis « Oui » ; « Oui » : la liste des sous-traitants. */
+  const bn = await boiteDeLibelle('Sous-traitance : Non');
+  const bo = await boiteDeLibelle('Sous-traitance : Oui');
+  verifier('« Non » vient AVANT « Oui » (à gauche, ou au-dessus), et les deux font 44 points au moins',
+    !!bn && !!bo && (bn.y < bo.y - 4 || (Math.abs(bn.y - bo.y) <= 4 && bn.x < bo.x)) && Math.min(bn.h, bo.h, bn.l, bo.l) >= TOUCHE - 0.5);
+  await toucher(pastilleEnergie('Sous-traitance : Oui'));
+  await attendre(PAUSE_DEMO + 400);
+  const cST = caseEnergie(ST_DEMO).first();
+  const nomST = net((await cST.getAttribute('aria-label').catch(() => '')) || '');
+  verifier(`« Oui » : « ${LESQUELLES} », et la case du sous-traitant de démonstration, son SIRET formaté puis son état en aide (« ${nomST} »)`,
+    (await texteLu()).includes(LESQUELLES) && nomST === `${ST_DEMO}. ${SIRET_ST_DEMO} · Ne détient pas de label RGE` && !(await coche(cST)));
+  await toucher(cST);
+  await attendre(PAUSE_DEMO + 400);
+  const d4 = await energieEnBase(OBJET_ENERGIE);
+  verifier(`le sous-traitant coché : la base dit « Oui » et son identifiant (${JSON.stringify(d4 && d4.sousTraitants)})`,
+    !!d4 && d4.sousTraitance === true && Array.isArray(d4.sousTraitants) && d4.sousTraitants.length === 1);
+  await fermerLEnergie(RETOUR_ENERGIE_LISTE);
+  await jusqua(async () => (await enCarte()) && !(await texteLu()).includes(POINT_ENERGIE_LOI), DELAI_ECRITURE + 3000);
+  verifier('« ‹ Liste » ramène à la liste, relue : le point du rang 14 S’ÉTEINT', (await enCarte()) && !(await texteLu()).includes(POINT_ENERGIE_LOI));
+  await fermerLaListe();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.dits)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.dits), await resumeEnergie());
+  await noterHauteurEnergie(393, 'neuf : dits');
+  /* « NON » GARDE les sous-traitants cochés (T23) ; « Oui » les rend. */
+  await ouvrirLEnergie();
+  await toucher(pastilleEnergie('Sous-traitance : Non'));
+  await attendre(PAUSE_DEMO + 400);
+  const d5 = await energieEnBase(OBJET_ENERGIE);
+  verifier(`« Non » : la base dit « Non », et GARDE le sous-traitant (${JSON.stringify(d5 && d5.sousTraitants)}) ; la case n’est plus montrée`,
+    !!d5 && d5.sousTraitance === false && Array.isArray(d5.sousTraitants) && d5.sousTraitants.length === 1 && (await caseEnergie(ST_DEMO).count()) === 0);
+  await toucher(pastilleEnergie('Sous-traitance : Oui'));
+  await attendre(PAUSE_DEMO + 400);
+  verifier('…« Oui » de nouveau : le sous-traitant revient, coché', (await caseEnergie(ST_DEMO).count()) === 1 && (await coche(caseEnergie(ST_DEMO).first())));
+  /* « AUCUN DE CES TRAVAUX » : il RETIRE les travaux cochés, et le DIT ; la
+     déclaration et les sous-traitants sont GARDÉS (T23). */
+  await oublierAnnonces();
+  const yA = await placeDansLaCarte(AUCUN_TRAVAUX);
+  await toucher(pastilleEnergie(AUCUN_TRAVAUX));
+  await attendre(PAUSE_DEMO + 400);
+  const d6 = await energieEnBase(OBJET_ENERGIE);
+  const yB = await placeDansLaCarte(AUCUN_TRAVAUX);
+  const tAucun = await texteLu();
+  verifier(`« ${AUCUN_TRAVAUX} » : la base dit « aucun », GARDE la déclaration et le sous-traitant, la carte l’ANNONCE (« ${TRAVAUX_RETIRES} »), le label et la sous-traitance se taisent, et la pastille n’a pas bougé`,
+    !!d6 && JSON.stringify(d6.travaux) === '["aucun"]' && JSON.stringify(d6.sansLabel) === '["ventilation"]' && d6.sousTraitance === true
+    && (await annonces()).includes(TRAVAUX_RETIRES) && !tAucun.includes(TITRE_LABEL) && !tAucun.includes(TITRE_SOUS_TRAITANCE)
+    && (await choisie(pastilleEnergie(AUCUN_TRAVAUX))) && yA !== null && yA === yB,
+    JSON.stringify({ d6, yA, yB, annonces: await annonces(), label: tAucun.includes(TITRE_LABEL), st: tAucun.includes(TITRE_SOUS_TRAITANCE) }));
+  await fermerLEnergie();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.aucun)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.aucun), await resumeEnergie());
+  await noterHauteurEnergie(393, 'neuf : aucun');
+  await ouvrirLEnergie();
+  await toucher(pastilleEnergie(AUCUN_TRAVAUX));
+  await attendre(PAUSE_DEMO + 400);
+  const d7 = await energieEnBase(OBJET_ENERGIE);
+  verifier('« Aucun » retouché : la base revient à rien (jamais une liste vide)', !!d7 && d7.travaux === null && !(await choisie(pastilleEnergie(AUCUN_TRAVAUX))));
+  await toucher(caseEnergie('Ventilation mécanique').first());
+  await attendre(PAUSE_DEMO + 400);
+  verifier('la ventilation recochée : sa case « Je ne détiens pas… » revient, COCHÉE (la déclaration était gardée)',
+    (await caseEnergie(DECLARATION_LABEL).count()) === 1 && (await coche(caseEnergie(DECLARATION_LABEL).first())));
+  await fermerLEnergie();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.dits)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.dits), await resumeEnergie());
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteurEnergie(320, 'neuf : dits');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : les états des deux listes dans la carte — en échec, en lecture (rien n’est dit), relues, vides — et les deux portes qui ouvrent « Mon entreprise » SUR leur section (§5.6, ÉCRAN-5, ÉCRAN-10)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  await allerAMesDevis();
+  /* EN ÉCHEC : la lecture du régime (qui porte les deux listes) casse. */
+  await page.evaluate(() => { window.__opusRegime.casser = true; window.__opusRegime.casses = 0; });
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  await jusqua(async () => (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.nonLus), 10000, 200);
+  verifier(`les listes en échec : la rangée dit « ${RESUMES_ENERGIE.nonLus} » — jamais « dits » ni « à compléter »`,
+    (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.nonLus), await resumeEnergie());
+  HAUTEURS_ENERGIE[393].push(['listes non lues', await hauteurEnergie(), (await resumeEnergie()).slice(20, 80)]);
+  await ouvrirLEnergie();
+  const tE = await texteLu();
+  verifier(`EN ÉCHEC : « ${LABELS_ECHEC} » et « ${ST_ECHEC} », leurs « Réessayer » et leurs portes ; aucune phrase d’état, la case de la ventilation (COCHÉE) seule, et aucun sous-traitant`,
+    tE.includes(LABELS_ECHEC) && tE.includes(ST_ECHEC) && (await parLibelle(RELIRE_SIGNES).count()) === 1 && (await parLibelle(RELIRE_ST).count()) === 1
+    && (await parLibelle(PORTE_SIGNES).count()) === 1 && (await parLibelle(PORTE_ST).count()) === 1
+    && !tE.includes(ABSENT_LABEL) && (await caseEnergie(DECLARATION_LABEL).count()) === 1 && (await coche(caseEnergie(DECLARATION_LABEL).first()))
+    && (await caseEnergie(ST_DEMO).count()) === 0 && !tE.includes(LABELS_VIDE) && !tE.includes(ST_VIDE));
+  await capture('2b6-listes-en-echec');
+  await jugerLEnergie('la carte, listes en échec');
+  /* EN LECTURE : « Réessayer » relit, la réponse RETENUE. */
+  await page.evaluate(() => { window.__opusRegime.casser = false; window.__opusRegime.retenir = true; window.__opusRegime.retenues = []; });
+  await toucher(parLibelle(RELIRE_SIGNES));
+  const retenue = await jusqua(async () => (await page.evaluate(() => window.__opusRegime.retenues.length)) >= 1, 4000);
+  await attendre(400);
+  const tLe = await texteLu();
+  verifier('EN LECTURE : les deux listes ne disent RIEN — ni échec, ni « aucun », ni phrase d’état, ni sous-traitant, ni « Réessayer »',
+    !!retenue && !tLe.includes(LABELS_ECHEC) && !tLe.includes(ST_ECHEC) && !tLe.includes(LABELS_VIDE) && !tLe.includes(ST_VIDE)
+    && !tLe.includes(ABSENT_LABEL) && (await caseEnergie(ST_DEMO).count()) === 0 && (await parLibelle(RELIRE_SIGNES).count()) === 0
+    && (await parLibelle(RELIRE_ST).count()) === 0);
+  await capture('2b6-listes-en-lecture');
+  await page.evaluate(() => { window.__opusRegime.retenir = false; window.__opusRegime.retenues.splice(0).forEach((f) => f()); });
+  const relues = await jusqua(async () => (await caseEnergie(ST_DEMO).count()) > 0, 8000, 200);
+  verifier('…la réponse arrive : la phrase d’état de la ventilation revient, et le sous-traitant, coché',
+    !!relues && (await texteLu()).includes(ABSENT_LABEL) && (await coche(caseEnergie(ST_DEMO).first())));
+  await fermerLEnergie();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.dits)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.dits), await resumeEnergie());
+  await quitterLaSaisie();
+  /* VIDES : la démonstration lit deux listes VIDES (`__opusLabels`,
+     `__opusSousTraitants` : la copie de la fiche rend zéro ligne). */
+  await page.evaluate(() => { window.__opusLabels.vider = true; window.__opusSousTraitants.vider = true; });
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  await jusqua(async () => (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.st), 6000);
+  verifier(`deux listes VIDES : le sous-traitant choisi n’existe plus pour Opus, la rangée dit « ${RESUMES_ENERGIE.st} »`,
+    (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.st), await resumeEnergie());
+  HAUTEURS_ENERGIE[393].push(['listes vides', await hauteurEnergie(), (await resumeEnergie()).slice(20, 80)]);
+  await ouvrirLEnergie();
+  const tV = await texteLu();
+  verifier(`VIDES : « ${LABELS_VIDE} », « ${ST_VIDE} » et « Ajouter un sous-traitant » — ni échec, ni sous-traitant`,
+    tV.includes(LABELS_VIDE) && tV.includes(ST_VIDE) && (await parLibelle(AJOUTER_ST_CARTE).count()) === 1
+    && (await caseEnergie(ST_DEMO).count()) === 0 && !tV.includes(LABELS_ECHEC) && !tV.includes(ST_ECHEC));
+  await capture('2b6-listes-vides');
+  /* LA PORTE des sous-traitants : la carte s'enregistre, « Mon entreprise » s'ouvre SUR la section. */
+  await toucher(parLibelle(AJOUTER_ST_CARTE));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  const tst = await boiteDuTexte(TITRE_ST_ME);
+  verifier(`« Ajouter un sous-traitant » ouvre « Mon entreprise » SUR « ${TITRE_ST_ME} » (y = ${tst && Math.round(tst.y)}, fenêtre ${tst && tst.fenetre})`,
+    !!tst && tst.y >= 0 && tst.bas <= tst.fenetre);
+  await capture('2b6-mon-entreprise-sous-traitants');
+  await page.evaluate(() => { window.__opusLabels.vider = false; window.__opusSousTraitants.vider = false; });
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  const revenus = await jusqua(async () => (await caseEnergie(ST_DEMO).count()) > 0, 8000, 300);
+  verifier('« Mon entreprise » refermée : la carte est TOUJOURS là, et les listes relues reviennent (le sous-traitant, coché)',
+    !!revenus && (await page.getByText(TITRE_ENERGIE, { exact: true }).count()) > 0 && (await coche(caseEnergie(ST_DEMO).first())));
+  /* LA PORTE des signes de qualité. */
+  await toucher(parLibelle(PORTE_SIGNES));
+  await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+  await attendre(1200);
+  const tsq = await boiteDuTexte(TITRE_SIGNES_ME);
+  verifier(`« Mes signes de qualité » ouvre « Mon entreprise » SUR « ${TITRE_SIGNES_ME} » (y = ${tsq && Math.round(tsq.y)}, fenêtre ${tsq && tsq.fenetre})`,
+    !!tsq && tsq.y >= 0 && tsq.bas <= tsq.fenetre);
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await attendre(600);
+  await fermerLEnergie();
+  verifier(`…la rangée : « ${libelleEnergie(RESUMES_ENERGIE.dits)} »`, (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.dits), await resumeEnergie());
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : dix sous-traitants au plus par devis — le onzième n’écrit rien, la carte dit pourquoi, juste sous les cases (§5.6)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  const ajoutes = await page.evaluate(async () => {
+    const api = window.__opusModule('src/lib/api.js');
+    const ids = [];
+    for (let i = 1; i <= 10; i += 1) {
+      const pose = await api.enregistrerSousTraitant({
+        raison_sociale: `Sous-traitant essai ${String(i).padStart(2, '0')}`, siret: '00000496000019', label_detient: false,
+      });
+      ids.push(pose.id);
+    }
+    return ids;
+  });
+  exiger(Array.isArray(ajoutes) && ajoutes.length === 10, 'dix sous-traitants d’essai rangés par la porte de l’application');
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  await ouvrirLEnergie();
+  const essai = (i) => caseEnergie(`Sous-traitant essai ${String(i).padStart(2, '0')}`).first();
+  for (let i = 1; i <= 9; i += 1) {
+    await essai(i).scrollIntoViewIfNeeded();
+    await toucher(essai(i));
+    await attendre(PAUSE_DEMO + 200);
+  }
+  await ecrituresEnRepos();
+  await attendre(PAUSE_DEMO + 400);
+  const d10 = await energieEnBase(OBJET_ENERGIE);
+  verifier(`neuf appuis : DIX sous-traitants dans le devis (${d10 && d10.sousTraitants && d10.sousTraitants.length}), et pas de phrase de plafond`,
+    !!d10 && Array.isArray(d10.sousTraitants) && d10.sousTraitants.length === 10 && !(await texteLu()).includes(PLAFOND_ST));
+  const e0 = await ecrituresDemo();
+  await oublierAnnonces();
+  await essai(10).scrollIntoViewIfNeeded();
+  await toucher(essai(10));
+  await attendre(PAUSE_DEMO + 600);
+  const d11 = await energieEnBase(OBJET_ENERGIE);
+  const vu = await boiteDuTexte(PLAFOND_ST);
+  verifier(`le onzième : AUCUNE écriture (${(await ecrituresDemo()) - e0}), toujours dix en base, la case NON cochée, « ${PLAFOND_ST} » AFFICHÉE dans l’écran (${JSON.stringify(vu)}) et annoncée`,
+    (await ecrituresDemo()) === e0 && !!d11 && d11.sousTraitants.length === 10 && !(await coche(essai(10)))
+    && !!vu && vu.y >= 0 && vu.bas <= vu.fenetre && (await annonces()).includes(PLAFOND_ST));
+  const bCase = await essai(10).boundingBox();
+  const bPorte = await parLibelle(PORTE_ST).boundingBox();
+  verifier('…JUSTE SOUS les cases, avant la porte « Mes sous-traitants »', !!vu && !!bCase && !!bPorte && vu.y >= bCase.y + bCase.height - 1 && vu.bas <= bPorte.y + 1);
+  await capture('2b6-plafond-sous-traitants');
+  await fermerLEnergie();
+  await quitterLaSaisie();
+  verifier('…et la saisie se quitte sans que la garde de sortie se déclenche', !(await dansLaSaisie()));
+  await page.evaluate(async (ids) => {
+    const api = window.__opusModule('src/lib/api.js');
+    for (const id of ids) await api.retirerSousTraitant(id);
+  }, ajoutes);
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : un client qui commande pour son entreprise — « Sans objet pour ce client », la rangée à sa place, et la carte qui ne garde que sa phrase, rien d’effacé (§5.6)', async () => {
+  const tailleAvant = page.viewportSize();
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  if (await dansLaSaisie()) await quitterLaSaisie();
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  const avant = await energieEnBase(OBJET_ENERGIE);
+  await choisirAuCarnet('SCI des Verlusses', 'verl');
+  await toucher(bouton('Répondre'));
+  await jusqua(async () => (await page.locator('[aria-modal="true"]').count()) === 1, 4000);
+  await attendre(300);
+  await toucher(rangeeDeLaFeuille(3));
+  await reponseVue(REPONSE_PRO);
+  await ecrituresEnRepos();
+  await jusqua(async () => (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.sansObjet), 6000);
+  verifier(`« pour son entreprise, dans son activité principale » : « ${libelleEnergie(RESUMES_ENERGIE.sansObjet)} »`,
+    (await resumeEnergie()) === libelleEnergie(RESUMES_ENERGIE.sansObjet), await resumeEnergie());
+  await noterHauteurEnergie(393, 'sans objet');
+  await ouvrirLEnergie();
+  const t = await texteLu();
+  verifier('la carte : la seule phrase « Ce client commande pour son entreprise… », ni question, ni case, ni l’introduction',
+    t.includes(ENTREPRISE_ENERGIE) && !t.includes(QUESTION_ENERGIE) && !t.includes(INTRO_ENERGIE) && (await page.getByRole('switch').count()) === 0);
+  await capture('2b6-sans-objet');
+  await fermerLEnergie();
+  const apres = await energieEnBase(OBJET_ENERGIE);
+  verifier('…et RIEN n’est effacé : les quatre colonnes sont celles d’avant', JSON.stringify(avant) === JSON.stringify(apres), JSON.stringify([avant, apres]));
+  await page.setViewportSize({ width: 320, height: 852 });
+  await attendre(600);
+  await noterHauteurEnergie(320, 'sans objet');
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(400);
+  await quitterLaSaisie();
+  await page.setViewportSize(tailleAvant);
+  await attendre(400);
+});
+
+await section('2b-6 : la hauteur de la rangée « Énergie (label RGE) » ne bouge jamais — à 393, puis à 320, dans tous les états mesurés (§3.7, A.4)', async () => {
+  for (const largeur of [393, 320]) {
+    const hs = HAUTEURS_ENERGIE[largeur];
+    noter(`${largeur} : les hauteurs de la rangée « Énergie »`, JSON.stringify(hs));
+    const valeurs = [...new Set(hs.map(([, h]) => h))];
+    verifier(`${largeur} : ${hs.length} état(s) mesuré(s), UNE hauteur (${valeurs.join(', ')})`,
+      hs.length >= (largeur === 393 ? 10 : 2) && valeurs.length === 1 && valeurs[0] > 0);
+  }
+});
+
+await section('2b-6 : l’invariant — le brouillon de mesure supprimé, les brouillons, les signes de qualité, les sous-traitants et l’énergie des devis de démonstration rendus à l’identique (§5.6)', async () => {
+  await allerAMesDevis();
+  await ouvrirLeDevis(OBJET_ENERGIE);
+  await toucher(bouton('Supprimer ce brouillon'));
+  await toucher(bouton('Confirmer la suppression de ce brouillon'));
+  await jusqua(async () => !(await dansLaSaisie()), 6000);
+  verifier(`le brouillon « ${OBJET_ENERGIE} » est supprimé`, !(await texte()).includes(OBJET_ENERGIE));
+  const objets = await brouillonsDeMesDevis();
+  noter('les brouillons après les sections 2b-6', JSON.stringify(objets));
+  verifier(`les sections 2b-6 ne laissent aucun brouillon : ${BROUILLONS_AVANT_2B6.liste ? BROUILLONS_AVANT_2B6.liste.length : '?'} avant, ${objets.length} après, les mêmes`,
+    Array.isArray(BROUILLONS_AVANT_2B6.liste) && JSON.stringify([...objets].sort()) === JSON.stringify([...BROUILLONS_AVANT_2B6.liste].sort()));
+  const fiche = await signesEtSousTraitantsDemo();
+  verifier('le signe de qualité et le sous-traitant de démonstration : IDENTIQUES', JSON.stringify(fiche) === JSON.stringify(AVANT_2B6.fiche),
+    JSON.stringify([AVANT_2B6.fiche, fiche]));
+  const ecarts = [];
+  for (const o of DEVIS_SUIVIS_2B6) {
+    const d = await energieEnBase(o);
+    if (JSON.stringify(d) !== JSON.stringify(AVANT_2B6.devis[o])) ecarts.push(`${o} : ${JSON.stringify([AVANT_2B6.devis[o], d])}`);
+  }
+  verifier(`l’énergie des cinq devis de démonstration : identique (${ecarts.length} écart(s))`, ecarts.length === 0, ecarts.join(' | '));
 });
 
 await section('Les textes : la politique de confidentialité parle des devis', async () => {

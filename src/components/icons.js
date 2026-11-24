@@ -109,6 +109,10 @@ export const Scale = mk(MaterialCommunityIcons, 'scale-balance');
 export const Clock = mk(Feather, 'clock');
 export const Navigation = mk(Feather, 'navigation');
 export const ChevronLeft = mk(Feather, 'chevron-left');
+/* Les deux flèches « année » du calendrier (étape 2b-6, T30) : une date de
+   fin de signe de qualité à quatre ans ne se cherche pas mois par mois. */
+export const ChevronsLeft = mk(Feather, 'chevrons-left');
+export const ChevronsRight = mk(Feather, 'chevrons-right');
 
 /* Corriger le texte d'une publication ou d'un commentaire (section 20 de
    schema.sql : le texte seulement, jamais les photos ni les compteurs). */

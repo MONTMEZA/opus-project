@@ -50,6 +50,7 @@ import {
   pourLaBase, nettoyerEmetteur, nettoyerAssurance, nettoyerTarifs,
   validerEmetteur, validerAssurance, validerTarifs, motifsEmetteur, lireMotifs,
   nettoyerLieuDepot, validerLieuDepot,
+  nettoyerLabel, validerLabel, nettoyerSousTraitant, validerSousTraitant,
 } from './emetteur';
 import { fabriquerEmetteurDemo, PRO_DEMO_EMETTEUR } from '../data/emetteur-demo';
 /* Les tarifs réunis (section 47, lot T). `tarifs.js` n'importe que
@@ -2142,7 +2143,7 @@ function ficheEmetteurDemo(moi) {
   if (!emetteursDemo[cle]) {
     emetteursDemo[cle] = cle === String(PRO_DEMO_EMETTEUR)
       ? fabriquerEmetteurDemo(new Date())
-      : { emetteur: null, assurances: [], tarifs: null, lieux: [] };
+      : { emetteur: null, assurances: [], tarifs: null, lieux: [], labels: [], sousTraitants: [] };
   }
   return emetteursDemo[cle];
 }
@@ -2155,12 +2156,22 @@ function refusDeContrainte(table, contrainte) {
 
 /* 2b-5 : les lieux de dépôt des déchets voyagent avec le reste de la fiche.
    Une fiche de démonstration qui n'en porte pas (celle d'avant 2b-5) en a
-   ZÉRO — une démonstration a toujours LU sa liste : jamais « non lus ». */
+   ZÉRO — une démonstration a toujours LU sa liste : jamais « non lus ».
+   2b-6 : les signes de qualité et les sous-traitants aussi, sur la même
+   règle ; leurs listes de catégories sont recopiées NEUVES (une carte qui
+   les toucherait ne changerait pas la fiche de démonstration). */
+const copieLigne = (x) => ({
+  ...x,
+  ...(Array.isArray(x.categories) ? { categories: [...x.categories] } : {}),
+  ...(Array.isArray(x.label_categories) ? { label_categories: [...x.label_categories] } : {}),
+});
 const copieEmetteur = (f) => ({
   emetteur: f.emetteur ? { ...f.emetteur } : null,
   assurances: f.assurances.map((a) => ({ ...a })),
   tarifs: f.tarifs ? { ...f.tarifs } : null,
   lieux: Array.isArray(f.lieux) ? f.lieux.map((l) => ({ ...l })) : [],
+  labels: Array.isArray(f.labels) ? f.labels.map(copieLigne) : [],
+  sousTraitants: Array.isArray(f.sousTraitants) ? f.sousTraitants.map(copieLigne) : [],
 });
 
 /* --------------------------------------------------------------------------
@@ -2192,12 +2203,20 @@ async function monEmetteurSupabase() {
      AVANT la preuve de TVA, qui reste la DERNIÈRE du tableau : la relecture
      de la preuve (`declare_le`, 2b-2) est écrite et contrôlée sous cette
      forme (`verifier-emetteur`). */
-  const [e, a, t, l, v0] = await Promise.all([
+  /* La sixième et la septième (2b-6, sections 46.2 ter et 46.2 quater) : les
+     signes de qualité (label RGE) et les sous-traitants de l'entreprise,
+     dans l'ordre de la base (`created_at`, puis `id`), UNE lecture chacune,
+     rangées avant la preuve de TVA, qui reste la DERNIÈRE. */
+  const [e, a, t, l, q, st, v0] = await Promise.all([
     supabase.from('emetteur').select('*').eq('pro_id', currentUserId).maybeSingle(),
     supabase.from('emetteur_assurances').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }),
     supabase.from('tarifs_pro').select('*').eq('pro_id', currentUserId).maybeSingle(),
     supabase.from('emetteur_lieux_depot').select('*').eq('pro_id', currentUserId)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }),
+    supabase.from('emetteur_labels').select('*').eq('pro_id', currentUserId)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }),
+    supabase.from('emetteur_sous_traitants').select('*').eq('pro_id', currentUserId)
       .order('created_at', { ascending: true }).order('id', { ascending: true }),
     supabase.from('preuves_tva').select('siren, numero, reconnu_le, source, declare_le').eq('pro_id', currentUserId)
       .maybeSingle(),
@@ -2227,12 +2246,21 @@ async function monEmetteurSupabase() {
      dirait à un artisan qui en a qu'il n'en a pas, et l'inviterait au
      doublon. */
   if (l.error && !tableAbsente(l.error)) throw l.error;
+  /* LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS (2b-6, T24) : la règle des
+     lieux — toute erreur LÈVE, sauf la table absente (une base pas encore
+     migrée, un cache de PostgREST pas encore rechargé), qui rend `null` —
+     NON LUS, JAMAIS `[]` : « aucun signe de qualité » dirait à un artisan
+     qui en a un que ses travaux ne sont pas couverts. */
+  if (q.error && !tableAbsente(q.error)) throw q.error;
+  if (st.error && !tableAbsente(st.error)) throw st.error;
   return {
     emetteur: e.data || null,
     assurances: a.data || [],
     tarifs: t.data || null,
     preuveTva: v.error ? null : (v.data || null),
     lieux: l.error ? null : (l.data || []),
+    labels: q.error ? null : (q.data || []),
+    sousTraitants: st.error ? null : (st.data || []),
   };
 }
 
@@ -2563,6 +2591,177 @@ async function retirerLieuDepotDemo(id) {
 }
 
 export const retirerLieuDepot = hasSupabase ? retirerLieuDepotSupabase : retirerLieuDepotDemo;
+
+/* --------------------------------------------------------------------------
+   UN SIGNE DE QUALITÉ (LABEL RGE) ET UN SOUS-TRAITANT (2b-6, sections
+   46.2 ter et 46.2 quater) — deux listes de « Mon entreprise », sur le
+   modèle EXACT des lieux de dépôt : `insert` pour un nouveau,
+   `update(...).eq('id').eq('pro_id')` pour un existant, `delete` pour le
+   retirer — JAMAIS d'`upsert` ; ce qui part passe par `pourLaBase`, `pro_id`
+   posé depuis la session ; l'identifiant est choisi par la BASE.
+
+   CE NE SONT PAS LES PORTES DU BADGE (CTL-5) : le badge public
+   « Certification RGE » de la fiche (`rge`, `rgePath`, `submitDocuments`,
+   `envoyerDocuments`) n'est ni lu ni écrit ici. Un signe de qualité rangé
+   ici ne s'affiche nulle part sur la fiche publique.
+
+   RETIRER une ligne ne récrit AUCUN devis : un brouillon qui citait un
+   sous-traitant garde son identifiant, orphelin, que plus rien ne compte —
+   son point revient. Et le CERTIFICAT ou le JUSTIFICATIF reste dans
+   `documents` (aucun client ne retire un fichier de cet espace, lot S-a) :
+   il part avec le compte.
+   -------------------------------------------------------------------------- */
+async function enregistrerLabelSupabase(valeurs, idExistant = null) {
+  const ligne = pourLaBase('emetteur_labels', valeurs || {});
+  if (idExistant) {
+    const { data, error } = await supabase.from('emetteur_labels')
+      .update(ligne).eq('id', idExistant).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await supabase.from('emetteur_labels')
+    .insert({ ...ligne, pro_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* LA DÉMONSTRATION : la pause des lieux (`attendreLieux`), puis elle VALIDE
+   comme la base (`validerLabel`, les mots de PostgreSQL) et range comme elle
+   (`nettoyerLabel` : la date de création posée ici, jamais par le
+   téléphone), dans le dossier de `moiEnDemo()`. */
+async function enregistrerLabelDemo(valeurs, idExistant = null) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  const avant = Array.isArray(f.labels) ? f.labels : [];
+  const ancien = idExistant ? avant.find((x) => String(x.id) === String(idExistant)) : null;
+  if (idExistant && !ancien) throw new Error('Ce signe de qualité n’existe plus : rechargez l’écran.');
+  const ligne = { ...(ancien || {}), ...pourLaBase('emetteur_labels', valeurs || {}), pro_id: moi };
+  const refus = validerLabel(ligne, moi);
+  if (!refus.ok) throw refusDeContrainte('emetteur_labels', refus.contrainte);
+  const propre = {
+    ...nettoyerLabel(ligne, ancien, new Date()),
+    id: ancien ? ancien.id : nouvelIdentifiant(),
+    pro_id: moi,
+  };
+  f.labels = ancien ? avant.map((x) => (String(x.id) === String(idExistant) ? propre : x)) : [...avant, propre];
+  return { ...propre };
+}
+
+export const enregistrerLabel = hasSupabase ? enregistrerLabelSupabase : enregistrerLabelDemo;
+
+async function retirerLabelSupabase(id) {
+  const { error } = await supabase.from('emetteur_labels')
+    .delete().eq('id', id).eq('pro_id', currentUserId);
+  if (error) throw error;
+  return true;
+}
+
+async function retirerLabelDemo(id) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const f = ficheEmetteurDemo(moiEnDemo());
+  f.labels = (Array.isArray(f.labels) ? f.labels : []).filter((x) => String(x.id) !== String(id));
+  return true;
+}
+
+export const retirerLabel = hasSupabase ? retirerLabelSupabase : retirerLabelDemo;
+
+async function enregistrerSousTraitantSupabase(valeurs, idExistant = null) {
+  const ligne = pourLaBase('emetteur_sous_traitants', valeurs || {});
+  if (idExistant) {
+    const { data, error } = await supabase.from('emetteur_sous_traitants')
+      .update(ligne).eq('id', idExistant).eq('pro_id', currentUserId)
+      .select().single();
+    if (error) throw error;
+    return data;
+  }
+  const { data, error } = await supabase.from('emetteur_sous_traitants')
+    .insert({ ...ligne, pro_id: currentUserId })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* La démonstration refuse ce que la BASE refuse, et rien d'autre : la clé du
+   SIRET (Luhn), la base ne la vérifie pas — c'est le formulaire qui la
+   refuse avant d'envoyer (`validerSousTraitant` sans option). */
+async function enregistrerSousTraitantDemo(valeurs, idExistant = null) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const moi = moiEnDemo();
+  const f = ficheEmetteurDemo(moi);
+  const avant = Array.isArray(f.sousTraitants) ? f.sousTraitants : [];
+  const ancien = idExistant ? avant.find((x) => String(x.id) === String(idExistant)) : null;
+  if (idExistant && !ancien) throw new Error('Ce sous-traitant n’existe plus : rechargez l’écran.');
+  const ligne = { ...(ancien || {}), ...pourLaBase('emetteur_sous_traitants', valeurs || {}), pro_id: moi };
+  const refus = validerSousTraitant(ligne, moi, { cleSiret: false });
+  if (!refus.ok) throw refusDeContrainte('emetteur_sous_traitants', refus.contrainte);
+  const propre = {
+    ...nettoyerSousTraitant(ligne, ancien, new Date()),
+    id: ancien ? ancien.id : nouvelIdentifiant(),
+    pro_id: moi,
+  };
+  f.sousTraitants = ancien ? avant.map((x) => (String(x.id) === String(idExistant) ? propre : x)) : [...avant, propre];
+  return { ...propre };
+}
+
+export const enregistrerSousTraitant = hasSupabase ? enregistrerSousTraitantSupabase : enregistrerSousTraitantDemo;
+
+async function retirerSousTraitantSupabase(id) {
+  const { error } = await supabase.from('emetteur_sous_traitants')
+    .delete().eq('id', id).eq('pro_id', currentUserId);
+  if (error) throw error;
+  return true;
+}
+
+async function retirerSousTraitantDemo(id) {
+  await attendreLieux(PAUSE_LIEUX_DEMO);
+  const f = ficheEmetteurDemo(moiEnDemo());
+  f.sousTraitants = (Array.isArray(f.sousTraitants) ? f.sousTraitants : []).filter((x) => String(x.id) !== String(id));
+  return true;
+}
+
+export const retirerSousTraitant = hasSupabase ? retirerSousTraitantSupabase : retirerSousTraitantDemo;
+
+/* LE CERTIFICAT D'UN SIGNE DE QUALITÉ et LE JUSTIFICATIF D'UN SOUS-TRAITANT,
+   dans l'espace PRIVÉ `documents`, sous `<compte>/<nom>-<horodatage>.<ext>` :
+   un seul niveau, dans son dossier — la forme qu'exigent
+   `emetteur_label_chemin_check` et `emetteur_sous_traitant_chemin_check`.
+   `envoyerFichier` envoie sans jamais remplacer (`upsert: false`). Le nom
+   n'est JAMAIS `rge` : ce nom-là est celui du fichier du BADGE (CTL-5), et
+   un certificat de devis n'est pas une pièce du badge. */
+async function envoyerCertificatSupabase(doc) {
+  if (!doc || !doc.uri) return null;
+  return envoyerFichier({
+    uri: doc.uri, bucket: 'documents', nom: 'certificat-signe-qualite', userId: currentUserId,
+    nomOrigine: doc.nom || null, typeMime: doc.type || null,
+  });
+}
+
+/* En démonstration, un chemin dans le dossier de la fiche — `moiEnDemo()`,
+   jamais « demo-user » —, qui passe le miroir de la contrainte. */
+async function envoyerCertificatDemo(doc) {
+  if (!doc) return null;
+  return `${moiEnDemo()}/certificat-signe-qualite-demo-${Date.now()}.pdf`;
+}
+
+export const envoyerCertificat = hasSupabase ? envoyerCertificatSupabase : envoyerCertificatDemo;
+
+async function envoyerJustificatifSupabase(doc) {
+  if (!doc || !doc.uri) return null;
+  return envoyerFichier({
+    uri: doc.uri, bucket: 'documents', nom: 'justificatif-sous-traitant', userId: currentUserId,
+    nomOrigine: doc.nom || null, typeMime: doc.type || null,
+  });
+}
+
+async function envoyerJustificatifDemo(doc) {
+  if (!doc) return null;
+  return `${moiEnDemo()}/justificatif-sous-traitant-demo-${Date.now()}.pdf`;
+}
+
+export const envoyerJustificatif = hasSupabase ? envoyerJustificatifSupabase : envoyerJustificatifDemo;
 
 /* L'ATTESTATION, dans l'espace PRIVÉ `documents`, sous
    `<compte>/attestation-assurance-<horodatage>.<ext>` : un seul niveau, dans
@@ -3125,6 +3324,15 @@ function devisVersBase(v, { creation = false, proId = null } = {}) {
   poser('dechets_lieux', 'dechetsLieux');
   poser('dechets_sans_depot', 'dechetsSansDepot');
   poser('dechets_cout_centimes', 'dechetsCoutCentimes');
+  /* 2b-6 : les travaux d'énergie et le label RGE (49.4 septies) — quatre
+     colonnes, telles que la carte les tient. AUCUNE normalisation : un
+     tableau vide (que la carte n'écrit jamais) part tel quel, et la base le
+     REFUSE sous le nom de sa contrainte — jamais un silence qui le
+     changerait en « rien de dit ». */
+  poser('energie_travaux', 'energieTravaux');
+  poser('energie_sans_label', 'energieSansLabel');
+  poser('energie_sous_traitance', 'energieSousTraitance');
+  poser('energie_sous_traitants', 'energieSousTraitants');
   if (creation) {
     poser('id', 'id');
     poser('source', 'source');
@@ -3576,6 +3784,12 @@ async function motifsRefusRemiseDemo(devisId) {
     motifsEmetteur: motifsEmetteur(entreeDesMotifsEmetteurDemo(moi)),
     assurances: ficheEmetteurDemo(moi).assurances,
     lieux: lieuxDe(copieEmetteur(ficheEmetteurDemo(moi))),
+    /* 2b-6 : les signes de qualité et les sous-traitants de « Mon
+       entreprise » de démonstration — le rang 14 ne compte que ceux de
+       cette entreprise (`pro_id`, filtrés par le miroir sur le `proId` du
+       devis). Une fiche qui n'en porte pas en a zéro. */
+    labels: labelsDe(copieEmetteur(ficheEmetteurDemo(moi))),
+    sousTraitants: sousTraitantsDe(copieEmetteur(ficheEmetteurDemo(moi))),
   });
 }
 export const motifsRefusRemise = hasSupabase ? motifsRefusRemiseSupabase : motifsRefusRemiseDemo;
@@ -3715,6 +3929,18 @@ function assurancesDe(f) {
 function lieuxDe(f) {
   return f && Array.isArray(f.lieux) ? f.lieux : null;
 }
+/* LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS de la même fiche (2b-6, T24) :
+   des LISTES (les lignes de la base, dans son ordre), ou `null` quand la
+   fiche ne les porte pas — NON LUS, jamais `[]`. La carte « Énergie et label
+   RGE » d'un devis en tire ses états et ses cases ; l'état de chaque liste
+   (`etatDesLieux`, devis.js) se déduit de celui du régime, lu par la MÊME
+   réponse. */
+function labelsDe(f) {
+  return f && Array.isArray(f.labels) ? f.labels : null;
+}
+function sousTraitantsDe(f) {
+  return f && Array.isArray(f.sousTraitants) ? f.sousTraitants : null;
+}
 async function monRegimeSupabase() {
   return regimeEtSaDate(await monEmetteurSupabase()).regime;
 }
@@ -3724,8 +3950,11 @@ async function monRegimeDemo() {
 export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
 
 /**
- * MON RÉGIME, LA DATE DE SA DÉCLARATION, MES ASSURANCES ET MES LIEUX DE
- * DÉPÔT — `{ regime, declareLe, assurances, lieux }` (lot P, section 50 ; la
+ * MON RÉGIME, LA DATE DE SA DÉCLARATION, MES ASSURANCES, MES LIEUX DE
+ * DÉPÔT, MES SIGNES DE QUALITÉ ET MES SOUS-TRAITANTS — `{ regime, declareLe,
+ * assurances, lieux, labels, sousTraitants }` (les deux derniers depuis
+ * 2b-6, T24 : la carte « Énergie et label RGE » les lit, et la MÊME lecture
+ * les rend ; lot P, section 50 ; la
  * date est `regime_tva_declare_le`, posée par la BASE au changement de
  * régime, section 46 ; les assurances depuis 2b-4 ; les lieux de dépôt des
  * déchets depuis 2b-5, T12 : la carte « Déchets » d'un devis les choisit,
@@ -3752,11 +3981,15 @@ export const monRegime = hasSupabase ? monRegimeSupabase : monRegimeDemo;
  */
 async function monRegimeEtSaDateSupabase() {
   const f = await monEmetteurSupabase();
-  return { ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f) };
+  return {
+    ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f), labels: labelsDe(f), sousTraitants: sousTraitantsDe(f),
+  };
 }
 async function monRegimeEtSaDateDemo() {
   const f = await monEmetteurDemo();
-  return { ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f) };
+  return {
+    ...regimeEtSaDate(f), assurances: assurancesDe(f), lieux: lieuxDe(f), labels: labelsDe(f), sousTraitants: sousTraitantsDe(f),
+  };
 }
 export const monRegimeEtSaDate = hasSupabase ? monRegimeEtSaDateSupabase : monRegimeEtSaDateDemo;
 

@@ -5,7 +5,9 @@
  * donne pas : l'immatriculation, le capital, les adresses qu'Opus n'a pas,
  * les coordonnées, le régime de TVA, les assurances, le médiateur, les
  * garanties, les conditions (section 46), ses LIEUX DE DÉPÔT DES DÉCHETS
- * (étape 2b-5, section 46.2 bis) — et ses TARIFS (lot T, section 47) :
+ * (étape 2b-5, section 46.2 bis), ses SIGNES DE QUALITÉ (label RGE) et ses
+ * SOUS-TRAITANTS (étape 2b-6, sections 46.2 ter et 46.2 quater) — et ses
+ * TARIFS (lot T, section 47) :
  * frais de déplacement, taux horaire et son décompte, majoration de nuit et
  * de week-end, prix du devis, et l'interrupteur « Afficher mes tarifs sur
  * ma fiche ». C'est la SEULE porte qui les écrit : le réglage d'urgence de
@@ -58,6 +60,7 @@ import {
   versCentimes, estEI, estSocieteCommerciale, rcsOblige, mediateurDeLaListe,
   parleDUnPaiementALaSignature, avisEmetteur, numeroTvaImprime, etatDeLAssurance, attestationJointe,
   libelleDuTypeDeLieu,
+  TEXTES_SIGNES_DE_QUALITE, TEXTES_SOUS_TRAITANTS, libelleEtatDuLabel, libelleEtatDuSousTraitant, siretDuSousTraitant,
 } from '../lib/emetteur';
 import { HEURES_MAJOREES, QUI_VOIT_LES_TARIFS, TARIFS_NON_AFFICHES } from '../lib/tarifs';
 import { aideDeLaSectionTvaDeclaree } from '../lib/declaration-tva';
@@ -323,6 +326,92 @@ export function LieuxDeDepotEnLecture({ lieux = null, onModifier, onReessayer })
   );
 }
 
+/**
+ * VOS SIGNES DE QUALITÉ ET VOS SOUS-TRAITANTS, EN LECTURE (étape 2b-6,
+ * cahier §3.6 et annexe A.5) — les deux blocs que « Mon entreprise » montre
+ * avant d'entrer en édition, sur le modèle EXACT de `LieuxDeDepotEnLecture`.
+ * Ils MONTRENT chaque ligne (son intitulé ou son nom ; dessous, son état,
+ * par la MÊME fonction que la rangée de l'édition : `libelleEtatDuLabel`,
+ * `libelleEtatDuSousTraitant`) ; vides, ils le disent ; NON LUS, ils le
+ * disent, avec « Réessayer » — jamais « aucun signe de qualité » d'une liste
+ * qu'on n'a pas lue (T24). L'en-tête imprimé (`ApercuEntete`) ne les imprime
+ * pas : ils se choisissent devis par devis, dans la carte « Énergie et label
+ * RGE », et rien n'est imprimé avant le lot 2c.
+ *
+ * « RIEN NE S'AFFICHE SUR VOTRE FICHE PUBLIQUE » (T29) : la phrase de la
+ * section le dit, ici comme en édition. Le badge « Certification RGE » de
+ * « Modifier mon profil » reste à part.
+ */
+export function SignesDeQualiteEnLecture({ labels = null, onModifier, onReessayer }) {
+  const X = TEXTES_SIGNES_DE_QUALITE;
+  const lus = Array.isArray(labels);
+  return (
+    <View style={s.blocLecture}>
+      <Text style={s.titreBloc} accessibilityRole="header">{X.section}</Text>
+      <Text style={s.texteBloc}>{X.phrase}</Text>
+      {!lus && (
+        <>
+          <Text style={s.texteBloc}>{X.nonLus}</Text>
+          {!!onReessayer && <BtnMini outline label="Réessayer" onPress={onReessayer} style={s.cible} />}
+        </>
+      )}
+      {lus && labels.length === 0 && <Text style={s.texteBloc}>{X.vide}</Text>}
+      {lus && labels.map((g) => (
+        <View key={String(g.id)} style={s.lieuLu}>
+          <Text style={s.optionLibelle}>{g.intitule}</Text>
+          <Text style={s.optionAide}>{g.organisme}</Text>
+          <Text style={s.optionAide}>{libelleEtatDuLabel(g)}</Text>
+        </View>
+      ))}
+      {lus && (
+        <Pressable
+          onPress={onModifier}
+          accessibilityRole="button"
+          accessibilityLabel={labels.length ? X.modifierLesMiens : X.declarerLesMiens}
+          style={({ pressed }) => [s.rangeeLecture, pressed && APPUI.discret]}
+        >
+          <Text style={s.rangeeLectureTexte}>{labels.length ? X.modifierLesMiens : X.declarerLesMiens}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+export function SousTraitantsEnLecture({ sousTraitants = null, onModifier, onReessayer }) {
+  const X = TEXTES_SOUS_TRAITANTS;
+  const lus = Array.isArray(sousTraitants);
+  return (
+    <View style={s.blocLecture}>
+      <Text style={s.titreBloc} accessibilityRole="header">{X.section}</Text>
+      <Text style={s.texteBloc}>{X.phrase}</Text>
+      {!lus && (
+        <>
+          <Text style={s.texteBloc}>{X.nonLus}</Text>
+          {!!onReessayer && <BtnMini outline label="Réessayer" onPress={onReessayer} style={s.cible} />}
+        </>
+      )}
+      {lus && sousTraitants.length === 0 && <Text style={s.texteBloc}>{X.vide}</Text>}
+      {lus && sousTraitants.map((st) => (
+        <View key={String(st.id)} style={s.lieuLu}>
+          <Text style={s.optionLibelle}>{st.raison_sociale}</Text>
+          {!!siretDuSousTraitant(st) && <Text style={s.optionAide}>{siretDuSousTraitant(st)}</Text>}
+          <Text style={s.optionAide}>{libelleEtatDuSousTraitant(st)}</Text>
+        </View>
+      ))}
+      {lus && (
+        <Pressable
+          onPress={onModifier}
+          accessibilityRole="button"
+          accessibilityLabel={sousTraitants.length ? X.modifierLesMiens : X.declarerLesMiens}
+          style={({ pressed }) => [s.rangeeLecture, pressed && APPUI.discret]}
+        >
+          <Text style={s.rangeeLectureTexte}>{sousTraitants.length ? X.modifierLesMiens : X.declarerLesMiens}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 /* ==================================================================== */
 /*  LE FORMULAIRE                                                        */
 /* ==================================================================== */
@@ -335,6 +424,11 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
      jamais `[]`). SANS défaut à `[]` : « aucun lieu » dirait à un artisan qui
      en a qu'il n'en a pas, et l'inviterait au doublon (cahier T12). */
   lieux = null, onAjouterLieu, onOuvrirLieu,
+  /* 2b-6 : les signes de qualité (label RGE) et les sous-traitants — des
+     LISTES, ou `null` quand elles n'ont pas pu être lues, sur la règle des
+     lieux : SANS défaut à `[]` (T24). */
+  labels = null, onAjouterLabel, onOuvrirLabel,
+  sousTraitants = null, onAjouterSousTraitant, onOuvrirSousTraitant,
   telephoneFiche = '', emailFiche = '', emailCompte = '',
   erreur = null, onEffacerErreur, onPosition,
 }, ref) {
@@ -993,6 +1087,106 @@ const FicheEmetteur = forwardRef(function FicheEmetteur({
             >
               <Plus size={15} color={C.accent2} />
               <Text style={s.ajouterTexte}>Ajouter un lieu de dépôt</Text>
+            </Pressable>
+          </>
+        )}
+      </Section>
+
+      {/* 7 ter. — VOS SIGNES DE QUALITÉ (label RGE) (étape 2b-6, cahier §3.6 et
+          annexe A.5) : rangés une fois ici, retrouvés ensuite par la carte
+          « Énergie et label RGE » de chaque devis, travail par travail. Sur
+          le modèle des lieux : une rangée par signe (son intitulé ; son
+          organisme ; SON ÉTAT, sur sa propre ligne, par
+          `libelleEtatDuLabel` — la même règle que la carte du devis, tenue
+          ensemble par `verifier-emetteur`, CTL-8 ; un chevron), puis
+          « Ajouter un signe de qualité ». Chacun s'écrit À PART de
+          « Enregistrer mes informations de devis », par son propre formulaire
+          (`FicheLabel`). UNE LISTE NON LUE N'EST JAMAIS « AUCUN » (T24) : elle
+          le dit, et ne propose pas d'en ajouter. Sa phrase dit que rien ne
+          s'affiche sur la fiche publique (T29) : le badge « Certification
+          RGE » de « Modifier mon profil » reste à part. */}
+      <Section ancre="labels" titre="Vos signes de qualité (label RGE)" onPosition={pos}>
+        <Aide>{TEXTES_SIGNES_DE_QUALITE.phrase}</Aide>
+        {labels == null ? (
+          <Aide>{TEXTES_SIGNES_DE_QUALITE.nonLusEdition}</Aide>
+        ) : (
+          <>
+            {labels.length === 0 && <Aide>{TEXTES_SIGNES_DE_QUALITE.vide}</Aide>}
+            {labels.map((g) => {
+              const etatLu = libelleEtatDuLabel(g);
+              return (
+                <Pressable
+                  key={String(g.id)}
+                  onPress={() => onOuvrirLabel(g)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${g.intitule}, ${g.organisme}, ${etatLu}. ${TEXTES_SIGNES_DE_QUALITE.modifier}`}
+                  style={({ pressed }) => [s.assurance, pressed && APPUI.discret]}
+                >
+                  <View style={s.optionTexte}>
+                    <Text style={s.optionLibelle}>{g.intitule}</Text>
+                    <Text style={s.optionAide} numberOfLines={2}>{g.organisme}</Text>
+                    <Text style={s.optionAide}>{etatLu}</Text>
+                  </View>
+                  <ChevronRight size={15} color={C.muted} />
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={onAjouterLabel}
+              accessibilityRole="button"
+              accessibilityLabel={TEXTES_SIGNES_DE_QUALITE.ajouter}
+              style={({ pressed }) => [s.ajouter, pressed && APPUI.plein]}
+            >
+              <Plus size={15} color={C.accent2} />
+              <Text style={s.ajouterTexte}>{TEXTES_SIGNES_DE_QUALITE.ajouter}</Text>
+            </Pressable>
+          </>
+        )}
+      </Section>
+
+      {/* 7 quater. — VOS SOUS-TRAITANTS (étape 2b-6) : les entreprises qui
+          font une partie, ou la totalité, des travaux ; rangées une fois ici,
+          cochées ensuite dans la carte « Énergie et label RGE » d'un devis.
+          Une rangée par sous-traitant : son nom ; son SIRET (deux homonymes
+          ne se confondent plus, ÉCRAN-11) ; son ÉTAT
+          (`libelleEtatDuSousTraitant`). Chacun s'écrit par son propre
+          formulaire (`FicheSousTraitant`). Une liste non lue le dit (T24). */}
+      <Section ancre="sousTraitants" titre="Vos sous-traitants" onPosition={pos}>
+        <Aide>{TEXTES_SOUS_TRAITANTS.phrase}</Aide>
+        {sousTraitants == null ? (
+          <Aide>{TEXTES_SOUS_TRAITANTS.nonLusEdition}</Aide>
+        ) : (
+          <>
+            {sousTraitants.length === 0 && <Aide>{TEXTES_SOUS_TRAITANTS.vide}</Aide>}
+            {sousTraitants.map((st) => {
+              const etatLu = libelleEtatDuSousTraitant(st);
+              const siretLu = siretDuSousTraitant(st);
+              return (
+                <Pressable
+                  key={String(st.id)}
+                  onPress={() => onOuvrirSousTraitant(st)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${st.raison_sociale}, ${siretLu ? `SIRET ${siretLu}, ` : ''}${etatLu}. `
+                    + TEXTES_SOUS_TRAITANTS.modifier}
+                  style={({ pressed }) => [s.assurance, pressed && APPUI.discret]}
+                >
+                  <View style={s.optionTexte}>
+                    <Text style={s.optionLibelle}>{st.raison_sociale}</Text>
+                    {!!siretLu && <Text style={s.optionAide}>{siretLu}</Text>}
+                    <Text style={s.optionAide}>{etatLu}</Text>
+                  </View>
+                  <ChevronRight size={15} color={C.muted} />
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={onAjouterSousTraitant}
+              accessibilityRole="button"
+              accessibilityLabel={TEXTES_SOUS_TRAITANTS.ajouter}
+              style={({ pressed }) => [s.ajouter, pressed && APPUI.plein]}
+            >
+              <Plus size={15} color={C.accent2} />
+              <Text style={s.ajouterTexte}>{TEXTES_SOUS_TRAITANTS.ajouter}</Text>
             </Pressable>
           </>
         )}

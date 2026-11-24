@@ -11,8 +11,10 @@
  * avis qui ne bloquent rien (`avisEmetteur`).
  *
  * Il n'importe QUE des fichiers que `node` sait ouvrir — `entreprise.js`,
- * `formes-juridiques.js`, `siret.js`, `mediateurs.js`, et
- * `pieces-justificatives.js` pour le NOM des assurances —, jamais `erreurs.js`,
+ * `formes-juridiques.js`, `siret.js`, `mediateurs.js`,
+ * `pieces-justificatives.js` pour le NOM des assurances, et, depuis 2b-6,
+ * `travaux-energie.js` pour les travaux que couvre un signe de qualité —,
+ * jamais `erreurs.js`,
  * `theme.js` ni rien qui charge React Native : `verifier-emetteur` le FAIT
  * TOURNER, et un contrôle qui plante ne vérifie rien (treizième application
  * de la leçon de `cloudinary-adresses.js`). Le contrôle tient cette liste.
@@ -57,11 +59,15 @@
  */
 import { dateFrancaise } from './entreprise.js';
 import { formeCourte } from '../data/formes-juridiques.js';
-import { formaterSiret } from './siret.js';
+import { formaterSiret, cleSiretValide } from './siret.js';
 import { FORME_TVA } from './tva.js';
 import { versCentimes, centimesLisibles } from './centimes.js';
 import { MEDIATEURS, MEDIATEURS_RELEVES_LE } from '../data/mediateurs.js';
 import { DECENNALE, RC_PRO } from '../data/pieces-justificatives.js';
+/* 2b-6 : les dix-neuf travaux d'économies d'énergie, avec les MÊMES clés que
+   le devis (`devis.js`, que ce fichier n'importe pas) — un fichier de
+   données qui n'importe RIEN. */
+import { TRAVAUX_ENERGIE } from '../data/travaux-energie.js';
 
 /* ================================================================== */
 /*  CE QUE LE CLIENT A LE DROIT D'ENVOYER                              */
@@ -111,6 +117,24 @@ export const COLONNES_ECRITES = Object.freeze({
      ni `created_at` (posée par la BASE, toute valeur du client ignorée). */
   emetteur_lieux_depot: Object.freeze([
     'raison_sociale', 'adresse', 'code_postal', 'ville', 'type_installation', 'libelle',
+  ]),
+  /* 2b-6 (46.2 ter) : un signe de qualité (label RGE) de l'entreprise — ce
+     que le devis devra dire (L. 224-114) : l'organisme qui l'a délivré, son
+     intitulé, son numéro (facultatif), les travaux qu'il couvre (les clés de
+     `TRAVAUX_ENERGIE`), sa date de fin, et le chemin de son certificat dans
+     l'espace PRIVÉ `documents`. Ni `id`, ni `pro_id` (posé par l'API depuis
+     la session), ni `created_at` (posée par la BASE). */
+  emetteur_labels: Object.freeze([
+    'organisme', 'intitule', 'reference', 'categories', 'valide_jusquau', 'justificatif_chemin',
+  ]),
+  /* 2b-6 (46.2 quater) : un sous-traitant — une AUTRE entreprise, que
+     l'artisan range sous sa responsabilité (L. 224-115) : son nom ou sa
+     raison sociale, son SIRET, s'il détient un label RGE, pour quels
+     travaux, jusqu'à quand, et le chemin de son justificatif (dans le
+     dossier de l'ARTISAN, qui l'envoie). Jamais un lien vers un compte
+     Opus. */
+  emetteur_sous_traitants: Object.freeze([
+    'raison_sociale', 'siret', 'label_detient', 'label_categories', 'label_valide_jusquau', 'label_justificatif_chemin',
   ]),
 });
 
@@ -251,6 +275,12 @@ export const LONGUEUR_MAX = Object.freeze({
   /* 2b-5 (46.2 bis) : `emetteur_lieu_longueurs_check`. Le code postal n'y
      est pas : `emetteur_lieu_code_postal_check` le veut de cinq chiffres. */
   emetteur_lieux_depot: Object.freeze({ raison_sociale: 120, adresse: 200, ville: 100, libelle: 80 }),
+  /* 2b-6 : `emetteur_label_longueurs_check` et
+     `emetteur_sous_traitant_longueurs_check`. Le SIRET n'y est pas :
+     `emetteur_sous_traitant_siret_check` le veut de quatorze chiffres ; ni
+     les chemins, qu'Opus fabrique. */
+  emetteur_labels: Object.freeze({ organisme: 120, intitule: 120, reference: 60 }),
+  emetteur_sous_traitants: Object.freeze({ raison_sociale: 120 }),
 });
 
 /** Où l'entreprise est immatriculée. « Registre » ne désigne ici que le RCS et le RNE. */
@@ -702,6 +732,59 @@ export function nettoyerLieuDepot(l, ancien = null, maintenant = new Date()) {
   return n;
 }
 
+const TEXTES_LABEL = ['organisme', 'intitule', 'reference'];
+
+/**
+ * Miroir de `tient_le_label()` (section 46.2 ter, étape 2b-6) :
+ *   - l'organisme, l'intitulé et le numéro rognés par la classe de blancs
+ *     des textes qui s'AFFICHENT, invisibles compris (`rognerTarif`,
+ *     `BLANCS_TARIFS` — la base l'écrit en `chr(n)`) : ils s'imprimeront ;
+ *   - le CHEMIN du certificat par la PETITE classe (`rogner` : espace,
+ *     tabulation, retour chariot, saut de ligne — BASE-6, le modèle de
+ *     `tient_l_assurance()`) : un chemin suivi d'une espace ne compte pas
+ *     « joint » pour une autre forme, et une chaîne vide devient vide de
+ *     valeur au lieu d'un refus mal dit ;
+ *   - `created_at` POSÉ PAR LA BASE : à la création, l'heure de l'écriture,
+ *     quoi que le client envoie ; ensuite, jamais récrite.
+ * Les catégories ne sont pas rognées : ce sont des clés, que l'écran choisit
+ * dans `TRAVAUX_ENERGIE`.
+ */
+export function nettoyerLabel(l, ancien = null, maintenant = new Date()) {
+  const n = { ...(l || {}) };
+  for (const c of TEXTES_LABEL) n[c] = rognerTarif(n[c]);
+  n.justificatif_chemin = rogner(n.justificatif_chemin);
+  n.created_at = ancien ? ancien.created_at : enIso(maintenant);
+  return n;
+}
+
+/**
+ * Miroir de `tient_le_sous_traitant()` (section 46.2 quater, étape 2b-6) :
+ *   - le nom ou la raison sociale rogné par la classe des textes qui
+ *     s'affichent (`rognerTarif`) ;
+ *   - le SIRET réduit à ses CHIFFRES (« 000 480 090 00013 » se range
+ *     « 00048009000013 ») — vide de valeur s'il n'en reste aucun ;
+ *   - le chemin du justificatif par la petite classe (`rogner`, BASE-6) ;
+ *   - les champs du label EFFACÉS quand la réponse n'est pas « Oui »
+ *     (BASE-7 : garder ces valeurs sous « Non » casserait la croisée, et
+ *     garderait sans usage des données d'une autre entreprise ; le
+ *     formulaire le DIT avant d'enregistrer) ;
+ *   - `created_at` POSÉ PAR LA BASE, comme ci-dessus.
+ */
+export function nettoyerSousTraitant(st, ancien = null, maintenant = new Date()) {
+  const n = { ...(st || {}) };
+  n.raison_sociale = rognerTarif(n.raison_sociale);
+  n.label_justificatif_chemin = rogner(n.label_justificatif_chemin);
+  const chiffres = n.siret == null ? '' : String(n.siret).replace(/[^0-9]/g, '');
+  n.siret = chiffres === '' ? null : chiffres;
+  if (n.label_detient !== true) {
+    n.label_categories = null;
+    n.label_valide_jusquau = null;
+    n.label_justificatif_chemin = null;
+  }
+  n.created_at = ancien ? ancien.created_at : enIso(maintenant);
+  return n;
+}
+
 /* LES BLANCS DES TARIFS : ceux de `rogner`, PLUS les caractères qu'on ne
    voit pas — l'espace insécable, les espaces de largeur nulle, le
    joint de mot et l'indicateur d'ordre des octets. Trouvé par la relecture
@@ -864,6 +947,46 @@ export const CONTRAINTES = Object.freeze({
     emetteur_lieu_type_check: (l) => (l.type_installation == null
       || TYPES_INSTALLATION.some((t) => t.cle === l.type_installation) ? null : 'type_installation'),
   }),
+  /* 2b-6 (46.2 ter) : un signe de qualité. Les catégories : de 1 à 19 clés
+     de `TRAVAUX_ENERGIE` (jamais `aucun`, qui n'existe que sur le devis),
+     jamais un tableau vide (la forme `case … else false` de la base) ; le
+     chemin du certificat dans le dossier de l'artisan, un niveau ; la
+     CROISÉE de ce qui s'imprimera — l'organisme, l'intitulé, les travaux, la
+     date de fin, tous écrits (le certificat, non : une ligne sans lui ne
+     couvre rien, et la carte du devis le dit) ; les longueurs. */
+  emetteur_labels: Object.freeze({
+    emetteur_label_categories_check: (l) => (l.categories == null || categoriesRecevables(l.categories)
+      ? null : 'categories'),
+    emetteur_label_chemin_check: (l, proId) => (cheminDansSonDossier(l.justificatif_chemin, l.pro_id ?? proId)
+      ? null : 'justificatif_chemin'),
+    emetteur_label_complet_check: (l) => (['organisme', 'intitule', 'categories', 'valide_jusquau']
+      .find((c) => l[c] == null) || null),
+    emetteur_label_longueurs_check: (l) => tropLong(l, LONGUEUR_MAX.emetteur_labels),
+  }),
+  /* 2b-6 (46.2 quater) : un sous-traitant. La CROISÉE : l'identité écrite (le
+     nom et le SIRET), et « Oui » SI ET SEULEMENT SI les travaux et la date
+     sont écrits — la SECONDE barrière de « jamais labellisé sans date » (la
+     première est la forme `is not true` du rang 14, CTL-7). Le SIRET :
+     quatorze chiffres, sans clé de Luhn (l'exception de La Poste) — c'est
+     l'écran qui refuse une clé fausse (`validerSousTraitant`). */
+  emetteur_sous_traitants: Object.freeze({
+    emetteur_sous_traitant_categories_check: (st) => (st.label_categories == null
+      || categoriesRecevables(st.label_categories) ? null : 'label_categories'),
+    emetteur_sous_traitant_chemin_check: (st, proId) => (cheminDansSonDossier(st.label_justificatif_chemin,
+      st.pro_id ?? proId) ? null : 'label_justificatif_chemin'),
+    emetteur_sous_traitant_complet_check: (st) => {
+      const manque = ['raison_sociale', 'siret'].find((c) => st[c] == null);
+      if (manque) return manque;
+      const detient = st.label_detient === true;
+      const dit = st.label_categories != null && st.label_valide_jusquau != null;
+      if (detient === dit) return null;
+      if (!detient) return 'label_detient';
+      return st.label_categories == null ? 'label_categories' : 'label_valide_jusquau';
+    },
+    emetteur_sous_traitant_longueurs_check: (st) => tropLong(st, LONGUEUR_MAX.emetteur_sous_traitants),
+    emetteur_sous_traitant_siret_check: (st) => (st.siret == null || /^[0-9]{14}$/.test(String(st.siret))
+      ? null : 'siret'),
+  }),
   tarifs_pro: Object.freeze({
     /* UN BLOC AFFICHÉ N'EST JAMAIS VIDE (section 47) : au moins UN prix —
        des frais (montant, « offert » ou conditions), un taux horaire ou un
@@ -906,6 +1029,23 @@ export const CONTRAINTES = Object.freeze({
   }),
 });
 
+/* LES CATÉGORIES D'UN SIGNE DE QUALITÉ (`emetteur_label_categories_check`,
+   `emetteur_sous_traitant_categories_check`) : un tableau de 1 à 19 clés de
+   `TRAVAUX_ENERGIE`, sans élément vide. Un doublon passe, comme en base. */
+const CLES_DES_TRAVAUX = Object.freeze(TRAVAUX_ENERGIE.map((t) => t.cle));
+function categoriesRecevables(v) {
+  return Array.isArray(v) && v.length >= 1 && v.length <= CLES_DES_TRAVAUX.length
+    && v.every((c) => CLES_DES_TRAVAUX.includes(c));
+}
+/* Un chemin dans le DOSSIER de l'entreprise, à un seul niveau — le miroir de
+   `chemin ~ ('^' || pro_id::text || '/[^/]+$')` ; `null` passe. */
+function cheminDansSonDossier(chemin, proId) {
+  if (chemin == null) return true;
+  const prefixe = `${String(proId)}/`;
+  const reste = String(chemin).slice(prefixe.length);
+  return String(chemin).startsWith(prefixe) && reste !== '' && !reste.includes('/');
+}
+
 /* PostgreSQL vérifie les contraintes `check` d'une table dans l'ORDRE
    ALPHABÉTIQUE de leur nom, et s'arrête à la première qui refuse : c'est
    elle que nomme son message. On fait pareil, pour que la démonstration et
@@ -940,6 +1080,33 @@ export function validerTarifs(t) {
    puis jugé dans l'ordre de ses contraintes. */
 export function validerLieuDepot(l) {
   return premierRefus('emetteur_lieux_depot', nettoyerLieuDepot(l), null);
+}
+
+/* 2b-6 : un signe de qualité, nettoyé comme la base le nettoiera, puis jugé
+   dans l'ordre de ses contraintes. `proId` : l'entreprise, pour le chemin du
+   certificat (celui de la ligne d'abord). */
+export function validerLabel(l, proId = null) {
+  return premierRefus('emetteur_labels', nettoyerLabel(l), proId);
+}
+
+/** Ce que l'écran dit d'un SIRET de sous-traitant à clé fausse (annexe A.5 ;
+ *  CTL-6 : « relisez », jamais « vérifiez »). */
+export const MESSAGE_SIRET_FAUX = 'Ce numéro SIRET n’est pas valable : relisez ses quatorze chiffres.';
+
+/**
+ * 2b-6 : un sous-traitant, nettoyé comme la base le nettoiera, jugé dans
+ * l'ordre de ses contraintes — PUIS, si `cleSiret` (le formulaire), la clé
+ * du SIRET nettoyé (`cleSiretValide`, l'exception de La Poste comprise) :
+ * `{ ok: false, contrainte: null, champ: 'siret', message: MESSAGE_SIRET_FAUX }`.
+ * La BASE, elle, ne vérifie aucune clé : la démonstration, qui doit refuser
+ * ce que la base refuse et rien d'autre, appelle `{ cleSiret: false }`.
+ */
+export function validerSousTraitant(st, proId = null, { cleSiret = true } = {}) {
+  const n = nettoyerSousTraitant(st);
+  const refus = premierRefus('emetteur_sous_traitants', n, proId);
+  if (!refus.ok || !cleSiret) return refus;
+  if (!cleSiretValide(n.siret)) return { ok: false, contrainte: null, champ: 'siret', message: MESSAGE_SIRET_FAUX };
+  return refus;
 }
 
 /* ================================================================== */
@@ -1702,6 +1869,228 @@ export function etatDeLAssurance(a, jour = jourLocal(new Date())) {
   if (fin[1] >= auJour) return nonJointe ? `Attestation non jointe · valable jusqu’au ${date}` : `Valable jusqu’au ${date}`;
   return nonJointe ? `Attestation non jointe · expirée le ${date}` : `Expirée le ${date}`;
 }
+
+/* ================================================================== */
+/*  LES SIGNES DE QUALITÉ ET LES SOUS-TRAITANTS, LIGNE PAR LIGNE (2b-6) */
+/* ================================================================== */
+
+/** Le libellé d'un travail d'économies d'énergie (sa clé), tel que la carte
+ *  du devis et « Mon entreprise » l'écrivent ; `null` pour une clé inconnue. */
+export function libelleDuTravail(cle) {
+  const t = TRAVAUX_ENERGIE.find((x) => x.cle === cle);
+  return t ? t.libelle : null;
+}
+
+/* La date de fin d'une ligne, « AAAA-MM-JJ », ou `null` : comparée comme une
+   CHAÎNE au jour, jamais par `new Date(…)` (la leçon des dates de la Place
+   des pros). */
+function finDeLaLigne(v) {
+  const m = v == null ? null : String(v).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
+/**
+ * L'ÉTAT D'UN SIGNE DE QUALITÉ, sur SA ligne dans « Mon entreprise » (T26,
+ * annexe A.5) — `'valable'`, `'sans_certificat'` ou `'expire'`, au jour
+ * LOCAL du téléphone (`jourLocal`, comme les assurances ; la base juge au
+ * jour de Paris) :
+ *   - `'expire'` : la date de fin est passée (ou absente), certificat joint
+ *     ou non ;
+ *   - `'sans_certificat'` : valable, mais son certificat n'est pas joint (le
+ *     chemin n'est pas ÉCRIT, la règle de `rogner`) ;
+ *   - `'valable'` : valable, certificat joint.
+ * Elle dit d'UNE ligne ce que `etatsDesTravaux` (`devis.js`) dit d'un
+ * travail que cette seule ligne porte : `verifier-emetteur` les fait tourner
+ * d'accord sur un même jeu (CTL-8) — `valable` ↔ `couvert`, et les deux
+ * autres à l'identique. Ce fichier n'importe pas `devis.js` : c'est le
+ * contrôle qui tient les deux écritures ensemble.
+ */
+export function etatDuLabel(label, jour = jourLocal(new Date())) {
+  const fin = finDeLaLigne(label ? label.valide_jusquau : null);
+  if (fin === null || fin < jourLocal(jour)) return 'expire';
+  return rogner(label ? label.justificatif_chemin : null) === null ? 'sans_certificat' : 'valable';
+}
+
+/** Ce que la ligne d'un signe de qualité DIT de son état (annexe A.5 ;
+ *  DROIT-16 : « Fin de validité dépassée », jamais « Expiré depuis le », qui
+ *  se trompait d'un jour). Une ligne sans date (la base n'en range aucune)
+ *  dit seulement que sa fin est dépassée. */
+export function libelleEtatDuLabel(label, jour = jourLocal(new Date())) {
+  const etat = etatDuLabel(label, jour);
+  const fin = finDeLaLigne(label ? label.valide_jusquau : null);
+  const date = fin ? dateFrancaise(fin) : null;
+  if (etat === 'valable') return `Valable jusqu’au ${date}`;
+  if (etat === 'sans_certificat') return `Certificat non joint · valable jusqu’au ${date}`;
+  return date ? `Fin de validité dépassée (valable jusqu’au ${date})` : 'Fin de validité dépassée';
+}
+
+/**
+ * L'ÉTAT D'UN SOUS-TRAITANT, sur SA ligne dans « Mon entreprise » (annexe
+ * A.5) — `'detient'`, `'justificatif'`, `'expire'`, `'non'` ou `'a_dire'`,
+ * au jour LOCAL :
+ *   - `'a_dire'` : la question de son label n'a pas de réponse ;
+ *   - `'non'` : il ne détient pas de label ;
+ *   - `'expire'` : « Oui », mais la date de fin est passée (ou absente) ;
+ *   - `'justificatif'` : « Oui », valable, mais le justificatif n'est pas
+ *     joint (réponse P13 du 24/11 : il est exigé) ;
+ *   - `'detient'` : « Oui », valable, justificatif joint.
+ * `'detient'` et `'non'` sont EXACTEMENT les cas où `sousTraitantComplet`
+ * (`devis.js`) le dit complet — l'identité, elle, est garantie par la
+ * contrainte de la table, et ni l'un ni l'autre ne la juge (la parité avec
+ * le rang 14) : `verifier-emetteur` les fait tourner d'accord (CTL-8).
+ */
+export function etatDuSousTraitant(st, jour = jourLocal(new Date())) {
+  if (!st || (st.label_detient !== true && st.label_detient !== false)) return 'a_dire';
+  if (st.label_detient === false) return 'non';
+  const fin = finDeLaLigne(st.label_valide_jusquau);
+  if (fin === null || fin < jourLocal(jour)) return 'expire';
+  return rogner(st.label_justificatif_chemin) === null ? 'justificatif' : 'detient';
+}
+
+/** Ce que la ligne d'un sous-traitant DIT de son label (annexe A.5). */
+export function libelleEtatDuSousTraitant(st, jour = jourLocal(new Date())) {
+  const etat = etatDuSousTraitant(st, jour);
+  const fin = finDeLaLigne(st ? st.label_valide_jusquau : null);
+  const date = fin ? dateFrancaise(fin) : null;
+  if (etat === 'detient') return `Détient un label RGE · valable jusqu’au ${date}`;
+  if (etat === 'justificatif') return 'Label RGE déclaré · justificatif non joint';
+  if (etat === 'expire') {
+    return date ? `Label RGE : fin de validité dépassée (valable jusqu’au ${date})` : 'Label RGE : fin de validité dépassée';
+  }
+  if (etat === 'non') return 'Ne détient pas de label RGE';
+  return 'Label RGE : à dire';
+}
+
+/** Le SIRET d'un sous-traitant, en groupes (« 000 480 090 00013 ») pour
+ *  l'aide de sa case dans la carte du devis — deux homonymes ne se
+ *  confondent plus (ÉCRAN-11). */
+export function siretDuSousTraitant(st) {
+  return st && st.siret ? formaterSiret(st.siret) : null;
+}
+
+/**
+ * CE QU'ÉCRIT UN APPUI sur une case « Travaux couverts » d'un signe de
+ * qualité ou du label d'un sous-traitant, dans « Mon entreprise » (2b-6) —
+ * `liste` : les clés que le formulaire tient ; `cle` : la case touchée.
+ *   - la case se coche ou se décoche, et l'ORDRE est celui de
+ *     `TRAVAUX_ENERGIE` (le décret, puis les deux lignes de prudence) : deux
+ *     lignes qui portent les mêmes travaux s'écrivent pareil ;
+ *   - la DERNIÈRE case décochée rend `null`, JAMAIS `[]` — la base refuse le
+ *     tableau vide (`emetteur_label_categories_check`), et « rien de coché »
+ *     ne s'écrit qu'une façon : vide de valeur (la leçon de 2b-5) ;
+ *   - une clé inconnue (ou « aucun », qui n'existe que sur le devis) ne
+ *     change rien ;
+ *   - rien n'est jamais coché sans un appui : cette fonction ne part que
+ *     d'une case touchée. Toujours un tableau NEUF.
+ * Le jumeau de `sansLabelApresAppui` (`devis.js`), que ce fichier n'importe
+ * pas : la liste des clés vient de la MÊME source, `travaux-energie.js`.
+ */
+export function categoriesApresAppui(liste, cle) {
+  if (!CLES_DES_TRAVAUX.includes(cle)) return Array.isArray(liste) && liste.length ? [...liste] : null;
+  const avant = Array.isArray(liste) ? liste.filter((c) => CLES_DES_TRAVAUX.includes(c)) : [];
+  const apres = avant.includes(cle) ? avant.filter((c) => c !== cle) : [...avant, cle];
+  const range = CLES_DES_TRAVAUX.filter((c) => apres.includes(c));
+  return range.length ? range : null;
+}
+
+/* ================================================================== */
+/*  LES TEXTES DES DEUX SECTIONS ET DES DEUX FORMULAIRES (2b-6, A.5)    */
+/* ================================================================== */
+/*
+ * ÉCRITS UNE FOIS, ICI, et pas dans les écrans : `FicheEmetteur.js`,
+ * `FicheLabel.js`, `FicheSousTraitant.js` et `MonEntreprise.js` les lisent,
+ * et `verifier-emetteur` les compare MOT POUR MOT à l'annexe A.5 du cahier
+ * 2b-6 — puis leur applique la règle du vocabulaire (T10) : jamais
+ * « certifié » (la pièce s'appelle un certificat), jamais « agréé », jamais
+ * « vérifié », jamais « garanti ». Une phrase rangée dans un composant ne se
+ * ferait tourner par aucun contrôle.
+ *
+ * Ce que ces textes disent, et pourquoi :
+ *   - « rien ne s’affiche sur votre fiche publique » (T29) : le badge public
+ *     « Certification RGE » de « Modifier mon profil » reste À PART, et
+ *     2b-6 ne le lit ni ne l'écrit — un artisan qui range ici son label ne
+ *     doit pas croire qu'il apparaît sur sa fiche ;
+ *   - l'aide des travaux couverts (DROIT-4) : le 3° couvre le 4°, le 5° le
+ *     6°, dans un seul sens (arrêté du 1er décembre 2015) — ce n'est PAS une
+ *     règle d'Opus, c'est une phrase qui dit de cocher les deux ;
+ *   - la pratique commerciale trompeuse (DROIT-16, les mots de L. 121-4 2°) ;
+ *   - une page de l'annuaire RGE n'est pas délivrée par l'organisme (DROIT-16) ;
+ *   - le justificatif d'un sous-traitant se FOURNIT au client (DROIT-16),
+ *     et ce sont des données d'une AUTRE entreprise, rangées sous la
+ *     responsabilité de l'artisan, qui partent avec SON compte (DROIT-11) ;
+ *   - sous « Non », ce que l'enregistrement retire, AVANT de le faire
+ *     (BASE-7, ÉCRAN-13) : le déclencheur efface le label d'un sous-traitant
+ *     hors « Oui ».
+ */
+export const TEXTES_SIGNES_DE_QUALITE = Object.freeze({
+  section: 'Vos signes de qualité (label RGE)',
+  phrase: 'Les signes de qualité que vous détenez, avec leur certificat. Opus s’en sert pour vos devis de travaux '
+    + 'd’économies d’énergie ; rien ne s’affiche sur votre fiche publique.',
+  vide: 'Vous n’avez déclaré aucun signe de qualité. Vos devis de travaux d’économies d’énergie vous le demanderont.',
+  nonLus: 'Vos signes de qualité n’ont pas pu être lus.',
+  nonLusEdition: 'Vos signes de qualité n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : fermez « Mon '
+    + 'entreprise », puis rouvrez-la pour réessayer.',
+  ajouter: 'Ajouter un signe de qualité',
+  modifier: 'Modifier ce signe de qualité',
+  modifierLesMiens: 'Modifier mes signes de qualité',
+  declarerLesMiens: 'Déclarer mes signes de qualité',
+  formulaire: 'Un signe de qualité (label RGE)',
+  organisme: 'Organisme qui l’a délivré',
+  organismePlaceholder: 'Nom de l’organisme',
+  intitule: 'Intitulé',
+  intitulePlaceholder: 'Tel qu’il figure sur votre certificat',
+  reference: 'Numéro du certificat (facultatif)',
+  travaux: 'Travaux couverts',
+  travauxAide: 'Cochez les travaux que votre certificat nomme. Une qualification pour un appareil au bois relié au '
+    + 'chauffage central vaut aussi pour un poêle ou un insert indépendant, et une pompe à chaleur de chauffage pour un '
+    + 'chauffe-eau thermodynamique : cochez-les aussi.',
+  fin: 'Valable jusqu’au',
+  finAide: 'La date de fin de validité écrite sur votre certificat ; sans date, demandez-la à l’organisme.',
+  joindre: 'Joindre le certificat',
+  joindreAide: 'Le certificat ou la décision que l’organisme vous a remis. La loi demande de le joindre au devis ; une '
+    + 'page de l’annuaire RGE n’est pas délivrée par l’organisme et n’en tient pas lieu.',
+  joint: 'Certificat joint',
+  voir: 'Voir le certificat',
+  trompeuse: 'Afficher un signe de qualité sans l’avoir obtenu est une pratique commerciale trompeuse : ne déclarez '
+    + 'que ceux que vous détenez, pour les travaux qu’ils couvrent.',
+  enregistrer: 'Enregistrer ce signe de qualité',
+  retirer: 'Retirer ce signe de qualité',
+});
+
+export const TEXTES_SOUS_TRAITANTS = Object.freeze({
+  section: 'Vos sous-traitants',
+  phrase: 'Les entreprises qui font une partie, ou la totalité, de vos travaux. Rangées ici une fois, elles se '
+    + 'choisissent ensuite dans vos devis de travaux d’économies d’énergie.',
+  vide: 'Vous n’avez encore aucun sous-traitant.',
+  nonLus: 'Vos sous-traitants n’ont pas pu être lus.',
+  nonLusEdition: 'Vos sous-traitants n’ont pas pu être lus. Ce n’est pas que vous n’en avez aucun : fermez « Mon '
+    + 'entreprise », puis rouvrez-la pour réessayer.',
+  ajouter: 'Ajouter un sous-traitant',
+  modifier: 'Modifier ce sous-traitant',
+  modifierLesMiens: 'Modifier mes sous-traitants',
+  declarerLesMiens: 'Déclarer mes sous-traitants',
+  formulaire: 'Un sous-traitant',
+  nom: 'Nom ou raison sociale',
+  nomPlaceholder: 'Le nom de l’entreprise',
+  siret: 'Numéro SIRET',
+  siretPlaceholder: 'Quatorze chiffres',
+  detient: 'Détient-il un label RGE ?',
+  non: 'Non',
+  oui: 'Oui',
+  retraitDuLabel: 'En enregistrant, son label et son justificatif seront retirés de cette fiche.',
+  travaux: 'Travaux couverts',
+  fin: 'Valable jusqu’au',
+  joindre: 'Joindre son justificatif',
+  joindreAide: 'Le certificat que son organisme lui a remis, et qu’il vous a transmis. La loi demande de le fournir à '
+    + 'votre client avec le devis.',
+  joint: 'Justificatif joint',
+  voir: 'Voir le justificatif',
+  tiers: 'Ces informations concernent une autre entreprise : ne rangez que ce qui sert à vos devis. Retirer un '
+    + 'sous-traitant ne retire pas son justificatif de votre espace : il part avec votre compte.',
+  enregistrer: 'Enregistrer ce sous-traitant',
+  retirer: 'Retirer ce sous-traitant',
+  retirerCoute: 'Les brouillons qui le citent le perdront.',
+});
 
 function plusUnAn(jour) {
   const [a, m, j] = jour.split('-');

@@ -719,8 +719,11 @@ console.log('\n10. La base du lot S-c : les formes ENTIÈRES, les déclencheurs,
     professional_profiles: 'insert or update', users: 'insert or update',
   };
   /* `emetteur_lieux_depot` (lot 2b-5) : son déclencheur, comme celui des
-     assurances, pose la date de création pour tous les rôles. */
-  const EXCLUES = ['devis', 'devis_lignes', 'base_postes', 'emetteur', 'emetteur_assurances', 'emetteur_lieux_depot', 'tarifs_pro',
+     assurances, pose la date de création pour tous les rôles.
+     `emetteur_labels` et `emetteur_sous_traitants` (lot 2b-6) : même chose,
+     par `tient_le_label()` et `tient_le_sous_traitant()`. */
+  const EXCLUES = ['devis', 'devis_lignes', 'base_postes', 'emetteur', 'emetteur_assurances', 'emetteur_lieux_depot',
+    'emetteur_labels', 'emetteur_sous_traitants', 'tarifs_pro',
     'clients', 'professional_partners', 'demandes_pro', 'entreprise_registre', 'journal_admin', 'journal_ia',
     'remontees', 'signalements', 'metier_demandes', 'specialites_proposees', 'notifications', 'blocages',
     'saved_posts', 'follows', 'post_likes', 'conversations', 'sos_availability'];
