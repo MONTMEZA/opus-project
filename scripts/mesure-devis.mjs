@@ -195,6 +195,14 @@
  * P5 (il faudrait déplacer l'horloge) : l'iPhone et le banc de
  * `verifier-tva`.
  *
+ * « POUR LE REMETTRE » PASSE AU VERT (demande du propriétaire, 25/11/2026)
+ * — la DERNIÈRE section, et elle recharge la page : une démonstration neuve,
+ * dont l'entreprise est complétée PAR L'ÉCRAN (les boutons de la carte). Elle
+ * mesure le filet, le titre et la coche verts, l'étiquette parlée, la hauteur
+ * à 393 et à 320, et un vert qui ne s'allume JAMAIS pendant un envoi, sur une
+ * ligne non enregistrée ni sur une lecture coupée. Ni VoiceOver sur la coche,
+ * ni le vert lu en plein soleil : l'iPhone.
+ *
  * Pour la base de postes, pas davantage : ni le clavier sous les feuilles,
  * ni `hitSlop` (la croix d'une feuille mesure 18 × 20 ici, environ 38 × 40
  * au doigt), ni VoiceOver, ni Hermes. Deux `Modal` empilées ne laissent
@@ -204,7 +212,7 @@
  * `verifier-postes` (G) sous `node`, et sur la vraie base par l'API seulement
  * (une écriture tardive n'y touche aucune ligne ; l'écran ne l'a jamais montré).
  */
-import { readFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fabriquerDevisDemo, fabriquerPostesDemo, DEVIS_DEMO_IDS } from '../src/data/devis-demo.js';
 import {
   totauxDevis, sousTotaux, totalLigne, validerLigne, trierLignes, UNITES, cleDeLigne,
@@ -10753,6 +10761,463 @@ await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration 
   await toucher(parLibelle('Fermer « Mon entreprise »'));
   await page.setViewportSize(tailleAvant);
   await attendre(400);
+});
+
+/* ======================================================================== */
+/*  « POUR LE REMETTRE » PASSE AU VERT — demande du propriétaire, 25/11/2026 */
+/* ======================================================================== */
+/* Le propriétaire, le 25/11 : « quand tout est ok c'est écrit ce devis 0
+   point votre entreprise 0 point, c'est très bien, mais la case reste
+   toujours en orange ; on pourrait la faire passer en vert quand tout est
+   ok, comme ça en un coup d'œil on sait que c'est bon ».
+   La RÈGLE est `ligneRemisePrete` (devis.js) : `verifier-devis` la fait
+   tourner sur sa grille, sous `node`. Ce que seul un navigateur dit, c'est
+   ici : la COULEUR CALCULÉE du filet et des deux titres, la COCHE posée
+   devant le titre (la couleur ne porte jamais l'information seule),
+   l'étiquette parlée, la HAUTEUR — le vert ne doit rien faire sauter sous le
+   doigt —, et surtout que le vert ne s'allume JAMAIS sur ce qui n'est pas
+   sûr : pendant un envoi, sur une ligne non enregistrée (la dernière liste
+   peut pourtant dire « aucun point » partout), sur une lecture coupée.
+
+   POURQUOI EN DERNIER, ET POURQUOI ELLE RECHARGE LA PAGE. Pour voir le vert,
+   il faut une entreprise SANS point ; la démonstration en garde cinq exprès
+   (`verifier-emetteur` l'exige — comme chez le propriétaire, dont VIES
+   refuse encore le n° de TVA). On les complète PAR L'ÉCRAN, comme le ferait
+   l'artisan : les boutons « Compléter dans « Mon entreprise » » de la carte
+   « Pour le remettre ». Or la démonstration GARDE en mémoire ce qu'on y
+   écrit, tant que la page vit : posée plus haut, cette section aurait changé
+   ce que mesurent les suivantes (le « Muret » de 2b-1 compte les points de
+   l'entreprise et les veut ≥ 1 ; 2b-4 veut des frais de déplacement NON
+   déclarés et « aucun avis » sur le « Muret »…). Elle vient donc APRÈS la
+   dernière section, juste avant le résumé, et ne laisse rien derrière elle
+   que ce résumé. Et elle RECHARGE la page d'abord : la section d'avant a
+   quitté le compte de démonstration (un particulier passé pro, rangé en
+   mémoire sous l'identifiant même du compte de démonstration) ; une
+   démonstration NEUVE rend le « Muret » tel qu'il naît — 0 point au devis,
+   cinq à l'entreprise —, qu'on joue cette section seule (`SEULEMENT=…`) ou
+   après toutes les autres.
+
+   CE QUI EST SIMULÉ : rien de plus que les crochets décrits en tête du
+   fichier — l'écriture RALENTIE (`__opusPauseEcritures`), pour que l'envoi
+   dure le temps d'être vu, et la lecture de la liste COUPÉE
+   (`__opusListe.casser`). Le reste est le vrai code de l'écran.
+
+   LES COULEURS ATTENDUES sont écrites EN TOUTES LETTRES : une mesure qui les
+   importerait du code ne vérifierait rien. Elles sont comparées à `theme.js`
+   une fois, pour dire laquelle a bougé si l'une bouge.
+
+   LES CAPTURES, pour le propriétaire : à 393 points de large et à DEUX
+   pixels par point (la densité d'un iPhone), posée par le protocole de
+   Chrome le temps de la photo, puis rendue. Avec `--captures <dossier>`
+   seulement, comme les autres. */
+const VERT_FILET = 'rgb(31, 122, 77)'; // C.ok, ce qu'on dessine (le filet, la coche)
+const VERT_TITRE = 'rgb(28, 112, 70)'; // C.okTexte, ce qu'on lit (le titre)
+const ORANGE_FILET = 'rgb(177, 66, 18)'; // C.accentTexte, l'orange de lecture
+const BLEU_TITRE_BAS = 'rgb(27, 75, 107)'; // C.accent2, le titre de la rangée du bas
+const VERT_DIT = 'Pour le remettre : ce devis — aucun point · votre entreprise — aucun point. Ouvrir la liste';
+const RIEN_NE_MANQUE_DEVIS = 'Ce devis : rien ne manque de ce qu’Opus vérifie aujourd’hui.';
+const EN_ROUTE_DIT = `Pour le remettre : ${EN_ROUTE_LIGNE} Ouvrir la liste`;
+const NON_LUE_DIT = 'Liste de ce qu’il manque non lue. Réessayer';
+/* Les cinq points de l'entreprise de démonstration (exigés par
+   `verifier-emetteur` : capital, médiateur, modalités d'exécution,
+   réclamations, frais de déplacement), par l'étiquette parlée de leur
+   bouton — celle que `actionDuPoint` compose. */
+const COMPLETER = 'Compléter dans « Mon entreprise » : ';
+const POINTS_DEMO = [
+  'Capital social', 'Médiateur de la consommation', 'Vos conditions, modalités d’exécution',
+  'Vos conditions, réclamations', 'Vos tarifs',
+].map((s) => `${COMPLETER}${s}`);
+/* Le glyphe « check » de Feather, LU dans la table de `@expo/vector-icons` :
+   la coche se reconnaît à son glyphe, pas à sa seule présence — le chevron
+   de la ligne est un glyphe Feather lui aussi. */
+const GLYPHES_FEATHER = JSON.parse(readFileSync('node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Feather.json', 'utf8'));
+const GLYPHE_CHECK = GLYPHES_FEATHER.check;
+
+/** LA SONDE, posée dans la page : les deux lignes « Pour le remettre » (la
+ *  première est celle du haut, la dernière la rangée du bas), et pour
+ *  chacune ce qu'on VOIT — le filet gauche, la couleur CALCULÉE du titre, le
+ *  glyphe posé dans la rangée du titre (la coche), les boîtes — et ce qu'elle
+ *  DIT (son étiquette). Le titre se cherche hors des gabarits cachés. */
+const poserLaSondeDuVert = () => page.evaluate(() => {
+  window.__opusSondeVert = () => {
+    const plat = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+    const glyphe = (t) => {
+      const c = [...String(t || '')];
+      return c.length === 1 && c[0].codePointAt(0) >= 0xe000 && c[0].codePointAt(0) <= 0xf8ff;
+    };
+    const boite = (x) => {
+      const b = x.getBoundingClientRect();
+      const r = (v) => Math.round(v * 10) / 10;
+      return { x: r(b.x), y: r(b.y), l: r(b.width), h: r(b.height) };
+    };
+    const lire = (e) => {
+      const cs = getComputedStyle(e);
+      const titre = [...e.querySelectorAll('*')]
+        .find((x) => x.children.length === 0 && plat(x.innerText) === 'Pour le remettre' && !x.closest('[aria-hidden="true"]')) || null;
+      const rangee = titre ? titre.parentElement : null;
+      const glyphes = rangee ? [...rangee.querySelectorAll('*')].filter((x) => x !== titre && x.children.length === 0 && glyphe(x.innerText)) : [];
+      const g = glyphes[0] || null;
+      return {
+        libelle: plat(e.getAttribute('aria-label')),
+        filet: cs.borderLeftColor,
+        filetLargeur: cs.borderLeftWidth,
+        titre: titre ? getComputedStyle(titre).color : null,
+        tailleTitre: titre ? getComputedStyle(titre).fontSize : null,
+        boiteTitre: titre ? boite(titre) : null,
+        boiteRangee: rangee ? boite(rangee) : null,
+        coche: g ? {
+          code: g.innerText.codePointAt(0), couleur: getComputedStyle(g).color, taille: getComputedStyle(g).fontSize, boite: boite(g),
+        } : null,
+        nbGlyphes: glyphes.length,
+        hauteur: Math.round(e.getBoundingClientRect().height * 10) / 10,
+      };
+    };
+    const ls = [...document.querySelectorAll('[aria-label^="Pour le remettre"], [aria-label^="Liste de ce qu"]')];
+    return { nb: ls.length, haut: ls.length ? lire(ls[0]) : null, bas: ls.length > 1 ? lire(ls[ls.length - 1]) : null };
+  };
+});
+const sondeDuVert = () => page.evaluate(() => window.__opusSondeVert());
+/* Une ligne est « verte » dès que l'UN de ses signes l'est : le filet (en
+   haut seulement — la rangée du bas n'en a pas), le titre, ou une coche. Un
+   vert à moitié posé est un vert. */
+const estVerte = (x, avecFilet) => !!x && ((avecFilet && x.filet === VERT_FILET) || x.titre === VERT_TITRE || x.titre === VERT_FILET || !!x.coche);
+
+/** L'ENREGISTREUR : à chaque image, ce que les deux lignes disent et si
+ *  elles sont vertes — on ne garde que les changements. Un vert qui ne
+ *  durerait qu'une image se verrait ici, pas dans un relevé ponctuel. */
+const demarrerLeTemoinDuVert = () => page.evaluate(({ vf, vt }) => {
+  window.__opusVertVus = [];
+  window.__opusVertFin = false;
+  const vert = (x, f) => !!x && ((f && x.filet === vf) || x.titre === vt || x.titre === vf || !!x.coche);
+  let prec = '';
+  const pas = () => {
+    const s = window.__opusSondeVert();
+    const v = [s.haut ? s.haut.libelle : null, vert(s.haut, true), s.bas ? s.bas.libelle : null, vert(s.bas, false)];
+    const k = JSON.stringify(v);
+    if (k !== prec) { window.__opusVertVus.push(v); prec = k; }
+    if (!window.__opusVertFin) requestAnimationFrame(pas);
+  };
+  requestAnimationFrame(pas);
+}, { vf: VERT_FILET, vt: VERT_TITRE });
+const arreterLeTemoinDuVert = () => page.evaluate(() => { window.__opusVertFin = true; return window.__opusVertVus.slice(); });
+/** Juger un enregistrement : l'état mesuré (`vu`, une étiquette) a bien été
+ *  VU — sinon la mesure ne prouve rien —, aucune image n'a été verte sous une
+ *  autre étiquette que celle du 0 / 0 sûr, toute image qui dit le 0 / 0 sûr
+ *  est verte (le dessin ne traîne pas derrière le texte), et la dernière est
+ *  verte des deux côtés. */
+const jugerLeTemoin = (vus, vu, ou) => {
+  const vuOk = vus.some(([h]) => vu(h));
+  const fautes = vus.filter(([h, vh, b, vb]) => (vh || vb) && !(h === VERT_DIT && b === VERT_DIT));
+  const enRetard = vus.filter(([h, vh, b, vb]) => (h === VERT_DIT && !vh) || (b === VERT_DIT && !vb));
+  const der = vus[vus.length - 1] || [];
+  /* Ce qui est noté : chaque changement, l'étiquette du haut PUIS celle du
+     bas (sans « Pour le remettre : » ni « Ouvrir la liste »), et leur vert. */
+  const court = (x) => String(x || '').replace(/^Pour le remettre : /, '').replace(/\.? ?Ouvrir la liste$/, '');
+  noter(`${ou} — images enregistrées (changements)`, `${vus.length} : ${JSON.stringify(vus.map(([h, vh, b, vb]) => [court(h), vh, court(b), vb]))}`);
+  verifier(`${ou} : l’état mesuré a bien été VU (${vus.filter(([h]) => vu(h)).length} image(s)), et le vert ne s’est allumé à AUCUNE `
+    + `image sous une autre étiquette que « aucun point · aucun point » (${fautes.length} faute(s))`, vuOk && fautes.length === 0,
+  JSON.stringify(fautes.slice(0, 4)));
+  verifier(`${ou} : toute image qui dit « aucun point · aucun point » est verte en haut ET en bas (${enRetard.length} en retard), et la `
+    + 'dernière l’est', enRetard.length === 0 && der[0] === VERT_DIT && der[1] === true && der[2] === VERT_DIT && der[3] === true,
+  JSON.stringify([enRetard.slice(0, 3), der]));
+};
+
+/** Les hauteurs des deux lignes, à 393 puis à 320 points de large (et
+ *  l'étiquette lue à chaque largeur, pour qu'on sache ce qui a été mesuré). */
+const hauteursDuVert = async () => {
+  const r = {};
+  for (const [L, H] of [[393, 852], [320, 568]]) {
+    await page.setViewportSize({ width: L, height: H });
+    await attendre(700);
+    const s = await sondeDuVert();
+    r[L] = { haut: s.haut && s.haut.hauteur, bas: s.bas && s.bas.hauteur, dit: s.haut && s.haut.libelle };
+  }
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(600);
+  return r;
+};
+
+/** UNE CAPTURE À DEUX PIXELS PAR POINT : `Emulation.setDeviceMetricsOverride`
+ *  le temps de la photo (Playwright ne change pas la densité d'un contexte
+ *  déjà ouvert), puis la densité d'avant, rendue et VÉRIFIÉE. `cible` est
+ *  amenée au milieu de l'écran d'abord. Rend `{ chemin, largeur, hauteur }`
+ *  lus dans l'en-tête du PNG, ou `null` sans `--captures`. */
+const captureAuDouble = async (nom, cible = null) => {
+  if (!DOSSIER) return null;
+  if (cible) {
+    await cible.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+    await attendre(500);
+  }
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 2, mobile: true });
+  await attendre(700);
+  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  const octets = Buffer.from(data, 'base64');
+  const chemin = `${DOSSIER}/${nom}.png`;
+  writeFileSync(chemin, octets);
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 393, height: 852, deviceScaleFactor: 1, mobile: true });
+  await page.setViewportSize({ width: 393, height: 852 });
+  await attendre(500);
+  const info = { chemin, largeur: octets.readUInt32BE(16), hauteur: octets.readUInt32BE(20) };
+  noter(`capture « ${nom} »`, `${info.chemin} (${info.largeur} × ${info.hauteur} pixels)`);
+  return info;
+};
+
+/** Le compte de l'entreprise, lu dans la carte ouverte : « Votre entreprise —
+ *  N point(s) » ou « aucun point ». */
+const pointsDeLEntreprise = async () => {
+  const m = /Votre entreprise — (aucun point|\d+ points?)/.exec(await texteLu());
+  return m ? nombre(m[1]) : null;
+};
+const boutonsCompleter = async () => (await page.getByRole('button', { name: /^Compléter dans « Mon entreprise » : / })
+  .evaluateAll((es) => es.map((e) => e.getAttribute('aria-label') || ''))).map(net);
+const enregistrerMonEntreprise = async () => {
+  await toucher(bouton('Enregistrer mes informations de devis'));
+  const ok = await jusqua(async () => (await bouton(/^(Compléter|Modifier) mes informations de devis$/).count()) > 0, 8000);
+  verifier('« Mon entreprise » : enregistré, la fiche revient en lecture', !!ok, (await texteLu()).slice(0, 400));
+  await toucher(parLibelle('Fermer « Mon entreprise »'));
+  await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
+  await attendre(600);
+};
+
+await section('Pour le remettre passe au VERT quand rien ne manque — « Muret de clôture », l’entreprise complétée par l’écran : le filet, le titre, la coche, l’étiquette, la hauteur à 393 et 320 ; jamais de vert pendant un envoi, sur une ligne non enregistrée ni sur une lecture coupée (demande du 25/11/2026)', async () => {
+  const tailleAvant = page.viewportSize();
+  try {
+    /* LES COULEURS ATTENDUES, face à `theme.js`. */
+    verifier(`les couleurs attendues sont celles de theme.js (ok ${rgbDuTheme('ok')}, okTexte ${rgbDuTheme('okTexte')}, accentTexte `
+      + `${ORANGE_DE_LECTURE}, accent2 ${rgbDuTheme('accent2')}) ; le glyphe « check » de Feather : ${GLYPHE_CHECK}`,
+    rgbDuTheme('ok') === VERT_FILET && rgbDuTheme('okTexte') === VERT_TITRE && ORANGE_DE_LECTURE === ORANGE_FILET
+      && rgbDuTheme('accent2') === BLEU_TITRE_BAS && Number.isInteger(GLYPHE_CHECK) && GLYPHE_CHECK !== GLYPHES_FEATHER['chevron-right']);
+
+    /* UNE DÉMONSTRATION NEUVE (voir plus haut), sur le compte pro. */
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
+    await jusqua(async () => (await page.getByText('JE SUIS UN PROFESSIONNEL').count()) > 0
+      || (await page.getByRole('tab', { name: 'Profil' }).count()) > 0, 120000, 500);
+    if (await page.getByText('JE SUIS UN PROFESSIONNEL').count()) {
+      await toucher(page.getByText('JE SUIS UN PROFESSIONNEL').first());
+      await attendre(3000);
+    }
+    if (await page.getByText('Plus tard').first().count()) { await toucher(page.getByText('Plus tard').first()); await attendre(800); }
+    await toucher(page.getByRole('tab', { name: 'Profil' }));
+    await attendre(900);
+    if ((await parLibelle('Mes devis : les brouillons de chiffrage').count()) === 0) {
+      await toucher(page.getByText('Se déconnecter', { exact: true }).first());
+      await page.getByText('JE SUIS UN PROFESSIONNEL').first().waitFor({ timeout: 10000 });
+      await toucher(page.getByText('JE SUIS UN PROFESSIONNEL').first());
+      await attendre(3000);
+      if (await page.getByText('Plus tard').first().count()) { await toucher(page.getByText('Plus tard').first()); await attendre(800); }
+    }
+    exiger(/MODE DÉMONSTRATION/.test(await texte()), 'la page rechargée est en démonstration, sur le compte pro');
+    await ecouterLaListe(true);
+    await poserLaSondeDuVert();
+    await allerAMesDevis();
+    await ouvrirLeDevis('Muret de clôture');
+
+    /* a. AU DÉPART : le devis complet, l'entreprise non — orange. */
+    const c0 = await compteDeLaLigne();
+    exiger(c0.devis === 0 && c0.entreprise >= 1, `« Muret de clôture » : 0 point au devis, au moins 1 à l’entreprise (« ${c0.libelle} »)`);
+    const s0 = await sondeDuVert();
+    const jugerOrange = (s, ou) => {
+      verifier(`${ou} — la ligne du haut : filet ${s.haut && s.haut.filet} ${s.haut && s.haut.filetLargeur} (orange de lecture), titre `
+        + `${s.haut && s.haut.titre} (orange de lecture), aucune coche`,
+      s.nb === 2 && !!s.haut && s.haut.filet === ORANGE_FILET && s.haut.filetLargeur === '3px' && s.haut.titre === ORANGE_FILET
+        && !s.haut.coche && s.haut.nbGlyphes === 0, JSON.stringify(s.haut));
+      verifier(`${ou} — la rangée du bas : titre ${s.bas && s.bas.titre} (bleu, C.accent2), aucune coche`,
+        !!s.bas && s.bas.titre === BLEU_TITRE_BAS && !s.bas.coche && s.bas.nbGlyphes === 0, JSON.stringify(s.bas));
+    };
+    jugerOrange(s0, `au départ (« ${c0.libelle.slice(19, 80)} »)`);
+    const h0 = await hauteursDuVert();
+    noter(`hauteurs au départ, l’entreprise à ${c0.entreprise} points (haut / bas)`, JSON.stringify(h0));
+
+    /* b. L'ENTREPRISE À 0 POINT, PAR L'ÉCRAN — d'abord quatre points sur
+       cinq, par le bouton « Capital social » de la carte : « Mon
+       entreprise » s'ouvre en édition sur cette section, et le reste se
+       remplit dans la même édition, comme l'artisan le ferait. */
+    await ouvrirLaListe();
+    const boutons0 = await boutonsCompleter();
+    exiger(boutons0.length === POINTS_DEMO.length && POINTS_DEMO.every((b) => boutons0.includes(b)),
+      `la carte propose les cinq boutons attendus de l’entreprise de démonstration (${JSON.stringify(boutons0)})`);
+    await toucher(bouton(POINTS_DEMO[0]));
+    await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+    await bouton('Enregistrer mes informations de devis').waitFor({ timeout: 6000 });
+    await attendre(600);
+    await toucher(page.getByRole('radio', { name: 'Un montant', exact: true }));
+    await toucher(parLibelle('Capital social, en euros'));
+    await taper('1000');
+    await toucher(parLibelle('Choisir mon médiateur dans la liste officielle'));
+    await parLibelle('Chercher un médiateur dans la liste officielle').waitFor({ timeout: 6000 });
+    const mediateur = page.getByRole('button', { name: /\. Site\s*:\s/ }).first();
+    noter('le médiateur choisi dans la liste', net((await mediateur.getAttribute('aria-label')) || '').slice(0, 90));
+    await toucher(mediateur);
+    const adresse = page.getByPlaceholder(/^Telle qu.elle figure sur votre contrat/).first();
+    await adresse.waitFor({ timeout: 6000 });
+    await toucher(adresse);
+    await taper('Adresse de démonstration du médiateur');
+    await toucher(page.getByPlaceholder(/^Comment se déroulent vos travaux/).first());
+    await taper('Texte de démonstration — vos modalités d’exécution.');
+    await toucher(page.getByPlaceholder(/^Comment un client vous adresse une réclamation/).first());
+    await taper('Texte de démonstration — vos réclamations.');
+    await enregistrerMonEntreprise();
+    const p1 = await jusqua(async () => ((await pointsDeLEntreprise()) === 1 ? 1 : null), DELAI_ECRITURE + 4000);
+    const boutons1 = await boutonsCompleter();
+    verifier(`la carte, relue à la fermeture de « Mon entreprise » : « Votre entreprise — 1 point », celui des frais de déplacement `
+      + `(${JSON.stringify(boutons1)})`, p1 === 1 && boutons1.length === 1 && boutons1[0] === POINTS_DEMO[4], (await texteLu()).slice(0, 300));
+    await fermerLaListe();
+
+    /* a (suite) et d. UN SEUL POINT : toujours orange, aucune coche — et la
+       hauteur de référence, à 393 puis à 320. */
+    const c1 = await compteDeLaLigne();
+    verifier(`la ligne du haut : « ${c1.libelle} »`, c1.devis === 0 && c1.entreprise === 1, c1.libelle);
+    jugerOrange(await sondeDuVert(), 'un point à l’entreprise');
+    const h1 = await hauteursDuVert();
+    noter('hauteurs, l’entreprise à 1 point (haut / bas)', JSON.stringify(h1));
+    await captureAuDouble('vert-01-orange-haut', ligneHaut());
+    await captureAuDouble('vert-02-orange-bas', page.locator('[aria-label^="Pour le remettre"]').last());
+
+    /* b (fin). LE DERNIER POINT, par SON bouton : « Je ne facture pas de
+       frais de déplacement » — l'interrupteur, le 0 d'un choix. */
+    await ouvrirLaListe();
+    await toucher(bouton(POINTS_DEMO[4]));
+    await parLibelle('Fermer « Mon entreprise »').waitFor({ timeout: 6000 });
+    await bouton('Enregistrer mes informations de devis').waitFor({ timeout: 6000 });
+    await attendre(600);
+    const frais = page.getByRole('switch', { name: /^Je ne facture pas de frais de déplacement/ }).first();
+    await toucher(frais);
+    verifier('« Je ne facture pas de frais de déplacement » est allumé', (await frais.getAttribute('aria-checked')) === 'true');
+    await enregistrerMonEntreprise();
+    const p0 = await jusqua(async () => ((await pointsDeLEntreprise()) === 0 ? 'zero' : null), DELAI_ECRITURE + 4000);
+    verifier('la carte, relue : « Votre entreprise — aucun point », et plus aucun bouton « Compléter dans « Mon entreprise » »',
+      p0 === 'zero' && (await boutonsCompleter()).length === 0, (await texteLu()).slice(0, 300));
+    await fermerLaListe();
+
+    /* c. LE VERT : la ligne du haut et la rangée du bas, à 0 / 0. */
+    const vertVu = await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    const s2 = await sondeDuVert();
+    verifier(`l’étiquette parlée de la ligne du haut, EXACTE : « ${s2.haut && s2.haut.libelle} »`, !!vertVu && !!s2.haut && s2.haut.libelle === VERT_DIT);
+    verifier(`…et celle de la rangée du bas, la MÊME : « ${s2.bas && s2.bas.libelle} »`, !!s2.bas && s2.bas.libelle === VERT_DIT);
+    const jugerVert = (x, ou, avecFilet) => {
+      const t = x && x.boiteTitre;
+      const c = x && x.coche;
+      if (avecFilet) {
+        verifier(`${ou} : le filet ${x && x.filet}, ${x && x.filetLargeur} (vert ${VERT_FILET}, la même largeur que l’orange)`,
+          !!x && x.filet === VERT_FILET && x.filetLargeur === '3px', JSON.stringify(x));
+      }
+      verifier(`${ou} : le titre ${x && x.titre} (vert ${VERT_TITRE})`, !!x && x.titre === VERT_TITRE, JSON.stringify(x));
+      verifier(`${ou} : UNE coche — le glyphe « check » (${c && c.code}), ${c && c.couleur}, ${c && c.taille} comme le titre (${x && x.tailleTitre}) `
+        + `— posée AVANT le titre (coche ${c && c.boite.x}+${c && c.boite.l}, titre ${t && t.x}), pas plus haute que lui `
+        + `(${c && c.boite.h} ≤ ${t && t.h}), la rangée du titre de la hauteur du titre (${x && x.boiteRangee && x.boiteRangee.h})`,
+      !!x && !!c && !!t && x.nbGlyphes === 1 && c.code === GLYPHE_CHECK && c.couleur === VERT_FILET && c.taille === x.tailleTitre
+        && c.boite.x + c.boite.l <= t.x + 0.5 && c.boite.h <= t.h + 0.5 && Math.abs(x.boiteRangee.h - t.h) <= 0.5, JSON.stringify(x));
+    };
+    jugerVert(s2.haut, 'la ligne du haut', true);
+    jugerVert(s2.bas, 'la rangée du bas', false);
+
+    /* d. LA HAUTEUR NE BOUGE PAS : orange (1 point) et vert, à 393 et 320. */
+    const h2 = await hauteursDuVert();
+    noter('hauteurs, en vert (haut / bas)', JSON.stringify(h2));
+    for (const L of [393, 320]) {
+      verifier(`${L} points : la ligne du haut fait ${h1[L].haut} en orange (1 point) et ${h2[L].haut} en vert ; la rangée du bas, `
+        + `${h1[L].bas} et ${h2[L].bas} — rien ne saute`, h1[L].haut != null && h1[L].haut === h2[L].haut && h1[L].bas != null
+        && h1[L].bas === h2[L].bas && h2[L].dit === VERT_DIT, JSON.stringify([h1[L], h2[L]]));
+    }
+    await captureAuDouble('vert-03-vert-haut', ligneHaut());
+    await captureAuDouble('vert-04-vert-bas', page.locator('[aria-label^="Pour le remettre"]').last());
+    const dpr = await page.evaluate(() => window.devicePixelRatio);
+    verifier(`après les captures, la densité d’avant est rendue (devicePixelRatio ${dpr})`, dpr === 1);
+
+    /* h. LA CARTE, OUVERTE DEPUIS LA LIGNE VERTE : « rien ne manque » ne
+       se dit jamais seul — « Pas encore vérifié : … » le suit. */
+    await ouvrirLaListe();
+    const tc = await texteLu();
+    const iRien = tc.indexOf(RIEN_NE_MANQUE_DEVIS);
+    const suite = iRien >= 0 ? tc.slice(iRien + RIEN_NE_MANQUE_DEVIS.length).trim() : '';
+    verifier(`la carte dit « ${RIEN_NE_MANQUE_DEVIS} », PUIS « Pas encore vérifié : … » (la phrase entière de 2b-6)`,
+      iRien >= 0 && suite.startsWith(PAS_ENCORE_2B6), suite.slice(0, 120));
+    noter('la carte, pour l’entreprise', (/Votre entreprise[^\n]*/.exec(tc) || ['(rien)'])[0]);
+    await captureAuDouble('vert-05-carte');
+    await fermerLaListe();
+
+    /* e. ON TAPE DANS « Objet du devis » : pendant la frappe puis pendant
+       l'envoi (ralenti à 1,5 s pour être vu), « Des changements partent… »
+       — jamais de vert ; il revient quand la liste revient. */
+    const objet = parLibelle('Objet du devis');
+    const objetAvant = await objet.inputValue();
+    await demarrerLeTemoinDuVert();
+    await page.evaluate(() => { window.__opusPauseEcritures = 1500; });
+    await toucher(objet);
+    await page.keyboard.press('End');
+    await taper(' vert');
+    const pendantFrappe = await jusqua(async () => (await libelleLigne()) === EN_ROUTE_DIT, 3000);
+    const s3 = await sondeDuVert();
+    verifier(`pendant la FRAPPE : « ${s3.haut && s3.haut.libelle} », filet ${s3.haut && s3.haut.filet}, titres ${s3.haut && s3.haut.titre} / `
+      + `${s3.bas && s3.bas.titre} — pas de vert, pas de coche`, !!pendantFrappe && !estVerte(s3.haut, true) && !estVerte(s3.bas, false)
+      && s3.haut.filet === ORANGE_FILET, JSON.stringify(s3));
+    await objet.evaluate((e) => e.blur());
+    await attendre(300);
+    const s4 = await sondeDuVert();
+    verifier(`pendant l’ENVOI (le champ quitté) : « ${s4.haut && s4.haut.libelle} » — pas de vert`,
+      !!s4.haut && s4.haut.libelle === EN_ROUTE_DIT && !estVerte(s4.haut, true) && !estVerte(s4.bas, false), JSON.stringify(s4));
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    await attendre(300);
+    jugerLeTemoin(await arreterLeTemoinDuVert(), (h) => h === EN_ROUTE_DIT, 'e. la frappe et l’envoi');
+    await page.evaluate(() => { window.__opusPauseEcritures = null; });
+    await objet.fill(objetAvant);
+    await objet.evaluate((e) => e.blur());
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+
+    /* f. UNE LIGNE LAISSÉE INCOMPLÈTE : la dernière liste dit encore
+       « aucun point » partout — mais cette ligne-là n'y est pas comptée.
+       Pas de vert. Retirée, le vert revient. */
+    await demarrerLeTemoinDuVert();
+    await toucher(page.getByRole('button', { name: 'Ajouter un poste chiffré', exact: true }).first());
+    await attendre(400);
+    await page.locator('[aria-label="Désignation de la ligne"]').last().fill('Chaperon (essai du vert)');
+    await fermerCarte();
+    const PAS_COMPTE_DIT = `Pour le remettre : ${PAS_COMPTE_1} Dernière liste : ce devis — aucun point · votre entreprise — aucun point. Ouvrir la liste`;
+    const incomplete = await jusqua(async () => (await libelleLigne()) === PAS_COMPTE_DIT, 4000);
+    const s5 = await sondeDuVert();
+    verifier(`une ligne non enregistrée : « ${s5.haut && s5.haut.libelle} » — la dernière liste à 0 / 0, et PAS de vert`,
+      !!incomplete && !estVerte(s5.haut, true) && !estVerte(s5.bas, false) && s5.haut.filet === ORANGE_FILET, JSON.stringify(s5));
+    await captureAuDouble('vert-06-ligne-incomplete-orange', ligneHaut());
+    await toucher(parLibelle('Ligne incomplète. La compléter'));
+    await toucher(parLibelle('Retirer cette ligne'));
+    await toucher(parLibelle('Confirmer : retirer cette ligne'));
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    await attendre(300);
+    jugerLeTemoin(await arreterLeTemoinDuVert(), (h) => h === PAS_COMPTE_DIT, 'f. la ligne incomplète, puis retirée');
+
+    /* g. UNE LECTURE DE LA LISTE COUPÉE : l'écriture passe, la relecture
+       échoue — la ligne devient « Réessayer », jamais verte ; « Réessayer »
+       relit, et le vert revient. */
+    await demarrerLeTemoinDuVert();
+    await page.evaluate(() => { window.__opusListe.casser = 'reseau'; });
+    await objet.fill(`${objetAvant} (lecture coupée)`);
+    await objet.evaluate((e) => e.blur());
+    const coupee = await jusqua(async () => (await libelleLigne()) === NON_LUE_DIT, DELAI_ECRITURE + 4000);
+    const s6 = await sondeDuVert();
+    verifier(`une lecture COUPÉE : « ${s6.haut && s6.haut.libelle} », en haut ET en bas — pas de vert`,
+      !!coupee && !!s6.bas && s6.bas.libelle === NON_LUE_DIT && !estVerte(s6.haut, true) && !estVerte(s6.bas, false)
+      && s6.haut.filet === ORANGE_FILET, JSON.stringify(s6));
+    await page.evaluate(() => { window.__opusListe.casser = null; });
+    await toucher(page.getByRole('button', { name: NON_LUE_DIT, exact: true }).first());
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    await attendre(300);
+    jugerLeTemoin(await arreterLeTemoinDuVert(), (h) => h === NON_LUE_DIT, 'g. la lecture coupée, puis « Réessayer »');
+    await objet.fill(objetAvant);
+    await objet.evaluate((e) => e.blur());
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    verifier('à la fin, l’objet rendu, la ligne est verte de nouveau', estVerte((await sondeDuVert()).haut, true)
+      && (await libelleLigne()) === VERT_DIT, await libelleLigne());
+    await quitterLaSaisie();
+  } finally {
+    await page.evaluate(() => {
+      window.__opusPauseEcritures = null;
+      window.__opusVertFin = true;
+      if (window.__opusListe) { window.__opusListe.casser = null; window.__opusListe.ecoute = false; }
+    }).catch(() => {});
+    await page.setViewportSize(tailleAvant).catch(() => {});
+    await attendre(400);
+  }
 });
 
 /* LA PROPRIÉTÉ DES RANGÉES, en un chiffre : combien de propositions ont été
