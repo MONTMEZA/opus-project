@@ -47,3 +47,8 @@ yarn-error.*
 # Captures d'écran de référence (lourdes, régénérables)
 captures/
 supabase/.temp/
+
+# Les copies de travail temporaires des agents (git worktree). Elles vivent
+# dans .claude/worktrees le temps d'une tâche, puis disparaissent : elles ne
+# partent jamais sur GitHub.
+.claude/worktrees/
