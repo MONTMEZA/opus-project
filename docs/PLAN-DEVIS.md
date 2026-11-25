@@ -4263,3 +4263,45 @@ les dix-sept textes composés de « Mon entreprise », les deux phrases de
 
 **La suite** : **2c** (numéro, aperçu au format final, PDF, remise, tri des
 devis remis) ; puis, en lot à part, la signature par le client dans Opus.
+
+### 10.25 Les décisions du 25/11/2026 — avant l'étape 2c
+
+**« Pour le remettre » passe au vert** quand la liste LUE ne compte aucun
+point (demande du propriétaire, essayée sur son iPhone le 25/11 ; commits
+`1994d76`, `1636258`, `8eec95e` ; la règle `ligneRemisePrete`, devis.js).
+
+**Le découpage de 2c** (lecture de cinq angles, synthèse et critique le
+25/11 ; les notes de travail ne sont pas dans le dépôt) : 2c-0 la
+reconstruction ; 2c-1 l'aperçu au format final ; 2c-2 les blocs de droit du
+document ; 2c-3a l'instantané calculé par la base (l'aperçu lu depuis la
+base) ; 2c-3b numéroter, figer, archiver (une fiche de lecture, pas un mode
+lecture seule de la saisie) ; 2c-4 donner le devis au client ; 2c-5 ranger
+les devis remis, et la version 2. Les essais SQL entrent dans GitHub dans une
+étape à part (2c-E), avant 2c-3a. Le cahier de chaque étape tranchera ce que
+la critique a relevé (l'abandon d'une remise après l'envoi du fichier, les
+pièces en JPEG, la cascade de suppression du compte de l'artisan, le modèle
+local du stockage, une version d'Opus en retard qui archiverait un document
+incomplet).
+
+| question | réponse du propriétaire | ce qu'elle change |
+|---|---|---|
+| 2c en essai ? | **« Oui, que des essais »** | `STATUT` reste `'essai'` pendant tout 2c ; chaque PDF porte « Document d'essai — sans valeur » ; aucun ne part chez un vrai client |
+| l'aperçu avant de valider | **une vraie page A4 dans Opus** | un PDF provisoire marqué « APERÇU » sur chaque page, sans bouton pour l'envoyer ni l'imprimer, effacé à la fermeture ; un module d'affichage dans la reconstruction |
+| les pièces jointes (attestation, certificats, justificatifs) | **« Plusieurs fichiers, un seul envoi »** | une seule feuille de partage iOS avec plusieurs fichiers ; un module de partage multiple dans la reconstruction (le Share de React Native et `expo-sharing` n'en passent qu'un) ; le devis part de l'adresse ou du numéro de l'ARTISAN, jamais d'Opus |
+| la reconstruction de 2c-0 | **le nom « Opus » sous l'icône, son logo au démarrage, une application de test séparée « Opus Dev »** | `expo.name` ; `expo-splash-screen` ; un `app.config.js` qui donne au profil `development` sa propre identité (A-FAIRE, « Donner au build de développement sa propre identité ») |
+| la connexion dans la même reconstruction | **« Oui, l'ajouter demain »** | ce qu'il faudra pour « mot de passe oublié » (un schéma de lien qui rouvre Opus) et pour « Se connecter avec Google / avec Apple » (Apple l'impose quand Google est proposé) entre dans 2c-0, SANS aucun code qui s'en sert |
+| quand construire « mot de passe oublié » et Google / Apple | **« Après le PDF des devis »** | un lot à part, juste après 2c ; il demandera une vraie boîte d'envoi sur `opus-project.com` (l'envoi intégré de Supabase est très limité), la configuration Google et Apple, et le SIRET vérifié pour un artisan qui s'inscrit par Google |
+
+**Ce qu'il faut savoir avant la reconstruction** : Opus n'a **aucun bouton
+« mot de passe oublié »** (vérifié le 25/11) ; « Opus Dev » est une
+application NOUVELLE, qui demande de se reconnecter — le propriétaire doit
+connaître son mot de passe. L'ancien build reste installé à côté.
+
+**Et avant la première remise** : l'attestation décennale enregistrée sur le
+compte principal finit vers le 01/01/2027 ; sans la nouvelle, la liste
+refusera tout devis où la décennale est « Oui ».
+
+**Les factures** (module 3, plus tard) : à partir du 01/09/2027, les
+factures entre entreprises passent par une plateforme agréée, et les ventes
+aux particuliers sont déclarées par elle (e-reporting) — c'est déjà relevé
+plus haut dans ce plan (CGI 290, LFR 2022 art. 26). Opus devra s'y brancher.

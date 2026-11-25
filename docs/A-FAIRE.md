@@ -5373,3 +5373,25 @@ nationale (un prix de Paris n'est pas un prix de Provence). Et un chiffre
 porte sur un **poste précis**, jamais sur un mot : dans ses propres devis, « le
 placo » vaut 48 €/m² en contre-cloison simple, 58 € en cloison isolée et 72 €
 en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
+
+### Décidé le 25/11/2026 — à ne pas perdre
+
+- [ ] **« Mot de passe oublié »** : Opus n'en a pas (vérifié le 25/11). À
+  construire **juste après 2c**, avec « Se connecter avec Google » et « avec
+  Apple » (décision du 25/11). Il faudra : une boîte d'envoi sur
+  `opus-project.com` (à créer par le propriétaire chez IONOS) branchée sur
+  Supabase, le lien qui rouvre Opus (son schéma entre dans la reconstruction
+  de 2c-0), la configuration Google Cloud et Apple, et le SIRET vérifié
+  quand un artisan s'inscrit par Google.
+- [ ] **L'attestation décennale du compte principal finit vers le
+  01/01/2027** : demander la nouvelle à l'assureur, et la joindre dans « Mon
+  entreprise ».
+- [ ] **La clé Anthropic est refusée** (25/11, « invalid x-api-key » dans les
+  journaux de la fonction `ai`, quatre appels) : le propriétaire crée une
+  nouvelle clé et la range dans Supabase → Edge Functions → Secrets
+  (`ANTHROPIC_API_KEY`), guidé pas à pas. Puis vérifier dans les journaux
+  qu'un appel passe.
+- [ ] **« Votre entreprise — aucun point » sans phrase dessous** dans la carte
+  « Pour le remettre » (relevé par la mesure du vert, 25/11) : « Ce devis » a
+  sa phrase « rien ne manque… », l'entreprise non. Demandé au propriétaire,
+  pas encore décidé.
