@@ -10888,9 +10888,16 @@ const estVerte = (x, avecFilet) => !!x && ((avecFilet && x.filet === VERT_FILET)
 const demarrerLeTemoinDuVert = () => page.evaluate(({ vf, vt }) => {
   window.__opusVertVus = [];
   window.__opusVertFin = false;
+  /* UNE GÉNÉRATION par enregistreur : relancé juste après l'arrêt du
+     précédent, avant qu'une image ait passé, l'ancienne boucle relirait le
+     drapeau remis à faux et continuerait — deux boucles, des doublons dans
+     le relevé (vu le 25/11 sur la lecture coupée). Seule la dernière vit. */
+  window.__opusVertGen = (window.__opusVertGen || 0) + 1;
+  const gen = window.__opusVertGen;
   const vert = (x, f) => !!x && ((f && x.filet === vf) || x.titre === vt || x.titre === vf || !!x.coche);
   let prec = '';
   const pas = () => {
+    if (window.__opusVertGen !== gen) return;
     const s = window.__opusSondeVert();
     const v = [s.haut ? s.haut.libelle : null, vert(s.haut, true), s.bas ? s.bas.libelle : null, vert(s.bas, false)];
     const k = JSON.stringify(v);
