@@ -75,7 +75,7 @@ import {
 import {
   C, F, T, S, R, TOUCHE, APPUI, interligne,
 } from '../theme';
-import { ChevronRight } from './icons';
+import { ChevronRight, Check } from './icons';
 import {
   PAS_ENCORE_VERIFIE, RIEN_NE_MANQUE_POUR_CE_DEVIS, LISTE_NON_LUE, phraseDesMentionsParticulier,
   TITRE_POUR_REMETTRE, titresDesParties, premierePhrase, actionDuPoint, secondeActionDuPoint,
@@ -89,7 +89,9 @@ import {
 /**
  * `variante` : `'haut'` (sous le bandeau, une carte de structure au filet
  * orange de lecture) ou `'bas'` (sous « Conditions », la forme de sa
- * rangée). Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
+ * rangée). QUAND RIEN NE MANQUE (`pret`, la règle `ligneRemisePrete` de
+ * devis.js — demande du propriétaire, 25/11/2026), le filet du haut et les
+ * deux titres passent au VERT, avec une coche devant le titre. Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
  * passe, et la ligne ne grandit pas — la liste ne saute pas sous le doigt
  * (E-6). Quand quelque chose n'est pas compté sur un devis en base, elle
  * dit la phrase ET le décompte (décision D-A du propriétaire, 05/11/2026 au
@@ -152,7 +154,7 @@ export function LigneRemise({
   const dit = texteDeLaLigneRemise({
     etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, renvoi,
   });
-  const { contenu, compte, gabarits, aDire } = dit;
+  const { contenu, compte, gabarits, aDire, pret } = dit;
   let action = null;
   if (dit.action === 'ouvrir') action = onOuvrir;
   else if (dit.action === 'reessayer') action = onReessayer;
@@ -163,7 +165,15 @@ export function LigneRemise({
   const corps = (
     <>
       <View style={s.ligneCorps}>
-        <Text style={variante === 'bas' ? s.ligneTitreBas : s.ligneTitre}>{TITRE_POUR_REMETTRE}</Text>
+        {/* LE VERT (demande du propriétaire, 25/11/2026 ; la règle :
+            `ligneRemisePrete`, devis.js) : quand la liste LUE ne compte aucun
+            point, le titre passe au vert, précédé d'une coche — la couleur
+            ne porte jamais l'information seule. La coche tient dans la
+            hauteur du titre : la ligne ne grandit pas. */}
+        <View style={s.ligneTitreRangee}>
+          {pret && <Check size={variante === 'bas' ? T.corps : T.petit} color={C.ok} />}
+          <Text style={[variante === 'bas' ? s.ligneTitreBas : s.ligneTitre, pret && s.ligneTitrePret]}>{TITRE_POUR_REMETTRE}</Text>
+        </View>
         {gabarits ? (
           /* LES GABARITS DONNENT LA HAUTEUR — le plus grand —, le texte lu
              est posé dessus (REL-1, D-A bis, RELIRE3-1). */
@@ -188,7 +198,7 @@ export function LigneRemise({
       {!!action && <ChevronRight size={16} color={C.accent2} />}
     </>
   );
-  const style = variante === 'bas' ? s.ligneBas : s.ligneHaut;
+  const style = [variante === 'bas' ? s.ligneBas : s.ligneHaut, pret && variante !== 'bas' && s.ligneHautPrete];
   if (!action) {
     return <View style={style} accessible accessibilityLabel={aDire}>{corps}</View>;
   }
@@ -476,9 +486,18 @@ const s = StyleSheet.create({
   ligneBas: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCHE, paddingVertical: S.sm,
   },
+  /* …ET QUAND RIEN NE MANQUE (`ligneRemisePrete`, demande du propriétaire
+     du 25/11/2026) : le filet passe au vert, `C.ok` — un élément graphique,
+     5,4 : 1 sur le blanc, comme la « réussite en vert » de `SaisieTva`. La
+     même largeur (3 points) : rien ne se décale. */
+  ligneHautPrete: { borderLeftColor: C.ok },
   ligneCorps: { flex: 1, minWidth: 0, gap: S.xs },
+  ligneTitreRangee: { flexDirection: 'row', alignItems: 'center', gap: S.xs },
   ligneTitre: { fontFamily: F.oswald6, fontSize: T.petit, color: C.accentTexte },
   ligneTitreBas: { fontFamily: F.oswald6, fontSize: T.corps, color: C.accent2 },
+  /* Le titre vert : `okTexte`, le vert qu'on LIT — 6,08 : 1 sur le blanc de
+     la ligne du haut, 4,78 sur le fond de la rangée du bas. */
+  ligneTitrePret: { color: C.okTexte },
   /* DEUX LIGNES RÉSERVÉES : la hauteur ne bouge pas d'un état à l'autre. */
   ligneTexte: {
     fontFamily: F.inter, fontSize: T.courant, color: C.ink, lineHeight: interligne(T.courant),

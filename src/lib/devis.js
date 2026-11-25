@@ -5852,9 +5852,57 @@ export function texteDeLaLigneRemise({
      ni la phrase, ni l'état (hors « pas en base ») —, une seule écriture de
      la règle (relecture 6). */
   const gabarits = garderLaPlace({ enBase: etat !== 'pas_en_base', pasCompte, renvoi }) ? GABARITS_DE_LA_LIGNE : null;
+  /* LE VERT (demande du propriétaire, 25/11/2026) : une seule écriture de
+     la règle, `ligneRemisePrete`. */
+  const pret = ligneRemisePrete({
+    etat, lue, enLecture, pasCompte, renvoi,
+  });
   return {
-    contenu, compte, gabarits, action, aDire,
+    contenu, compte, gabarits, action, aDire, pret,
   };
+}
+
+/**
+ * LA LIGNE « POUR LE REMETTRE » PASSE AU VERT — demande du propriétaire, le
+ * 25/11/2026 : « quand tout est ok c'est écrit ce devis 0 point votre
+ * entreprise 0 point, c'est très bien, mais la case reste toujours en
+ * orange ; on pourrait la faire passer en vert quand tout est ok, comme ça en
+ * un coup d'œil on sait que c'est bon ».
+ *
+ * Vrai SI ET SEULEMENT SI la ligne affiche, à cet instant, un compte SÛR de
+ * zéro point partout :
+ *   - l'état est `liste` — une liste LUE, rien en route (une écriture du
+ *     devis, un champ tapé, la relecture qui suit « Mon entreprise » sont
+ *     `en_route`), pas un échec, pas une première lecture, pas un brouillon
+ *     hors de la base ;
+ *   - aucune relecture n'est en cours (`enLecture`) : la ligne dit alors
+ *     « · mise à jour… », et le vert attend son retour ;
+ *   - rien n'est « pas compté » (`pasCompte`) : une ligne non enregistrée
+ *     n'est pas jugée par la base ;
+ *   - aucune écriture renvoyée après un échec n'est en route (`renvoi`) ;
+ *   - la liste lue porte un TOTAL entier, et il vaut 0 : aucun point du
+ *     devis, de l'entreprise, ni des mentions dues à un particulier — une
+ *     clé que l'écran ne connaît pas compte aussi (`lireMotifsDeRemise` range
+ *     tout motif dans une partie). Une liste sans `total` lisible n'est
+ *     JAMAIS verte : la règle se ferme quand elle doute.
+ * Sinon, l'orange de lecture, comme avant. Une valeur douteuse (un `renvoi`
+ * ou un `enLecture` qui ne vaut pas `false`) ÉTEINT le vert : il ne s'allume
+ * que sur ce qui est sûr.
+ *
+ * CE QUE LE VERT NE DIT PAS : que le devis est « conforme ». Il dit ce que
+ * dit le texte de la ligne — aucun point de ce qu'Opus vérifie aujourd'hui —,
+ * et la carte garde « Pas encore vérifié : … » sous « rien ne manque ». Les
+ * AVIS (« À vérifier ») ne l'éteignent pas : ils ne bloquent jamais la
+ * remise. Et la couleur ne porte pas l'information seule : le texte dit
+ * « aucun point », et une coche se pose devant le titre (on distingue mal
+ * l'orange du vert quand on voit mal le rouge et le vert).
+ */
+export function ligneRemisePrete({
+  etat, lue = null, enLecture = false, pasCompte = null, renvoi = false,
+} = {}) {
+  if (etat !== 'liste' || !!enLecture || !!pasCompte || !!renvoi) return false;
+  if (!lue || typeof lue !== 'object' || !Number.isSafeInteger(lue.total)) return false;
+  return lue.total === 0;
 }
 
 /**

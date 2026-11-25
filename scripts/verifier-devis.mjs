@@ -10875,7 +10875,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   const ligne = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
   verifier('la LIGNE (haut et bas) dit ce que décide `texteDeLaLigneRemise` (fait tourner plus haut), et rien d’autre : aucune phrase '
     + 'ni aucun compte écrit dans le composant ; `ouvrir` ouvre la carte, `reessayer` RELIT, sinon ce n’est PAS une cible',
-  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, renvoi, \}\); const \{ contenu, compte, gabarits, aDire \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
+  /const dit = texteDeLaLigneRemise\(\{ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, renvoi, \}\); const \{ contenu, compte, gabarits, aDire, pret \} = dit; let action = null; if \(dit\.action === 'ouvrir'\) action = onOuvrir; else if \(dit\.action === 'reessayer'\) action = onReessayer;/.test(ligne)
     && !/phraseDesEndroits|LISTE_|MISE_A_JOUR|\bpoints\(/.test(ligne) && /if \(!action\) \{ return <View/.test(ligne)
     /* LA PHRASE ET LE DÉCOMPTE (décision D-A), le décompte à la ligne ; ET
        LES GABARITS (relecture 2 de 2b-1, REL-1 ; D-A bis, 06/11) : quand
@@ -10894,7 +10894,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
        deux lignes réservées, comme avant. Plus aucune « troisième ligne »
        réservée : c'était elle qui sautait (92 → 74 points). */
     && ligne.includes('const dit = texteDeLaLigneRemise({ etat, lue, enLecture, erreurReessayable, erreurPhrase, pasCompte, relecture, '
-      + 'renvoi, }); const { contenu, compte, gabarits, aDire } = dit;')
+      + 'renvoi, }); const { contenu, compte, gabarits, aDire, pret } = dit;')
     /* …et elle ne reçoit plus la dernière liste lue (relecture 4) : les
        gabarits n'en dépendent plus */
     && !/\bderniere\b/.test(sansCommentairesJs(corpsDeFonction(PR, 'LigneRemise') || ''))
@@ -10917,6 +10917,106 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /superpose: \{ flexDirection: 'row', alignItems: 'flex-start' \},/.test(prE) && /couche: \{ width: '100%' \},/.test(prE)
     && /coucheSuivante: \{ marginLeft: '-100%' \},/.test(prE) && !/\bgabarit\b(?!s|-|:| \?)/.test(ligne.replace(/s\.gabarit\b/g, ''))
     && /minHeight: 2 \* interligne\(T\.courant\),/.test(prE) && /minHeight: 2 \* interligne\(T\.petit\),/.test(prE), ligne.slice(0, 300));
+  /* LE VERT — demande du propriétaire, le 25/11/2026 : « quand tout est ok
+     […] la case reste toujours en orange ; on pourrait la faire passer en
+     vert ». `ligneRemisePrete` (devis.js) est la SEULE écriture de la règle,
+     FAITE TOURNER ici contre un oracle écrit à part, sur toute la grille des
+     états de la ligne : vert SI ET SEULEMENT SI la liste est LUE (`liste`),
+     sans relecture, sans « pas compté », sans renvoi en route, et que son
+     TOTAL entier vaut 0 — une clé inconnue compte, une liste sans total
+     lisible n'est jamais verte. Et `texteDeLaLigneRemise` rend la MÊME
+     valeur (`pret`), avec, chaque fois qu'elle est vraie, le texte EXACT
+     « ce devis — aucun point · votre entreprise — aucun point » : le vert ne
+     se pose jamais sur un autre texte. */
+  {
+    const lueVide = D.lireMotifsDeRemise([]);
+    const lues = {
+      nulle: null,
+      vide: lueVide,
+      unPointDuDevis: D.lireMotifsDeRemise([{ rang: 1, cle: 'devis_client', phrase: 'x', nature: 'loi' }]),
+      unPointDeLEntreprise: D.lireMotifsDeRemise([{ rang: 101, cle: 'mediateur', phrase: 'x', nature: 'loi' }], { sections: { mediateur: 'x' } }),
+      uneMentionParticulier: D.lireMotifsDeRemise([{ rang: 102, cle: 'conso_x', phrase: 'x', nature: 'loi' }], { sections: { conso_x: 'x' } }),
+      uneCleInconnue: D.lireMotifsDeRemise([{ rang: 7, cle: 'cle_venue_d_ailleurs', phrase: 'x' }]),
+      unMotifIllisible: D.lireMotifsDeRemise([null]),
+      malformee: {},
+      totalEnTexte: { ...lueVide, total: '0' },
+      totalNegatif: { ...lueVide, total: -1 },
+    };
+    const ETATS_LIGNE = ['pas_en_base', 'en_route', 'echec', 'lecture', 'liste', 'inconnu', undefined];
+    const oracle = (o) => o.etat === 'liste' && o.lueNom === 'vide' && o.enLecture === false && o.pasCompte === null && o.renvoi === false;
+    const faux = [];
+    let vrais = 0;
+    let cas = 0;
+    ETATS_LIGNE.forEach((etat) => Object.keys(lues).forEach((lueNom) => [false, true].forEach((enLecture) => [null, 'Une ligne n’est pas enregistrée.']
+      .forEach((pasCompte) => [false, true].forEach((renvoi) => {
+        cas += 1;
+        const o = {
+          etat, lue: lues[lueNom], enLecture, pasCompte, renvoi,
+        };
+        const attendu = oracle({ ...o, lueNom });
+        const vu = D.ligneRemisePrete(o);
+        const dit = D.texteDeLaLigneRemise({ ...o, erreurReessayable: true });
+        if (attendu) vrais += 1;
+        if (vu !== attendu || dit.pret !== vu
+          || (vu && (dit.contenu !== 'ce devis — aucun point · votre entreprise — aucun point' || dit.compte !== null
+            || dit.gabarits !== null || dit.action !== 'ouvrir'))) {
+          faux.push(`${etat}/${lueNom}/lecture:${enLecture}/pasCompte:${!!pasCompte}/renvoi:${renvoi} → ${vu} (${dit.pret}), attendu ${attendu}`);
+        }
+      })))));
+    verifier(`le VERT (25/11/2026), FAIT TOURNER sur ${cas} états de la ligne : \`ligneRemisePrete\` n’est vraie que pour une liste LUE, sans `
+      + 'relecture, sans « pas compté », sans renvoi, au TOTAL entier nul — une clé inconnue ou un motif illisible comptent, une liste sans '
+      + 'total lisible n’est jamais verte —, `texteDeLaLigneRemise` rend la même valeur, et le vert ne se pose que sur « ce devis — aucun '
+      + 'point · votre entreprise — aucun point »', faux.length === 0 && vrais === 1 && typeof D.ligneRemisePrete() === 'boolean'
+      && D.ligneRemisePrete() === false && D.ligneRemisePrete({ etat: 'liste', lue: lueVide }) === true
+      && D.ligneRemisePrete({ etat: 'liste', lue: lueVide, renvoi: 'oui' }) === false
+      && D.ligneRemisePrete({ etat: 'liste', lue: lueVide, enLecture: 1 }) === false,
+    faux.slice(0, 6).join(' | '));
+    /* LA RÈGLE, COMPARÉE ENTIÈRE (la discipline des corps de calcul du lot
+       2a) : changer la condition du vert se DÉCIDE — le corps, cette forme et
+       la grille ci-dessus, dans le même lot. */
+    const corpsPret = sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'ligneRemisePrete') || '');
+    verifier('…sa règle est écrite UNE fois, comparée entière : `etat === \'liste\'`, `enLecture`, `pasCompte`, `renvoi`, puis un total '
+      + 'entier qui vaut 0',
+    corpsPret === "{ if (etat !== 'liste' || !!enLecture || !!pasCompte || !!renvoi) return false; if (!lue || typeof lue !== "
+      + "'object' || !Number.isSafeInteger(lue.total)) return false; return lue.total === 0; }"
+      && /export function ligneRemisePrete\(\{\s*etat, lue = null, enLecture = false, pasCompte = null, renvoi = false,\s*\} = \{\}\)/
+        .test(sansCommentairesJs(lire('src/lib/devis.js')))
+      && sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'texteDeLaLigneRemise') || '')
+        .includes('const pret = ligneRemisePrete({ etat, lue, enLecture, pasCompte, renvoi, }); return { contenu, compte, gabarits, action, aDire, pret, };'),
+    corpsPret.slice(0, 300));
+    /* LE DESSIN : `PourRemettre.js` LIT `pret` (jamais ne le recalcule), et
+       ne s'en sert qu'à trois endroits — la coche devant le titre, le titre
+       vert, le filet vert du haut. L'orange reste la couleur ordinaire : le
+       vert ne fait que s'AJOUTER. La coche tient dans la hauteur du titre
+       (sa taille est celle du titre) : la ligne ne grandit pas. */
+    const ligneS = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
+    const contraste = (a, b) => {
+      const lum = (h) => {
+        const v = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+          .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+      };
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const Cth = (await import('../src/theme.js')).C;
+    verifier('…et le DESSIN lit `pret` sans le recalculer, à TROIS endroits seulement : la coche `C.ok` à la taille du titre, le titre '
+      + '`okTexte`, le filet `C.ok` du haut — l’orange de lecture reste le filet et le titre ordinaires ; et les contrastes tiennent : '
+      + 'le filet et la coche ≥ 3 : 1 sur le blanc et sur le fond, le titre ≥ 4,5 : 1 sur les deux',
+    !/ligneRemisePrete/.test(PR) && (ligneS.match(/\bpret\b/g) || []).length === 4
+      && ligneS.includes('<View style={s.ligneTitreRangee}> {pret && <Check size={variante === \'bas\' ? T.corps : T.petit} color={C.ok} />} '
+        + '<Text style={[variante === \'bas\' ? s.ligneTitreBas : s.ligneTitre, pret && s.ligneTitrePret]}>{TITRE_POUR_REMETTRE}</Text> </View>')
+      && ligneS.includes("const style = [variante === 'bas' ? s.ligneBas : s.ligneHaut, pret && variante !== 'bas' && s.ligneHautPrete];")
+      && /import \{ ChevronRight, Check \} from '\.\/icons';/.test(PR)
+      && /ligneHautPrete: \{ borderLeftColor: C\.ok \},/.test(prE) && /ligneTitrePret: \{ color: C\.okTexte \},/.test(prE)
+      && /ligneTitreRangee: \{ flexDirection: 'row', alignItems: 'center', gap: S\.xs \},/.test(prE)
+      && /borderLeftWidth: 3, borderLeftColor: C\.accentTexte,/.test(prE)
+      && /ligneTitre: \{ fontFamily: F\.oswald6, fontSize: T\.petit, color: C\.accentTexte \},/.test(prE)
+      && /ligneTitreBas: \{ fontFamily: F\.oswald6, fontSize: T\.corps, color: C\.accent2 \},/.test(prE)
+      && contraste(Cth.ok, Cth.surface) >= 3 && contraste(Cth.ok, Cth.bg) >= 3
+      && contraste(Cth.okTexte, Cth.surface) >= 4.5 && contraste(Cth.okTexte, Cth.bg) >= 4.5,
+    ligneS.slice(0, 400));
+  }
   verifier('…et la carte, en échec, propose « Liste non lue — Réessayer » (`onReessayer`), sans liste dessous',
     /\{etat === 'echec' && \( <View style=\{s\.echec\}> \{erreurReessayable \? \( <Pressable onPress=\{onReessayer\}[^]*?\{LISTE_NON_LUE\}/.test(prE));
   /* UN BOUTON PAR POINT : chaque point de chaque partie est rendu par
