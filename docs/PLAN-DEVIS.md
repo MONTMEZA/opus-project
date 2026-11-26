@@ -4307,3 +4307,51 @@ refusera tout devis où la décennale est « Oui ».
 factures entre entreprises passent par une plateforme agréée, et les ventes
 aux particuliers sont déclarées par elle (e-reporting) — c'est déjà relevé
 plus haut dans ce plan (CGI 290, LFR 2022 art. 26). Opus devra s'y brancher.
+
+### 10.26 L'étape 2c-E — FAITE le 26/11/2026 : les essais SQL tournent tout seuls
+
+**Aucun changement de la base ni de l'application** : un outil, construit
+avant 2c-3a comme le décidait le 10.25. `npm run essais-sql` crée une grappe
+PostgreSQL 16 neuve, y rejoue `schema.sql` deux fois, puis les 33 essais de
+`supabase/` (le rattrapage du lot T compris), les quatre procédures à deux
+sessions et la parité de `cas-remise.json` (237 cas), chacun jugé par son
+oracle figé dans `supabase/essais-attendus/` ; GitHub fait la même chose à
+chaque envoi, dans un job à part (`essais-sql`). Commits `caa30e5` (la
+construction) et `4f52007` (la relecture, 22 constats, et ses corrections) ;
+ce qui est construit et vérifié : CLAUDE.md, « Les essais SQL tournent tout
+seuls — étape 2c-E » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape
+2c-E » et §2.3. **Pas encore joué sur la machine de GitHub** : rien n'est
+envoyé.
+
+Ce que 2c doit savoir :
+
+- **toute section nouvelle de `schema.sql` amène son essai**, rangé dans la
+  liste fermée de `scripts/jouer-essais-sql.mjs` (sinon `verifier-atelier`
+  et le script rougissent) ; son oracle se fige par
+  `npm run essais-sql -- --figer <essai>`, jamais à la main, et le diff de
+  l'oracle se relit avant le commit : `--figer` ne refuse que la perte
+  TOTALE des refus, des valeurs ou des cas (V4) ;
+- **une date fixe d'un essai s'écrit dans l'essai** : elle n'est alors
+  jamais normalisée. Jamais une date FUTURE, sauf lointaine comme 2099 :
+  elle ferait rougir l'essai le jour venu (V2) ;
+- **2c-3 figera des devis remis** : c'est la raison de l'étape. Avant 2c-3a,
+  fermer les trous de couverture où une régression RÉELLE passe au vert —
+  C6 (une fonction `security definer` rendue à `anon`), C5 (l'horodatage du
+  journal d'administration remis à `now()`) — et, si possible, C7 et C12 ;
+- **le juge n'est pas encore tenu partout** : le décompte des rouges dans
+  la boucle du script peut être avalé sans que rien ne rougisse (V1) ;
+- **`npm run verifier` ne joue toujours aucun SQL** : il doit passer sans
+  base. Les deux se lancent ; après le commit et avant l'envoi,
+  `npm run essais-sql -- --comme-github` rejoue depuis un clone propre.
+
+**Les questions laissées au propriétaire** : m4, deux écarts à la consigne
+de départ (aucun service `postgres:16` dans le job, mais le PostgreSQL 16 de
+l'image, dont la version mineure n'est pas fixée ; `scripts/verifier.mjs` a
+gagné un délai par contrôle, et deux contrôles importent le script des
+essais) ; l'étiquette annotée de `d0560e8` que proposait la critique du
+cahier (non posée : elle ne part qu'avec `git push --tags`). Et il doit être
+prévenu, avant le premier envoi, qu'un e-mail « Run failed » peut arriver :
+deux passages par envoi (push et pull request), deux e-mails possibles.
+
+**La suite** : 2c-0, la reconstruction ; puis 2c-1, l'aperçu au format
+final.

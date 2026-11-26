@@ -1537,13 +1537,33 @@ Et le piège déjà identifié pour la suite : sans le greffon
 part **sans les autorisations APNs** et rien n'arrive — sans aucune erreur
 pour l'expliquer.
 
-### 2.3 Rejouer `schema.sql` ne doit plus être manuel
+### 2.3 Rejouer `schema.sql` ne doit plus être manuel — ✅ FAIT sur une base neuve le 26/11/2026 (étape 2c-E) ; la vraie base, toujours à la main
 
 C'est ce qui a cassé l'application le 21/09 : six commits d'avance de
 l'application sur la base. Voir la règle dans `CLAUDE.md`.
 
 Piste : des migrations numérotées plutôt qu'un fichier unique à rejouer, ou
 au minimum un script qui compare `information_schema` à ce que le code attend.
+
+**Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` crée une grappe
+PostgreSQL 16 neuve, y rejoue `schema.sql` deux fois, puis les 33 essais de
+`supabase/`, les quatre procédures à deux sessions et la parité de
+`cas-remise.json` — 38 entrées, chacune jugée par son oracle figé
+(`supabase/essais-attendus/`), en environ 2 min 20 s. GitHub fait la même
+chose à chaque envoi, dans un job à part (`essais-sql`). CLAUDE.md, « Les
+essais SQL tournent tout seuls ».
+
+**Ce qui reste** :
+
+- **la VRAIE base** : une section nouvelle de `schema.sql` n'y arrive
+  toujours que par une migration construite, simulée et appliquée à la
+  main, avec votre accord, et la vraie base se compare encore au dépôt à la
+  main (l'empreinte du catalogue) à chaque migration. Les migrations
+  numérotées de la piste ne sont pas faites ;
+- **le premier passage sur la machine de GitHub** n'a pas eu lieu (rien
+  n'est envoyé), et PostgreSQL 17, celui de la vraie base, n'est pas joué ;
+- les trous de couverture et le reste de la relecture : « Après l'étape
+  2c-E — ce qui reste ».
 
 ---
 
@@ -2291,12 +2311,15 @@ construisant le lot 1, d'avant le module ou hors de son périmètre :
   (186 mesures, en vrais événements tactiles). À lancer à la main avant toute
   retouche de ces écrans, ou à brancher dans la CI avec un serveur (compte
   rendu des étapes 4 à 7, §7).
-- [ ] **`supabase/essais-section-49.sql` ne tourne qu'à la main** (§2.3 :
+- [x] **`supabase/essais-section-49.sql` ne tourne qu'à la main** (§2.3 :
   `npm run verifier` ne joue aucun SQL). C'est lui qui prouve la sécurité des
   tables du devis, par le catalogue de la base rejouée ; un contrôle qui lit
   du texte ne verra jamais toutes les formes qu'un SQL peut prendre. Tant que
   ce n'est pas automatisé, une régression qui passe les contrôles ne se voit
   qu'au prochain rejeu.
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [x] **La relecture SÉCURITÉ du 2e tour de l'étape 3 n'a jamais été rendue**
   (le conteneur a redémarré pendant qu'elle tournait). Les deux importants du
   1er tour sont corrigés et mesurés ; au 2e tour, la relecture SQL a rejoué
@@ -2627,9 +2650,12 @@ Aucun module natif : rien à reconstruire.
   des choses fausses : **une décision à vous**.
 - [ ] **Il n'existe pas de bouton pour signaler un AVIS.** Les textes le
   disent au lieu de le promettre. À construire avec la modération des avis.
-- [ ] **Les essais SQL ne tournent pas dans `npm run verifier`** (§2.3) :
+- [x] **Les essais SQL ne tournent pas dans `npm run verifier`** (§2.3) :
   l'essai 51 b voit toutes les formes de SQL qui rouvrent une règle, les
   contrôles de texte non. Le plus utile des chantiers d'outillage.
+  **Fait le 26/11/2026 (étape 2c-E)**, à côté de `npm run verifier` et pas
+  dedans (il doit passer sans base) : `npm run essais-sql`, et GitHub à
+  chaque envoi ; ce qui reste : « Après l'étape 2c-E ».
 - [ ] **Des compteurs d'abonnés sont faux sur la vraie base** — relevé de
   FORME du 27/10 : `followers_count` est PLUS HAUT que le vrai nombre sur 5
   fiches, les 5 du `seed.sql` (dont 3 « vérifiées » sans pièce). Aucun
@@ -3054,7 +3080,7 @@ documents de travail de la session, pas dans le dépôt) :
   refuse. Le contrôle de texte (`verifier-devis`, TC-2) ne juge que ce qui est
   ouvert entre le début du CONTENU de la carte et chaque aide. **À lancer
   avant toute livraison qui touche l'écran du devis.**
-- [ ] **`npm run verifier` ne joue toujours aucun essai SQL** (§2.3). Les deux
+- [x] **`npm run verifier` ne joue toujours aucun essai SQL** (§2.3). Les deux
   essais du lot 2a annoncent désormais leur nombre EXACT d'erreurs — 27 pour
   `essais-section-49-conditions.sql` ; 4 pour
   `essais-section-49-rattrapage.sql`, dont 2 « P0001: Rattrapage du lot 2a »
@@ -3062,6 +3088,9 @@ documents de travail de la session, pas dans le dépôt) :
   49.6 ter neutralisée : 2 erreurs au lieu de 4, zéro `f`, mesuré). Ce compte
   ne se lit qu'en jouant l'essai ; `verifier-devis` tient seulement que
   l'annonce est là et que les ordres joués sont ceux relus.
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` compare à chaque
+  passage le compte que ces essais annoncent au compte vu, et GitHub à
+  chaque envoi.
 - [ ] **La liste fermée des ordres fabriqués (`execute <chaîne>`) et les
   empreintes des essais du lot 2a se décident** : toute section future qui
   ajoute un `execute`, tout cas ajouté à un de ces essais, met à jour la liste
@@ -3301,13 +3330,16 @@ Le détail : `docs/PLAN-DEVIS.md` 10.19.
 
 **Contrôles et méthode :**
 
-- [ ] **`npm run verifier` ne joue aucun SQL** (§2.3) : la parité base ↔
+- [x] **`npm run verifier` ne joue aucun SQL** (§2.3) : la parité base ↔
   téléphone ne tient que par `node scripts/generer-cas-remise.mjs
   --verifier`, et l'essai 49-remise par un rejeu à la main. Un travail de CI
   avec un service PostgreSQL qui lance les deux. D'ici là, les bords trouvés
   par le banc sont écrits en toutes lettres dans `verifier-devis`, mais un
   bord que personne n'a pensé à écrire n'est gardé que par le fichier
   engendré.
+  **Fait le 26/11/2026 (étape 2c-E)**, sans service PostgreSQL : le job
+  `essais-sql` lance le script, qui crée sa grappe et joue les deux (la
+  parité, son nombre de cas figé : 237).
 - [ ] **Un essai SQL peut être affaibli en tautologie sans changer son
   compte** : les cas 10, 11 a et 13 de l'essai 49-remise ne sont gardés que
   par la relecture humaine (relevé par le banc du 05/11). Seul un rejeu en CI contre un schéma saboté le
@@ -3604,13 +3636,16 @@ détail est au §1.5 du cahier) :
 
 **Contrôles et méthode** :
 
-- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+- [x] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
   comptes à relire après 2b-2 sont l'essai 48 (22 erreurs, 78 justes), le
   49-remise (13, 188) et le 49-conditions (27, 40) ; la parité base ↔
   téléphone tient par deux moitiés : la base contre
   `supabase/cas-remise.json`, par `node scripts/generer-cas-remise.mjs
   --verifier` (85 cas, à la main), et le miroir contre ce fichier, par
   `verifier-devis` (qui, lui, est dans `npm run verifier`).
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [ ] **`mesure-devis` n'est pas dans `npm run verifier`** (788 mesures au
   10/11) : à lancer avant toute livraison qui touche l'écran du devis ou
   « Mon entreprise » → TVA.
@@ -3900,10 +3935,13 @@ signature ». La liste reste ci-dessous pour mémoire :
 
 **Contrôles et méthode** :
 
-- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+- [x] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
   comptes à relire après 2b-3 sont le 49-remise (19 erreurs, 268 justes), le
   49-conditions (27, 43) et le 49 (79, 189) ; la parité base ↔ téléphone,
   par `node scripts/generer-cas-remise.mjs --verifier` (125 cas, à la main).
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [ ] **`mesure-devis` n'est pas dans `npm run verifier`** (près de 900
   mesures, environ 35 minutes) : à lancer avant toute livraison qui touche
   l'écran du devis ou « Mon entreprise ». Un passage complet peut dépasser
@@ -4218,11 +4256,14 @@ l'essai n'a rien écrit, et le geste ci-dessus reste à faire.
 
 **Contrôles et méthode** :
 
-- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+- [x] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
   comptes à relire après 2b-4 sont le 49-remise (21 erreurs, 289 valeurs
   jugées, le compte `t` sur 288), le 49-conditions (27, 43) et le 49 (79) ;
   la parité, par `node scripts/generer-cas-remise.mjs --verifier` (139 cas).
   Ils se jouent depuis la RACINE du dépôt.
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 953 mesures,
   33 min 30 s au passage complet. Il lit l'arbre VALIDÉ depuis la racine de
   React, jamais la fibre d'un élément du DOM.
@@ -4498,13 +4539,16 @@ remplies ; ce qu'elle ne peut pas montrer reste ici :
 
 **Contrôles et méthode** :
 
-- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+- [x] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
   comptes à relire après 2b-5 sont le 43 (0), le 46 (27), le 47 (18), le 49
   (79), le 49-conditions (27, 51 valeurs justes), le 49-remise (38 erreurs,
   365 valeurs justes, son compte `t` sur 364), le 51d (23) et la suppression
   de compte (3) ; la parité, par
   `node scripts/generer-cas-remise.mjs --verifier` (184 cas). Ils se jouent
   depuis la RACINE du dépôt.
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 1 050 mesures au
   passage complet de la construction (37 min) ; après la relecture et
   DROIT-R2, seules ses sections 2b-5 ont été rejouées (132).
@@ -4823,12 +4867,15 @@ que la relecture et vos phrases ont ajouté) :
 
 **Contrôles et méthode** :
 
-- [ ] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
+- [x] **Les essais SQL ne tournent toujours qu'à la main** (§2.3) : les
   comptes à relire après 2b-6 sont le 43 (0), le 46 (45), le 47 (18), le 49
   (79), le 49-conditions (27), le 49-remise (53 erreurs, 472 valeurs, son
   compte « toutes jugées » à `t`), le 51d (23) et la suppression de compte
   (3) ; la parité, par `node scripts/generer-cas-remise.mjs --verifier`
   (237 cas). Ils se jouent depuis la RACINE du dépôt.
+  **Fait le 26/11/2026 (étape 2c-E)** : `npm run essais-sql` joue tous les
+  essais, avec la parité, sur une grappe neuve, et GitHub à chaque envoi ;
+  ce qui reste : « Après l'étape 2c-E ».
 - [ ] **`mesure-devis` n'est pas dans `npm run verifier`** : 1 157 mesures
   au passage complet de la construction ; après la relecture, seules ses
   sections 2b-6 (97), puis 110 après vos phrases ; après « pourront », aucune
@@ -4847,7 +4894,9 @@ que la relecture et vos phrases ont ajouté) :
 
 > **Les essais SQL tournent tout seuls** (`npm run essais-sql`, et le job
 > `essais-sql` de GitHub). Une seule relecture (deux angles, chaque constat
-> contredit, règle « Accélérer ») : 23 constats. Corrigés dans la même étape :
+> contredit, règle « Accélérer ») : 22 constats (13 par le banc, 9 par la
+> lecture, tous confirmés par leur contradicteur ; le message du commit
+> `4f52007` dit 23). Corrigés dans la même étape :
 > les dates que l'essai écrit, qu'on effaçait (G1, M1, C1 — le seul grave :
 > cinq essais auraient rougi tout seuls le 01/01/2029) ; la forme du job et de
 > la commande, figées et comparées entières (C2, C3, M2) ; le juge éprouvé
@@ -4981,7 +5030,9 @@ que la relecture et vos phrases ont ajouté) :
   par l'essai ni à deux jours du passage : un essai qui voudrait afficher une
   date fixe que la base calcule l'écrit dans son source (un commentaire
   suffit) ; une date relative lointaine (`now() - interval '400 days'`)
-  s'affiche en t/f.
+  s'affiche en t/f. **Le revers, mesuré par la vérification (V2 plus bas)** :
+  ce « commentaire suffit » vaut aussi pour une date FUTURE, et il suffit
+  d'un commentaire pour protéger tous les horodatages de ce jour-là.
 - [ ] **Un passage à −3 ans ne peut pas être vert, et c'est la BASE.** Sous
   libfaketime au 27/11/2023, les essais 31, 45 et 51c rougissent sur la
   version des conditions : `version_cgu_ou_null` refuse une version datée
@@ -4993,6 +5044,117 @@ que la relecture et vos phrases ont ajouté) :
   ne revient pas : rien à corriger, mais un essai qui dépend de l'horloge par
   construction devrait le dire dans son titre. (À +3 ans, +10 ans et à
   cheval sur le 31/12/2028 → 01/01/2029 : 38 sur 38.)
+
+**Le premier passage sur GitHub — pas encore joué (26/11/2026).**
+
+- [ ] **Avant le premier envoi de la branche qui porte 2c-E, vous serez
+  prévenu** : un e-mail « Run failed » peut arriver. Le job `essais-sql`
+  tourne à chaque envoi ET à chaque pull request : deux passages, deux
+  e-mails possibles. Ce sera le premier essai de la version MINEURE de
+  PostgreSQL 16 de l'image `ubuntu-24.04` (16.15 dans le conteneur), de son
+  ICU et de sa glibc. **Un rouge se lit dans cet ordre** : le code (2 : la
+  machine, pas un essai) ; les trois versions que le journal imprime en
+  tête, comparées à celles du conteneur ; puis l'essai, le cas et la ligne
+  qu'il nomme, et l'artefact « sorties-essais-sql ». Quand GitHub rougit et
+  pas le conteneur, c'est le journal de GitHub qu'on lit d'abord.
+
+**Ce que la vérification de la correction a trouvé (26/11/2026).** Sur une
+copie de `4f52007`, chaque constat reproduit. Elle a aussi CONFIRMÉ le reste
+(CLAUDE.md, « Les essais SQL tournent tout seuls », « Vérifié, et
+comment »). Rien de ce qui suit n'est corrigé : règle « Accélérer ».
+
+- [ ] **V1 (moyen) — C4 n'est fermé qu'en partie : le décompte des rouges
+  n'est tenu par rien.** `verifier-juge-sql` fait tourner les fonctions qui
+  jugent et compare la colle du bilan, pas la boucle de `principal()`.
+  Mesuré : `if (pbs.length) rouges += 1;` (l'essai d'un seul fichier)
+  devenu `rouges += 0;` → `verifier-juge-sql` vert, `npm run verifier` vert
+  (57 en 106,8 s) ; avec, en plus, `revoke delete on public.users from anon,
+  authenticated;` retiré du schéma, `node scripts/jouer-essais-sql.mjs
+  essais-suppression-compte` imprime « ✘ essais-suppression-compte » puis
+  « ✔ Les 1 essais rendent ce qu’ils rendaient », code 0. La boucle porte
+  neuf `rouges += …` (les essais, le rattrapage, la famille D, la parité, et
+  trois dans `--figer`) ; aucun n'est tenu. Pas un défaut actif, mais la
+  famille exacte de C4 : une retouche future rendrait muet tout le filet.
+  **Correction** : figer dans `verifier-juge-sql` la forme de ces lignes,
+  comme la colle du bilan, ou sortir le verdict de chaque entrée dans une
+  fonction pure qu'on fait tourner.
+- [ ] **V2 — une date FUTURE écrite dans un essai le ferait rougir le jour
+  venu, et ce jour-là seulement.** Une date AAAA-MM-JJ écrite n'importe où
+  dans l'essai, un commentaire compris, protège tous les horodatages de CE
+  jour : la comparaison porte sur le jour. Mesuré sous libfaketime (serveur
+  et client), l'essai 44 seul, avec en tête le commentaire « (… court
+  jusqu’au 2026-11-28) » : le 28/11 à 10 h (UTC), ✘, « la sortie a
+  changé, ligne 176 » (un `prepare_le` qui n'est plus normalisé), code 1 ;
+  le 29/11, ✔ ; sans le commentaire, le 28/11, ✔. Aujourd'hui aucune date future n'est
+  écrite dans les essais ni dans leurs annexes, sauf 2099 ; mais rien ne
+  garde qu'il en reste ainsi, et le script conseille lui-même « écrivez-la
+  dans l’essai (un commentaire suffit) ». Ce jour-là, le refus de `--figer`
+  dit « elle rougirait demain » sans nommer la date écrite. Sur GitHub : un
+  « Run failed » un matin, sur un dépôt immobile. **Correction possible** :
+  refuser, sans base, toute date ISO écrite dans un essai ou ses annexes
+  qui tombe après aujourd'hui et avant 2090 ; ou ne protéger que
+  l'horodatage de minuit d'un jour écrit.
+- [ ] **V3 — un `.npmrc` commité neutralise les DEUX jobs de GitHub.**
+  Mesuré, sur une copie : `script-shell=/bin/true` dans un `.npmrc` à la
+  racine → `npm run --silent essais-sql` rend 0 en 0,13 s, même sous
+  `CI=true` avec un nom d'essai ; `npm run --silent verifier` rend 0 aussi.
+  `verifier-atelier`, lancé directement, rougit, mais par accident (« le
+  linter se lance »), et on ne l'atteint jamais, puisque `npm run verifier`
+  est lui-même neutralisé. Le trou existait pour le job `verifier` ; il
+  s'ouvre maintenant pour `essais-sql`. **Correction possible** : que les
+  jobs appellent `node scripts/…` directement, et que `verifier-atelier`
+  refuse un `.npmrc` qui pose `script-shell` ou `ignore-scripts` — l'un
+  sans l'autre ne suffit pas, puisqu'un `npm run verifier` neutralisé
+  n'atteint jamais `verifier-atelier`.
+- [ ] **V4 — `--figer` ne refuse que la perte TOTALE (C9).** Mesuré :
+  l'essai 25 réduit à ses 158 premières lignes (cas 0 à 7), puis
+  `--figer essais-section-25` → « ✎ essais-section-25 : erreurs 9 → 4,
+  valeurs jugées 0 → 0, 132 ligne(s) de sortie changée(s) », « ✔ 1
+  oracle(s) écrit(s) », code 0 ; seule la ligne « ✎ » le signale. Le même
+  essai vidé à un seul titre, lui, est bien refusé (« perdu TOUS ses
+  refus (9 → 0) »). La relecture proposait de refuser toute BAISSE, sauf
+  `--accepter-la-perte` ; d'ici là, le diff de l'oracle se relit avant le
+  commit.
+- [ ] **V5 — la liste (C8) ne voit que les noms en `essai…` ou `essais…`.**
+  Mesuré, chaque fichier posé seul sur une copie, une erreur dedans :
+  `essai-section-52.sql` et `sous/essais-section-53.sql` sont vus ;
+  `verif-section-54.sql` et `tests/section-55.sql` ne le sont pas, ne
+  tournent nulle part, et rien ne rougit. Or `supabase/` ne contient que
+  trois autres `.sql` (`schema.sql`, `local-prelude.sql`, `seed.sql`) : la
+  liste fermée de TOUS les `.sql` que proposait la relecture était
+  faisable. **Correction** : tout `.sql` de `supabase/`, à toute
+  profondeur, est dans la liste, dans `HORS_LISTE` avec sa raison, ou l'un
+  de ces trois.
+- [ ] **V6 — `CI=false` est pris pour un passage sous CI.** Toute valeur
+  non vide de `CI` compte, `CI=false` et `CI=0` compris : un seul essai
+  lancé à la main est alors refusé (code 2), avec « Jouer un seul essai se
+  fait à la main, hors CI », qui égare. Mesuré : `CI=false node
+  scripts/jouer-essais-sql.mjs essais-section-43` → code 2 ; sans `CI`, deux
+  essais nommés → code 0, « 2 sur 38 joués : ce n’est PAS le passage
+  complet ». GitHub pose `CI=true` : la règle y tient. **Correction** :
+  traiter `false`, `0` et le vide comme « hors CI ».
+- [ ] **V7 — un `--figer` réussi laisse son dossier de sorties dans
+  `/tmp`, sans en écrire le chemin.** Antérieur (déjà dans `caa30e5`) : la
+  branche `--figer` rend 0 juste après « ✔ N oracle(s) écrit(s) », AVANT le
+  ménage des sorties. Mesuré : 127 fichiers restés dans un
+  `/tmp/opus-essais-sql-sorties-*` après `--figer --oracle`, 57 après le
+  `--figer` de dix essais. Même famille que M3 et m2. **Correction** : faire
+  le ménage, ou imprimer le chemin, avant ce retour.
+- [ ] **V8 — `verifier-juge-sql` ne passerait sans doute pas sous Windows**
+  (lu, pas mesuré). Un lien symbolique de DOSSIER, sans le mode
+  développeur, lève `EPERM`, qui n'est pas rattrapé : le contrôle
+  planterait ; et l'`import()` d'un chemin absolu Windows est refusé
+  (`ERR_UNSUPPORTED_ESM_URL_SCHEME`). Cela ne compte que si
+  `npm run verifier` se lance un jour sur votre poste, en PowerShell ;
+  d'autres contrôles ne sont peut-être pas portables non plus. Sous Linux,
+  le contrôle ne dépend pas de l'horloge (mesuré : `CI=true`, des fuseaux à
+  +14 h et à −11 h, minuit, +5 ans : code 0). **Correction** : le type
+  `'junction'` sous `win32`, et `pathToFileURL` pour l'`import`.
+- [x] **V9 — deux inexactitudes du message de `4f52007`, sans effet** :
+  C1d (la version des conditions rendue au lendemain) n'est pas vu « par
+  l’essai 45 SEUL », l'essai 51c le voit aussi (mesuré : ligne 12,
+  « t | t » attendu, « f | t » reçu) ; et la relecture a rendu 22 constats,
+  pas 23. Dit dans CLAUDE.md, « Les essais SQL tournent tout seuls ».
 
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
@@ -5660,13 +5822,18 @@ savoir :
   après la seconde. Tenu par « m quater » de `verifier-devis`, éprouvé par
   trois sabotages ; le banc du vérificateur (27 scénarios) rend les mêmes
   résultats ailleurs, et ses quatre cas K justes.
-- [ ] **Limite connue — un contrôle qui BOUCLE bloque `npm run verifier`.**
+- [x] **Limite connue — un contrôle qui BOUCLE bloque `npm run verifier`.**
   Trouvé par la vérification : `aRelire` qui ne retombe jamais (un
   sabotage) fait rougir `verifier-devis` (deux ✘), puis un cas plus loin
   tourne sans fin (le renvoi du plafond relancé à chaque `totaux`), et
   `npm run verifier` n'a aucun délai par contrôle : il resterait bloqué au
   lieu de rougir (sur GitHub, le travail s'arrête au bout de son délai
   général). Un délai par contrôle, à poser avec 2c-E.
+  **Fait le 26/11/2026 (étape 2c-E)** : 300 s par contrôle, le GROUPE de
+  processus arrêté, compté « N'A PAS PU SE LANCER » (éprouvé avec
+  `--delai 4` : un contrôle qui boucle et un petit-enfant qui boucle,
+  arrêtés tous les deux). Ce délai n'est contrôlé que par son TEXTE : C11,
+  « Après l'étape 2c-E ».
 - [ ] **Pas vérifié sur l'iPhone** : le vert qui attend le retour de la liste
   sur la vraie base (l'orange « Des changements partent… » dure de l'envoi
   au retour de la liste, au lieu de clignoter), la coche après le titre, et

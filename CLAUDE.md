@@ -790,6 +790,11 @@ jour.
 > SQL (voir A-FAIRE §2.3) : rien d'autre ne le dira. Et un fichier d'essai
 > commence par un « cas 0 » qui prouve que sa donnée EXISTE.
 
+> **Depuis le 26/11/2026 (étape 2c-E)**, quelque chose d'autre le dit :
+> `npm run essais-sql` rejoue TOUS les fichiers d'essais sur une grappe
+> neuve, et GitHub le fait à chaque envoi. `npm run verifier`, lui, ne joue
+> toujours aucun SQL. Voir « Les essais SQL tournent tout seuls ».
+
 ### Le SIRET à l'inscription — lot 1 bis (15-17/10/2026)
 
 Section 45 de `schema.sql`, fonction Edge `supabase/functions/siret/`,
@@ -1180,8 +1185,13 @@ Le `.env` et le dossier `.git` voyagent avec le dossier : rien n'est perdu.
 ## Comment vérifier
 
 ```bash
-# 1. le SQL, sur un vrai PostgreSQL, DEUX FOIS (il doit être rejouable)
-psql ... -f supabase/schema.sql      # puis une seconde fois : aucune erreur
+# 0. les contrôles du projet, sans base (57 au 26/11/2026)
+npm run verifier                     # lire le CODE de sortie
+
+# 1. le SQL : schema.sql rejoué DEUX fois sur une grappe PostgreSQL 16
+#    neuve, puis les 33 essais, les procédures à deux sessions, la parité
+npm run essais-sql                   # 0 juste · 1 un essai a changé · 2 la machine
+npm run essais-sql -- --comme-github # après le commit, avant l'envoi
 
 # 2. insérer réellement la ligne que l'application produira
 
@@ -1189,6 +1199,17 @@ psql ... -f supabase/schema.sql      # puis une seconde fois : aucune erreur
 npx expo export --platform android   # le bundle doit passer
 npx expo start --web                 # puis Playwright + /opt/pw-browsers
 ```
+
+**Depuis le 26/11/2026 (étape 2c-E), l'étape 1 ne se fait plus à la main.**
+`npm run essais-sql` rend 0 quand les 38 entrées rendent ce qu'elles
+rendaient (environ 2 min 20 s) ; 1 en nommant ce qui a changé (l'essai,
+le cas et la première ligne ; ou la liste, le prélude, le schéma) ; 2 quand
+c'est la machine (pas de PostgreSQL 16, un clone superficiel). Un essai nouveau entre dans la liste
+fermée de `scripts/jouer-essais-sql.mjs`, puis son oracle se fige par
+`npm run essais-sql -- --figer <essai>`, jamais à la main, et son diff se
+relit avant le commit. GitHub les rejoue à chaque envoi, dans le job
+`essais-sql`. `npm run verifier`, lui, ne joue toujours aucun SQL : les
+deux se lancent. Voir « Les essais SQL tournent tout seuls ».
 
 **Un contrôle qui PLANTE ne vérifie rien** — et ça ne se voit pas, puisqu'il
 n'écrit aucun « ✘ ». Constaté le 02/10/2026 : `npm run verifier-montage`
@@ -8523,6 +8544,11 @@ déclencheur `security definer` posé sur `clients` qui écrivait dans
 > met à jour avec sa raison. Mais l'essai ne tourne qu'à la main :
 > `npm run verifier` ne joue aucun SQL (`docs/A-FAIRE.md` §2.3).
 
+> **Depuis le 26/11/2026 (étape 2c-E)**, ce n'est plus « à la main » :
+> `npm run verifier` ne joue toujours aucun SQL, mais `npm run essais-sql`
+> rejoue tous les fichiers d'essais sur une grappe neuve, et GitHub le fait
+> à chaque envoi. Voir « Les essais SQL tournent tout seuls ».
+
 #### La migration sur la vraie base, et ses pièges
 
 **Construite, pas recopiée** : un script (hors du dépôt) PREND chaque objet
@@ -9963,6 +9989,11 @@ Trois autres trous, de la même famille :
 > (`docs/A-FAIRE.md` §2.3). Tant que ce n'est pas fait, les contrôles de
 > texte sont la seule garde automatique — d'où leur durcissement.
 
+> **Depuis le 26/11/2026 (étape 2c-E), c'est fait** : `npm run essais-sql`
+> joue l'essai 51 b et tous les autres sur une grappe neuve, et GitHub le
+> fait à chaque envoi ; `npm run verifier` ne joue toujours aucun SQL. Voir
+> « Les essais SQL tournent tout seuls ».
+
 #### La troisième relecture — une garde peut BLOQUER ce qu'elle protège (27/10/2026)
 
 Relue une troisième fois, par trois angles et un contradicteur par constat :
@@ -10928,6 +10959,11 @@ puis 3 de sa contre-vérification). Ce qu'il ne faut pas redécouvrir :
 > la garde), et le refus du cas 13 bis se juge en SQL (`:ERROR`, puis
 > `LAST_ERROR_MESSAGE`). Ce compte ne se lit qu'en jouant l'essai :
 > `npm run verifier` ne joue aucun SQL.
+
+> **Depuis le 26/11/2026 (étape 2c-E)**, ce compte se relit à chaque passage
+> de `npm run essais-sql`, et sur GitHub à chaque envoi : le compte que
+> l'essai annonce doit égaler le compte vu. Voir « Les essais SQL tournent
+> tout seuls ».
 
 #### La migration, gardée par son empreinte
 
@@ -13336,6 +13372,220 @@ huit questions du cahier (§7) sont dans `docs/A-FAIRE.md`, « Après l'étape
 
 La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-6 — ce qui reste » ;
 `docs/PLAN-DEVIS.md` 10.24.
+
+### Les essais SQL tournent tout seuls — étape 2c-E (26/11/2026)
+
+`scripts/jouer-essais-sql.mjs` (`npm run essais-sql`), un oracle par essai
+dans `supabase/essais-attendus/`, `scripts/verifier-juge-sql.mjs`, le job
+`essais-sql` de `.github/workflows/verifier.yml`, et un délai par contrôle
+dans `scripts/verifier.mjs`. Commits `caa30e5` (la construction) et
+`4f52007` (la relecture et ses corrections) ; le cahier (v1, sa critique,
+la v2) est dans le dossier de travail de la session, pas dans le dépôt.
+**Rien ne change dans `schema.sql` ni dans l'application** : c'est un outil.
+
+Jusqu'ici, les fichiers `supabase/essais-*.sql` ne tournaient qu'à la main,
+jugés contre « un relevé d'avant » que personne ne gardait. Ce que ça a
+coûté est écrit plus haut : sept fichiers d'essais cassés pendant deux jours
+par le verrou d'une autre section (15-17/10), une garde neutralisée qui
+laissait l'essai 49-rattrapage à 2 erreurs au lieu de 4 sans un seul `f`
+(lot 2a). **Et à partir de 2c-3, un devis remis sera FIGÉ** : une régression
+de la base y deviendrait définitive.
+
+#### Ce qui est construit
+
+- **`npm run essais-sql`**, sans dépendance, environ 2 min 20 s :
+  - il crée SA grappe PostgreSQL 16 à chaque passage (`initdb` dans un
+    dossier temporaire, une socket privée, aucun port, aucun mot de passe ;
+    lancé en root, le serveur tourne sous « postgres »), impose et RELIT ses
+    réglages (UTC, `C.UTF-8`, ISO…), imprime les versions de PostgreSQL,
+    d'ICU et de la glibc, et détruit la grappe à la fin ;
+  - il sonde le prélude, puis rejoue `schema.sql` DEUX fois ;
+  - une LISTE FERMÉE, comparée au disque : 33 essais (dont le rattrapage du
+    lot T, rejoué en douze étapes sur le schéma de `d0560e8`), quatre
+    procédures à deux sessions (la concurrence avec et sans témoin, la
+    requête tardive OP015, le plafond par demande OP017) et la parité de
+    `cas-remise.json` (237 cas) : 38 entrées.
+    `essais-section-49-temoin.sql` reste dehors, avec sa raison : c'est
+    l'outil de ces procédures ;
+  - chaque essai, sur un clone neuf du modèle, est jugé par son ORACLE,
+    engendré par `--figer` et jamais écrit à la main : ses erreurs, chacune
+    rattachée à son cas par son message ENTIER ; ses cellules
+    `…_attendu_<valeur>` ; sa sortie ENTIÈRE, normalisée (les UUID tirés au
+    hasard, les dates que la base pose près du passage) ; le compte
+    d'erreurs que l'essai annonce lui-même ; les « (attendu : …) » de ses
+    titres.
+- **Ses codes** : 0, tout ce qui a été joué rend ce qu'il rendait ; 1, un
+  essai ne le rend plus, ou la liste, le prélude, le schéma ; 2, la machine
+  (pas de PostgreSQL 16, clone superficiel, mauvais réglage). **Sous CI, le
+  passage est complet** : un nom d'essai est refusé, et un passage qui n'a
+  pas joué toutes les entrées rend 1.
+- **Ses options** : des noms d'essais, à la main (le bilan dit « ce n'est
+  PAS le passage complet ») ; `--sorties <dossier>` ; `--figer <nom>…`, qui
+  refuse en CI, sur une valeur fausse, sur deux modèles qui diffèrent, sur
+  une date qu'il ne sait pas expliquer, et sur un essai qui perd TOUS ses
+  refus, ses valeurs ou ses cas (sauf `--accepter-la-perte`) ;
+  `--figer --oracle`, quand la façon de juger change (sa version est écrite
+  dans chaque oracle, et il refuse si le SENS d'un seul change) ;
+  `--comme-github`, un clone propre de `HEAD`, sans `node_modules`,
+  `CI=true` : la commande à lancer après le commit, avant l'envoi.
+- **Hors de `npm run verifier`** : son nom ne commence pas par `verifier-`.
+  `npm run verifier` doit passer partout, sans base, et il ne joue toujours
+  aucun SQL.
+- **Un job GitHub à part, `essais-sql`** (`ubuntu-24.04`, `fetch-depth: 0`
+  pour lire `d0560e8`, Node 22, le PostgreSQL 16 de l'image installé s'il
+  manque, les sorties brutes gardées en artefact si un essai rougit). Le job
+  `verifier` ne change pas. **Aucun service Docker `postgres:16`**,
+  contrairement à la consigne de départ : ce serait une Debian (une autre
+  glibc, un autre ICU) que ce conteneur ne peut pas lancer, donc qu'on
+  pousserait sans l'avoir jouée. Le job lance le même script, qui y fait
+  exactement ce qu'il fait ici.
+- **`verifier-atelier`** tient la liste (chaque fichier qui ressemble à un
+  essai est rangé, chacun a son oracle à la bonne version, le nombre
+  d'entrées est figé), la commande npm EXACTE, et le job, comparé ENTIER à
+  sa forme figée.
+- **`npm run verifier-juge-sql`** (le 57e contrôle, sans base) fait tourner
+  les fonctions qui jugent sur une sortie psql figée, puis abîmée d'une
+  chose à la fois, et lance le vrai script sans base.
+- **`scripts/verifier.mjs`** : un délai de 300 s par contrôle (le plus long,
+  `verifier-atelier`, en prend environ 33), le GROUPE de processus arrêté,
+  compté « N'A PAS PU SE LANCER ». Un contrôle qui boucle ne bloque plus
+  tous les suivants.
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **Une normalisation qui efface ce que l'essai ÉCRIT efface ce qu'il
+> JUGE.** La première version de l'oracle réduisait à `<jour>` toute date à
+> deux ANS du passage, y compris « 2026-10-15 » (la version des conditions
+> que l'essai 45 envoie) et « 30/10/2026 » dans des titres. Deux défauts,
+> mesurés : le 01/01/2029, cinq essais (45, 47, 49, 51c,
+> suppression-compte) auraient rougi sur un dépôt immobile, et GitHub aurait
+> envoyé un « Run failed » à chaque envoi ; et dès aujourd'hui, une version
+> des conditions rendue au lendemain restait VERTE à l'essai 45. Désormais,
+> une date écrite telle quelle dans l'essai (ou dans un fichier qu'il lit
+> par `cat`) n'est jamais normalisée ; celles de la base ne le sont qu'à
+> deux JOURS du passage ; et `--figer` refuse une date qui n'est ni l'une ni
+> l'autre.
+
+- **Une épreuve d'horloge se fait au-delà de la fenêtre qu'elle éprouve.**
+  Le constructeur avait avancé l'horloge de 400 jours : fin 2027, encore à
+  l'intérieur des deux ans. C'est une horloge posée en janvier 2029, par la
+  relecture, qui a montré le défaut ; depuis, on éprouve à +3 et +10 ans.
+- **La protection a son revers** (relevé par la vérification) : une date
+  AAAA-MM-JJ écrite n'importe où dans l'essai, un commentaire compris,
+  protège aussi les horodatages que la base pose CE jour-là. Une date FUTURE
+  écrite dans un essai le ferait rougir le jour venu, et ce jour-là
+  seulement. **On n'écrit dans un essai que des dates passées, ou
+  lointaines comme 2099.**
+
+> **Un contrôle de CI qui vérifie la PRÉSENCE d'un mot ne garde rien.** Le
+> premier `verifier-atelier` cherchait « npm run essais-sql » et
+> « fetch-depth: 0 » dans le job. Cinq retouches posées une à une — `|| true`,
+> `continue-on-error: true`, `if: false` sur le job, `run: echo npm run
+> essais-sql`, un seul essai nommé — le laissaient vert, `npm run verifier`
+> aussi, et GitHub serait resté vert avec des essais cassés. Il compare
+> désormais le job ENTIER à sa forme figée, et la commande npm EXACTE.
+> C'est la famille « une syntaxe au lieu d'une propriété », encore. Une
+> route reste ouverte, hors de ces deux fichiers : un `.npmrc` commité avec
+> `script-shell=/bin/true` neutralise `npm run` partout, et rien ne le
+> refuse (`docs/A-FAIRE.md`).
+
+> **Le juge doit s'éprouver lui-même, à chaque passage.** Les 47 sabotages
+> du constructeur avaient été joués une fois, dans son dossier de travail.
+> La relecture a changé `return 1` en `return 0` dans le bilan : le script
+> imprimait « ✘ 1 essai(s) sur 1 ne rendent plus… » ET rendait 0 (l'étape
+> GitHub serait passée), et `npm run verifier` restait vert. **Un contrôle
+> qui écrit « ✘ » et rend 0 est pire qu'un contrôle qui plante** : on lit
+> son code, et son code ment. D'où `verifier-juge-sql` ; la vérification
+> l'a éprouvé (ce défaut remis dans le bilan, `npm run verifier` rougit).
+> **Mais pas partout** : le décompte des rouges dans la boucle du script
+> (`if (pbs.length) rouges += 1;` et ses huit voisins, `--figer` compris)
+> n'est tenu par rien. Remis à `+= 0`, chaque essai cassé affiche ✘, le
+> bilan dit ✔, le code vaut 0, et `npm run verifier` reste vert
+> (`docs/A-FAIRE.md`).
+
+- **Une grappe PARTAGÉE ment.** Elle garde les rôles et leurs attributs
+  d'un passage à l'autre : mesuré par la critique du cahier, un prélude qui
+  perdait `bypassrls` donnait 0 rouge sur la grappe du conteneur et 5 sur
+  une grappe neuve. D'où une grappe neuve à chaque passage.
+- **Une copie de banc se fait par `git clone`.** Le fichier `.git` d'un
+  worktree n'est qu'un renvoi : copié par `tar` ou `rsync`, il partage
+  l'INDEX et le HEAD du dépôt de travail. Un `git rm` lancé dans une copie a
+  posé une suppression dans cet index (défaite aussitôt) ; un commit fait
+  sans chemins l'aurait emportée.
+
+> **On ne signale que ce qu'on a lancé soi-même.** Pendant la relecture, le
+> 26/11 vers 05 h 10 (heure de Paris), un relecteur a choisi un processus
+> par `pgrep -f "node scripts/verifier.mjs" | head -1` : c'était le
+> `npm run verifier` d'un AUTRE agent, qui travaillait dans une copie
+> voisine. Il lui a envoyé SIGHUP puis SIGKILL : ce passage est mort
+> (code 129), et l'un de ses contrôles a survécu, orphelin. Sans effet sur
+> les verdicts (l'autre agent a relancé : 56 sur 56), mais **jamais
+> `pkill -f` ni `pgrep -f … | kill`** : on relève le numéro de ce qu'on
+> lance, on l'arrête par ce numéro, et on vérifie son dossier courant avant.
+> C'est la leçon de `pkill -f "expo start"` (lot P), qui avait tué son
+> propre terminal, vue cette fois de l'autre côté.
+
+#### Vérifié, et comment
+
+- **à la construction** (`caa30e5`) : 38 entrées sur 38, environ 2 min 15 s ;
+  la forme du job rejouée depuis un clone propre, sous le compte `postgres`
+  (non root, comme sur GitHub), `CI=true`, les étapes `run:` du YAML jouées
+  telles quelles : code 0 ; un banc de 47 sabotages, les 47 refusés ;
+- **après la relecture** (`4f52007`) : 38 sur 38 en 141 s ; `--comme-github`
+  en 145 s ; un clone propre sous `postgres`, `CI=true`, en 139 s ; sous
+  libfaketime (le serveur ET le client), +3 ans, +10 ans et le passage du
+  31/12/2028 au 01/01/2029 : code 0 ; `--figer --oracle` rejoué : aucun
+  fichier changé ; les 57 contrôles ; le linter à 32 ; un banc de
+  79 sabotages, les 79 refusés par la vérification visée ;
+- **par une vérification indépendante**, sur une copie de `4f52007` : le
+  passage complet et `--comme-github`, code 0 ; sous libfaketime, +3 ans,
+  +10 ans et le passage du 31/12/2030 au 01/01/2031 : code 0 ;
+  `--figer --oracle` lancé à cheval sur le 29/02/2028 et le 01/03/2028 : les
+  34 oracles réécrits, aucune ligne changée ; les sabotages des dates (la
+  version des conditions rendue au lendemain ou à la veille, un titre
+  changé) rougissent ; un nom d'essai sous CI est refusé ;
+  `npm run verifier` : 57 contrôles en 96 s, et rouge quand on remet au
+  bilan le `code: 0` d'un essai rouge.
+
+> **Un passage à −3 ans n'est PAS vert, et c'est la BASE.** Les essais 31,
+> 45 et 51c rougissent : `version_cgu_ou_null` refuse une version des
+> conditions datée après demain, et en 2023 les versions de 2026 que ces
+> essais envoient sont « du futur ». Contre-épreuve, sur une copie sans
+> cette garde : il ne reste que le cas I5 de 51c, qui l'éprouve. Rien à
+> corriger : le passé ne revient pas.
+
+Deux inexactitudes de message, sans effet : `4f52007` compte 23 constats,
+la relecture en a rendu 22 (13 par le banc, 9 par la lecture, tous
+confirmés par leur contradicteur) ; et il dit qu'une version des conditions
+rendue au lendemain est vue « par l'essai 45 SEUL » : l'essai 51c la voit
+aussi (mesuré par la vérification). Un message de commit ne se récrit pas ;
+c'est ici qu'on le dit.
+
+#### Ce qui n'a PAS été vérifié
+
+- **le premier passage sur la machine de GitHub** : rien n'est encore
+  envoyé. Ce sera le premier essai de SA version mineure de PostgreSQL 16
+  (16.15 ici), de son ICU et de sa glibc ; un rouge de machine rend le
+  code 2, et le journal imprime d'abord ces trois versions : c'est la
+  première chose à comparer. **Un rouge envoie un e-mail « Run failed » au
+  propriétaire** : le prévenir avant le premier envoi. Le job tourne à
+  chaque envoi ET à chaque pull request : deux passages, deux e-mails
+  possibles ;
+- PostgreSQL 17, celui de la vraie base : tout est joué sur la 16 ;
+- **des régressions RÉELLES passent encore au vert**, faute d'un cas qui
+  les éprouve : une fonction `security definer` rendue à `anon` (C6),
+  l'horodatage du journal d'administration remis à `now()` (C5), la colonne
+  « horaire » d'OP012 (C7), trois autres que seuls des contrôles de texte
+  voient (C12). C5 et C6 sont à fermer avant 2c-3 ;
+- une interruption : Ctrl+C n'arrête que l'essai en cours, et un SIGHUP (le
+  terminal fermé) laisse la grappe et son serveur dans `/tmp` (M3) ;
+- `npm run verifier-juge-sql` sous Windows : lu, pas mesuré (un lien
+  symbolique de dossier et l'`import` d'un chemin absolu y échoueraient) ;
+- un espace en FIN de cellule, qui reste invisible dans la sortie
+  normalisée.
+
+La suite : `docs/A-FAIRE.md`, « Après l'étape 2c-E — ce qui reste », et
+§2.3 ; `docs/PLAN-DEVIS.md` 10.26.
 
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 
