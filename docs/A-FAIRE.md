@@ -5698,6 +5698,29 @@ en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
   Supabase, le lien qui rouvre Opus (son schéma entre dans la reconstruction
   de 2c-0), la configuration Google Cloud et Apple, et le SIRET vérifié
   quand un artisan s'inscrit par Google.
+
+  **Décidé le 26/11/2026 par le propriétaire (« Oui, un code ») : un CODE à
+  6 chiffres, pas un lien.** Le modèle d'e-mail de Supabase envoie
+  `{{ .Token }}` ; l'application le fait taper, puis
+  `verifyOtp({ email, token, type: 'recovery' })` et `updateUser`. Pourquoi :
+  un code marche même quand l'e-mail est lu sur l'ordinateur, et un filtre
+  de messagerie d'entreprise qui ouvre les liens avant la personne ne peut
+  pas le gâcher. Il ne demande aucune pièce native. Le détail, et ce qui
+  reste à mesurer (durée de validité, limite d'envoi intégrée de Supabase) :
+  la note « connexion » de 2c-0, à reprendre dans le cahier du lot de la
+  connexion.
+
+  Et une règle à tenir dans ce lot, trouvée en préparant 2c-0 : l'identité
+  de l'application qui tourne (Opus ou Opus Dev) se lit côté NATIF, par
+  `expo-application` (`Application.applicationId`) ; l'adresse de retour
+  s'écrit `${Application.applicationId}://auth/callback`. **Jamais**
+  `Constants.expoConfig`, `Linking.createURL` ni `makeRedirectUri` : dans
+  Opus Dev, ils décrivent la configuration servie par le PC, c'est-à-dire
+  Opus.
+- [ ] **Les quatre phrases d'autorisation d'iOS** (photos, appareil photo,
+  micro, enregistrer dans Photos) : validées telles quelles par le
+  propriétaire le 26/11/2026, avant la reconstruction. Elles vivent dans
+  `app.json` → `ios.infoPlist` ; en changer une demande une construction.
 - [ ] **L'attestation décennale du compte principal finit vers le
   01/01/2027** : demander la nouvelle à l'assureur, et la joindre dans « Mon
   entreprise ».
