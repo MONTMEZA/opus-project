@@ -50,7 +50,20 @@
  *      enregistrée ne doit pas laisser à l'écran un total qui ignore la
  *      première. Un compteur de génération jette une relecture partie avant
  *      une autre écriture : une réponse en retard n'affiche jamais un total
- *      périmé ;
+ *      périmé. ET UNE RELECTURE JETÉE NE FAIT PAS OUBLIER QU'IL FAUT RELIRE
+ *      (relecture du vert, VERT-3, 25/11/2026) : `aRelire` ne retombe qu'au
+ *      moment où l'événement `totaux` (ou `totaux_illisibles`) part sous la
+ *      génération COURANTE. Avant, il retombait au DÉPART de la relecture :
+ *      une ligne partie pendant cette relecture la faisait jeter, et si cette
+ *      ligne était REFUSÉE, plus rien ne relisait — la liste « Pour le
+ *      remettre » gardait celle d'avant l'écriture confirmée, et pouvait
+ *      passer au vert sur une base qui comptait un point. Désormais le
+ *      prochain repos de la file relit. Une seule relecture à la fois sous
+ *      une même génération (`generationRelue`) : un passage « à vide » de la
+ *      file pendant qu'elle est en vol (une carte fermée sans rien changer)
+ *      n'en lance pas une seconde — c'était déjà la règle, puisque
+ *      `aRelire` était faux pendant ce temps. `relectureAVenir()` le dit à
+ *      l'écran ;
  *   8. l'état de chaque ligne est public : `locale` (jamais partie :
  *      incomplète, ou refusée avant l'envoi), `en_cours`, `enregistree`,
  *      `echec` — et `null` pour ce que la file ne connaît plus (retiré, ou le
@@ -402,9 +415,12 @@ export function creerFileEcriture({
   /* `attente` : les clés à écrire, dans l'ordre d'arrivée, chacune une
      fois. `enVol` : la clé dont la requête est partie. `generation` monte à
      chaque requête d'écriture qui part. `enRelecture` : les relectures de
-     totaux en cours. `aRelire` : une écriture a été confirmée (ou son issue
-     est inconnue) depuis la dernière relecture — les totaux affichés ne la
-     comptent peut-être pas. `enPause` : la suppression du devis est en
+     totaux en cours. `generationRelue` : la génération sous laquelle la
+     DERNIÈRE relecture est partie. `aRelire` : une écriture a été confirmée
+     (ou son issue est inconnue) et aucun événement `totaux` (ni
+     `totaux_illisibles`) n'est encore parti sous la génération courante —
+     les totaux affichés, et la liste « Pour le remettre », ne la comptent
+     peut-être pas (7). `enPause` : la suppression du devis est en
      cours, rien ne part. `supprime` : le devis n'existe plus.
      `fermetures` : les promesses de `attendre()` ; `finsDeVol` : celles de
      la suppression, qui attend la fin de la requête en vol. */
@@ -422,6 +438,7 @@ export function creerFileEcriture({
     return dernierNumero;
   };
   let enRelecture = 0;
+  let generationRelue = null;
   let aRelire = false;
   let enPause = false;
   let supprime = false;
@@ -606,11 +623,12 @@ export function creerFileEcriture({
     if (!attente.length) {
       /* LA FILE DEVIENT INACTIVE : si une écriture a été confirmée depuis la
          dernière relecture, les totaux se relisent MAINTENANT — même si la
-         dernière opération a échoué, ou n'avait rien à envoyer. */
-      if (aRelire) {
-        aRelire = false;
-        relire();
-      }
+         dernière opération a échoué, ou n'avait rien à envoyer. `aRelire`
+         reste vrai jusqu'à l'événement (7, VERT-3) : une relecture déjà en
+         vol sous CETTE génération suffit, on n'en lance pas une seconde ;
+         une relecture partie sous une génération plus ancienne sera jetée,
+         on en lance une maintenant. */
+      if (aRelire && !(enRelecture > 0 && generationRelue === generation)) relire();
       verifierFermetures();
       return;
     }
@@ -793,15 +811,28 @@ export function creerFileEcriture({
 
   /* Les totaux, relus quand la file devient inactive. Une relecture partie
      avant une autre écriture est jetée : elle montrerait un total périmé
-     comme « le total de la base ». */
+     comme « le total de la base ». `aRelire` ne retombe QUE quand
+     l'événement part sous la génération courante (7, VERT-3) — juste AVANT
+     lui, pour que l'écran, qui recopie `relectureAVenir()` en traitant cet
+     événement, le lise déjà faux. Une relecture jetée le laisse vrai : le
+     prochain repos de la file relit. */
   function relire() {
     if (typeof relireTotaux !== 'function' || supprime) return;
     const g = generation;
     const id = entrees.get(DEVIS).voulu.id;
     enRelecture += 1;
+    generationRelue = g;
     delai(Promise.resolve().then(() => relireTotaux(id)))
-      .then((totaux) => { if (g === generation) prevenir({ type: 'totaux', totaux }); })
-      .catch((err) => { if (g === generation) prevenir({ type: 'totaux_illisibles', erreur: err }); })
+      .then((totaux) => {
+        if (g !== generation) return;
+        aRelire = false;
+        prevenir({ type: 'totaux', totaux });
+      })
+      .catch((err) => {
+        if (g !== generation) return;
+        aRelire = false;
+        prevenir({ type: 'totaux_illisibles', erreur: err });
+      })
       .finally(() => { enRelecture -= 1; verifierFermetures(); });
   }
 
@@ -1116,6 +1147,19 @@ export function creerFileEcriture({
       const r = [];
       entrees.forEach((e, c) => { if (e.renvoi && e.etat === 'en_cours') r.push(c); });
       return r;
+    },
+    /** Une relecture des totaux — et donc de la liste « Pour le remettre »,
+     *  que l'écran relit à l'événement `totaux` ou `totaux_illisibles` —
+     *  est-elle ENCORE À VENIR après une écriture confirmée (ou d'issue
+     *  inconnue) ? (relecture du vert, VERT-1, 25/11/2026) C'est `aRelire`,
+     *  qui ne retombe qu'au départ de cet événement (7). Tant que c'est
+     *  vrai, la liste affichée date peut-être d'avant cette écriture :
+     *  l'écran la tient « en route », jamais pour sûre — il le recopie
+     *  dans son état d'attente après chaque événement, comme
+     *  `renvoisEnRoute()`. Faux quand rien ne relira : le devis supprimé, ou
+     *  aucune relecture possible (`relireTotaux` absent). */
+    relectureAVenir() {
+      return aRelire && !supprime && typeof relireTotaux === 'function';
     },
     /** Plus rien en vol ni en attente ? */
     vide: estVide,

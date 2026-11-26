@@ -845,7 +845,7 @@ export default function SaisieDevisScreen({
   };
   const [totauxIllisibles, setTotauxIllisibles] = useState(false);
   const [attente, setAttente] = useState({
-    nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0,
+    nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, relectureAVenir: false,
     etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT,
     etatDechets: AUCUN_ETAT, etatEnergie: AUCUN_ETAT,
   });
@@ -1034,6 +1034,16 @@ export default function SaisieDevisScreen({
          pendant ce temps (`garderLaPlace`, devis.js). Lues ICI, après chaque
          événement de la file — jamais par une référence pendant le rendu. */
       renvoisEnRoute: f.renvoisEnRoute().length,
+      /* UNE RELECTURE ENCORE À VENIR APRÈS UNE ÉCRITURE CONFIRMÉE (relecture
+         du vert, VERT-1, 25/11/2026) : la liste lue avant cette écriture
+         n'est plus sûre, `etatDeLaListe` la tient « en route » — sans quoi
+         la ligne passait au VERT, coche comprise, pendant l'aller-retour des
+         totaux, sur une base qui comptait un point. La file le sait
+         (`relectureAVenir()`, file-ecriture.js) ; il ne change que DANS un
+         de ses événements (vrai à la confirmation, faux à `totaux` ou à
+         `totaux_illisibles`, qui relisent la liste dans le même rendu) :
+         le recopier ici, après chaque événement, ne laisse aucun trou. */
+      relectureAVenir: f.relectureAVenir(),
       /* Ceux que « Réessayer » de leur bande peut renvoyer : jamais un refus
          définitif (TC-1). */
       retraitsRenvoyables: retraitsARenvoyer(entrees.map((x) => ({ ...x, erreur: f.erreurDe(x.cle) })),
@@ -1227,6 +1237,15 @@ export default function SaisieDevisScreen({
         lireLaListe(changee ? ['devis', 'entreprise'] : 'devis');
       } else if (ev.type === 'totaux_illisibles') {
         setTotauxIllisibles(true);
+        /* …ET LA LISTE SE RELIT QUAND MÊME (relecture du vert, VERT-2,
+           25/11/2026) : elle ne dépend pas des totaux, et rien d'autre ne la
+           relirait — la ligne gardait la liste d'AVANT l'écriture confirmée,
+           en vert, pendant que le pied disait « les totaux peuvent dater ».
+           Les DEUX causes : sans totaux relus sous cette génération, la
+           réponse « à quel titre » que la base a vue n'est plus connue, et
+           les mentions dues à un particulier en dépendent. Si la liste
+           échoue aussi, la ligne dit « Liste non lue — Réessayer ». */
+        lireLaListe(['devis', 'entreprise']);
       } else if (ev.type === 'renomme' && ev.quoi === 'ligne') {
         changerLignes((ls) => ls.map((l) => (l.id === ev.ancien ? { ...l, id: ev.nouveau } : l)));
         if (carteRef.current === ev.ancien) poserCarte(ev.nouveau);
@@ -2381,6 +2400,7 @@ export default function SaisieDevisScreen({
     erreur: liste.erreur,
     lue,
     relecture: relectureVue,
+    relectureAVenir: attente.relectureAVenir,
   });
   const pasCompte = ceQueLaListeNeComptePas({
     nbLignes: nbNonEnregistrees,

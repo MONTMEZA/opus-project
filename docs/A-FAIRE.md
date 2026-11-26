@@ -5397,3 +5397,108 @@ en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
   « Pour le remettre » (relevé par la mesure du vert, 25/11) : « Ce devis » a
   sa phrase « rien ne manque… », l'entreprise non. Demandé au propriétaire,
   pas encore décidé.
+
+#### Le vert de « Pour le remettre » — la relecture du 25/11 au soir
+
+**Corrigé** (relecture à trois angles, chaque constat contredit ; règle
+« Accélérer ») : le vert s'allumait sur une liste PÉRIMÉE entre la
+confirmation d'une écriture et le retour de la liste (VERT-1), et pour de
+bon quand la relecture des totaux échouait (VERT-2) ou était jetée avant
+une écriture refusée (VERT-3, un défaut de 2b-1 : le texte « aucun point »
+était déjà faux, le vert l'a rendu visible) ; il clignotait vert → orange →
+vert → orange → vert à chaque champ quitté (VERT-4). La règle tenue
+désormais : **une liste n'est sûre que si aucune relecture n'est à venir
+après une écriture confirmée** (`relectureAVenir()` de la file, recopiée par
+`majAttente`, lue par `etatDeLaListe`). La coche est passée APRÈS le titre
+(E5 : le titre reculait de 15 points en haut, 17 en bas). Six trous de
+contrôle fermés (C1 à C6). Ce qui reste, à poser au propriétaire ou à
+savoir :
+
+- [ ] **Question au propriétaire — le vert au-dessus d'un « À vérifier »**
+  (VERT-5 et E1, mineur). La ligne passe au vert dès que la liste compte 0
+  point, même quand la carte porte un avis « À vérifier » : un franchisé au-
+  delà de 37 500 €, une attestation décennale qui finit avant la fin de
+  validité du devis, un devis « Offert » qui ne coûte rien, un devis sans
+  objet. C'est voulu (un avis ne bloque jamais une remise, décision de 2b-4)
+  et le texte dit vrai (« aucun point »). **Son cas à lui** : son attestation
+  décennale finit vers le 01/01/2027 — un devis valable 30 jours au délai par
+  défaut, ou 60 jours, porte probablement déjà l'avis sous une ligne verte
+  (déduit de `finDeLAttestation`, pas mesuré sur la base). Trois réponses
+  possibles : (a) la ligne dit aussi « · N avis à vérifier » — mais le texte
+  0 / 0 tient déjà sur deux lignes à 393, et à 320 il en prendrait trois
+  (estimé sur une capture, pas mesuré) : il faudrait agrandir les gabarits
+  de `garderLaPlace`, donc la ligne partout ; (b) pas de vert tant qu'un avis
+  existe — **mesuré faux** (`option-b.mjs` du contradicteur) : avec une
+  décennale annuelle au 31/12 et un devis de 30 jours, l'avis sort les 25/11,
+  01/12 et 15/12, et la ligne redevient orange avec « aucun point », la
+  plainte même du 25/11 ; (c) garder le vert tel quel (c'est l'état actuel).
+  Dans tous les cas, **pour 2c** : le geste de remise relit `avisDuDevis` et
+  MONTRE les avis avant de numéroter, sans les rendre bloquants — c'est là
+  que « avant de remettre ce devis » prend son sens.
+- [ ] **Limite connue — la liste lue un autre jour** (VERT-6 et E2, mineur,
+  antérieur au vert). La ligne montre la dernière liste lue ; rien ne la relit
+  au retour de l'application au premier plan, au passage de minuit, ni après
+  une écriture faite depuis un AUTRE appareil du même compte (le frère, lui,
+  ne peut pas toucher aux devis du propriétaire : `est_mon_entreprise`). Les
+  points qui dépendent de la date : `entreprise_ancienne` (jugé à l'INSTANT,
+  `now() - 365 jours`), `devis_attestation` et `devis_attestation_date` (au
+  jour de Paris), le rang 14 (au jour de Paris). **Mesuré** par le
+  contradicteur, au navigateur en démonstration (`mesure-e2.mjs`) : horloge
+  avancée de 201 jours (la décennale de démonstration en vaut 200), la ligne
+  reste verte 4 s après, et après avoir ouvert puis fermé la carte ; le devis
+  quitté puis rouvert, la liste relue dit « ce devis — 1 point », en orange.
+  Ce qui le corrigerait, à mesurer d'abord : abonner la saisie à `AppState`
+  et relire au passage à « active » SEULEMENT si le jour a changé ou si la
+  lecture date de plus d'une heure (sinon la ligne clignote à chaque centre
+  de notifications, Face ID, choix d'une photo), plus une minuterie unique
+  jusqu'au prochain minuit ; vérifier que « · mise à jour… » ne fait pas
+  sauter la ligne verte à 320. **Pour 2c** : la remise rappelle
+  `motifs_refus_remise` et ne se fie jamais à la ligne.
+- [ ] **Question au propriétaire — les icônes ne suivent pas la taille du
+  texte** (E3, mineur, toute l'application). `@expo/vector-icons` pose
+  `allowFontScaling: false` par défaut, et `mk` (`icons.js`) ne le transmet
+  pas : en « Taille de texte plus grande » d'iOS (AX5, × 3,571), le titre
+  grossit, la coche reste à 11 points — comme le chevron de la même ligne et
+  toutes les icônes d'Opus. Le débordement sur le chevron que la relecture
+  annonçait n'est PAS reproduit : refait avec les vraies chasses d'Oswald, il
+  reste 5,7 points entre l'encre et le trait du chevron au pire cas (320
+  points, AX4), et une collision n'existerait qu'à des largeurs d'écran
+  qu'aucun iPhone n'a (≈ 314-316, 328-331, 345-347, 365-368 points) ; la
+  coche passée APRÈS le titre (E5) garde la même somme de largeurs —
+  non remesuré. Ce qu'il ne faut PAS faire : `flexShrink: 1` seul sur le
+  titre (la ligne sauterait d'environ 51 points en passant au vert), ou une
+  coche agrandie seule (elle chevaucherait le chevron). À juger sur l'iPhone
+  en AX3 à AX5, puis à décider pour toutes les icônes.
+- [ ] **Question au propriétaire — la coche pour qui voit mal le rouge et le
+  vert** (E4, mineur ; les chiffres CORRIGÉS par le contradicteur). Le texte
+  porte l'information (WCAG 1.4.1 tenue) ; c'est le « coup d'œil » qui
+  s'affaiblit. En deutéranopie, le passage de l'orange au vert se voit comme
+  un AFFADISSEMENT — même teinte, environ 96°, saturation de 51 à 15 (orange
+  « moutarde » #7E6F0A, vert olive grisâtre #6E6850) —, pas comme un passage
+  au vert : écart ΔE2000 de 15,0 sur le filet et 16,3 sur le titre, contre
+  52,7 en vision normale. Environ 2 % des hommes voient comme cette
+  simulation (deux couleurs primaires) ; les autres daltoniens rouge-vert,
+  environ 6 %, gardent une partie du virage (ordre de grandeur : teinte de
+  78° à 128°, ΔE2000 ≈ 23). La coche Feather est fine : 8,3 × 6,0 points à
+  11 (9,8 × 7,0 à 13), un trait de 0,92 point (1,08), posée 2,7 points
+  au-dessus de la ligne de base (3,2 en bas). Deux dessins à lui montrer,
+  sans paquet nouveau (`MaterialCommunityIcons` est déjà importé) :
+  « check-bold » (trait plein) ou « check-circle » (disque plein), à la
+  taille du titre + 2, `alignItems: 'baseline'` ; la boîte (13 et 15 points)
+  reste sous celle du titre (16,3 et 19,3) : la ligne ne grandirait pas.
+  « La même coche en trait plus épais » n'existe pas avec une police
+  d'icônes. S'il choisit, ouvrir la forme figée de `verifier-devis` (C5 et le
+  dessin) et remesurer la hauteur à 320 et 393.
+- [ ] **Trous de contrôle laissés ouverts, à savoir** : la balise
+  `<PourRemettre>` de la saisie (la carte) reçoit le même `etat` et la même
+  `lue` que la ligne, et rien ne la fige (trou de 2b-1, noté par la
+  contradiction de C1) ; `verifier-atelier` accepte toute alerte du linter
+  sous le plafond — un `no-dupe-keys` passerait le jour où une alerte
+  `react-hooks` serait corrigée sans redescendre le plafond (C6 ferme le cas
+  des six clés du vert, pas les autres) ; et `mesure-devis`, seule à voir le
+  dessin et la fenêtre de confirmation au navigateur, n'est toujours pas
+  dans `npm run verifier` (« s. » la tient, il ne la joue pas).
+- [ ] **Pas vérifié sur l'iPhone** : le vert qui attend le retour de la liste
+  sur la vraie base (l'orange « Des changements partent… » dure de l'envoi
+  au retour de la liste, au lieu de clignoter), la coche après le titre, et
+  VoiceOver sur la ligne.

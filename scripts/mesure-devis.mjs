@@ -523,6 +523,26 @@ await ctx.addInitScript(({ pause, pausePostes, pauseLieux }) => {
       suite.__opusRetenue = true;
       return suite;
     }
+    /* LA RELECTURE DES TOTAUX DE LA FILE, RETENUE à la demande (relecture
+       du vert, VERT-1, VERT-2 et VERT-4, 25/11/2026) : la suite que
+       `relire()` (file-ecriture.js) pose sur la relecture — elle SEULE (sa
+       source nomme `prevenir` et l'événement 'totaux'). Sur la vraie base,
+       un aller-retour sépare la confirmation d'une écriture du retour des
+       totaux, qui seul relit la liste ; en démonstration il ne dure rien :
+       sans ce crochet, la fenêtre ne se PEINT jamais. `lacher(casser)` la
+       relâche — telle quelle, ou en ÉCHEC (une coupure réseau), pour voir
+       `totaux_illisibles`. */
+    const tt = window.__opusTotaux;
+    if (tt && tt.retenir && !this.__opusRetenue && typeof a === 'function' && /\bprevenir\b/.test(String(a))
+      && /['"]totaux['"]/.test(String(a))) {
+      const origine = this;
+      const retenue = new Promise((ok, ko) => {
+        tt.retenues.push((casser) => (casser ? ko(new TypeError('Network request failed')) : thenOrigine.call(origine, ok, ko)));
+      });
+      const suite = thenOrigine.call(retenue, a, b);
+      suite.__opusRetenue = true;
+      return suite;
+    }
     if (l && l.retenir && !this.__opusRetenue && /\blireLaListe\b/.test(String(new Error().stack))) {
       const origine = this;
       const retenue = new Promise((ok, ko) => { l.retenues.push(() => thenOrigine.call(origine, ok, ko)); });
@@ -540,6 +560,11 @@ await ctx.addInitScript(({ pause, pausePostes, pauseLieux }) => {
      `ouvrirDevis` → `lireRegime` → `avecDelai` rejette → `{ echec: true }`. */
   window.__opusRegime = {
     casser: false, casses: 0, retenir: false, retenues: [],
+  };
+  window.__opusTotaux = {
+    retenir: false,
+    retenues: [],
+    lacher(casser = false) { this.retenues.splice(0).forEach((f) => f(casser)); },
   };
   /* 2b-5 : UNE LISTE DE LIEUX VIDE, sans rien retirer de la fiche — quand
      `vider` est vrai, la copie de la fiche de démonstration
@@ -10773,11 +10798,15 @@ await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration 
    La RÈGLE est `ligneRemisePrete` (devis.js) : `verifier-devis` la fait
    tourner sur sa grille, sous `node`. Ce que seul un navigateur dit, c'est
    ici : la COULEUR CALCULÉE du filet et des deux titres, la COCHE posée
-   devant le titre (la couleur ne porte jamais l'information seule),
+   APRÈS le titre (la couleur ne porte jamais l'information seule ; après,
+   pour que le titre ne bouge pas — relecture du vert, E5),
    l'étiquette parlée, la HAUTEUR — le vert ne doit rien faire sauter sous le
    doigt —, et surtout que le vert ne s'allume JAMAIS sur ce qui n'est pas
    sûr : pendant un envoi, sur une ligne non enregistrée (la dernière liste
-   peut pourtant dire « aucun point » partout), sur une lecture coupée.
+   peut pourtant dire « aucun point » partout), sur une lecture coupée —
+   ni entre la CONFIRMATION d'une écriture et le retour de la liste
+   (relecture du vert, VERT-1 : la liste d'avant l'écriture n'est plus
+   sûre), ni quand la relecture des totaux échoue (VERT-2).
 
    POURQUOI EN DERNIER, ET POURQUOI ELLE RECHARGE LA PAGE. Pour voir le vert,
    il faut une entreprise SANS point ; la démonstration en garde cinq exprès
@@ -10799,8 +10828,10 @@ await section('« Mon entreprise » → TVA : le refus de VIES, la déclaration 
 
    CE QUI EST SIMULÉ : rien de plus que les crochets décrits en tête du
    fichier — l'écriture RALENTIE (`__opusPauseEcritures`), pour que l'envoi
-   dure le temps d'être vu, et la lecture de la liste COUPÉE
-   (`__opusListe.casser`). Le reste est le vrai code de l'écran.
+   dure le temps d'être vu, la lecture de la liste COUPÉE
+   (`__opusListe.casser`), et la relecture des TOTAUX RETENUE puis relâchée,
+   telle quelle ou en échec (`__opusTotaux`, relecture du vert). Le reste est
+   le vrai code de l'écran.
 
    LES COULEURS ATTENDUES sont écrites EN TOUTES LETTRES : une mesure qui les
    importerait du code ne vérifierait rien. Elles sont comparées à `theme.js`
@@ -11075,7 +11106,8 @@ await section('Pour le remettre passe au VERT quand rien ne manque — « Muret 
        hauteur de référence, à 393 puis à 320. */
     const c1 = await compteDeLaLigne();
     verifier(`la ligne du haut : « ${c1.libelle} »`, c1.devis === 0 && c1.entreprise === 1, c1.libelle);
-    jugerOrange(await sondeDuVert(), 'un point à l’entreprise');
+    const s1 = await sondeDuVert();
+    jugerOrange(s1, 'un point à l’entreprise');
     const h1 = await hauteursDuVert();
     noter('hauteurs, l’entreprise à 1 point (haut / bas)', JSON.stringify(h1));
     await captureAuDouble('vert-01-orange-haut', ligneHaut());
@@ -11111,13 +11143,23 @@ await section('Pour le remettre passe au VERT quand rien ne manque — « Muret 
       }
       verifier(`${ou} : le titre ${x && x.titre} (vert ${VERT_TITRE})`, !!x && x.titre === VERT_TITRE, JSON.stringify(x));
       verifier(`${ou} : UNE coche — le glyphe « check » (${c && c.code}), ${c && c.couleur}, ${c && c.taille} comme le titre (${x && x.tailleTitre}) `
-        + `— posée AVANT le titre (coche ${c && c.boite.x}+${c && c.boite.l}, titre ${t && t.x}), pas plus haute que lui `
+        + `— posée APRÈS le titre (titre ${t && t.x}+${t && t.l}, coche ${c && c.boite.x}), pas plus haute que lui `
         + `(${c && c.boite.h} ≤ ${t && t.h}), la rangée du titre de la hauteur du titre (${x && x.boiteRangee && x.boiteRangee.h})`,
       !!x && !!c && !!t && x.nbGlyphes === 1 && c.code === GLYPHE_CHECK && c.couleur === VERT_FILET && c.taille === x.tailleTitre
-        && c.boite.x + c.boite.l <= t.x + 0.5 && c.boite.h <= t.h + 0.5 && Math.abs(x.boiteRangee.h - t.h) <= 0.5, JSON.stringify(x));
+        && c.boite.x >= t.x + t.l - 0.5 && c.boite.h <= t.h + 0.5 && Math.abs(x.boiteRangee.h - t.h) <= 0.5, JSON.stringify(x));
     };
     jugerVert(s2.haut, 'la ligne du haut', true);
     jugerVert(s2.bas, 'la rangée du bas', false);
+    /* LE TITRE NE BOUGE PAS quand le vert s'allume (relecture du vert, E5) :
+       la coche venait DEVANT lui, et il reculait de 15 points en haut, de 17
+       en bas, à chaque passage — mesuré. Il est maintenant à la MÊME
+       abscisse en orange (un point) et en vert, en haut comme en bas. */
+    verifier(`le titre ne se déplace pas quand le vert s’allume : en haut, x ${s1.haut && s1.haut.boiteTitre && s1.haut.boiteTitre.x} en orange `
+      + `et ${s2.haut && s2.haut.boiteTitre && s2.haut.boiteTitre.x} en vert ; en bas, ${s1.bas && s1.bas.boiteTitre && s1.bas.boiteTitre.x} et `
+      + `${s2.bas && s2.bas.boiteTitre && s2.bas.boiteTitre.x}`,
+    !!s1.haut && !!s2.haut && !!s1.bas && !!s2.bas && !!s1.haut.boiteTitre && !!s2.haut.boiteTitre && !!s1.bas.boiteTitre
+      && !!s2.bas.boiteTitre && Math.abs(s1.haut.boiteTitre.x - s2.haut.boiteTitre.x) <= 0.5
+      && Math.abs(s1.bas.boiteTitre.x - s2.bas.boiteTitre.x) <= 0.5, JSON.stringify([s1.haut, s2.haut, s1.bas, s2.bas]));
 
     /* d. LA HAUTEUR NE BOUGE PAS : orange (1 point) et vert, à 393 et 320. */
     const h2 = await hauteursDuVert();
@@ -11213,6 +11255,61 @@ await section('Pour le remettre passe au VERT quand rien ne manque — « Muret 
     await objet.fill(objetAvant);
     await objet.evaluate((e) => e.blur());
     await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+
+    /* i. LA RELECTURE DES TOTAUX RETENUE après une écriture CONFIRMÉE
+       (relecture du vert, VERT-1 et VERT-4, 25/11/2026). Sur la vraie base,
+       un aller-retour sépare la confirmation de l'écriture du retour des
+       totaux, qui seul relit la liste ; on le RETIENT ici (`__opusTotaux`).
+       Pendant ce temps, la liste d'avant l'écriture n'est plus sûre : la
+       ligne dit « Des changements partent… », en haut ET en bas, jamais le
+       0 / 0 vert. Et le vert ne revient qu'UNE fois, au retour de la liste —
+       avant la correction, il clignotait vert → orange → VERT → orange →
+       vert à chaque champ quitté. */
+    await demarrerLeTemoinDuVert();
+    await page.evaluate(() => { window.__opusTotaux.retenir = true; });
+    await objet.fill(`${objetAvant} (totaux retenus)`);
+    await objet.evaluate((e) => e.blur());
+    const retenus = await jusqua(async () => (await page.evaluate(() => window.__opusTotaux.retenues.length)) > 0, DELAI_ECRITURE + 4000);
+    await attendre(600);
+    const s7 = await sondeDuVert();
+    verifier(`l’écriture CONFIRMÉE, la relecture des totaux RETENUE : « ${s7.haut && s7.haut.libelle} », en haut et en bas — jamais `
+      + 'le 0 / 0 vert d’avant l’écriture (VERT-1)',
+    !!retenus && !!s7.haut && s7.haut.libelle === EN_ROUTE_DIT && !!s7.bas && s7.bas.libelle === EN_ROUTE_DIT
+      && !estVerte(s7.haut, true) && !estVerte(s7.bas, false), JSON.stringify(s7));
+    await page.evaluate(() => { window.__opusTotaux.retenir = false; window.__opusTotaux.lacher(false); });
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    await attendre(300);
+    const vus7 = await arreterLeTemoinDuVert();
+    jugerLeTemoin(vus7, (h) => h === EN_ROUTE_DIT, 'i. la relecture des totaux retenue');
+    const remontees = vus7.filter(([h], k) => k > 0 && h === VERT_DIT && vus7[k - 1][0] !== VERT_DIT).length;
+    verifier(`…et le vert ne revient qu’UNE fois, au retour de la liste — aucun clignotement vert → orange → vert → orange → vert `
+      + `(VERT-4) : ${remontees} remontée(s) au vert`, remontees === 1, JSON.stringify(vus7));
+
+    /* j. …ET SI CETTE RELECTURE DES TOTAUX ÉCHOUE (VERT-2) : la liste se
+       relit QUAND MÊME — avant, rien ne la relisait, et la ligne gardait,
+       en vert, la liste d'avant l'écriture pendant que le pied disait « les
+       totaux peuvent dater ». On compte les lectures de la liste : au moins
+       une de plus après l'échec. Puis « Relire », sous les totaux, les
+       remet. */
+    await demarrerLeTemoinDuVert();
+    await page.evaluate(() => { window.__opusTotaux.retenir = true; });
+    await objet.fill(objetAvant);
+    await objet.evaluate((e) => e.blur());
+    const retenus2 = await jusqua(async () => (await page.evaluate(() => window.__opusTotaux.retenues.length)) > 0, DELAI_ECRITURE + 4000);
+    const lecturesAvant = await page.evaluate(() => window.__opusListe.lectures);
+    await page.evaluate(() => { window.__opusTotaux.retenir = false; window.__opusTotaux.lacher(true); });
+    const illisibles = await jusqua(async () => (await texteLu()).includes('Les totaux n’ont pas pu être relus'), 4000);
+    await jusqua(async () => (await page.evaluate(() => window.__opusListe.lectures)) > lecturesAvant, 4000);
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    await attendre(300);
+    const lecturesApres = await page.evaluate(() => window.__opusListe.lectures);
+    jugerLeTemoin(await arreterLeTemoinDuVert(), (h) => h === EN_ROUTE_DIT, 'j. la relecture des totaux en échec');
+    verifier(`la relecture des totaux en ÉCHEC : le pied le dit, et la liste se RELIT quand même (${lecturesApres - lecturesAvant} `
+      + 'lecture(s) de plus) — VERT-2', !!retenus2 && !!illisibles && lecturesApres > lecturesAvant, `${lecturesAvant} → ${lecturesApres}`);
+    await toucher(page.getByRole('button', { name: 'Relire', exact: true }).first());
+    const relus = await jusqua(async () => !(await texteLu()).includes('Les totaux n’ont pas pu être relus'), 4000);
+    await jusqua(async () => (await libelleLigne()) === VERT_DIT, DELAI_ECRITURE + 4000);
+    verifier('…et « Relire » remet les totaux', !!relus);
     verifier('à la fin, l’objet rendu, la ligne est verte de nouveau', estVerte((await sondeDuVert()).haut, true)
       && (await libelleLigne()) === VERT_DIT, await libelleLigne());
     await quitterLaSaisie();
@@ -11221,6 +11318,7 @@ await section('Pour le remettre passe au VERT quand rien ne manque — « Muret 
       window.__opusPauseEcritures = null;
       window.__opusVertFin = true;
       if (window.__opusListe) { window.__opusListe.casser = null; window.__opusListe.ecoute = false; }
+      if (window.__opusTotaux) { window.__opusTotaux.retenir = false; window.__opusTotaux.lacher(false); }
     }).catch(() => {});
     await page.setViewportSize(tailleAvant).catch(() => {});
     await attendre(400);

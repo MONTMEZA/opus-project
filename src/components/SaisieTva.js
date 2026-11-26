@@ -419,7 +419,7 @@ const s = StyleSheet.create({
     borderLeftWidth: S.xs, borderLeftColor: C.bad, paddingLeft: S.sm,
   },
   /* UNE RÉUSSITE EN VERT (reconnu, déclaré, retiré) : le filet `C.ok`, un
-     élément graphique — 5,4 : 1 sur le blanc —, le texte en encre. */
+     élément graphique — 5,3 : 1 sur le blanc —, le texte en encre. */
   reussite: {
     fontFamily: F.inter, fontSize: T.courant, color: C.ink, lineHeight: interligne(T.courant),
     borderLeftWidth: S.xs, borderLeftColor: C.ok, paddingLeft: S.sm,

@@ -5499,10 +5499,26 @@ export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false, enBase =
  *   2. `en_route`    : des changements DU DEVIS partent — une écriture en
  *      vol ou en attente (`enRoute`), un champ de l'en-tête ouvert et tapé
  *      mais pas encore quitté (`champOuvert`) —, OU une RELECTURE qui suit
- *      un changement (`relecture`, l'une ou l'autre cause) : ce temps-là
- *      n'est fini qu'au retour de la liste (relecture de 2b-1, ECR-1 — sinon
- *      la ligne disait « ce devis — aucun point · mise à jour… » juste après
- *      qu'on avait vidé le délai) ;
+ *      un changement (`relecture`, l'une ou l'autre cause), OU une relecture
+ *      ENCORE À VENIR après une écriture confirmée (`relectureAVenir`, que la
+ *      file dit : `relectureAVenir()`, file-ecriture.js) : ce temps-là n'est
+ *      fini qu'au retour de la liste (relecture de 2b-1, ECR-1 — sinon la
+ *      ligne disait « ce devis — aucun point · mise à jour… » juste après
+ *      qu'on avait vidé le délai).
+ *      UNE LISTE N'EST SÛRE QUE SI AUCUNE RELECTURE N'EST À VENIR APRÈS UNE
+ *      ÉCRITURE CONFIRMÉE (relecture du vert, VERT-1, 25/11/2026) : la
+ *      saisie ne relit la liste qu'à l'événement `totaux`, un aller-retour
+ *      APRÈS la confirmation ; entre les deux, la liste lue avant l'écriture
+ *      passait pour sûre — en orange depuis 2b-1, en VERT depuis le
+ *      25/11 (on retire le seul poste : « ce devis — aucun point », coche
+ *      comprise, sur une base qui en compte un). Pourquoi cette forme, et
+ *      pas la génération de la file comparée à celle de la liste : la
+ *      génération monte à CHAQUE envoi, même refusé, et un refus ne relit
+ *      rien — la ligne restait « en route » pour toujours ; et une lecture
+ *      partie PENDANT le vol d'une écriture porte déjà la génération
+ *      montée, l'égalité ne prouve pas qu'elle a été lue après la
+ *      confirmation. La file, elle, SAIT qu'une relecture est due : elle
+ *      vient de la décider ;
  *   3. `echec`       : la DERNIÈRE lecture a échoué ;
  *   4. `lecture`     : rien de lu encore ;
  *   5. `liste`.
@@ -5527,10 +5543,10 @@ export function ceQueLaListeNeComptePas({ nbLignes = 0, entete = false, enBase =
  * qui ne montre aucune partie sur un échec.
  */
 export function etatDeLaListe({
-  enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null, relecture = null,
+  enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null, relecture = null, relectureAVenir = false,
 } = {}) {
   if (!enBase) return 'pas_en_base';
-  if (enRoute || champOuvert || !!(relecture && (relecture.devis || relecture.entreprise))) return 'en_route';
+  if (enRoute || champOuvert || !!relectureAVenir || !!(relecture && (relecture.devis || relecture.entreprise))) return 'en_route';
   if (erreur) return 'echec';
   if (!lue) return 'lecture';
   return 'liste';
@@ -5873,8 +5889,10 @@ export function texteDeLaLigneRemise({
  * zéro point partout :
  *   - l'état est `liste` — une liste LUE, rien en route (une écriture du
  *     devis, un champ tapé, la relecture qui suit « Mon entreprise » sont
- *     `en_route`), pas un échec, pas une première lecture, pas un brouillon
- *     hors de la base ;
+ *     `en_route`, et AUSSI la relecture encore à venir après une écriture
+ *     confirmée, `etatDeLaListe` : la liste d'avant cette écriture n'est
+ *     plus sûre — relecture du vert, VERT-1), pas un échec, pas une
+ *     première lecture, pas un brouillon hors de la base ;
  *   - aucune relecture n'est en cours (`enLecture`) : la ligne dit alors
  *     « · mise à jour… », et le vert attend son retour ;
  *   - rien n'est « pas compté » (`pasCompte`) : une ligne non enregistrée
@@ -5894,8 +5912,10 @@ export function texteDeLaLigneRemise({
  * et la carte garde « Pas encore vérifié : … » sous « rien ne manque ». Les
  * AVIS (« À vérifier ») ne l'éteignent pas : ils ne bloquent jamais la
  * remise. Et la couleur ne porte pas l'information seule : le texte dit
- * « aucun point », et une coche se pose devant le titre (on distingue mal
- * l'orange du vert quand on voit mal le rouge et le vert).
+ * « aucun point », et une coche se pose APRÈS le titre (on distingue mal
+ * l'orange du vert quand on voit mal le rouge et le vert ; après lui, et non
+ * devant, pour que le titre ne se déplace pas quand le vert s'allume —
+ * relecture du vert, E5).
  */
 export function ligneRemisePrete({
   etat, lue = null, enLecture = false, pasCompte = null, renvoi = false,

@@ -91,7 +91,7 @@ import {
  * orange de lecture) ou `'bas'` (sous « Conditions », la forme de sa
  * rangée). QUAND RIEN NE MANQUE (`pret`, la règle `ligneRemisePrete` de
  * devis.js — demande du propriétaire, 25/11/2026), le filet du haut et les
- * deux titres passent au VERT, avec une coche devant le titre. Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
+ * deux titres passent au VERT, avec une coche après le titre. Son texte tient sur DEUX lignes RÉSERVÉES : qu'une écriture
  * passe, et la ligne ne grandit pas — la liste ne saute pas sous le doigt
  * (E-6). Quand quelque chose n'est pas compté sur un devis en base, elle
  * dit la phrase ET le décompte (décision D-A du propriétaire, 05/11/2026 au
@@ -167,12 +167,17 @@ export function LigneRemise({
       <View style={s.ligneCorps}>
         {/* LE VERT (demande du propriétaire, 25/11/2026 ; la règle :
             `ligneRemisePrete`, devis.js) : quand la liste LUE ne compte aucun
-            point, le titre passe au vert, précédé d'une coche — la couleur
-            ne porte jamais l'information seule. La coche tient dans la
-            hauteur du titre : la ligne ne grandit pas. */}
+            point, le titre passe au vert, SUIVI d'une coche — la couleur ne
+            porte jamais l'information seule. La coche tient dans la hauteur
+            du titre : la ligne ne grandit pas. Elle vient APRÈS le titre, et
+            non devant (relecture du vert, E5) : devant, le titre reculait de
+            15 points en haut et de 17 en bas à chaque passage du vert à
+            l'orange — mesuré —, et quittait la verticale de son texte et des
+            titres des rangées voisines. Après lui, rien ne la suit dans la
+            rangée : rien ne bouge. */}
         <View style={s.ligneTitreRangee}>
-          {pret && <Check size={variante === 'bas' ? T.corps : T.petit} color={C.ok} />}
           <Text style={[variante === 'bas' ? s.ligneTitreBas : s.ligneTitre, pret && s.ligneTitrePret]}>{TITRE_POUR_REMETTRE}</Text>
+          {pret && <Check size={variante === 'bas' ? T.corps : T.petit} color={C.ok} />}
         </View>
         {gabarits ? (
           /* LES GABARITS DONNENT LA HAUTEUR — le plus grand —, le texte lu
@@ -488,7 +493,7 @@ const s = StyleSheet.create({
   },
   /* …ET QUAND RIEN NE MANQUE (`ligneRemisePrete`, demande du propriétaire
      du 25/11/2026) : le filet passe au vert, `C.ok` — un élément graphique,
-     5,4 : 1 sur le blanc, comme la « réussite en vert » de `SaisieTva`. La
+     5,3 : 1 sur le blanc, comme la « réussite en vert » de `SaisieTva`. La
      même largeur (3 points) : rien ne se décale. */
   ligneHautPrete: { borderLeftColor: C.ok },
   ligneCorps: { flex: 1, minWidth: 0, gap: S.xs },

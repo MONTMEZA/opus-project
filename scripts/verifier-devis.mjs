@@ -2606,6 +2606,100 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
     lectures === 1 && json(totaux) === json([1]) && f.etatDe('B') === 'echec' && lectures2 === 1
       && json(resume(b2)) === json(['inserer ligne A']), `${lectures}/${json(totaux)} ; ${lectures2} ${json(resume(b2))}`);
   });
+  /* m bis. UNE RELECTURE JETÉE NE FAIT PAS OUBLIER QU'IL FAUT RELIRE
+     (relecture du vert, VERT-3, 25/11/2026). L'écriture A est confirmée, la
+     relecture des totaux part ; PENDANT elle, la ligne B part — la
+     génération monte, la relecture est jetée — et la base REFUSE B (un
+     refus définitif ne demande aucune relecture). Avant, `aRelire` était
+     retombé au DÉPART de la première relecture : plus rien ne relisait, et
+     l'écran gardait les totaux et la liste d'avant A (la ligne « Pour le
+     remettre » repassait au vert sur une base qui comptait un point).
+     Désormais une seconde relecture part, sous la bonne génération, et ses
+     totaux sont émis — dans les DEUX ordres : le refus avant le retour de
+     la première relecture, et après. Et `relectureAVenir()`, lue à CHAQUE
+     événement comme l'écran la recopie, est vraie de la confirmation de A
+     jusqu'à l'événement `totaux`, où elle est déjà fausse. */
+  await essayerCas(async () => {
+    const plafond = () => Object.assign(new Error('new row for relation "devis" violates check constraint "devis_plafond_check"'), { code: '23514' });
+    const jouer = async ({ refus, totaux }) => {
+      const b = fausseBase();
+      let lectures = 0;
+      const emis = [];
+      const vus = [];
+      b.commandes.push({ quand: (op) => op.id === 'B', avant: refus, erreur: plafond() });
+      const f = fabriquer(b, {
+        devisEnBase: true,
+        relireTotaux: async () => { lectures += 1; const n = lectures; await pause(totaux); return { n }; },
+      });
+      f.abonner((e) => {
+        vus.push([e.type === 'etat' ? `${e.cle}:${e.etat}` : e.type, f.relectureAVenir()]);
+        if (e.type === 'totaux') emis.push(e.totaux.n);
+        /* B part juste APRÈS le départ de la relecture qui suit A. */
+        if (e.type === 'etat' && e.cle === 'A' && e.etat === 'enregistree') setTimeout(() => f.ligne(ligne('B', { ordre: 2000 })), 2);
+      });
+      f.ligne(ligne('A'));
+      await pause(5);
+      await f.attendre(500);
+      await pause(totaux + 10);
+      return {
+        lectures, emis, vus, etatB: f.etatDe('B'), aVenirFin: f.relectureAVenir(),
+      };
+    };
+    const avant = await jouer({ refus: 3, totaux: 30 });
+    const apres = await jouer({ refus: 25, totaux: 10 });
+    const juge = (r) => r.lectures === 2 && json(r.emis) === json([2]) && r.etatB === 'echec' && r.aVenirFin === false
+      && r.vus.some(([q, v]) => q === 'A:enregistree' && v === true) && r.vus.some(([q, v]) => q === 'B:echec' && v === true)
+      && r.vus.filter(([q]) => q === 'totaux').every(([, v]) => v === false) && r.vus.filter(([q]) => q === 'totaux').length === 1;
+    verifier('une relecture des totaux JETÉE (une ligne partie pendant elle), puis cette ligne REFUSÉE : une SECONDE relecture part et ses '
+      + 'totaux sont émis — le refus revenant avant comme après la première (VERT-3) ; `relectureAVenir()` est vraie de la confirmation '
+      + 'jusqu’à l’événement `totaux`, où elle est fausse',
+    juge(avant) && juge(apres), json([avant, apres]));
+  });
+  /* m ter. …ET RIEN D'AUTRE NE CHANGE : le chemin ordinaire fait UNE
+     relecture ; un passage « à vide » de la file PENDANT la relecture (la
+     même ligne renvoyée telle quelle : rien à envoyer) n'en lance pas une
+     seconde sous la même génération ; une ligne seulement REFUSÉE ne laisse
+     aucune relecture à venir (rien ne relirait : l'écran resterait « en
+     route » pour toujours) ; des totaux ILLISIBLES la soldent aussi ; et
+     sans `relireTotaux`, rien n'est à venir. */
+  await essayerCas(async () => {
+    const b = fausseBase();
+    let lectures = 0;
+    const vus = [];
+    const f = fabriquer(b, { devisEnBase: true, relireTotaux: async () => { lectures += 1; await pause(20); return {}; } });
+    f.abonner((e) => {
+      vus.push([e.type, f.relectureAVenir()]);
+      if (e.type === 'etat' && e.cle === 'A' && e.etat === 'enregistree' && vus.length < 6) setTimeout(() => f.ligne(ligne('A')), 4);
+    });
+    f.ligne(ligne('A'));
+    await pause(5);
+    await f.attendre(500);
+    const b2 = fausseBase();
+    let lectures2 = 0;
+    const vus2 = [];
+    b2.commandes.push({ quand: (op) => op.id === 'B', erreur: Object.assign(new Error('x'), { code: '23514' }) });
+    const f2 = fabriquer(b2, { devisEnBase: true, relireTotaux: async () => { lectures2 += 1; return {}; } });
+    f2.abonner(() => vus2.push(f2.relectureAVenir()));
+    f2.ligne(ligne('B'));
+    await f2.attendre(500);
+    const b3 = fausseBase();
+    const vus3 = [];
+    const f3 = fabriquer(b3, { devisEnBase: true, relireTotaux: async () => { throw new TypeError('Network request failed'); } });
+    f3.abonner((e) => vus3.push([e.type, f3.relectureAVenir()]));
+    f3.ligne(ligne('A'));
+    await f3.attendre(500);
+    const f4 = fabriquer(fausseBase(), { devisEnBase: true });
+    f4.ligne(ligne('A'));
+    await f4.attendre(500);
+    verifier('…et rien d’autre de la file ne change : UNE relecture sur le chemin ordinaire, même avec un passage « à vide » pendant '
+      + 'elle ; une ligne seulement refusée ne laisse AUCUNE relecture à venir ; des totaux illisibles la soldent ; sans `relireTotaux`, '
+      + 'rien n’est à venir',
+    lectures === 1 && vus.filter(([t]) => t === 'totaux').length === 1 && f.relectureAVenir() === false
+      && lectures2 === 0 && vus2.length > 0 && vus2.every((v) => v === false) && f2.etatDe('B') === 'echec'
+      && vus3.some(([t, v]) => t === 'totaux_illisibles' && v === false) && f3.relectureAVenir() === false
+      && f4.etatDe('A') === 'enregistree' && f4.relectureAVenir() === false,
+    json([lectures, vus, lectures2, vus2, vus3]));
+  });
   /* n. UN DÉLAI DÉPASSÉ ANNULE LA REQUÊTE : une modification lente ne
      repasse pas, plus tard, par-dessus la suivante (P5, S5). */
   await essayerCas(async () => {
@@ -10222,6 +10316,27 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       + 'entreprise » (les deux causes) est « en route » elle aussi, avant l’échec',
     egal(etats, ['pas_en_base', 'en_route', 'en_route', 'echec', 'en_route', 'lecture', 'liste', 'pas_en_base',
       'echec', 'echec', 'en_route', 'en_route', 'en_route', 'pas_en_base', 'en_route', 'en_route', 'liste']), json(etats));
+    /* UNE RELECTURE ENCORE À VENIR APRÈS UNE ÉCRITURE CONFIRMÉE (relecture
+       du vert, VERT-1, 25/11/2026) : « en route », même sur une liste lue et
+       sans relecture notée — la liste d'avant l'écriture n'est plus sûre,
+       et le vert attend la suivante. Jamais avant « pas en base ». La
+       règle, comparée ENTIÈRE : changer l'ordre des états se décide. */
+    const corpsEtat = sansEspaces(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'etatDeLaListe') || '');
+    verifier('…`etatDeLaListe` : une relecture ENCORE À VENIR après une écriture confirmée (`relectureAVenir`, que la file dit) est « en '
+      + 'route », sur une liste lue comme sur un échec, jamais avant « pas en base » ; sans elle, la liste lue est « liste » — et la règle est '
+      + 'comparée entière (VERT-1)',
+    P.etatDeLaListe({ enBase: true, lue: lue2, relectureAVenir: true }) === 'en_route'
+      && P.etatDeLaListe({ enBase: true, lue: lue2, relectureAVenir: false }) === 'liste'
+      && P.etatDeLaListe({ enBase: true, lue: lue2 }) === 'liste'
+      && P.etatDeLaListe({ enBase: true, erreur: err, relectureAVenir: true }) === 'en_route'
+      && P.etatDeLaListe({ enBase: false, lue: lue2, relectureAVenir: true }) === 'pas_en_base'
+      && P.etatDeLaListe({ enBase: true, lue: lue2, relectureAVenir: 1 }) === 'en_route'
+      && D.ligneRemisePrete({ etat: P.etatDeLaListe({ enBase: true, lue: D.lireMotifsDeRemise([]), relectureAVenir: true }), lue: D.lireMotifsDeRemise([]) }) === false
+      && corpsEtat === "{ if (!enBase) return 'pas_en_base'; if (enRoute || champOuvert || !!relectureAVenir || !!(relecture && "
+        + "(relecture.devis || relecture.entreprise))) return 'en_route'; if (erreur) return 'echec'; if (!lue) return 'lecture'; return 'liste'; }"
+      && /export function etatDeLaListe\(\{\s*enBase = false, enRoute = false, champOuvert = false, erreur = null, lue = null, relecture = null, relectureAVenir = false,\s*\} = \{\}\)/
+        .test(sansCommentairesJs(lire('src/lib/devis.js'))),
+    corpsEtat.slice(0, 300));
     /* CE QUE LA LISTE NE COMPTE PAS (écart 8) : LE compte du pied, dit en
        toutes lettres — et l'en-tête refusé, quand aucune ligne ne l'est. Sur
        un brouillon PAS ENCORE EN BASE (ECR-3), la liste se calculera
@@ -10957,16 +11072,21 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
         const vu = D.ligneRemisePrete(o);
         const dit = D.texteDeLaLigneRemise({ ...o, erreurReessayable: true });
         if (attendu) vrais += 1;
+        /* …ET L'ÉTIQUETTE PARLÉE, EXACTE (relecture du vert, C3) : c'est le
+           seul canal pour qui ne voit pas la couleur — « tout est en ordre »
+           ou « devis vérifié » posés pour le seul état vert passaient tout.
+           Écrite en toutes lettres, jamais recomposée depuis le code. */
         if (vu !== attendu || dit.pret !== vu
           || (vu && (dit.contenu !== 'ce devis — aucun point · votre entreprise — aucun point' || dit.compte !== null
-            || dit.gabarits !== null || dit.action !== 'ouvrir'))) {
+            || dit.gabarits !== null || dit.action !== 'ouvrir'
+            || dit.aDire !== 'Pour le remettre : ce devis — aucun point · votre entreprise — aucun point. Ouvrir la liste'))) {
           faux.push(`${etat}/${lueNom}/lecture:${enLecture}/pasCompte:${!!pasCompte}/renvoi:${renvoi} → ${vu} (${dit.pret}), attendu ${attendu}`);
         }
       })))));
     verifier(`le VERT (25/11/2026), FAIT TOURNER sur ${cas} états de la ligne : \`ligneRemisePrete\` n’est vraie que pour une liste LUE, sans `
       + 'relecture, sans « pas compté », sans renvoi, au TOTAL entier nul — une clé inconnue ou un motif illisible comptent, une liste sans '
       + 'total lisible n’est jamais verte —, `texteDeLaLigneRemise` rend la même valeur, et le vert ne se pose que sur « ce devis — aucun '
-      + 'point · votre entreprise — aucun point »', faux.length === 0 && vrais === 1 && typeof D.ligneRemisePrete() === 'boolean'
+      + 'point · votre entreprise — aucun point », que l’étiquette parlée dit mot pour mot', faux.length === 0 && vrais === 1 && typeof D.ligneRemisePrete() === 'boolean'
       && D.ligneRemisePrete() === false && D.ligneRemisePrete({ etat: 'liste', lue: lueVide }) === true
       && D.ligneRemisePrete({ etat: 'liste', lue: lueVide, renvoi: 'oui' }) === false
       && D.ligneRemisePrete({ etat: 'liste', lue: lueVide, enLecture: 1 }) === false,
@@ -10985,10 +11105,22 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
         .includes('const pret = ligneRemisePrete({ etat, lue, enLecture, pasCompte, renvoi, }); return { contenu, compte, gabarits, action, aDire, pret, };'),
     corpsPret.slice(0, 300));
     /* LE DESSIN : `PourRemettre.js` LIT `pret` (jamais ne le recalcule), et
-       ne s'en sert qu'à trois endroits — la coche devant le titre, le titre
-       vert, le filet vert du haut. L'orange reste la couleur ordinaire : le
-       vert ne fait que s'AJOUTER. La coche tient dans la hauteur du titre
-       (sa taille est celle du titre) : la ligne ne grandit pas. */
+       ne s'en sert qu'à trois endroits — la coche APRÈS le titre (relecture
+       du vert, E5 : devant lui, elle le faisait reculer de 15 points en haut
+       et de 17 en bas à chaque passage du vert à l'orange), le titre vert,
+       le filet vert du haut. L'orange reste la couleur ordinaire : le vert ne
+       fait que s'AJOUTER. La coche tient dans la hauteur du titre (sa taille
+       est celle du titre) : la ligne ne grandit pas.
+       LA TEINTE, pas seulement le contraste (relecture du vert, C4) : `C.ok`
+       ou `C.okTexte` passés à l'orange de lecture tenaient tous les seuils
+       (5,74 et 4,52 : 1) — la ligne prête redevenait orange sans un mot. Leur
+       teinte doit être VERTE (entre 90° et 180°), à 60° au moins de celle de
+       `accentTexte` : on peut en ajuster la clarté pour un contraste, pas les
+       rendre orange. Et CHAQUE CLÉ DE STYLE de la ligne n'est définie
+       qu'UNE fois, entre guillemets ou non, et rien ne réaffecte `s` (C6) :
+       une clé redéfinie plus bas l'emporte — un filet de 6 points, une
+       coche passée au-dessus du titre —, et seul le cliquet du linter la
+       refusait, par hasard. */
     const ligneS = sansEspaces(corpsDeFonction(PR, 'LigneRemise') || '');
     const contraste = (a, b) => {
       const lum = (h) => {
@@ -11000,12 +11132,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       return (x + 0.05) / (y + 0.05);
     };
     const Cth = (await import('../src/theme.js')).C;
-    verifier('…et le DESSIN lit `pret` sans le recalculer, à TROIS endroits seulement : la coche `C.ok` à la taille du titre, le titre '
-      + '`okTexte`, le filet `C.ok` du haut — l’orange de lecture reste le filet et le titre ordinaires ; et les contrastes tiennent : '
-      + 'le filet et la coche ≥ 3 : 1 sur le blanc et sur le fond, le titre ≥ 4,5 : 1 sur les deux',
+    const teinte = (h) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+      const mx = Math.max(r, g, b);
+      const d = mx - Math.min(r, g, b);
+      if (!/^#[0-9A-Fa-f]{6}$/.test(h) || d === 0) return null;
+      let t;
+      if (mx === r) t = ((g - b) / d) % 6;
+      else if (mx === g) t = (b - r) / d + 2;
+      else t = (r - g) / d + 4;
+      return (t * 60 + 360) % 360;
+    };
+    const ecartDeTeinte = (a, b) => (a == null || b == null ? 0 : Math.min(Math.abs(a - b) % 360, 360 - (Math.abs(a - b) % 360)));
+    const vertVrai = (h) => teinte(h) != null && teinte(h) >= 90 && teinte(h) <= 180 && ecartDeTeinte(teinte(h), teinte(Cth.accentTexte)) >= 60;
+    const CLES_DU_VERT = ['ligneHaut', 'ligneHautPrete', 'ligneTitreRangee', 'ligneTitre', 'ligneTitreBas', 'ligneTitrePret'];
+    const clesUniques = CLES_DU_VERT.every((k) => (prE.match(new RegExp(`(^|[{,\\s])['"]?${k}['"]?\\s*:`, 'g')) || []).length === 1);
+    const sReaffecte = /\bs\s*\.\s*\w+\s*=[^=>]|\bs\s*\[[^\]]*\]\s*=[^=>]|Object\.(?:assign|defineProperty|defineProperties)\(\s*s\b|\bs\s*=[^=>]/.test(PR.replace(/const s = StyleSheet\.create\(/, ''));
+    verifier('…et le DESSIN lit `pret` sans le recalculer, à TROIS endroits seulement : la coche `C.ok` à la taille du titre, posée APRÈS '
+      + 'lui (E5), le titre `okTexte`, le filet `C.ok` du haut — l’orange de lecture reste le filet et le titre ordinaires ; les contrastes '
+      + 'tiennent : le filet et la coche ≥ 3 : 1 sur le blanc et sur le fond, le titre ≥ 4,5 : 1 sur les deux ; leur TEINTE est verte, loin '
+      + 'de l’orange (C4) ; et chaque clé de style de la ligne n’est définie qu’une fois, sans réaffectation de `s` (C6)',
     !/ligneRemisePrete/.test(PR) && (ligneS.match(/\bpret\b/g) || []).length === 4
-      && ligneS.includes('<View style={s.ligneTitreRangee}> {pret && <Check size={variante === \'bas\' ? T.corps : T.petit} color={C.ok} />} '
-        + '<Text style={[variante === \'bas\' ? s.ligneTitreBas : s.ligneTitre, pret && s.ligneTitrePret]}>{TITRE_POUR_REMETTRE}</Text> </View>')
+      && ligneS.includes('<View style={s.ligneTitreRangee}> <Text style={[variante === \'bas\' ? s.ligneTitreBas : s.ligneTitre, pret && '
+        + 's.ligneTitrePret]}>{TITRE_POUR_REMETTRE}</Text> {pret && <Check size={variante === \'bas\' ? T.corps : T.petit} color={C.ok} />} </View>')
+      && (ligneS.match(/<Check\b/g) || []).length === 1
+      && vertVrai(Cth.ok) && vertVrai(Cth.okTexte) && clesUniques && !sReaffecte
       && ligneS.includes("const style = [variante === 'bas' ? s.ligneBas : s.ligneHaut, pret && variante !== 'bas' && s.ligneHautPrete];")
       && /import \{ ChevronRight, Check \} from '\.\/icons';/.test(PR)
       && /ligneHautPrete: \{ borderLeftColor: C\.ok \},/.test(prE) && /ligneTitrePret: \{ color: C\.okTexte \},/.test(prE)
@@ -11015,7 +11166,31 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
       && /ligneTitreBas: \{ fontFamily: F\.oswald6, fontSize: T\.corps, color: C\.accent2 \},/.test(prE)
       && contraste(Cth.ok, Cth.surface) >= 3 && contraste(Cth.ok, Cth.bg) >= 3
       && contraste(Cth.okTexte, Cth.surface) >= 4.5 && contraste(Cth.okTexte, Cth.bg) >= 4.5,
-    ligneS.slice(0, 400));
+    `${json([teinte(Cth.ok), teinte(Cth.okTexte), teinte(Cth.accentTexte), clesUniques, sReaffecte])} ${ligneS.slice(0, 300)}`);
+    /* LA COCHE EST BIEN UNE COCHE (relecture du vert, C5) : rien ne lisait
+       la définition de `Check` — une croix (`mk(Feather, 'x')`), ou une
+       coche forcée à 24 points qui fait grandir la ligne au passage au vert,
+       passaient les 56 contrôles. `Check` est `mk(Feather, 'check')`, une
+       seule fois ; `mk`, comparée entière, passe la taille et la couleur au
+       glyphe ; Feather vient de `@expo/vector-icons`, sans autre famille
+       renommée ainsi ; et la table de Feather a bien le glyphe « check ». Ce
+       gel tient aussi les autres usages de `Check` (le bandeau de réussite,
+       la case cochée) : changer cette icône se DÉCIDE, dans le même lot que
+       ce contrôle. */
+    const ICO = sansCommentairesJs(lire('src/components/icons.js'));
+    const icoE = sansEspaces(ICO);
+    const tableFeather = JSON.parse(lire('node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Feather.json'));
+    verifier('…et la COCHE est bien une coche : `Check = mk(Feather, \'check\')`, une seule fois et sans autre exportation de `Check` ; '
+      + '`mk` comparée entière (elle passe la taille et la couleur au glyphe) ; Feather importée telle quelle de `@expo/vector-icons` ; le '
+      + 'glyphe « check » existe dans sa table (C5)',
+    (ICO.match(/^export const Check = mk\(Feather, 'check'\);$/gm) || []).length === 1 && (ICO.match(/\bCheck\b/g) || []).length === 1
+      && (icoE.match(/const mk = /g) || []).length === 1
+      && icoE.includes('const mk = (Set, name) => function Icon({ size = 18, color = C.ink, style }) { return <Set name={name} '
+        + 'size={size} color={color} style={style} />; };')
+      && (ICO.match(/^import \{ Feather, MaterialCommunityIcons \} from '@expo\/vector-icons';$/gm) || []).length === 1
+      && (ICO.match(/\bFeather\b/g) || []).length >= 2 && !/\bas\s+Feather\b|\bFeather\s*=[^=]/.test(ICO)
+      && Number.isInteger(tableFeather.check),
+    (/export const Check[^\n]*/.exec(ICO) || ['(aucune)'])[0]);
   }
   verifier('…et la carte, en échec, propose « Liste non lue — Réessayer » (`onReessayer`), sans liste dessous',
     /\{etat === 'echec' && \( <View style=\{s\.echec\}> \{erreurReessayable \? \( <Pressable onPress=\{onReessayer\}[^]*?\{LISTE_NON_LUE\}/.test(prE));
@@ -11214,13 +11389,19 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     '(); }); return; } const lues = ', //                   la garde de génération relit la DERNIÈRE lecture
     /* une écriture du devis confirmée — « Votre entreprise » aussi quand la réponse vue par la base change (2b-2) */
     "(changee ? ['devis', 'entreprise'] : 'devis'); } else if (",
+    /* LES TOTAUX ILLISIBLES (relecture du vert, VERT-2, 25/11/2026) : la
+       liste se relit quand même — sinon la ligne gardait, en vert, la liste
+       d'avant l'écriture confirmée ; les DEUX causes, la réponse « à quel
+       titre » vue par la base n'étant plus connue. */
+    "(['devis', 'entreprise']); } else if (ev.type === 'renomme'",
     '(); })(); return () => {', //                          l'ouverture d'un devis en base
     "(['devis', 'entreprise']); }, [retourEntreprise]);", // le retour de « Mon entreprise » (les deux causes, toujours)
     '} />', //                                              « Réessayer » de la ligne (en haut et en bas)
     '} onFermer={fermerCarte} />', //                       « Réessayer » de la carte
   ];
-  verifier('…et RIEN D’AUTRE ne relit la liste : les sept occurrences de `lireLaListe` dans la saisie, dans l’ordre (la définition, la garde '
-    + 'de génération, l’écriture confirmée, l’ouverture, le retour de « Mon entreprise », « Réessayer » ×2 — plus aucune sur un changement '
+  verifier('…et RIEN D’AUTRE ne relit la liste : les huit occurrences de `lireLaListe` dans la saisie, dans l’ordre (la définition, la garde '
+    + 'de génération, l’écriture confirmée, les totaux illisibles — VERT-2 —, l’ouverture, le retour de « Mon entreprise », « Réessayer » ×2 '
+    + '— plus aucune sur un changement '
     + 'du régime, relecture 4) — un appel '
     + 'de plus, ou un alias, rougit (banc de la relecture 2 : un second effet qui relisait « devis » à chaque retour passait au vert)',
   usagesDeLireLaListe.length === USAGES_DE_LIRE_LA_LISTE.length
@@ -11354,7 +11535,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
   verifier('la saisie : « des changements partent » pendant une écriture (`attente.enCours`) ET pendant la frappe d’un champ de l’en-tête '
     + '(`champOuvert`, que l’en-tête signale par `onFrappe`) ; ce que la liste ne compte pas vient de `ceQueLaListeNeComptePas` avec LE '
     + 'compte du pied (`nbNonEnregistrees`), et passe à la ligne ET à la carte',
-  /const etatListe = etatDeLaListe\(\{ enBase: attente\.devisEnBase, enRoute: attente\.enCours, champOuvert, erreur: liste\.erreur, lue, relecture: relectureVue, \}\);/.test(saE)
+  /const etatListe = etatDeLaListe\(\{ enBase: attente\.devisEnBase, enRoute: attente\.enCours, champOuvert, erreur: liste\.erreur, lue, relecture: relectureVue, relectureAVenir: attente\.relectureAVenir, \}\);/.test(saE)
     && /const pasCompte = ceQueLaListeNeComptePas\(\{ nbLignes: nbNonEnregistrees, entete: !!attente\.devisErreur \|\| Object\.keys\(erreursEntete\)\.length > 0, enBase: attente\.devisEnBase, \}\);/.test(saE)
     /* LES AVIS, une fois l'état connu (PAR-8) ; et « Réessayer » JAMAIS
        sur un refus définitif (PAR-3 : retirer la garde laissait OP027
@@ -11396,6 +11577,33 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
      ferme plus le clavier quand une carte ou une feuille la couvre
      (`glisserFermeLeClavier`) : la place y change de hauteur, et le
      défilement qu'en tire Chromium fermait le clavier du champ de la carte. */
+  /* CE QUE LA LIGNE REÇOIT, TENU JUSQU'À SA SOURCE (relecture du vert, C1) :
+     rien ne tenait `etat`, `lue` ni `enLecture` dans la balise — `etat` forcé
+     à « liste » pendant un envoi, ou une `lue` au total remis à 0 sous
+     « votre entreprise — 1 point », mettaient la ligne au VERT et passaient
+     les 56 contrôles. La balise est comparée ENTIÈRE, la déclaration de
+     `ligneRemise` aussi (un seul paramètre, `variante` : un second, avec sa
+     valeur par défaut, masquait `etatListe`), le calcul de `lue` aussi, et
+     `etatListe`, `lue` et `relectureVue` n'ont aucune autre écriture. */
+  {
+    const BALISE = '<LigneRemise variante={variante} etat={etatListe} lue={lue} enLecture={liste.enLecture} pasCompte={pasCompte} '
+      + 'relecture={relectureVue} renvoi={attente.renvoisEnRoute > 0} erreurReessayable={listeReessayable} erreurPhrase={erreurListe} '
+      + 'onOuvrir={ouvrirPourRemettre} onReessayer={lireLaListe} />';
+    const DECL = `const ligneRemise = (variante) => ( ${BALISE} );`;
+    const LUE = 'const lue = useMemo(() => (Array.isArray(liste.motifs) ? lireMotifsDeRemise(liste.motifs, { sections: SECTION_DU_MOTIF }) '
+      + ': null), [liste.motifs]);';
+    const ecrit = (re) => (saE.match(re) || []).length;
+    verifier('la ligne reçoit `etat`, `lue` et `enLecture` tels que l’écran les calcule : la balise `LigneRemise` comparée ENTIÈRE, sa '
+      + 'déclaration (`(variante) => (…)`, un seul paramètre) et le calcul de `lue` aussi, et ni `etatListe`, ni `lue`, ni `relectureVue` '
+      + 'n’ont d’autre écriture (C1)',
+    balises(SA, 'LigneRemise').length === 1 && sansEspaces(balises(SA, 'LigneRemise')[0]) === BALISE
+      && saE.split(DECL).length === 2 && saE.split(LUE).length === 2
+      && ecrit(/\betatListe\s*=(?![={])/g) === 1 && ecrit(/\blue\s*=(?![={])/g) === 3 && ecrit(/\brelectureVue\s*=(?![={])/g) === 1
+      && ecrit(/\blue\s*\.\s*[A-Za-z_$]+\s*(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?!=)/g) === 0
+      && ecrit(/Object\.(?:assign|defineProperty)\(\s*lue\b/g) === 0,
+    json([sansEspaces(balises(SA, 'LigneRemise')[0] || '').slice(0, 200), saE.split(DECL).length, saE.split(LUE).length,
+      ecrit(/\betatListe\s*=(?![={])/g), ecrit(/\blue\s*=(?![={])/g), ecrit(/\brelectureVue\s*=(?![={])/g)]));
+  }
   const balisesLigne = balises(SA, 'LigneRemise');
   const iMaj = saE.indexOf('const majAttente = () => {');
   const corpsMaj = iMaj >= 0 ? saE.slice(iMaj, saE.indexOf('};', iMaj)) : '';
@@ -11410,7 +11618,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /renvoisEnRoute: f\.renvoisEnRoute\(\)\.length,/.test(corpsMaj)
     /* 2b-3 (E-I6) : l'état de la troisième question, `etatQ3`, part du même
        état de repos. */
-    && /const \[attente, setAttente\] = useState\(\{ nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT, etatDechets: AUCUN_ETAT, etatEnergie: AUCUN_ETAT, \}\);/.test(saE)
+    && /const \[attente, setAttente\] = useState\(\{ nb: 0, enCours: false, devisErreur: null, devisEnBase: false, retraitsEnEchec: 0, renvoisEnRoute: 0, relectureAVenir: false, etatAQuelTitre: AUCUN_ETAT, etatChantier: AUCUN_ETAT, etatQ1: AUCUN_ETAT, etatQ2: AUCUN_ETAT, etatQ3: AUCUN_ETAT, etatDechets: AUCUN_ETAT, etatEnergie: AUCUN_ETAT, \}\);/.test(saE)
     && (saE.match(/\brenvoisEnRoute\b/g) || []).length === 4
     && !/fileRef\.current\.renvoisEnRoute|fileRef\.current && fileRef\.current\.renvoisEnRoute/.test(saE)
     && saE.includes("const glisserFermeLeClavier = carte || feuille ? 'none' : 'on-drag';")
@@ -11425,6 +11633,27 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && saE.indexOf('fileRef.current = f; desabonner = f.abonner(ecouter);') < saE.indexOf("majAttente(); setEtat('pret'); lireLaListe();"),
   `${balisesLigne.length} balise(s) ; renvoisEnRoute ×${(saE.match(/\brenvoisEnRoute\b/g) || []).length} ; ouverture `
     + `${saE.indexOf('fileRef.current = f; desabonner = f.abonner(ecouter);')} < ${saE.indexOf("majAttente(); setEtat('pret'); lireLaListe();")}`);
+  /* LA RELECTURE À VENIR (relecture du vert, VERT-1 et VERT-2, 25/11/2026) :
+     la liste n'est sûre que si AUCUNE relecture n'est à venir après une
+     écriture confirmée. La saisie ne la relisait qu'à l'événement `totaux`,
+     un aller-retour après la confirmation : entre les deux, la liste d'avant
+     l'écriture passait au VERT (on retire le seul poste, « aucun point »
+     coche comprise, sur une base qui en compte un) ; et sur des totaux
+     ILLISIBLES, rien ne la relisait du tout. La file sait qu'une relecture
+     est due (`relectureAVenir()`) : `majAttente` la recopie après chaque
+     événement — jamais lue par une référence pendant le rendu —,
+     `etatDeLaListe` la reçoit, et la branche `totaux_illisibles` relit la
+     liste, avec les DEUX causes. */
+  const brancheIllisibles = (/\} else if \(ev\.type === 'totaux_illisibles'\) \{[\s\S]*?\} else if \(ev\.type === 'renomme'/.exec(SA) || [''])[0];
+  verifier('la saisie tient la liste « en route » tant qu’une relecture est À VENIR après une écriture confirmée : `majAttente` recopie '
+    + '`relectureAVenir: f.relectureAVenir()` après chaque événement (jamais par une référence pendant le rendu), l’état d’attente '
+    + 'l’initialise à faux, `etatDeLaListe` la reçoit ; et des totaux ILLISIBLES relisent la liste, les deux causes (VERT-1, VERT-2)',
+  /relectureAVenir: f\.relectureAVenir\(\),/.test(corpsMaj) && (saE.match(/\brelectureAVenir\b/g) || []).length === 5
+    && /relectureAVenir: attente\.relectureAVenir,/.test(saE) && /renvoisEnRoute: 0, relectureAVenir: false,/.test(saE)
+    && !/fileRef\.current\.relectureAVenir|fileRef\.current && fileRef\.current\.relectureAVenir|\.relectureAVenir\(\)/.test(saE.replace('relectureAVenir: f.relectureAVenir(),', ''))
+    && sansEspaces(brancheIllisibles) === "} else if (ev.type === 'totaux_illisibles') { setTotauxIllisibles(true); lireLaListe(['devis', 'entreprise']); } "
+      + "else if (ev.type === 'renomme'",
+  sansEspaces(brancheIllisibles).slice(0, 200));
   verifier('…et l’en-tête signale la frappe UNE fois (`surPremiereFrappe` sur l’objet, le code postal, la ville et le délai ; la première '
     + 'lettre de la rue), et la retire quand le champ s’enregistre (chaque `onBlur`, le lieu, `enregistrer()`), réarmant ses champs',
   champsFrappe.length === 4
@@ -16276,6 +16505,100 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
       && (corpsP.match(/\bverifier\(/g) || []).length === 10 && absentesP.length === 0,
     `copies fausses : ${fausses.join(', ') || 'aucune'} ; section ${iP > 0} ; avant ${json(avantP.slice(0, 80))} ; après `
       + `${json(apresP.slice(0, 80))} ; vérifications absentes : ${absentesP.length}`);
+  }
+  /* s. LA SECTION DU VERT DE `mesure-devis` TOURNE, ET ELLE JUGE CE QU'ELLE
+        DIT JUGER (relecture du vert, C2, 25/11/2026 — la leçon de « r. »,
+        appliquée à cette section). Rien ne la tenait : neutralisée (`return`,
+        `if` autour de l'appel), aveuglée (`const fautes = []`, `estVerte`
+        toujours faux, une comparaison des hauteurs suivie de `|| true`, une
+        coche acceptée quel que soit son glyphe), `npm run verifier` restait
+        vert — et c'est la SEULE à voir, au navigateur, une `lue` au total
+        faussé, le DESSIN du vert (couleurs, coche, hauteur, place du titre),
+        et la fenêtre entre la confirmation d'une écriture et le retour de la
+        liste (VERT-1, VERT-2, VERT-4 : la relecture des totaux retenue). On
+        tient :
+          - LA PLACE, par ce qui la SUIT : le titre une seule fois, en début de
+            ligne, aucune `await section(` après elle, et RIEN entre sa fin et
+            le résumé (les outils posés devant elle rendent « juste après la
+            précédente » impossible, la contradiction de C2 l'a mesuré) ;
+          - LE CORPS : aucun `return` ; ses `if` et ses `||` COMPTÉS — une
+            liste fermée, pas une interdiction (le bouton « JE SUIS UN
+            PROFESSIONNEL », `|| ''` du médiateur, le nettoyage) ; ses
+            `verifier(`, ses cinq témoins jugés, ses deux `jugerVert` et ses
+            deux `jugerOrange` comptés ;
+          - LES COPIES, égales au code : les couleurs à `theme.js`, les phrases
+            à `devis.js`, le glyphe lu dans la table de Feather ;
+          - LES VÉRIFICATIONS DÉCISIVES, écrites telles quelles — y compris le
+            vert de l'enregistreur dans la page, que la liste du relecteur
+            oubliait (K38). Changer l'une d'elles se décide, ici. */
+  {
+    const M49 = sansCommentairesJs(lire('scripts/mesure-devis.mjs'));
+    const copieDe = (nom) => { const m = new RegExp(`\nconst ${nom} = '([^']*)';`).exec(M49); return m ? m[1] : null; };
+    const ThV = (await import('../src/theme.js')).C;
+    const rgbDe = (hex) => {
+      if (!/^#[0-9A-Fa-f]{6}$/.test(hex || '')) return null;
+      const v = parseInt(hex.slice(1), 16);
+      return `rgb(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255})`;
+    };
+    const TITRE_V = "await section('Pour le remettre passe au VERT";
+    const iV = M49.indexOf(TITRE_V);
+    const finV = iV > 0 ? M49.indexOf('\n});\n', iV) : -1;
+    const corpsV = iV > 0 && finV > iV ? M49.slice(iV, finV) : '';
+    const platV = sansEspaces(corpsV);
+    const platM = sansEspaces(M49);
+    const RESUME = "console.log('\\nLes propositions vues');";
+    const iR = M49.indexOf(RESUME);
+    const apresV = finV > 0 && iR > finV ? M49.slice(finV + 5, iR).trim() : 'absente';
+    const COPIES_V = [
+      ['VERT_DIT', `${D.TITRE_POUR_REMETTRE} : ${D.phraseDesEndroits(D.lireMotifsDeRemise([]))}. Ouvrir la liste`],
+      ['VERT_FILET', rgbDe(ThV.ok)], ['VERT_TITRE', rgbDe(ThV.okTexte)], ['ORANGE_FILET', rgbDe(ThV.accentTexte)],
+      ['BLEU_TITRE_BAS', rgbDe(ThV.accent2)], ['EN_ROUTE_LIGNE', D.LISTE_EN_ROUTE], ['MISE_A_JOUR_LIGNE', D.LISTE_MISE_A_JOUR],
+    ];
+    const faussesV = COPIES_V.filter(([nom, attendu]) => !attendu || copieDe(nom) !== attendu).map(([nom]) => nom);
+    const DECISIVES_MODULE = [
+      'const estVerte = (x, avecFilet) => !!x && ((avecFilet && x.filet === VERT_FILET) || x.titre === VERT_TITRE || x.titre === VERT_FILET || !!x.coche);',
+      'const vert = (x, f) => !!x && ((f && x.filet === vf) || x.titre === vt || x.titre === vf || !!x.coche);',
+      'const vuOk = vus.some(([h]) => vu(h));',
+      'const fautes = vus.filter(([h, vh, b, vb]) => (vh || vb) && !(h === VERT_DIT && b === VERT_DIT));',
+      'const enRetard = vus.filter(([h, vh, b, vb]) => (h === VERT_DIT && !vh) || (b === VERT_DIT && !vb));',
+      'vuOk && fautes.length === 0,',
+      'enRetard.length === 0 && der[0] === VERT_DIT && der[1] === true && der[2] === VERT_DIT && der[3] === true,',
+      'const EN_ROUTE_DIT = `Pour le remettre : ${EN_ROUTE_LIGNE} Ouvrir la liste`;',
+      'const GLYPHE_CHECK = GLYPHES_FEATHER.check;',
+    ];
+    const DECISIVES_CORPS = [
+      "s.nb === 2 && !!s.haut && s.haut.filet === ORANGE_FILET && s.haut.filetLargeur === '3px' && s.haut.titre === ORANGE_FILET "
+        + '&& !s.haut.coche && s.haut.nbGlyphes === 0, JSON.stringify(s.haut));',
+      '!!s.bas && s.bas.titre === BLEU_TITRE_BAS && !s.bas.coche && s.bas.nbGlyphes === 0, JSON.stringify(s.bas));',
+      '!!x && !!c && !!t && x.nbGlyphes === 1 && c.code === GLYPHE_CHECK && c.couleur === VERT_FILET && c.taille === x.tailleTitre '
+        + '&& c.boite.x >= t.x + t.l - 0.5 && c.boite.h <= t.h + 0.5 && Math.abs(x.boiteRangee.h - t.h) <= 0.5, JSON.stringify(x));',
+      'h1[L].haut != null && h1[L].haut === h2[L].haut && h1[L].bas != null && h1[L].bas === h2[L].bas && h2[L].dit === VERT_DIT, '
+        + 'JSON.stringify([h1[L], h2[L]]));',
+      '&& !!s2.bas.boiteTitre && Math.abs(s1.haut.boiteTitre.x - s2.haut.boiteTitre.x) <= 0.5 && Math.abs(s1.bas.boiteTitre.x - '
+        + 's2.bas.boiteTitre.x) <= 0.5, JSON.stringify([s1.haut, s2.haut, s1.bas, s2.bas]));',
+      '!!retenus && !!s7.haut && s7.haut.libelle === EN_ROUTE_DIT && !!s7.bas && s7.bas.libelle === EN_ROUTE_DIT && '
+        + '!estVerte(s7.haut, true) && !estVerte(s7.bas, false), JSON.stringify(s7));',
+      'const remontees = vus7.filter(([h], k) => k > 0 && h === VERT_DIT && vus7[k - 1][0] !== VERT_DIT).length;',
+      'remontees === 1, JSON.stringify(vus7));',
+      '!!retenus2 && !!illisibles && lecturesApres > lecturesAvant,',
+    ];
+    const absentesM = DECISIVES_MODULE.filter((v) => platM.split(sansEspaces(v)).length !== 2);
+    const absentesC = DECISIVES_CORPS.filter((v) => platV.split(sansEspaces(v)).length !== 2);
+    const nb = (re) => (corpsV.match(re) || []).length;
+    const glypheLu = /\nconst GLYPHES_FEATHER = JSON\.parse\(readFileSync\('node_modules\/@expo\/vector-icons\/build\/vendor\/react-native-vector-icons\/glyphmaps\/Feather\.json', 'utf8'\)\);\n/.test(M49);
+    verifier('s. la section du VERT de `mesure-devis` TOURNE et juge ce qu’elle dit juger : appelée une fois, en début de ligne, la dernière '
+      + 'avant le résumé, sans rien entre les deux ; ni `return`, ses `if` et ses `||` comptés (7 et 3), 25 `verifier(`, cinq témoins jugés, '
+      + 'deux `jugerVert`, deux `jugerOrange` ; ses copies (couleurs, phrases, glyphe) égales au code ; ses vérifications décisives écrites '
+      + 'telles quelles (C2)',
+    faussesV.length === 0 && iV > 0 && M49.split(TITRE_V).length === 2 && M49[iV - 1] === '\n' && apresV === ''
+      && M49.indexOf('await section(', finV) < 0 && corpsV.length > 10000 && nb(/\breturn\b/g) === 0 && nb(/\bif\s*\(/g) === 7
+      && nb(/\|\|/g) === 3 && nb(/\bverifier\(/g) === 25
+      && nb(/\bjugerLeTemoin\((?:await arreterLeTemoinDuVert\(\)|vus7),/g) === 5 && nb(/\bjugerLeTemoin\(/g) === 5
+      && nb(/\bjugerVert\(s2\.(?:haut|bas),/g) === 2 && nb(/\bjugerOrange\(/g) === 2
+      && absentesM.length === 0 && absentesC.length === 0 && glypheLu,
+    `copies fausses : ${faussesV.join(', ') || 'aucune'} ; section ${iV > 0} ; après ${json(apresV.slice(0, 80))} ; if ${nb(/\bif\s*\(/g)} ; `
+      + `|| ${nb(/\|\|/g)} ; return ${nb(/\breturn\b/g)} ; verifier ${nb(/\bverifier\(/g)} ; décisives absentes : `
+      + `${json([...absentesM, ...absentesC].map((v) => v.slice(0, 60)))} ; glyphe lu ${glypheLu}`);
   }
 }
 
