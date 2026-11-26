@@ -1,0 +1,149 @@
+# Ce que doit rendre supabase/essais-section-27.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-27` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-27
+
+[partie essai]
+erreurs: 3
+valeurs-jugees: 1
+[erreurs]
+| @ === 1. un tiers ne lit pas les files ===
+|   42501 Cette action est réservée à l'administration d'Opus.
+| @ === 4. un refus sans motif est refusé ===
+|   23514 Un refus demande un motif d'au moins dix caractères : sans lui, l'artisan ne sait pas quoi corriger.
+| @ === 6. on ne tranche pas SA PROPRE demande ===
+|   42501 On ne tranche pas sa propre demande de métiers : le verrou de la base annulerait l'opération en silence. Passez par l'éditeur SQL de Supabase.
+[valeurs]
+| ecart_attendu_zero = 0
+[sortie]
+| === jeu d essai ===
+| -- attendu : INSERT 0 1, INSERT 0 1, puis « fiche avant | {carreleur} | t »
+| INSERT 0 1
+| INSERT 0 1
+| quoi | metiers | verifie
+| ----
+| fiche avant | {carreleur} | t
+| (1 row)
+|
+| === 1. un tiers ne lit pas les files ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Cette action est réservée à l'administration d'Opus.
+| ROLLBACK
+| === 2. l administration les lit ===
+| BEGIN
+| SET
+| SET
+| entreprise | metiers_actuels | metiers_voulus | statut | jours | est_moi
+| ----
+| Carrelage du Sud | {carreleur} | {carreleur,plaquiste} | en_attente | 0 | f
+| (1 row)
+|
+| texte | metier_nom | propose_par | statut
+| ----
+| douche à l italienne | Carreleur | Pro Carreleur | en_attente
+| (1 row)
+|
+| ROLLBACK
+| === 3. ACCEPTER APPLIQUE VRAIMENT les métiers ===
+| BEGIN
+| SET
+| SET
+| admin_traiter_metier_demande
+| ----
+|
+| (1 row)
+|
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| RESET
+| RESET
+| quoi | metiers | metier
+| ----
+| fiche après | {carreleur,plaquiste} | carreleur
+| (1 row)
+|
+| action | cible_type
+| ----
+| metier_demande_traitee | metier_demande
+| (1 row)
+|
+| type | texte
+| ----
+| metiers_acceptes | Votre changement de métiers a été accepté : votre fiche
+| (1 row)
+|
+| ROLLBACK
+| === 4. un refus sans motif est refusé ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Un refus demande un motif d'au moins dix caractères : sans lui, l'artisan ne sait pas quoi corriger.
+| ROLLBACK
+| === 5. un refus motivé, et la fiche NE bouge PAS ===
+| BEGIN
+| SET
+| SET
+| admin_traiter_metier_demande
+| ----
+|
+| (1 row)
+|
+| RESET
+| RESET
+| quoi | metiers
+| ----
+| fiche après refus | {carreleur}
+| (1 row)
+|
+| ROLLBACK
+| === 6. on ne tranche pas SA PROPRE demande ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 On ne tranche pas sa propre demande de métiers : le verrou de la base annulerait l'opération en silence. Passez par l'éditeur SQL de Supabase.
+| ROLLBACK
+| === 7. une spécialité se retient, et le catalogue NE bouge pas ===
+| BEGIN
+| SET
+| SET
+| SELECT 1
+| admin_traiter_specialite
+| ----
+|
+| (1 row)
+|
+| texte | statut
+| ----
+| douche à l italienne | ajoutee
+| (1 row)
+|
+| RESET
+| RESET
+| avant | apres | ecart_attendu_zero
+| ----
+| 459 | 459 | 0
+| (1 row)
+|
+| ROLLBACK
+| === 8. un métier désactivé ne casse PAS la fiche de qui l exerce ===
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| constat | telephone
+| ----
+| téléphone enregistré malgré le métier désactivé | 0612345678
+| (1 row)
+|
+| ROLLBACK

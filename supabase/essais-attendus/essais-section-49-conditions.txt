@@ -1,0 +1,762 @@
+# Ce que doit rendre supabase/essais-section-49-conditions.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-49-conditions` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-49-conditions
+
+[partie essai]
+erreurs: 27
+valeurs-jugees: 55
+[erreurs]
+| @ --- acompte sous ses DEUX formes → devis_acompte_une_forme_check (relecture BASE-3)
+|   23514 new row for relation "devis" violates check constraint "devis_acompte_une_forme_check"
+| @ --- réduction sous ses DEUX formes → devis_remise_une_forme_check
+|   23514 new row for relation "devis" violates check constraint "devis_remise_une_forme_check"
+| @ --- acompte de 100,01 % → devis_acompte_check
+|   23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| @ --- acompte de 0 € → devis_acompte_check (aucun acompte, c est vide)
+|   23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| @     le déclencheur ne multiplie le pourcentage que dans ses bornes, la contrainte refuse sous son nom (relecture BASE-5)
+|   23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| @ --- nature « caution » → devis_acompte_nature_check
+|   23514 new row for relation "devis" violates check constraint "devis_acompte_nature_check"
+| @ --- réduction de 0 % → devis_remise_check (aucune réduction, c est vide)
+|   23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| @ --- réduction de 100,01 % → devis_remise_check
+|   23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| @ --- réduction négative → devis_remise_check
+|   23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| @ --- validité de 0 jour → devis_validite_check
+|   23514 new row for relation "devis" violates check constraint "devis_validite_check"
+| @ --- validité de 366 jours → devis_validite_check
+|   23514 new row for relation "devis" violates check constraint "devis_validite_check"
+| @     (sans la règle, le net 0 passait : des lignes au-delà de la borne tenaient sous elle grâce à la réduction)
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @ --- et une option qui ferait dépasser le total toutes options comprises → devis_plafond_check
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @               retrait_refuse_par_le_plafond_attendu_t t (relecture finale du lot 2a, RBM-1)
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @ === 14. L HORLOGE : une réduction plus ancienne que l horloge du devis → OP015 ===
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- statut écrit à la création → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- statut écrit, même INCHANGÉ → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- un total écrit → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- la réduction EFFECTIVE écrite → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- l acompte EFFECTIF écrit → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- le total toutes options comprises écrit → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- l entreprise changée → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- la source changée → permission denied for table devis (D3 : elle était déjà figée par le déclencheur)
+|   42501 permission denied for table devis
+| @ --- une date écrite → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- une ligne déplacée vers un autre devis → permission denied for table devis_lignes (relecture BASE-9)
+|   42501 permission denied for table devis_lignes
+| @ --- le total d une ligne écrit → permission denied for table devis_lignes
+|   42501 permission denied for table devis_lignes
+| @ --- la ventilation écrite → permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+[valeurs]
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| acompte_30_pourcent_attendu_t = t
+| acompte_0_10_pourcent_attendu_t = t
+| acompte_attendu_t = t
+| apres_option_attendu_t = t
+| acompte_ramene_attendu_t = t
+| valeurs_attendu_t = t
+| nature_seule_attendu_t = t
+| acompte_seul_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| retrait_refuse_par_le_plafond_attendu_t = t
+| droits_sans_ecart_attendu_t = t
+| colonnes_trouvees_attendu_t = t
+| droits_de_table_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| forme_attendu_t = t
+| colonnes_lues_attendu_t = t
+[sortie]
+| DELETE 0
+| INSERT 0 2
+| BEGIN
+| INSERT 0 3
+| COMMIT
+| PREPARE
+| PREPARE
+| PREPARE
+|
+| === 0. LA DONNÉE EXISTE — sans aucune condition, les totaux du lot 1, au centime ===
+|     attendu : ht 300000, tva 35500, ttc 335500, réduction 0, acompte 0, options 335500,
+|     ventilation 2000:100000:0:20000:1,1000:100000:0:10000:1,550:100000:0:5500:1 ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 300000 | 35500 | 335500 | 0 | 0 | 335500 | 2000:100000:0:20000:1,1000:100000:0:10000:1,550:100000:0:5500:1 | 4 | t
+|
+| ROLLBACK
+|
+| === 1. RÉDUCTION EN MONTANT : 10,00 € sur trois taux égaux → 334 / 333 / 333 (le plus fort reste ; à reste égal, le taux le plus fort) ===
+|     attendu : ventilation 2000:99666:334:19933:1,1000:99667:333:9967:1,550:99667:333:5482:1
+|               ht 299000, tva 35382, ttc 334382, réduction 1000, options 334382 ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 299000 | 35382 | 334382 | 1000 | 0 | 334382 | 2000:99666:334:19933:1,1000:99667:333:9967:1,550:99667:333:5482:1 | 10 | t
+|
+| ROLLBACK
+|
+| === 2. RÉDUCTION EN POURCENTAGE : 10 % → 10 000 c par taux ; la TVA se calcule sur la base NETTE ===
+|     attendu : ventilation 2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1
+|               ht 270000, tva 31950, ttc 301950, réduction 30000, options 301950 ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 270000 | 31950 | 301950 | 30000 | 0 | 301950 | 2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1 | 10 | t
+|
+| ROLLBACK
+|
+| === 3. LA RÉDUCTION POSÉE AVANT LES LIGNES : elle s applique aux lignes qui arrivent ensuite ===
+|     attendu : comme au cas 2 (ht 270000, tva 31950, ttc 301950, réduction 30000, options = ttc) ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 270000 | 31950 | 301950 | 30000 | 0 | 301950 | 2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1 | 4 | t
+|
+| ROLLBACK
+|
+| === 4. RÉDUCTION PLUS GRANDE QUE LE TOTAL : 4 000,00 € sur 3 000,00 € — RAMENÉE au brut, jamais refusée ===
+|     attendu : réduction 300000, ht 0, tva 0, ttc 0, options 0 ; ventilation 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 ;
+|               aucune base ni TVA négative ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 0 | 0 | 0 | 300000 | 0 | 0 | 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 | 10 | t
+|
+| ROLLBACK
+|
+| === 5. RÉDUCTION DE 100 % — tout à zéro, aucune TVA négative ===
+|     attendu : ventilation 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 ; ttc 0, réduction 300000 ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 0 | 0 | 0 | 300000 | 0 | 0 | 2000:0:100000:0:1,1000:0:100000:0:1,550:0:100000:0:1 | 10 | t
+|
+| ROLLBACK
+|
+| === 6. UN TAUX QUI DISPARAÎT EST À ZÉRO EN ENTIER, sa part de réduction comprise (relecture BASE-4) ===
+|     réduction 10 %, puis la ligne à 10 % retirée : brut 200000, réduction 20000
+|     attendu : ventilation 2000:90000:10000:18000:1,1000:0:0:0:0,550:90000:10000:4950:1 ; réduction 20000 ;
+|               ht 200000 - 20000 = 180000 ; tva 18000 + 4950 = 22950 ; ttc 202950 = options ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| DELETE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 180000 | 22950 | 202950 | 20000 | 0 | 202950 | 2000:90000:10000:18000:1,1000:0:0:0:0,550:90000:10000:4950:1 | 10 | t
+|
+| ROLLBACK
+|
+| === 7. UNE OPTION : jamais réduite, et le total toutes options comprises se calcule sur l UNION, taux par taux ===
+|     réduction 10 % ; option 1 : 333,33 € à 10 % ; option 2 : 123,45 € sans TVA
+|     union : 20 % 90000 → 108000 ; 10 % 90000+33333=123333 → tva 12333 → 135666 ;
+|             5,5 % 90000 → 94950 ; 0 % 12345 → 12345 ; total 350961
+|     attendu : ttc 301950 (les options n y entrent pas), réduction 30000, options 350961 ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| INSERT 0 2
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 270000 | 31950 | 301950 | 30000 | 0 | 350961 | 2000:90000:10000:18000:1,1000:90000:10000:9000:1,550:90000:10000:4950:1 | 12 | t
+|
+| ROLLBACK
+|
+| === 7 bis. L UNION N EST PAS UNE ADDITION : une option de 33,33 € à 10 % sur une base de 0,04 € ===
+|     option 33,33 € à 10 % : seule 3333 + 333 (333,3) = 3666 ;
+|     poste 0,04 € à 10 % : base 4, tva 0 (0,4) → 4 ; addition 4 + 3666 = 3670 ;
+|     union : 3337 → tva 334 (333,7) → 3671
+|     attendu : ttc 4, options 3671 (et non 3670) ; valeurs_attendu_t t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 2
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 4 | 0 | 4 | 0 | 0 | 3671 | 1000:4:0:0:1 | 3 | t
+|
+| ROLLBACK
+|
+| === 8. L ACOMPTE EN POURCENTAGE : sur le TTC HORS options, arrondi au centime, le demi vers le haut ===
+|     30 % de 335500 = 100650 ; 0,10 % de 335500 = 335,5 → 336
+|     attendu : acompte 100650, puis acompte 336 ; les deux colonnes _attendu_t à t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| acompte_30_pourcent | acompte_30_pourcent_attendu_t
+| ----
+| 100650 | t
+|
+| UPDATE 1
+| acompte_0_10_pourcent | acompte_0_10_pourcent_attendu_t
+| ----
+| 336 | t
+|
+| ROLLBACK
+|
+| === 9. L ACOMPTE SUIT LE TOTAL : réduction 10 % puis acompte 30 % → 30 % de 301950 = 90585 ; une option ne le change pas ===
+|     attendu : acompte 90585, puis, après l option, acompte 90585 et options > ttc :
+|               union 20 % 90000 + 50000 = 140000 → 168000 ; 10 % 99000 ; 5,5 % 94950 → options 361950 ;
+|               les deux colonnes _attendu_t à t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| acompte | acompte_attendu_t
+| ----
+| 90585 | t
+|
+| INSERT 0 1
+| acompte | ttc | options | apres_option_attendu_t
+| ----
+| 90585 | 301950 | 361950 | t
+|
+| ROLLBACK
+|
+| === 10. ACOMPTE EN MONTANT PLUS GRAND QUE LE TTC : RAMENÉ ; puis TOUTES les lignes retirées — la suppression PASSE (relecture BASE-1) ===
+|     attendu : acompte 335500 ; après les trois suppressions : ttc 0, acompte 0, sans erreur ;
+|               ventilation 2000:0:0:0:0,1000:0:0:0:0,550:0:0:0:0 ; les deux colonnes _attendu_t à t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| UPDATE 1
+| acompte | acompte_ramene_attendu_t
+| ----
+| 335500 | t
+|
+| DELETE 1
+| DELETE 1
+| DELETE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 0 | 0 | 0 | 0 | 0 | 0 | 2000:0:0:0:0,1000:0:0:0:0,550:0:0:0:0 | 10 | t
+|
+| ROLLBACK
+|
+| === 11. LA NATURE SANS ACOMPTE PASSE — et l acompte sans nature aussi : c est un motif de refus de la remise (lot 2b), jamais une contrainte (relecture BASE-2) ===
+|     attendu : deux UPDATE 1, sans erreur ; les deux colonnes _attendu_t à t
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| nature | pourcentage | nature_seule_attendu_t
+| ----
+| arrhes | ∅ | t
+|
+| UPDATE 1
+| nature | pourcentage | acompte_seul_attendu_t
+| ----
+| ∅ | 3000 | t
+|
+| ROLLBACK
+|
+| === 12. LES REFUS DES CONDITIONS — chaque nom lu ===
+| --- acompte sous ses DEUX formes → devis_acompte_une_forme_check (relecture BASE-3)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_acompte_une_forme_check"
+| ROLLBACK
+| --- réduction sous ses DEUX formes → devis_remise_une_forme_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_remise_une_forme_check"
+| ROLLBACK
+| --- acompte de 100,01 % → devis_acompte_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| ROLLBACK
+| --- acompte de 0 € → devis_acompte_check (aucun acompte, c est vide)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| ROLLBACK
+| --- acompte de 20 000 000 % sur un devis de 84 000 000,00 € TTC → devis_acompte_check, et NON « bigint out of range » (22003) :
+|     le déclencheur ne multiplie le pourcentage que dans ses bornes, la contrainte refuse sous son nom (relecture BASE-5)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_acompte_check"
+| ROLLBACK
+| --- nature « caution » → devis_acompte_nature_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_acompte_nature_check"
+| ROLLBACK
+| --- réduction de 0 % → devis_remise_check (aucune réduction, c est vide)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| ROLLBACK
+| --- réduction de 100,01 % → devis_remise_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| ROLLBACK
+| --- réduction négative → devis_remise_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_remise_check"
+| ROLLBACK
+| --- validité de 0 jour → devis_validite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_validite_check"
+| ROLLBACK
+| --- validité de 366 jours → devis_validite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_validite_check"
+| ROLLBACK
+| --- validité de 1 et de 365 jours : les deux bornes passent (UPDATE 1 ×2)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| ROLLBACK
+|
+| === 13. LE HT EST BORNÉ SUR LE BRUT (relecture BASE-6) : trois postes de 90 000 000,00 € et une réduction de 100 % → devis_plafond_check ===
+|     (sans la règle, le net 0 passait : des lignes au-delà de la borne tenaient sous elle grâce à la réduction)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| ROLLBACK
+| --- et une option qui ferait dépasser le total toutes options comprises → devis_plafond_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| ROLLBACK
+|
+| === 13 bis. RETIRER LA RÉDUCTION PRÈS DU PLAFOND DU TTC → devis_plafond_check (relecture BASE-4 du 03/11) ===
+|     Le HT est borné sur le brut, le TTC NET de la réduction : un poste de 90 000 000,00 € à 20 %
+|     et 50 % de réduction donnent ht 45·10^8, réduction 45·10^8, tva 9·10^8, ttc 54·10^8 — accepté.
+|     Sans la réduction, le ttc vaudrait 108·10^8, au-delà de 99 999 999,99 € : la retirer est REFUSÉ,
+|     et c est juste (un devis ne dépasse pas la borne, avec ou sans réduction). L écran dit alors
+|     « La réduction n a pas pu être changée », pas « pour cette ligne » (erreurs.js, devis.js).
+|     attendu : valeurs_attendu_t t ; puis la baisse à 20 % passe (ttc 86,4·10^8, attendu_t t) ;
+|               puis le retrait → devis_plafond_check, JUGÉ après l annulation :
+|               retrait_refuse_par_le_plafond_attendu_t t (relecture finale du lot 2a, RBM-1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 4500000000 | 900000000 | 5400000000 | 4500000000 | 0 | 5400000000 | 2000:4500000000:4500000000:900000000:1 | 2 | t
+|
+| UPDATE 1
+| ht | tva | ttc | reduction | acompte | options | ventilation | horloge | valeurs_attendu_t
+| ----
+| 7200000000 | 1440000000 | 8640000000 | 1800000000 | 0 | 8640000000 | 2000:7200000000:1800000000:1440000000:1 | 3 | t
+|
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| ROLLBACK
+| retrait_refuse_par_le_plafond_attendu_t
+| ----
+| t
+|
+|
+| === 14. L HORLOGE : une réduction plus ancienne que l horloge du devis → OP015 ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+|
+| === 15. LA RÉPONSE D UNE ÉCRITURE DE RÉDUCTION PORTE LES TOTAUX D AVANT ; la relecture, les vrais (relecture BASE-11, condition 3) ===
+|     attendu : returning ht 300000 (avant), puis relu ht 270000
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ht_rendu
+| ----
+| 300000
+|
+| UPDATE 1
+| ht_relu
+| ----
+| 270000
+|
+| ROLLBACK
+|
+| === 16. CE QUE L APPLICATION ENVOIE PASSE, SOUS LES DROITS DE COLONNE (sept formes, relecture BASE-16) ===
+|     attendu : INSERT 0 1, UPDATE 1 (en-tête + numéro), UPDATE 1 (la levée, numéro seul),
+|               UPDATE 1 (réduction et acompte, une paire en une écriture), INSERT 0 1 (ligne entière),
+|               UPDATE 1 (ligne), puis la suppression conditionnée rend son identifiant
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| id
+| ----
+| d4920000-0000-4000-8000-0000000000d1
+|
+| UPDATE 1
+| id
+| ----
+| d4920000-0000-4000-8000-0000000000d1
+|
+| UPDATE 1
+| id
+| ----
+| d4920000-0000-4000-8000-0000000000d1
+|
+| UPDATE 1
+| INSERT 0 1
+| id
+| ----
+| f4920000-0000-4000-8000-000000000001
+|
+| UPDATE 1
+| id
+| ----
+| f4920000-0000-4000-8000-000000000001
+|
+| DELETE 1
+| ROLLBACK
+|
+| === 17. CE QUE SEULE LA BASE ÉCRIT EST REFUSÉ AU CLIENT, AVANT TOUT DÉCLENCHEUR (49.7) ===
+| --- statut écrit à la création → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- statut écrit, même INCHANGÉ → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- un total écrit → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- la réduction EFFECTIVE écrite → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- l acompte EFFECTIF écrit → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- le total toutes options comprises écrit → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- l entreprise changée → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- la source changée → permission denied for table devis (D3 : elle était déjà figée par le déclencheur)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- une date écrite → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- une ligne déplacée vers un autre devis → permission denied for table devis_lignes (relecture BASE-9)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ERREUR 42501 permission denied for table devis_lignes
+| ROLLBACK
+| --- le total d une ligne écrit → permission denied for table devis_lignes
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ERREUR 42501 permission denied for table devis_lignes
+| ROLLBACK
+| --- la ventilation écrite → permission denied for table devis_tva
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+|
+| === 18. LES DROITS, LUS DANS LE CATALOGUE, COLONNE PAR COLONNE ET DANS LES DEUX SENS ===
+|     attendu : droits_sans_ecart_attendu_t t, ecarts — (la liste attendue est celle de 49.7, recopiée ici)
+| droits_sans_ecart_attendu_t | ecarts
+| ----
+| t | —
+|
+| --- et chaque colonne attendue existe (une faute de frappe ici ne passerait pas)
+| colonnes_attendues_trouvees | colonnes_trouvees_attendu_t
+| ----
+| 55 | t
+|
+|     attendu : 55 (34 jusqu’à 2b-1, les cinq colonnes de 49.4 ter, les trois de 2b-3, la colonne de 2b-4, les huit de 2b-5, et les quatre de 2b-6) ; colonnes_trouvees_attendu_t t
+| table_devis_insert | table_devis_update | table_devis_select | table_devis_delete | tva_select | tva_update | droits_de_table_attendu_t
+| ----
+| f | f | t | t | t | f | t
+|
+|     attendu : f, f, t, t, t, f ; droits_de_table_attendu_t t
+|
+| === 19. LES FONCTIONS DE LA RÉDUCTION : aucune n est exécutable par un client ; le déclencheur est definer et ne joue qu à une modification de la réduction ===
+| proname | definer | authenticated | anon
+| ----
+| recalcule_apres_reduction | t | f | f
+| recalcule_devis | t | f | f
+| repartir_au_plus_fort_reste | f | f | f
+|
+|     attendu : recalcule_apres_reduction t f f ; recalcule_devis t f f ; repartir_au_plus_fort_reste f f f
+| tgname | forme
+| ----
+| trg_recalcule_apres_reduction | t
+| trg_tient_le_devis | f
+| trg_tient_le_lien_du_devis | f
+|
+|     attendu : trg_recalcule_apres_reduction t ; trg_tient_le_devis f ; trg_tient_le_lien_du_devis f
+|
+| === 20. LA RÉPARTITION, SES BORDS (49.1) — en superutilisateur, la fonction n est à aucun client ===
+| vide_zero | vide_cinq | poids_nuls | total_plus_grand | total_negatif | poids_negatif | poids_nul_sql | total_nul_sql
+| ----
+| {} | ∅ | {0,0} | ∅ | ∅ | ∅ | ∅ | ∅
+|
+|     attendu : {} | (vide) | {0,0} | (vide) | (vide) | (vide) | (vide) | (vide)
+| un_centime | deux_centimes | mille_sur_trois | poids_unique | plus_fort_reste
+| ----
+| {1,0,0} | {1,1,0} | {334,333,333} | {0,3,0} | {3,3,4}
+|
+|     attendu : {1,0,0} | {1,1,0} | {334,333,333} | {0,3,0} | {3,3,4}
+| grands | au_dela_de_2_53
+| ----
+| {5000000000,4999999999} | {2251799813685249,2251799813685248}
+|
+|     attendu : {5000000000,4999999999} | {2251799813685249,2251799813685248}
+|
+| === 21. LE RATTRAPAGE DE 49.6 ter — il ne se joue plus ici : voir essais-section-49-rattrapage.sql ===
+|     Ce cas recopiait l ordre `update` du rattrapage : il éprouvait sa COPIE, et la copie ne voyait
+|     ni les devis aux options seules, ni l horloge à la borne, ni les options au-delà du plafond
+|     (relecture BASE-1 à BASE-3 et BASE-6 du 03/11). L essai dédié pose d anciens devis, puis
+|     REJOUE schema.sql lui-même (deux fois), et éprouve sa garde.
+|
+| === 22. UN AUTRE ARTISAN NE PEUT RIEN SUR CES COLONNES : B ne lit pas, ne réduit pas le devis de A ===
+|     attendu : A lit 1 ligne ; B lit 0 ligne ; la réduction de B ne touche aucune ligne (UPDATE 0)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| a_lit
+| ----
+| 1
+|
+| SET
+| b_lit
+| ----
+| 0
+|
+| UPDATE 0
+| SET
+| reduction_gardee
+| ----
+| ∅
+|
+| ROLLBACK
+|     attendu (dernière ligne) : réduction_gardee vide
+|
+| === 23. LES DÉFAUTS DES COLONNES DU LOT 2a, DE 2b-2, DE 2b-3, DE 2b-5 ET DE 2b-6, RELUS DANS LE CATALOGUE : rien de pré-choisi pour ce que l artisan choisit, 0 pour ce que la base calcule, ÉTEINT pour la réparation urgente ===
+|     attendu : trente et une lignes, toutes avec forme_attendu_t = t ; puis colonnes_lues_attendu_t = t
+| colonne | defaut_lu | nullable_lu | forme_attendu_t
+| ----
+| devis.acompte_a_la_signature | ∅ | YES | t
+| devis.acompte_centiemes | ∅ | YES | t
+| devis.acompte_centimes | ∅ | YES | t
+| devis.acompte_nature | ∅ | YES | t
+| devis.acompte_ttc_centimes | 0 | NO | t
+| devis.chantier_neuf_conso | ∅ | YES | t
+| devis.chantier_neuf_conso_le | ∅ | YES | t
+| devis.chantier_neuf_tva | ∅ | YES | t
+| devis.dechets_concerne | ∅ | YES | t
+| devis.dechets_cout_centimes | ∅ | YES | t
+| devis.dechets_flux | ∅ | YES | t
+| devis.dechets_lieux | ∅ | YES | t
+| devis.dechets_quantite_milliemes | ∅ | YES | t
+| devis.dechets_sans_depot | ∅ | YES | t
+| devis.dechets_sur_place | ∅ | YES | t
+| devis.dechets_unite | ∅ | YES | t
+| devis.energie_sans_label | ∅ | YES | t
+| devis.energie_sous_traitance | ∅ | YES | t
+| devis.energie_sous_traitants | ∅ | YES | t
+| devis.energie_travaux | ∅ | YES | t
+| devis.engage_decennale | ∅ | YES | t
+| devis.pour_qui | ∅ | YES | t
+| devis.pour_qui_client | ∅ | YES | t
+| devis.remise_centiemes | ∅ | YES | t
+| devis.remise_centimes | ∅ | YES | t
+| devis.remise_ht_centimes | 0 | NO | t
+| devis.retenue_garantie_centiemes | ∅ | YES | t
+| devis.total_ttc_options_centimes | 0 | NO | t
+| devis.validite_jours | ∅ | YES | t
+| devis_lignes.urgence | false | NO | t
+| devis_tva.remise_centimes | 0 | NO | t
+|
+| colonnes_lues_attendu_t
+| ----
+| t
+|
+|
+| === FIN — ce fichier a écrit EXACTEMENT 27 lignes « psql:… ERROR », chacune annoncée par son nom :
+|     un autre compte est un ÉCHEC (en-tête, relecture finale du lot 2a, RBM-1) ===

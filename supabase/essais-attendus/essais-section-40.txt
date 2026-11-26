@@ -1,0 +1,214 @@
+# Ce que doit rendre supabase/essais-section-40.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-40` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-40
+
+[partie essai]
+erreurs: 2
+valeurs-jugees: 0
+[erreurs]
+| @ === 4. UN NOM TROP LONG EST REFUSE (attendu : 23514) ===
+|   23514 new row for relation "professional_profiles" violates check constraint "pro_agent_nom_check"
+| @ === 5. UN NOM D UNE SEULE LETTRE EST REFUSE (attendu : 23514) ===
+|   23514 new row for relation "professional_profiles" violates check constraint "pro_agent_nom_check"
+[valeurs]
+[sortie]
+| CREATE FUNCTION
+| === 0. LE JEU D ESSAI EST BIEN CE QU IL PRETEND ETRE ===
+| -- attendu : Autre | pro | t | f ; Moi | pro | t | f
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| nom | type | a_une_fiche | verifie
+| ----
+| Autre | pro | t | f
+| Moi | pro | t | f
+| (2 rows)
+|
+| ROLLBACK
+| === 1. UNE FICHE NAIT SANS AGENT NOMME, ET A ZERO PROPOSITION ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| pas_de_nom | propositions
+| ----
+| t | 0
+| (1 row)
+|
+| ROLLBACK
+| === 2. ON NOMME SON AGENT ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| agent_nom
+| ----
+| Leon
+| (1 row)
+|
+| ROLLBACK
+| === 3. LE NOM EST NETTOYE, ET DES BLANCS SEULS VALENT null ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| rogne
+| ----
+| t
+| (1 row)
+|
+| UPDATE 1
+| vide_devient_null
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 4. UN NOM TROP LONG EST REFUSE (attendu : 23514) ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| ERREUR 23514 new row for relation "professional_profiles" violates check constraint "pro_agent_nom_check"
+| ROLLBACK
+| === 5. UN NOM D UNE SEULE LETTRE EST REFUSE (attendu : 23514) ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| ERREUR 23514 new row for relation "professional_profiles" violates check constraint "pro_agent_nom_check"
+| ROLLBACK
+| === 6. UN AUTRE PROFESSIONNEL NE PEUT PAS NOMMER MON AGENT ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| === 7. …ET LE NOM N A PAS BOUGE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| SET
+| SET
+| UPDATE 0
+| RESET
+| intact
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 8. LE COMPTEUR DE REFUS MONTE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| RESET
+| agent_propositions
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+| === 9. LE COMPTEUR NE REDESCEND JAMAIS — le verrou de la section ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| RESET
+| le_compteur_tient
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 10. …MAIS L ADMINISTRATION PEUT LE REMETTRE A ZERO ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| UPDATE 1
+| remise_a_zero_possible
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 11. NOMMER SON AGENT NE DONNE AUCUN DROIT DE PLUS ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| RESET
+| nom_pose | verifie | kbis_valide
+| ----
+| t | f | f
+| (1 row)
+|
+| ROLLBACK
+| === 12. L EXPORT RGPD EMPORTE LE NOM DE L AGENT ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| SET
+| SET
+| dans_l_export
+| ----
+| "Leon"
+| (1 row)
+|
+| RESET
+| ROLLBACK

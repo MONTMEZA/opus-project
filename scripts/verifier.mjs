@@ -24,15 +24,73 @@
  *
  *   npm run verifier              tout, dans l'ordre
  *   npm run verifier -- --bref    seulement ce qui ne va pas
+ *   npm run verifier -- --delai 5 un délai par contrôle de 5 s (pour l'éprouver)
  *
  * Ce qu'elle NE fait PAS : construire le paquet, ni ouvrir le navigateur.
  * Les deux prennent des minutes et demandent un réseau ; ils restent à la
- * main, et l'intégration continue s'en charge à chaque envoi.
+ * main, et l'intégration continue s'en charge à chaque envoi. Ni jouer les
+ * essais SQL : il leur faut un PostgreSQL, et cette commande doit passer
+ * partout — c'est `npm run essais-sql`, à part (étape 2c-E).
+ *
+ * UN CONTRÔLE QUI BOUCLE — le délai, ajouté le 26/11/2026 (étape 2c-E)
+ * ---------------------------------------------------------------------
+ * Un contrôle qui ne finit jamais (une boucle, une attente réseau sans
+ * fin) bloquait TOUS les suivants, et le coureur avec : rien ne rougissait,
+ * l'écran restait figé. Chaque contrôle a donc un DÉLAI, au-delà duquel il
+ * est arrêté et compté « N'A PAS PU SE LANCER » — il n'a rien vérifié.
+ *
+ * 300 secondes : le plus long d'aujourd'hui est `verifier-atelier`, 32,7 s
+ * (le linter sur tout le dépôt, mesuré le 26/11), soit neuf fois sa durée.
+ * Assez pour une machine plus lente, assez court pour qu'un blocage se voie.
+ *
+ * Et on arrête le GROUPE entier : `npm run` lance un shell qui lance `node`.
+ * Tuer `npm` seul laisserait le petit-enfant tourner, en tenant les tuyaux
+ * ouverts — et le coureur attendrait encore.
  */
 import { readFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 const bref = process.argv.includes('--bref');
+
+const DELAI_PAR_DEFAUT_S = 300;
+const iDelai = process.argv.indexOf('--delai');
+const delaiS = iDelai >= 0 ? Number(process.argv[iDelai + 1]) : DELAI_PAR_DEFAUT_S;
+if (!(delaiS > 0)) {
+  console.error('--delai attend un nombre de secondes.');
+  process.exit(2);
+}
+
+/* Le contrôle en cours, pour l'arrêter avec nous : lancé dans son propre
+   groupe, il ne recevrait pas le Ctrl+C du terminal, et survivrait. */
+let enCours = null;
+const arreterGroupe = (enfant) => {
+  try { process.kill(-enfant.pid, 'SIGKILL'); } catch { /* déjà parti */ }
+};
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (enCours) arreterGroupe(enCours);
+    process.exit(130);
+  });
+}
+
+function lancer(nom) {
+  return new Promise((fin) => {
+    const enfant = spawn('npm', ['run', '--silent', nom], { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    enCours = enfant;
+    let stdout = '';
+    let stderr = '';
+    let depasse = false;
+    enfant.stdout.setEncoding('utf8').on('data', (d) => { stdout += d; });
+    enfant.stderr.setEncoding('utf8').on('data', (d) => { stderr += d; });
+    const minuterie = setTimeout(() => { depasse = true; arreterGroupe(enfant); }, delaiS * 1000);
+    enfant.on('error', (e) => { stderr += String(e); });
+    enfant.on('close', (status) => {
+      clearTimeout(minuterie);
+      enCours = null;
+      fin({ status, stdout, stderr, depasse });
+    });
+  });
+}
 
 /* On découvre les contrôles plutôt que de les énumérer : un contrôle ajouté
    demain entre tout seul. C'est la différence entre une liste qui se périme
@@ -55,9 +113,18 @@ const t0 = Date.now();
 
 for (const nom of controles) {
   const t = Date.now();
-  const r = spawnSync('npm', ['run', '--silent', nom], { encoding: 'utf8' });
+  const r = await lancer(nom);
   const ms = Date.now() - t;
   const sortie = `${r.stdout || ''}${r.stderr || ''}`;
+
+  /* Un contrôle arrêté par le délai n'a rien vérifié : même famille qu'un
+     contrôle qui plante, et la phrase dit pourquoi. */
+  if (r.depasse) {
+    plantes.push([nom, `Il a dépassé le délai de ${delaiS} s et a été arrêté : un contrôle qui ne finit pas ne vérifie rien, `
+      + 'et bloquait tous les suivants.\n' + sortie.trim().split('\n').slice(-4).join('\n')]);
+    console.error(`  ⚠ ${nom.padEnd(22)} N'A PAS PU SE LANCER (arrêté au bout de ${delaiS} s)`);
+    continue;
+  }
 
   /* Un contrôle qui PLANTE ne vérifie rien, et ça ne se voit pas : il
      n'écrit aucun « ✘ ». On le reconnaît à ce qu'il meurt sans avoir écrit

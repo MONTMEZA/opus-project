@@ -1,0 +1,148 @@
+# Ce que doit rendre supabase/essais-suppression-compte.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-suppression-compte` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-suppression-compte
+
+[partie essai]
+erreurs: 3
+valeurs-jugees: 19
+[erreurs]
+| @ === 2. LE RACCOURCI EST FERME : un pro ne supprime plus sa ligne ===
+|   42501 permission denied for table users
+| @ === 3. …et un visiteur sans compte non plus ===
+|   42501 permission denied for table users
+| @     attendu : ERROR OP010, une fiche professionnelle ne se crée pas depuis l application
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+[valeurs]
+| delete_attendu_false = f
+| lit_l_email_attendu_false = f
+| delete_attendu_false = f
+| lit_l_email_attendu_false = f
+| section_46_posee_attendu_6 = 6
+| ligne_users_attendu_0 = 0
+| fiche_attendu_0 = 0
+| avis_marque_attendu_t = t
+| comm_marque_attendu_t = t
+| avis_recus_attendu_0 = 0
+| emetteur_attendu_0 = 0
+| assurances_attendu_0 = 0
+| lieux_de_depot_attendu_0 = 0
+| tarifs_attendu_0 = 0
+| labels_attendu_0 = 0
+| sous_traitants_attendu_0 = 0
+| session_encore_valable_attendu_1 = 1
+| ligne_users_attendu_0 = 0
+| fiche_attendu_0 = 0
+[sortie]
+| INSERT 0 2
+|
+| === 1. LE DROIT : plus de delete ; un compte connecté lit toujours le nom (t), un visiteur plus rien depuis le lot S-d du <jour> (f) ; update intact ===
+| rolname | delete_attendu_false | lit_le_nom_anon_f_connecte_t | lit_l_email_attendu_false
+| ----
+| anon | f | f | f
+| authenticated | f | t | f
+| (2 rows)
+|
+| l_artisan_enregistre_son_numero
+| ----
+| t
+| (1 row)
+|
+|
+| === 2. LE RACCOURCI EST FERME : un pro ne supprime plus sa ligne ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 permission denied for table users
+| ROLLBACK
+|
+| === 3. …et un visiteur sans compte non plus ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table users
+| ROLLBACK
+|
+| === 4. LE VRAI CHEMIN MARCHE TOUJOURS, et il ANONYMISE ===
+| BEGIN
+| INSERT 0 3
+| INSERT 0 2
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| section_46_posee_attendu_6
+| ----
+| 6
+| (1 row)
+|
+| SET
+| SET
+| resume
+| ----
+| {"compte": "aaaa3333-0000-4000-8000-00000000aaaa", "prepare_le": "<horodatage>", "avis_anonymises": 1, "commentaires_anonymises": 1}
+| (1 row)
+|
+| RESET
+| ligne_users_attendu_0 | fiche_attendu_0 | avis_ecrit_par_lui_garde | avis_marque_attendu_t | comm_marque_attendu_t | avis_recus_attendu_0
+| ----
+| 0 | 0 | Travail bacle, je deconseille. | t | t | 0
+| (1 row)
+|
+| emetteur_attendu_0 | assurances_attendu_0 | lieux_de_depot_attendu_0 | tarifs_attendu_0 | labels_attendu_0 | sous_traitants_attendu_0
+| ----
+| 0 | 0 | 0 | 0 | 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5. CE QUE LE RACCOURCI LAISSAIT : un compte IRREPARABLE ===
+| BEGIN
+| INSERT 0 1
+| DELETE 1
+| session_encore_valable_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| SET
+|     attendu : ERROR OP010, une fiche professionnelle ne se crée pas depuis l application
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+|
+| === 6. LA CASCADE DEPUIS auth.users MARCHE TOUJOURS ===
+| BEGIN
+| INSERT 0 1
+| DELETE 1
+| ligne_users_attendu_0 | fiche_attendu_0
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. ET MODIFIER SA LIGNE MARCHE ENCORE ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| numero_enregistre
+| ----
+| 0600000000
+| (1 row)
+|
+| ROLLBACK
+| DELETE 2
+|
+| ############ FIN DES ESSAIS ############

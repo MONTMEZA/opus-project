@@ -1,0 +1,1494 @@
+# Ce que doit rendre supabase/essais-section-46.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-46` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-46
+
+[partie essai]
+erreurs: 45
+valeurs-jugees: 203
+[erreurs]
+| @ === 7. A : un mediateur a moitie -> emetteur_mediateur_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur" violates check constraint "emetteur_mediateur_check"
+| @ === 8. A : RCS sans greffe -> emetteur_greffe_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur" violates check constraint "emetteur_greffe_check"
+| @ === 9. B : trois noms d EI passent ; « Jean Dupont » seul -> emetteur_denomination_ei_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| @ === 9 bis. B : « EI » seul, sans nom -> emetteur_denomination_ei_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| @ === 9 ter. B : « ENTREPRENEUR INDIVIDUEL À RESPONSABILITÉ LIMITÉE » seul -> emetteur_denomination_ei_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| @ === 11. A : une decennale SANS contrat passe ; « autre » sans libelle -> emetteur_assurance_libelle_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_libelle_check"
+| @ === 11 (suite). A : une assurance sans couverture -> emetteur_assurance_complete_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_complete_check"
+| @ === 12. A : une attestation dans SON dossier passe ; dans celui de B -> emetteur_assurance_chemin_check (ERREUR attendue) ===
+|   23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_chemin_check"
+| @ === 13 (e). 0 ET « gratuit jusqu a 20 km » -> tarif_frais_zero_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_frais_zero_check"
+| @ === 14. A : -100 -> tarif_frais_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_frais_check"
+| @ === 22. B ecrit une fiche AU NOM de A -> RLS sur "emetteur" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur"
+| @ === 22 bis. …des frais au nom de A -> RLS sur "tarifs_pro" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "tarifs_pro"
+| @ === 22 ter. …une assurance au nom de A -> RLS sur "emetteur_assurances" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur_assurances"
+| @ === 22 quater. …un lieu de depot des dechets au nom de A -> RLS sur "emetteur_lieux_depot" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur_lieux_depot"
+| @ === 22 quinquies. …un signe de qualite au nom de A -> RLS sur "emetteur_labels" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur_labels"
+| @ === 22 sexies. …un sous-traitant au nom de A -> RLS sur "emetteur_sous_traitants" (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur_sous_traitants"
+| @ === 23. Un PARTICULIER ecrit « sa » fiche -> RLS (ERREUR attendue) ===
+|   42501 new row violates row-level security policy for table "emetteur"
+| @ === 24 a. Un visiteur sans compte, sur "emetteur" -> permission denied (ERREUR attendue) ===
+|   42501 permission denied for table emetteur
+| @ === 24 b. …sur "emetteur_assurances" (ERREUR attendue) ===
+|   42501 permission denied for table emetteur_assurances
+| @ === 24 c. …sur "tarifs_pro" (ERREUR attendue) ===
+|   42501 permission denied for table tarifs_pro
+| @ === 24 d. …sur "emetteur_lieux_depot" (ERREUR attendue) ===
+|   42501 permission denied for table emetteur_lieux_depot
+| @ === 24 e. …sur "emetteur_labels" (ERREUR attendue) ===
+|   42501 permission denied for table emetteur_labels
+| @ === 24 f. …sur "emetteur_sous_traitants" (ERREUR attendue) ===
+|   42501 permission denied for table emetteur_sous_traitants
+| @ === 25. B demande ce qui manque a A -> OP011 et son texte (ERREUR attendue) ===
+|   OP011 Ces informations ne sont pas les vôtres : seul le titulaire d’une fiche professionnelle peut savoir ce qui manque à ses devis.
+| @ === 25 bis. Sans jeton (editeur SQL, fonction Edge) -> OP011 aussi : `is not true`, pas `not` (ERREUR attendue) ===
+|   OP011 Ces informations ne sont pas les vôtres : seul le titulaire d’une fiche professionnelle peut savoir ce qui manque à ses devis.
+| @ === 25 ter. Un visiteur l appelle -> permission denied for function (ERREUR attendue) ===
+|   — permission denied for function emetteur_incomplet
+| @ === 31 b. Une adresse faite de blancs INVISIBLES -> emetteur_lieu_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_complet_check"
+| @ === 31 c. Un code postal belge (quatre chiffres) -> emetteur_lieu_code_postal_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_code_postal_check"
+| @ === 31 d. Une raison sociale de 121 caracteres -> emetteur_lieu_longueurs_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_longueurs_check"
+| @ === 31 e. Un type hors de la liste -> emetteur_lieu_type_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_type_check"
+| @ === 31 f. « autre » sans le preciser -> emetteur_lieu_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_complet_check"
+| @ === 32 b. Des travaux couverts VIDES (le tableau vide) -> emetteur_label_categories_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_categories_check"
+| @ === 32 c. « aucun » n est pas une categorie d un label -> emetteur_label_categories_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_categories_check"
+| @ === 32 d. Un certificat dans le dossier de B -> emetteur_label_chemin_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_chemin_check"
+| @ === 32 e. Un certificat a DEUX niveaux sous le dossier de A -> emetteur_label_chemin_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_chemin_check"
+| @ === 32 f. Un label sans date de fin -> emetteur_label_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_complet_check"
+| @ === 32 g. Un organisme fait de blancs INVISIBLES -> emetteur_label_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_complet_check"
+| @ === 32 h. Un intitule de 121 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_longueurs_check"
+| @ === 32 i. Un numero de 61 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_labels" violates check constraint "emetteur_label_longueurs_check"
+| @ === 33 b. Un SIRET de trois chiffres -> emetteur_sous_traitant_siret_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_siret_check"
+| @ === 33 c. Un sous-traitant sans SIRET -> emetteur_sous_traitant_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_complet_check"
+| @ === 33 d. « Oui » sans date de fin -> emetteur_sous_traitant_complet_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_complet_check"
+| @ === 33 e. Un justificatif dans le dossier de B -> emetteur_sous_traitant_chemin_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_chemin_check"
+| @ === 33 f. Un nom de 121 caracteres -> emetteur_sous_traitant_longueurs_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_longueurs_check"
+| @ === 33 g. « aucun » dans les travaux de son label -> emetteur_sous_traitant_categories_check (ERREUR attendue) ===
+|   — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_categories_check"
+[valeurs]
+| identites_actives_attendu_4 = 4
+| fiches_pro_attendu_4 = 4
+| ce_que_a_lit_attendu_1 = 1
+| conforme_attendu_t = t
+| nombre_attendu_11 = 11
+| phrases_propres_attendu_t = t
+| conforme_attendu_t = t
+| nombre_attendu_12 = 12
+| hors_rcs_conso_attendu_t = t
+| hors_rcs_sans_prefixe_attendu_f = f
+| nom_ei_attendu_t = t
+| rne_conso_attendu_t = t
+| rne_sans_prefixe_attendu_f = f
+| rcs_sans_prefixe_attendu_t = t
+| rcs_conso_attendu_f = f
+| conso_adresse_attendu_t = t
+| adresse_etablissement_attendu_f = f
+| adresse_siege_attendu_f = f
+| rcs_sans_prefixe_attendu_t = t
+| rcs_conso_attendu_f = f
+| rne_conso_attendu_t = t
+| rne_sans_prefixe_attendu_f = f
+| siege_ecrit_plus_de_motif_attendu_f = f
+| seul_attendu_identite = identite
+| registre_attendu_t = t
+| profession_attendu_t = t
+| capital_attendu_f = f
+| snc_rien_attendu_0 = 0
+| scs_rien_attendu_0 = 0
+| sas_attendu_capital = capital
+| telephone_vide_attendu_t = t
+| montant_retire_attendu_t = t
+| greffe_vide_attendu_t = t
+| liquidation_attendu_f = f
+| locataire_attendu_f = f
+| retour_ligne_seul_vide_attendu_t = t
+| date_regime_de_la_base_attendu_t = t
+| modifie_le_de_la_base_attendu_t = t
+| inchangee_attendu_t = t
+| plus_grande_attendu_t = t
+| vide_attendu_t = t
+| meme_regime_meme_date_attendu_t = t
+| autre_regime_autre_date_attendu_t = t
+| libelle_efface_attendu_t = t
+| ordre_garde_attendu_t = t
+| date_forcee_ignoree_attendu_t = t
+| a_sans_ligne_motif_attendu_t = t
+| b_zero_motif_attendu_f = f
+| c_montant_motif_attendu_f = f
+| d_texte_motif_attendu_f = f
+| rien_ne_manque_attendu_0 = 0
+| assurances_attendu_0 = 0
+| seul_attendu_conso_mediateur = conso_mediateur
+| b_reel_attendu_t = t
+| b_franchise_attendu_f = f
+| a_reel_avec_numero_attendu_f = f
+| b_reel_sans_rien_attendu_t = t
+| phrase_dit_la_declaration_attendu_t = t
+| ni_certifie_ni_verifie_attendu_f = f
+| b_declare_pour_son_siren_attendu_f = f
+| b_declare_pour_un_autre_siren_attendu_t = t
+| identites_de_b_attendu_2 = 2
+| dont_active_attendu_1 = 1
+| retiree_avec_tva_attendu_1 = 1
+| tva_intra_attendu_t = t
+| a_300_jours_attendu_0 = 0
+| administration_400_jours_attendu_0 = 0
+| vraiment_en_base_attendu_1 = 1
+| tarifs_attendu_1 = 1
+| assurances_attendu_1 = 1
+| a_lit_attendu_1 = 1
+| a_lit_tarifs_attendu_1 = 1
+| a_lit_assurances_attendu_1 = 1
+| b_lit_attendu_0 = 0
+| b_lit_tarifs_attendu_0 = 0
+| b_lit_assurances_attendu_0 = 0
+| frais_intacts_attendu_3500 = 3500
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| execute_attendu_f = f
+| anon_attendu_f = f
+| authenticated_attendu_t = t
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| anon_select_attendu_f = f
+| truncate_attendu_f = f
+| lieux_references_attendu_f = f
+| lieux_trigger_attendu_f = f
+| lieux_rls_attendu_t = t
+| lieux_une_politique_attendu_1 = 1
+| labels_references_attendu_f = f
+| labels_trigger_attendu_f = f
+| labels_rls_attendu_t = t
+| labels_une_politique_attendu_1 = 1
+| st_references_attendu_f = f
+| st_trigger_attendu_f = f
+| st_rls_attendu_t = t
+| st_une_politique_attendu_1 = 1
+| hors_liste_attendu_aucune = (aucune)
+| definer_attendu_0 = 0
+| liste_attendu_t = t
+| vues_attendu_0 = 0
+| lieux_liste_fermee_attendu_t = t
+| labels_liste_fermee_attendu_t = t
+| sous_traitants_liste_fermee_attendu_t = t
+| mon_entreprise_attendu_t = t
+| assurances_attendu_1 = 1
+| frais_attendu_0 = 0
+| b_rien_attendu_t = t
+| b_assurances_attendu_0 = 0
+| b_tarifs_rien_attendu_t = t
+| avant_attendu_1 = 1
+| avant_tarifs_attendu_1 = 1
+| avant_assurances_attendu_1 = 1
+| apres_attendu_0 = 0
+| apres_tarifs_attendu_0 = 0
+| apres_assurances_attendu_0 = 0
+| mal_nommees_attendu_0 = 0
+| anonymes_attendu_0 = 0
+| paiement_attendu_0 = 0
+| contraintes_check_attendu_38 = 38
+| raison_sociale_rognee_attendu_t = t
+| adresse_rognee_attendu_t = t
+| code_postal_rogne_attendu_t = t
+| commune_rognee_attendu_t = t
+| libelle_efface_hors_autre_attendu_t = t
+| date_forcee_ignoree_lieu_attendu_t = t
+| ordre_des_lieux_garde_attendu_t = t
+| commune_changee_attendu_t = t
+| libelle_garde_pour_autre_attendu_t = t
+| a_lit_ses_lieux_attendu_2 = 2
+| b_lit_les_lieux_attendu_0 = 0
+| export_de_b_attendu_0 = 0
+| lieux_intacts_attendu_2 = 2
+| rien_n_a_change_chez_a_attendu_t = t
+| export_de_a_attendu_2 = 2
+| export_dans_l_ordre_attendu_t = t
+| lieux_partis_avec_le_compte_attendu_0 = 0
+| organisme_rogne_attendu_t = t
+| intitule_rogne_attendu_t = t
+| numero_rogne_attendu_t = t
+| chemin_rogne_attendu_t = t
+| date_forcee_ignoree_label_attendu_t = t
+| ordre_des_labels_garde_attendu_t = t
+| numero_blanc_vide_attendu_t = t
+| chemin_blanc_aucun_certificat_attendu_t = t
+| a_lit_ses_labels_attendu_2 = 2
+| b_lit_les_labels_attendu_0 = 0
+| export_labels_de_b_attendu_0 = 0
+| labels_intacts_attendu_2 = 2
+| rien_n_a_change_chez_a_labels_attendu_t = t
+| export_labels_de_a_attendu_2 = 2
+| export_labels_dans_l_ordre_attendu_t = t
+| labels_partis_avec_le_compte_attendu_0 = 0
+| raison_sociale_rognee_st_attendu_t = t
+| siret_chiffres_seuls_attendu_t = t
+| justificatif_rogne_attendu_t = t
+| label_garde_sous_oui_attendu_t = t
+| date_forcee_ignoree_st_attendu_t = t
+| ordre_des_sous_traitants_garde_attendu_t = t
+| non_garde_attendu_t = t
+| label_efface_sous_non_attendu_t = t
+| sans_reponse_sur_le_label_acceptee_attendu_t = t
+| a_lit_ses_sous_traitants_attendu_2 = 2
+| b_lit_les_sous_traitants_attendu_0 = 0
+| export_sous_traitants_de_b_attendu_0 = 0
+| sous_traitants_intacts_attendu_2 = 2
+| rien_n_a_change_chez_a_sous_traitants_attendu_t = t
+| export_sous_traitants_de_a_attendu_2 = 2
+| export_sous_traitants_dans_l_ordre_attendu_t = t
+| sous_traitants_partis_avec_le_compte_attendu_0 = 0
+| signe_de_a_existe_attendu_1 = 1
+| signe_de_b_existe_attendu_1 = 1
+| sous_traitant_de_a_existe_attendu_1 = 1
+| sous_traitant_de_b_existe_attendu_1 = 1
+| enveloppe_signes_de_b_attendu_1 = 1
+| enveloppe_le_signe_de_b_attendu_t = t
+| enveloppe_sous_traitants_de_b_attendu_1 = 1
+| enveloppe_le_sous_traitant_de_b_attendu_t = t
+| enveloppe_rien_de_a_chez_b_attendu_t = t
+| enveloppe_signes_de_a_attendu_1 = 1
+| enveloppe_le_signe_de_a_attendu_t = t
+| enveloppe_sous_traitants_de_a_attendu_1 = 1
+| enveloppe_le_sous_traitant_de_a_attendu_t = t
+| enveloppe_rien_de_b_chez_a_attendu_t = t
+| enveloppe_export_retiree_attendu_0 = 0
+[sortie]
+| DELETE 0
+| INSERT 0 4
+| BEGIN
+| INSERT 0 5
+| COMMIT
+| PREPARE
+| PREPARE
+|
+| === 0. La donnée EXISTE : quatre identités actives, et A lit LA SIENNE ===
+| identites_actives_attendu_4
+| ----
+| 4
+| (1 row)
+|
+| fiches_pro_attendu_4
+| ----
+| 4
+| (1 row)
+|
+| BEGIN
+| SET
+| SET
+| ce_que_a_lit_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 1. A (SARL, siège, TVA), fiche vide : les 11 clés, des phrases propres ===
+| BEGIN
+| SET
+| SET
+| cles | conforme_attendu_t | nombre_attendu_11 | phrases_propres_attendu_t
+| ----
+| registre,capital,conso_telephone,conso_email,regime_tva,conso_mediateur,conso_garantie_legale,conso_modalites_paiement,conso_modalites_execution,conso_reclamations,frais_deplacement | t | 11 | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. B (EI, etablissement secondaire) vide : 12 cles, dont nom_ei et conso_adresse_siege, sans capital ===
+| BEGIN
+| SET
+| SET
+| conforme_attendu_t | nombre_attendu_12
+| ----
+| t | 12
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3. C (EI, siege, adresse non diffusee) : hors RCS conso_adresse_etablissement ; au RCS adresse_etablissement SANS prefixe ===
+| BEGIN
+| SET
+| SET
+| cles | hors_rcs_conso_attendu_t | hors_rcs_sans_prefixe_attendu_f | nom_ei_attendu_t
+| ----
+| conso_adresse_etablissement,nom_ei,registre,conso_telephone,conso_email,regime_tva,conso_mediateur,conso_garantie_legale,conso_modalites_paiement,conso_modalites_execution,conso_reclamations,frais_deplacement | t | f | t
+| (1 row)
+|
+| INSERT 0 1
+| rne_conso_attendu_t | rne_sans_prefixe_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| UPDATE 1
+| rcs_sans_prefixe_attendu_t | rcs_conso_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3 bis. C hors siege inconnu (est_siege null) : conso_adresse_etablissement, seulement pour un particulier ===
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| conso_adresse_attendu_t | adresse_etablissement_attendu_f | adresse_siege_attendu_f
+| ----
+| t | f | f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3 ter. B (etablissement secondaire) : au RCS adresse_siege SANS prefixe ; au RNE conso_adresse_siege ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| rcs_sans_prefixe_attendu_t | rcs_conso_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| UPDATE 1
+| rne_conso_attendu_t | rne_sans_prefixe_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| UPDATE 1
+| siege_ecrit_plus_de_motif_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3 quater. Une identite ouverte par l administration (SIREN et SIRET seuls) reclame un nom ===
+| BEGIN
+| UPDATE 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| seul_attendu_identite
+| ----
+| identite
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4. D (SCP d architectes, 6578) choisit RNE : registre et conso_profession_reglementee, pas capital ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| cles | registre_attendu_t | profession_attendu_t | capital_attendu_f
+| ----
+| registre,conso_telephone,conso_email,regime_tva,conso_mediateur,conso_garantie_legale,conso_modalites_paiement,conso_modalites_execution,conso_reclamations,frais_deplacement,conso_profession_reglementee | t | t | f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4 bis. Le capital : une SNC (5202) et une SCS (5306) ne le doivent pas ; une SAS (5710) le doit ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| SET
+| SET
+| snc_rien_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| UPDATE 1
+| SET
+| scs_rien_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| UPDATE 1
+| SET
+| sas_attendu_capital
+| ----
+| capital
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5. A ecrit une fiche sale : le declencheur la nettoie, et pose SES dates ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| email | telephone_vide_attendu_t | montant_retire_attendu_t | registre | greffe_vide_attendu_t | liquidation_attendu_f | locataire_attendu_f | retour_ligne_seul_vide_attendu_t | denomination_ei | date_regime_de_la_base_attendu_t | modifie_le_de_la_base_attendu_t
+| ----
+| contact@exemple-opus.test | t | t | rne | t | f | f | t | Jean Dupont EI | t | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. La date du regime : inchangee, puis plus grande, puis vide ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| pg_sleep
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| inchangee_attendu_t
+| ----
+| t
+| (1 row)
+|
+| pg_sleep
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| plus_grande_attendu_t
+| ----
+| t
+| (1 row)
+|
+| UPDATE 1
+| vide_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6 bis. Le meme chemin que l application : un upsert, deux fois ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| pg_sleep
+| ----
+|
+| (1 row)
+|
+| INSERT 0 1
+| telephone | meme_regime_meme_date_attendu_t
+| ----
+| 06 00 00 00 00 | t
+| (1 row)
+|
+| pg_sleep
+| ----
+|
+| (1 row)
+|
+| INSERT 0 1
+| autre_regime_autre_date_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. A : un mediateur a moitie -> emetteur_mediateur_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "emetteur" violates check constraint "emetteur_mediateur_check"
+| ROLLBACK
+|
+| === 8. A : RCS sans greffe -> emetteur_greffe_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "emetteur" violates check constraint "emetteur_greffe_check"
+| ROLLBACK
+|
+| === 9. B : trois noms d EI passent ; « Jean Dupont » seul -> emetteur_denomination_ei_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| dernier_accepte
+| ----
+| Jean Dupont, entrepreneur individuel à responsabilité limitée
+| (1 row)
+|
+| ERREUR 23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| ROLLBACK
+|
+| === 9 bis. B : « EI » seul, sans nom -> emetteur_denomination_ei_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| un_nom_court_passe
+| ----
+| Jean EI
+| (1 row)
+|
+| ERREUR 23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| ROLLBACK
+|
+| === 9 ter. B : « ENTREPRENEUR INDIVIDUEL À RESPONSABILITÉ LIMITÉE » seul -> emetteur_denomination_ei_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "emetteur" violates check constraint "emetteur_denomination_ei_check"
+| ROLLBACK
+|
+| === 10. A : « au plus tot le 8e jour apres la signature » ET « a la signature » passent tous les deux ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| les_deux_passent
+| ----
+| Acompte de 30 % à la signature
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. A : une decennale SANS contrat passe ; « autre » sans libelle -> emetteur_assurance_libelle_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_libelle_check"
+| ROLLBACK
+|
+| === 11 (suite). A : une assurance sans couverture -> emetteur_assurance_complete_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_complete_check"
+| ROLLBACK
+|
+| === 11 bis. Le libelle s efface hors « autre », et l ordre de la liste ne se recrit pas ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| libelle_efface_attendu_t | assureur_nom | ordre_garde_attendu_t
+| ----
+| t | Assureur d’essai | t
+| (1 row)
+|
+| INSERT 0 1
+| date_forcee_ignoree_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 12. A : une attestation dans SON dossier passe ; dans celui de B -> emetteur_assurance_chemin_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "emetteur_assurances" violates check constraint "emetteur_assurance_chemin_check"
+| ROLLBACK
+|
+| === 13. Les frais de deplacement : trois etats, et le 0 avec des conditions refuse ===
+| BEGIN
+| SET
+| SET
+| a_sans_ligne_motif_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| b_zero_motif_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| c_montant_motif_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| d_texte_rogne
+| ----
+| Selon la distance
+| (1 row)
+|
+| d_texte_motif_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 13 (e). 0 ET « gratuit jusqu a 20 km » -> tarif_frais_zero_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_frais_zero_check"
+| ROLLBACK
+|
+| === 14. A : -100 -> tarif_frais_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_frais_check"
+| ROLLBACK
+|
+| === 15. A remplit tout — SANS assurance : plus rien ne manque ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| rien_ne_manque_attendu_0 | assurances_attendu_0
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 16. La meme chose sans mediateur : un seul element, conso_mediateur ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| seul_attendu_conso_mediateur
+| ----
+| conso_mediateur
+| (1 row)
+|
+| ROLLBACK
+|
+| === 17. TVA : B au reel sans numero transmis, puis en franchise ; A au reel avec numero ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| b_reel_attendu_t
+| ----
+| t
+| (1 row)
+|
+| UPDATE 1
+| b_franchise_attendu_f
+| ----
+| f
+| (1 row)
+|
+| SET
+| INSERT 0 1
+| a_reel_avec_numero_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 17 bis. TVA DECLAREE SUR L HONNEUR (2b-2) : pour le SIREN ACTIF de B, elle eteint conso_tva_intra ;
+|            pour un AUTRE SIREN, non ; et la phrase du motif dit la declaration, sans « certifi » ni « vérifi » ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| b_reel_sans_rien_attendu_t | phrase_dit_la_declaration_attendu_t | ni_certifie_ni_verifie_attendu_f
+| ----
+| t | t | f
+| (1 row)
+|
+| RESET
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| b_declare_pour_son_siren_attendu_f
+| ----
+| f
+| (1 row)
+|
+| RESET
+| SET
+| DELETE 1
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| b_declare_pour_un_autre_siren_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 18. Deux identites : la RETIREE avait un n° de TVA, l ACTIVE non -> conso_tva_intra present ===
+| BEGIN
+| UPDATE 1
+| INSERT 0 1
+| identites_de_b_attendu_2 | dont_active_attendu_1 | retiree_avec_tva_attendu_1
+| ----
+| 2 | 1 | 1
+| (1 row)
+|
+| SET
+| SET
+| INSERT 0 1
+| tva_intra_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 19. Fraicheur : lue il y a 400 jours -> entreprise_ancienne ; 300 -> rien ; 400 par l administration -> rien ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| attendu_entreprise_ancienne
+| ----
+| entreprise_ancienne
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| a_300_jours_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| administration_400_jours_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 20. L identite de A retiree, fiche complete : « entreprise » seul ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| attendu_entreprise
+| ----
+| entreprise
+| (1 row)
+|
+| ROLLBACK
+|
+| === 21. B ne LIT RIEN de A, dans aucune des trois tables, et n y ecrit rien ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| vraiment_en_base_attendu_1 | tarifs_attendu_1 | assurances_attendu_1
+| ----
+| 1 | 1 | 1
+| (1 row)
+|
+| SET
+| SET
+| a_lit_attendu_1 | a_lit_tarifs_attendu_1 | a_lit_assurances_attendu_1
+| ----
+| 1 | 1 | 1
+| (1 row)
+|
+| SET
+| b_lit_attendu_0 | b_lit_tarifs_attendu_0 | b_lit_assurances_attendu_0
+| ----
+| 0 | 0 | 0
+| (1 row)
+|
+| UPDATE 0
+| UPDATE 0
+| UPDATE 0
+| DELETE 0
+| RESET
+| toujours_celui_de_a | frais_intacts_attendu_3500
+| ----
+| 04 91 00 00 00 | 3500
+| (1 row)
+|
+| ROLLBACK
+|
+| === 22. B ecrit une fiche AU NOM de A -> RLS sur "emetteur" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur"
+| ROLLBACK
+|
+| === 22 bis. …des frais au nom de A -> RLS sur "tarifs_pro" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "tarifs_pro"
+| ROLLBACK
+|
+| === 22 ter. …une assurance au nom de A -> RLS sur "emetteur_assurances" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur_assurances"
+| ROLLBACK
+|
+| === 22 quater. …un lieu de depot des dechets au nom de A -> RLS sur "emetteur_lieux_depot" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur_lieux_depot"
+| ROLLBACK
+|
+| === 22 quinquies. …un signe de qualite au nom de A -> RLS sur "emetteur_labels" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur_labels"
+| ROLLBACK
+|
+| === 22 sexies. …un sous-traitant au nom de A -> RLS sur "emetteur_sous_traitants" (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur_sous_traitants"
+| ROLLBACK
+|
+| === 23. Un PARTICULIER ecrit « sa » fiche -> RLS (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "emetteur"
+| ROLLBACK
+|
+| === 24 a. Un visiteur sans compte, sur "emetteur" -> permission denied (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table emetteur
+| ROLLBACK
+|
+| === 24 b. …sur "emetteur_assurances" (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table emetteur_assurances
+| ROLLBACK
+|
+| === 24 c. …sur "tarifs_pro" (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table tarifs_pro
+| ROLLBACK
+|
+| === 24 d. …sur "emetteur_lieux_depot" (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table emetteur_lieux_depot
+| ROLLBACK
+|
+| === 24 e. …sur "emetteur_labels" (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table emetteur_labels
+| ROLLBACK
+|
+| === 24 f. …sur "emetteur_sous_traitants" (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table emetteur_sous_traitants
+| ROLLBACK
+|
+| === 25. B demande ce qui manque a A -> OP011 et son texte (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR OP011 Ces informations ne sont pas les vôtres : seul le titulaire d’une fiche professionnelle peut savoir ce qui manque à ses devis.
+| ROLLBACK
+|
+| === 25 bis. Sans jeton (editeur SQL, fonction Edge) -> OP011 aussi : `is not true`, pas `not` (ERREUR attendue) ===
+| BEGIN
+| ERREUR OP011 Ces informations ne sont pas les vôtres : seul le titulaire d’une fiche professionnelle peut savoir ce qui manque à ses devis.
+| ROLLBACK
+|
+| === 25 ter. Un visiteur l appelle -> permission denied for function (ERREUR attendue) ===
+| BEGIN
+| SET
+| ERREUR — permission denied for function emetteur_incomplet
+| ROLLBACK
+|
+| === 26. Les droits : les declencheurs ne s appellent pas, la fonction pour les connectes seulement ===
+| f | r | execute_attendu_f
+| ----
+| public.tient_l_assurance() | anon | f
+| public.tient_l_assurance() | authenticated | f
+| public.tient_l_emetteur() | anon | f
+| public.tient_l_emetteur() | authenticated | f
+| public.tient_le_label() | anon | f
+| public.tient_le_label() | authenticated | f
+| public.tient_le_lieu_de_depot() | anon | f
+| public.tient_le_lieu_de_depot() | authenticated | f
+| public.tient_le_sous_traitant() | anon | f
+| public.tient_le_sous_traitant() | authenticated | f
+| public.tient_les_tarifs() | anon | f
+| public.tient_les_tarifs() | authenticated | f
+| (12 rows)
+|
+| anon_attendu_f | authenticated_attendu_t
+| ----
+| f | t
+| (1 row)
+|
+| t | anon_select_attendu_f | truncate_attendu_f
+| ----
+| public.emetteur | f | f
+| public.emetteur_assurances | f | f
+| public.emetteur_labels | f | f
+| public.emetteur_lieux_depot | f | f
+| public.emetteur_sous_traitants | f | f
+| public.tarifs_pro | f | f
+| (6 rows)
+|
+| lieux_references_attendu_f | lieux_trigger_attendu_f | lieux_rls_attendu_t | lieux_une_politique_attendu_1
+| ----
+| f | f | t | 1
+| (1 row)
+|
+| labels_references_attendu_f | labels_trigger_attendu_f | labels_rls_attendu_t | labels_une_politique_attendu_1
+| ----
+| f | f | t | 1
+| (1 row)
+|
+| st_references_attendu_f | st_trigger_attendu_f | st_rls_attendu_t | st_une_politique_attendu_1
+| ----
+| f | f | t | 1
+| (1 row)
+|
+|
+| === 26 bis. Personne d autre ne lit ces six tables : une liste FERMEE de fonctions, aucune security definer, aucune vue ===
+| hors_liste_attendu_aucune
+| ----
+| (aucune)
+| (1 row)
+|
+| definer_attendu_0 | les_nomment | liste_attendu_t
+| ----
+| 0 | artisans_urgence, emetteur_incomplet, mes_donnees, motifs_refus_remise, tient_l_urgence | t
+| (1 row)
+|
+| vues_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| nomment_les_lieux | lieux_liste_fermee_attendu_t
+| ----
+| mes_donnees, motifs_refus_remise | t
+| (1 row)
+|
+| nomment_les_labels | labels_liste_fermee_attendu_t
+| ----
+| mes_donnees, motifs_refus_remise | t
+| (1 row)
+|
+| nomment_les_sous_traitants | sous_traitants_liste_fermee_attendu_t
+| ----
+| mes_donnees, motifs_refus_remise | t
+| (1 row)
+|
+|
+| === 27. L export RGPD : les trois cles pour A, rien de A pour B ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| mon_entreprise_attendu_t | assurances_attendu_1 | frais_attendu_0
+| ----
+| t | 1 | 0
+| (1 row)
+|
+| SET
+| b_rien_attendu_t | b_assurances_attendu_0 | b_tarifs_rien_attendu_t
+| ----
+| t | 0 | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 28. Le compte de A part : ses trois tables partent avec lui ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| avant_attendu_1 | avant_tarifs_attendu_1 | avant_assurances_attendu_1
+| ----
+| 1 | 1 | 1
+| (1 row)
+|
+| DELETE 1
+| apres_attendu_0 | apres_tarifs_attendu_0 | apres_assurances_attendu_0
+| ----
+| 0 | 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 29. Les contraintes : toutes nommees en _check, aucune anonyme, pas de emetteur_paiement_check ===
+| mal_nommees_attendu_0 | anonymes_attendu_0 | paiement_attendu_0 | contraintes_check_attendu_38
+| ----
+| 0 | 0 | 0 | 38
+| (1 row)
+|
+|
+| === 30. Rien n est « not null » sauf les cles ===
+| seules_les_cles
+| ----
+| emetteur.pro_id, emetteur_assurances.id, emetteur_assurances.pro_id, emetteur_labels.id, emetteur_labels.pro_id, emetteur_lieux_depot.id, emetteur_lieux_depot.pro_id, emetteur_sous_traitants.id, emetteur_sous_traitants.pro_id, tarifs_pro.pro_id
+| (1 row)
+|
+|
+| === 31. LES LIEUX DE DEPOT DES DECHETS (2b-5, 46.2 bis) : A range un lieu « sale » — la base le nettoie (la grande classe de blancs pour les textes, invisibles compris ; la petite pour le code postal), pose SA date, efface le libelle hors « autre » ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses lieux avec lui ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| raison_sociale_rognee_attendu_t | adresse_rognee_attendu_t | code_postal_rogne_attendu_t | commune_rognee_attendu_t | libelle_efface_hors_autre_attendu_t | date_forcee_ignoree_lieu_attendu_t
+| ----
+| t | t | t | t | t | t
+| (1 row)
+|
+| UPDATE 1
+| ordre_des_lieux_garde_attendu_t | commune_changee_attendu_t
+| ----
+| t | t
+| (1 row)
+|
+| INSERT 0 1
+| libelle_garde_pour_autre_attendu_t
+| ----
+| t
+| (1 row)
+|
+| a_lit_ses_lieux_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| SET
+| b_lit_les_lieux_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| UPDATE 0
+| DELETE 0
+| export_de_b_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| lieux_intacts_attendu_2 | rien_n_a_change_chez_a_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| export_de_a_attendu_2 | export_dans_l_ordre_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| RESET
+| DELETE 1
+| lieux_partis_avec_le_compte_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 31 b. Une adresse faite de blancs INVISIBLES -> emetteur_lieu_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_complet_check"
+| ROLLBACK
+|
+| === 31 c. Un code postal belge (quatre chiffres) -> emetteur_lieu_code_postal_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_code_postal_check"
+| ROLLBACK
+|
+| === 31 d. Une raison sociale de 121 caracteres -> emetteur_lieu_longueurs_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_longueurs_check"
+| ROLLBACK
+|
+| === 31 e. Un type hors de la liste -> emetteur_lieu_type_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_type_check"
+| ROLLBACK
+|
+| === 31 f. « autre » sans le preciser -> emetteur_lieu_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_lieux_depot" violates check constraint "emetteur_lieu_complet_check"
+| ROLLBACK
+|
+| === 32. LES SIGNES DE QUALITE (2b-6, 46.2 ter) : A range un label « sale » — la base le nettoie (la grande classe de blancs pour l organisme, l intitule et le numero, invisibles compris ; la PETITE pour le chemin du certificat), pose SA date ; un label complet SANS certificat est accepte ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses labels avec lui ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| organisme_rogne_attendu_t | intitule_rogne_attendu_t | numero_rogne_attendu_t | chemin_rogne_attendu_t | date_forcee_ignoree_label_attendu_t
+| ----
+| t | t | t | t | t
+| (1 row)
+|
+| UPDATE 1
+| ordre_des_labels_garde_attendu_t | numero_blanc_vide_attendu_t
+| ----
+| t | t
+| (1 row)
+|
+| INSERT 0 1
+| chemin_blanc_aucun_certificat_attendu_t
+| ----
+| t
+| (1 row)
+|
+| a_lit_ses_labels_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| SET
+| b_lit_les_labels_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| UPDATE 0
+| DELETE 0
+| export_labels_de_b_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| labels_intacts_attendu_2 | rien_n_a_change_chez_a_labels_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| export_labels_de_a_attendu_2 | export_labels_dans_l_ordre_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| RESET
+| DELETE 1
+| labels_partis_avec_le_compte_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 32 b. Des travaux couverts VIDES (le tableau vide) -> emetteur_label_categories_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_categories_check"
+| ROLLBACK
+|
+| === 32 c. « aucun » n est pas une categorie d un label -> emetteur_label_categories_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_categories_check"
+| ROLLBACK
+|
+| === 32 d. Un certificat dans le dossier de B -> emetteur_label_chemin_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_chemin_check"
+| ROLLBACK
+|
+| === 32 e. Un certificat a DEUX niveaux sous le dossier de A -> emetteur_label_chemin_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_chemin_check"
+| ROLLBACK
+|
+| === 32 f. Un label sans date de fin -> emetteur_label_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_complet_check"
+| ROLLBACK
+|
+| === 32 g. Un organisme fait de blancs INVISIBLES -> emetteur_label_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_complet_check"
+| ROLLBACK
+|
+| === 32 h. Un intitule de 121 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_longueurs_check"
+| ROLLBACK
+|
+| === 32 i. Un numero de 61 caracteres -> emetteur_label_longueurs_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_labels" violates check constraint "emetteur_label_longueurs_check"
+| ROLLBACK
+|
+| === 33. LES SOUS-TRAITANTS (2b-6, 46.2 quater) : A range un sous-traitant « sale » — la base le nettoie (le nom par la grande classe, le justificatif par la petite, le SIRET reduit a ses chiffres), pose SA date ; sous « Non », les champs du label sont EFFACES ; un sous-traitant sans reponse sur son label est accepte ; B ne lit rien et n ecrit rien ; l export de A le rend, celui de B non ; le compte de A part, ses sous-traitants avec lui ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| raison_sociale_rognee_st_attendu_t | siret_chiffres_seuls_attendu_t | justificatif_rogne_attendu_t | label_garde_sous_oui_attendu_t | date_forcee_ignoree_st_attendu_t
+| ----
+| t | t | t | t | t
+| (1 row)
+|
+| UPDATE 1
+| ordre_des_sous_traitants_garde_attendu_t | non_garde_attendu_t | label_efface_sous_non_attendu_t
+| ----
+| t | t | t
+| (1 row)
+|
+| INSERT 0 1
+| sans_reponse_sur_le_label_acceptee_attendu_t
+| ----
+| t
+| (1 row)
+|
+| a_lit_ses_sous_traitants_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| SET
+| b_lit_les_sous_traitants_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| UPDATE 0
+| DELETE 0
+| export_sous_traitants_de_b_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| sous_traitants_intacts_attendu_2 | rien_n_a_change_chez_a_sous_traitants_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| export_sous_traitants_de_a_attendu_2 | export_sous_traitants_dans_l_ordre_attendu_t
+| ----
+| 2 | t
+| (1 row)
+|
+| RESET
+| DELETE 1
+| sous_traitants_partis_avec_le_compte_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 33 b. Un SIRET de trois chiffres -> emetteur_sous_traitant_siret_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_siret_check"
+| ROLLBACK
+|
+| === 33 c. Un sous-traitant sans SIRET -> emetteur_sous_traitant_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_complet_check"
+| ROLLBACK
+|
+| === 33 d. « Oui » sans date de fin -> emetteur_sous_traitant_complet_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_complet_check"
+| ROLLBACK
+|
+| === 33 e. Un justificatif dans le dossier de B -> emetteur_sous_traitant_chemin_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_chemin_check"
+| ROLLBACK
+|
+| === 33 f. Un nom de 121 caracteres -> emetteur_sous_traitant_longueurs_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_longueurs_check"
+| ROLLBACK
+|
+| === 33 g. « aucun » dans les travaux de son label -> emetteur_sous_traitant_categories_check (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR — new row for relation "emetteur_sous_traitants" violates check constraint "emetteur_sous_traitant_categories_check"
+| ROLLBACK
+|
+| === 34. L EXPORT PAR UNE ENVELOPPE security definer (relecture de 2b-6, banc X26) : la RLS ne filtre plus, et seuls les filtres x.pro_id = auth.uid() de mes_donnees() separent A de B — l export de B ne contient AUCUN signe de qualite ni AUCUN sous-traitant de A, celui de A rien de B ; puis l enveloppe retiree ===
+| BEGIN
+| INSERT 0 2
+| INSERT 0 2
+| signe_de_a_existe_attendu_1 | signe_de_b_existe_attendu_1
+| ----
+| 1 | 1
+| (1 row)
+|
+| sous_traitant_de_a_existe_attendu_1 | sous_traitant_de_b_existe_attendu_1
+| ----
+| 1 | 1
+| (1 row)
+|
+| CREATE FUNCTION
+| SET
+| SET
+| enveloppe_signes_de_b_attendu_1 | enveloppe_le_signe_de_b_attendu_t | enveloppe_sous_traitants_de_b_attendu_1 | enveloppe_le_sous_traitant_de_b_attendu_t | enveloppe_rien_de_a_chez_b_attendu_t
+| ----
+| 1 | t | 1 | t | t
+| (1 row)
+|
+| SET
+| enveloppe_signes_de_a_attendu_1 | enveloppe_le_signe_de_a_attendu_t | enveloppe_sous_traitants_de_a_attendu_1 | enveloppe_le_sous_traitant_de_a_attendu_t | enveloppe_rien_de_b_chez_a_attendu_t
+| ----
+| 1 | t | 1 | t | t
+| (1 row)
+|
+| ROLLBACK
+| enveloppe_export_retiree_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| DEALLOCATE
+| DEALLOCATE

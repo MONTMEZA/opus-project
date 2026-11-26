@@ -1,0 +1,237 @@
+# Ce que doit rendre supabase/essais-section-49-rattrapage.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-49-rattrapage` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-49-rattrapage
+
+[partie essai]
+erreurs: 4
+valeurs-jugees: 29
+[erreurs]
+| @       3. aucun autre ERROR ; D7 intact (valeurs_attendu_t t)
+|   P0001 Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d'écrire quoi que ce soit. Devis dont le total toutes options comprises, une fois recalculé, dépasserait 99 999 999,99 € — le plafond que le lot 2a impose désormais : 1. Laissé ainsi, un tel devis ferait échouer plus tard une écriture qui ne le regarde pas, comme la suppression du compte d'un client. Retirez-lui l'option de trop (ou le brouillon entier), puis rejouez. Devis concernés : d4930000-0000-4000-8000-000000000007.
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @       3. aucune OP016 (le rattrapage ne l a pas touché), aucun autre ERROR ; D8 intact (valeurs_attendu_t t)
+|   P0001 Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d'écrire quoi que ce soit. Devis dont le numéro d'écriture est à la borne (9 007 199 254 740 991) et que le rattrapage devrait récrire : 1. Seule une application modifiée a pu y mettre ce numéro, et un tel devis ne peut plus être récrit : son total toutes options comprises ne peut pas être posé, et devis_calculs_check le refuserait. Retirez ces brouillons depuis l'éditeur SQL de Supabase, puis rejouez. Devis concernés : d4930000-0000-4000-8000-000000000008.
+|   23514 check constraint "devis_calculs_check" of relation "devis" is violated by some row
+[valeurs]
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| options_a_zero_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| devis_calculs_check_reposee_attendu_t = t
+| valeurs_attendu_t = t
+| valeurs_attendu_t = t
+| aucun_devis_de_l_essai_attendu_t = t
+| devis_calculs_check_en_place_attendu_t = t
+[sortie]
+| DELETE 0
+| INSERT 0 1
+| BEGIN
+| INSERT 0 1
+| COMMIT
+| PREPARE
+|
+| === 1. LE RATTRAPAGE, PAR schema.sql LUI-MÊME, sur huit anciens devis — puis un SECOND rejeu qui ne bouge plus rien ===
+|     D1 trois postes de 1 000,00 € (20 %, 10 %, 5,5 %) : ht 300000, tva 35500, ttc 335500 ; options 0 → 335500 ;
+|        horloge 4 → 5 (une écriture directe la fait monter) ; les totaux ne bougent pas
+|     D2 OPTIONS SEULES, 50,00 € à 20 % : ttc 0 ; options 0 → 5000 + 1000 = 6000 ; horloge 2 → 3 (BASE-1)
+|     D3 POSTE OFFERT + OPTION, poste 70,00 € à 10 % offert, option 40,00 € à 10 % : ttc 0 ;
+|        options 0 → union 10 % 0 + 4000 = 4000, tva 400 → 4400 ; horloge 3 → 4 (BASE-1)
+|     D4 OPTIONS SEULES À L HORLOGE MAXIMALE : EXCLU (BASE-2) — aucune OP016, options laissées à 0,
+|        horloge 9007199254740991 inchangée (le moindre mal pour un devis qui ne s écrit plus)
+|     D5 UNE OPTION OFFERTE SEULE : elle vaut 0, rien à rattraper — horloge 2 inchangée
+|     D6 VIDE : rien à rattraper — horloge 1 inchangée
+|     D9 POSTE + OPTION À UN AUTRE TAUX (la forme la plus courante d un vrai devis), poste 100,00 € à 20 %,
+|        option 33,33 € à 10 % : ttc 12000 ; options 0 → union 20 % 10000 → 12000, 10 % 3333 → tva 333
+|        (333,3) → 3666 ; 15666 ; horloge 3 → 4 (contre-vérification du 03/11 : aucun ancien devis du
+|        fichier n avait d option À CÔTÉ de ses postes — c est pourtant le cas réel)
+|     D10 OPTIONS SEULES À L HORLOGE MAXIMALE MOINS UN, option 50,00 € à 20 % : rattrapé (6000), et son
+|        horloge monte À la borne, 9007199254740991 ; au SECOND rejeu il est exclu — et déjà juste : la
+|        garde ne doit PAS l arrêter (contre-vérification du 03/11 : le seul devis qui change de camp
+|        entre les deux rejeux)
+|     attendu : aucun ERROR ; après le PREMIER rejeu comme après le SECOND, les huit valeurs_attendu_t à t
+|               (le second rejeu n a rien récrit : les horloges sont celles du premier)
+| BEGIN
+| ALTER TABLE
+| SET
+| INSERT 0 8
+| INSERT 0 11
+| INSERT 0 5
+| SET
+| --- avant : les huit à leur état du lot 1 (options 0 partout)
+| objet | ttc | options | horloge | options_a_zero_attendu_t
+| ----
+| D1 postes | 335500 | 0 | 4 | t
+| D10 options seules, borne - 1 | 0 | 0 | 9007199254740990 | t
+| D2 options seules | 0 | 0 | 2 | t
+| D3 poste offert + option | 0 | 0 | 3 | t
+| D4 options seules, horloge max | 0 | 0 | 9007199254740991 | t
+| D5 option offerte seule | 0 | 0 | 2 | t
+| D6 vide | 0 | 0 | 1 | t
+| D9 poste + option autre taux | 12000 | 0 | 3 | t
+|
+| --- premier rejeu de schema.sql (ses sorties masquées ; une erreur s afficherait quand même)
+| SET
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D1 postes | 300000 | 35500 | 335500 | 0 | 0 | 335500 | 5 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D2 options seules | 0 | 0 | 0 | 0 | 0 | 6000 | 3 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D3 poste offert + option | 0 | 0 | 0 | 0 | 0 | 4400 | 4 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D4 options seules, horloge max | 0 | 0 | 0 | 0 | 0 | 0 | 9007199254740991 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D5 option offerte seule | 0 | 0 | 0 | 0 | 0 | 0 | 2 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D6 vide | 0 | 0 | 0 | 0 | 0 | 0 | 1 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D9 poste + option autre taux | 10000 | 2000 | 12000 | 0 | 0 | 15666 | 4 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D10 options seules, borne - 1 | 0 | 0 | 0 | 0 | 0 | 6000 | 9007199254740991 | t
+|
+| --- second rejeu de schema.sql : le rattrapage ne trouve plus rien, aucune horloge ne monte
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D1 postes | 300000 | 35500 | 335500 | 0 | 0 | 335500 | 5 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D2 options seules | 0 | 0 | 0 | 0 | 0 | 6000 | 3 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D3 poste offert + option | 0 | 0 | 0 | 0 | 0 | 4400 | 4 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D4 options seules, horloge max | 0 | 0 | 0 | 0 | 0 | 0 | 9007199254740991 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D5 option offerte seule | 0 | 0 | 0 | 0 | 0 | 0 | 2 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D6 vide | 0 | 0 | 0 | 0 | 0 | 0 | 1 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D9 poste + option autre taux | 10000 | 2000 | 12000 | 0 | 0 | 15666 | 4 | t
+|
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D10 options seules, borne - 1 | 0 | 0 | 0 | 0 | 0 | 6000 | 9007199254740991 | t
+|
+| --- et devis_calculs_check est reposée
+| devis_calculs_check_reposee_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|
+| === 2. LA GARDE, PREMIER REFUS (BASE-3) : des OPTIONS au-delà du plafond, sur un ancien devis aux options seules ===
+|     D7 deux options de 60 000 000,00 € à 20 % (acceptées avant le lot 2a, rien ne bornait les options) :
+|        recalculé, son total toutes options vaudrait 2 × 6·10^9 × 1,2 = 14 400 000 000 c, au-delà de 9 999 999 999.
+|     attendu, DANS CET ORDRE :
+|       1. ERROR P0001 « Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d écrire quoi que ce
+|          soit. Devis dont le total toutes options comprises, une fois recalculé, dépasserait 99 999 999,99 € … : 1 »,
+|          qui NOMME d4930000-0000-4000-8000-000000000007 — c est l échec d une vraie migration, au moment
+|          où on l applique ;
+|       2. puis, parce que ce rejeu CONTINUE (ON_ERROR_ROLLBACK), ce que la garde évite : le rattrapage
+|          lui-même refusé, ERROR 23514 devis_plafond_check — sans la garde, la migration échouait là, sous
+|          ce nom sans rapport ; et sans le rattrapage de ce devis, c était PLUS TARD, pendant la
+|          suppression du compte d un client (la cascade) ;
+|       3. aucun autre ERROR ; D7 intact (valeurs_attendu_t t)
+| BEGIN
+| ALTER TABLE
+| SET
+| INSERT 0 1
+| INSERT 0 2
+| SET
+| SET
+| ERREUR P0001 Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d'écrire quoi que ce soit. Devis dont le total toutes options comprises, une fois recalculé, dépasserait 99 999 999,99 € — le plafond que le lot 2a impose désormais : 1. Laissé ainsi, un tel devis ferait échouer plus tard une écriture qui ne le regarde pas, comme la suppression du compte d'un client. Retirez-lui l'option de trop (ou le brouillon entier), puis rejouez. Devis concernés : d4930000-0000-4000-8000-000000000007.
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D7 options énormes seules | 0 | 0 | 0 | 0 | 0 | 0 | 3 | t
+|
+| ROLLBACK
+|
+| === 3. LA GARDE, SECOND REFUS (BASE-2) : un ancien devis À POSTES, à l horloge maximale ===
+|     D8 un poste de 70,00 € à 10 % (ttc 7700), horloge 9007199254740991 : le rattrapage l exclut —
+|        generation + 1 sortirait de la borne d OP016 — et son total toutes options resterait à 0, sous
+|        son ttc : devis_calculs_check le refuserait.
+|     attendu, DANS CET ORDRE :
+|       1. ERROR P0001 « Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d écrire quoi que ce
+|          soit. Devis dont le numéro d écriture est à la borne (9 007 199 254 740 991) et que le rattrapage
+|          devrait récrire : 1 … », qui NOMME d4930000-0000-4000-8000-000000000008 ;
+|       2. puis, le rejeu continuant, ce que la garde évite : ERROR 23514 « check constraint
+|          "devis_calculs_check" of relation "devis" is violated by some row » — un refus qui ne dit ni
+|          quel devis, ni pourquoi ;
+|       3. aucune OP016 (le rattrapage ne l a pas touché), aucun autre ERROR ; D8 intact (valeurs_attendu_t t)
+| BEGIN
+| ALTER TABLE
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR P0001 Rattrapage du lot 2a (schema.sql, section 49.6 ter) arrêté avant d'écrire quoi que ce soit. Devis dont le numéro d'écriture est à la borne (9 007 199 254 740 991) et que le rattrapage devrait récrire : 1. Seule une application modifiée a pu y mettre ce numéro, et un tel devis ne peut plus être récrit : son total toutes options comprises ne peut pas être posé, et devis_calculs_check le refuserait. Retirez ces brouillons depuis l'éditeur SQL de Supabase, puis rejouez. Devis concernés : d4930000-0000-4000-8000-000000000008.
+| ERREUR 23514 check constraint "devis_calculs_check" of relation "devis" is violated by some row
+| objet | ht | tva | ttc | reduction | acompte | options | horloge | valeurs_attendu_t
+| ----
+| D8 postes, horloge max | 7000 | 700 | 7700 | 0 | 0 | 0 | 9007199254740991 | t
+|
+| ROLLBACK
+|
+| === FIN — la base est revenue à son état de départ (chaque partie s est annulée) ===
+|     et ce fichier a écrit EXACTEMENT 4 lignes « psql:… ERROR », dont 2 « P0001: Rattrapage du lot 2a »
+|     (parties 2 et 3) : un autre compte est un ÉCHEC — la garde ne se juge que comme ça (en-tête).
+| aucun_devis_de_l_essai_attendu_t
+| ----
+| t
+|
+| devis_calculs_check_en_place_attendu_t
+| ----
+| t
+|

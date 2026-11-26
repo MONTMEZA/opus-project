@@ -1,0 +1,256 @@
+# Ce que doit rendre supabase/essais-section-38.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-38` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-38
+
+[partie essai]
+erreurs: 5
+valeurs-jugees: 0
+[erreurs]
+| @ === 1. UN APPEL SANS UTILISATEUR EST REFUSE ===
+|   23514 Aucun utilisateur : un appel à l'IA est toujours nominatif.
+| @ === 8. JE NE PEUX PAS ECRIRE DANS MON PROPRE JOURNAL ===
+|   42501 new row violates row-level security policy for table "journal_ia"
+|   25P02 current transaction is aborted, commands ignored until end of transaction block
+| @ === 9. …NI APPELER LA FONCTION QUI ECRIT ===
+|   42501 permission denied for function enregistrer_appel_ia
+|   25P02 current transaction is aborted, commands ignored until end of transaction block
+[valeurs]
+[sortie]
+| CREATE FUNCTION
+| === 1. UN APPEL SANS UTILISATEUR EST REFUSE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| ERREUR 23514 Aucun utilisateur : un appel à l'IA est toujours nominatif.
+| ROLLBACK
+| === 2. UN APPEL NORMAL S ECRIT, AVEC SON COUT ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| action | resultat | jetons_entree | jetons_sortie
+| ----
+| recit | ok | 1200 | 340
+| (1 row)
+|
+| ROLLBACK
+| === 3. LA LIMITE MORD, ET LE REFUS EST JOURNALISE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,10,10,ok,"<horodatage>")
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,10,10,ok,"<horodatage>")
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,10,10,ok,"<horodatage>")
+| (1 row)
+|
+| -- le quatrieme, qui doit etre REFUSE sans casser la transaction :
+| resultat
+| ----
+| refuse
+| (1 row)
+|
+| -- ce que le journal en garde :
+| resultat | count
+| ----
+| ok | 3
+| refuse | 1
+| (2 rows)
+|
+| ROLLBACK
+| === 4. UN REFUS NE COMPTE PAS CONTRE SOI-MEME ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,0,0,ok,"<horodatage>")
+| (1 row)
+|
+| -- deux refus :
+| resultat
+| ----
+| refuse
+| (1 row)
+|
+| resultat
+| ----
+| refuse
+| (1 row)
+|
+| -- avec une limite de 3, un appel passe-t-il encore ? (il doit)
+| resultat
+| ----
+| ok
+| (1 row)
+|
+| ROLLBACK
+| === 5. LA LIMITE EST PAR COMPTE, PAS GLOBALE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| resultat
+| ----
+| ok
+| (1 row)
+|
+| -- l autre compte doit passer :
+| cest_bien_l_autre
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 6. UNE ERREUR DU MODELE SE NOTE AUSSI ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| resultat
+| ----
+| erreur
+| (1 row)
+|
+| ROLLBACK
+| === 7. JE LIS MON JOURNAL, ET LUI SEUL ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,0,0,ok,"<horodatage>")
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,bbbb0000-0000-4000-8000-00000000bbbb,recit,,,0,0,ok,"<horodatage>")
+| (1 row)
+|
+| SET
+| SET
+| ce_que_je_lis
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| ROLLBACK
+| === 8. JE NE PEUX PAS ECRIRE DANS MON PROPRE JOURNAL ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "journal_ia"
+| ERREUR 25P02 current transaction is aborted, commands ignored until end of transaction block
+| ROLLBACK
+| === 9. …NI APPELER LA FONCTION QUI ECRIT ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| ERREUR 42501 permission denied for function enregistrer_appel_ia
+| ERREUR 25P02 current transaction is aborted, commands ignored until end of transaction block
+| ROLLBACK
+| === 9 bis. …MAIS LA CLE DE SERVICE, ELLE, DOIT PASSER ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| SET
+| resultat
+| ----
+| ok
+| (1 row)
+|
+| RESET
+| ROLLBACK
+| === 10. L EXPORT RGPD EMPORTE LE JOURNAL ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,chantier,c-1,5,5,ok,"<horodatage>")
+| (1 row)
+|
+| SET
+| SET
+| lignes_exportees
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| ROLLBACK
+| === 11. LE JOURNAL PART AVEC LE COMPTE ===
+| BEGIN
+| jeu
+| ----
+|
+| (1 row)
+|
+| enregistrer_appel_ia
+| ----
+| (<uuid>,aaaa0000-0000-4000-8000-00000000aaaa,recit,,,0,0,ok,"<horodatage>")
+| (1 row)
+|
+| avant
+| ----
+| 1
+| (1 row)
+|
+| DELETE 1
+| apres
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === FIN DES ESSAIS DE LA SECTION 38 ===

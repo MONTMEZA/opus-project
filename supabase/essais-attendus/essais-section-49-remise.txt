@@ -1,0 +1,3341 @@
+# Ce que doit rendre supabase/essais-section-49-remise.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-49-remise` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-49-remise
+
+[partie essai]
+erreurs: 53
+valeurs-jugees: 473
+[erreurs]
+| @ --- 12 a. A demande la liste du devis de B → OP027 (refus 1/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @ --- 12 b. A, un identifiant inventé → OP027 (refus 2/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @ --- 12 c. A, un identifiant vide → OP027 (refus 3/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @ --- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @ --- 12 e. P, un identifiant inventé → OP027 (refus 5/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @           savepoints : le devis de B → OP027 (refus 6/38), un identifiant inventé → OP027 (refus 7/38)
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @           → OP027 (refus 10/38) : la clé de service n’est l’entreprise de personne
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+|   OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| @ --- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/38)
+|   42501 permission denied for function motifs_refus_remise
+| @ --- 15 g. une réponse INCONNUE → devis_pour_qui_check (refus 12/38), jugé en SQL juste après
+|   23514 new row for relation "devis" violates check constraint "devis_pour_qui_check"
+| @ --- 18 b. le TÉLÉPHONE écrit la date → « permission denied for table devis » (refus 13/38), jugé en SQL juste après
+|   42501 permission denied for table devis
+| @ --- 19 a. une OPTION marquée urgente → devis_ligne_urgence_check (refus 14/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| @ --- 19 b. une ZONE marquée urgente → devis_ligne_urgence_check (refus 15/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| @ --- 19 c. une PIÈCE marquée urgente → devis_ligne_urgence_check (refus 16/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| @ --- 19 d. une RÉSERVE marquée urgente → devis_ligne_urgence_check (refus 17/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| @           le peut, `type` est dans grant update) → devis_ligne_urgence_check (refus 18/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| @           alphabétique — la preuve, côté base, que CONTRAINTES_LIGNE range « urgence » en dernier (refus 19/38)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| @ --- 25 h1. le prix du devis lui-même à −1 → devis_cout_check (refus 20/38), jugé en SQL plus bas
+|   23514 new row for relation "devis" violates check constraint "devis_cout_check"
+| @ --- 25 h2. le prix du devis lui-même à 100 001 centimes → devis_cout_check (refus 21/38), jugé en SQL plus bas
+|   23514 new row for relation "devis" violates check constraint "devis_cout_check"
+| @        (36/38), une unité « kg » (37/38), « Aucun dépôt » écrit faux (38/38) — jugés en SQL plus bas
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_cout_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_quantite_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_unite_check"
+|   23514 new row for relation "devis" violates check constraint "devis_dechets_sans_depot_check"
+| @        (46 à 50/53) ; les sous-traitants : vide, onze, un élément vide (51 à 53/53) — jugés en SQL plus bas
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+|   23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+[valeurs]
+| devis_attendu_1 = 1
+| lignes_attendu_1 = 1
+| lignes_rendues_attendu_0 = 0
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| franchise_la_loi_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| reel_sans_tva_prudence_attendu_t = t
+| motifs_attendu_t = t
+| taux_regime_sans_fiche_attendu_0 = 0
+| regime_tva_attendu_1 = 1
+| taux_regime_fiche_sans_regime_attendu_0 = 0
+| regime_tva_attendu_1 = 1
+| ranges_vides_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| range_vide_attendu_t = t
+| motifs_attendu_t = t
+| rang_nature_attendu_t = t
+| motifs_attendu_t = t
+| u3000_range_tel_quel_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| acompte_applique_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| acompte_ramene_par_le_retrait_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| reduction_appliquee_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| cent_pour_cent_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_9 = 9
+| rangs_dans_l_ordre_attendu_t = t
+| conformes_au_contrat_attendu_9 = 9
+| ligne_id_seulement_au_3_attendu_t = t
+| la_bonne_ligne_attendu_t = t
+| phrases_propres_attendu_t = t
+| rang_smallint_attendu_t = t
+| motifs_entreprise_attendu_11 = 11
+| recomposes_attendu_11 = 11
+| rangs_attendu_t = t
+| cles_natures_attendu_t = t
+| ligne_id_attendu_0 = 0
+| phrases_mal_coupees_attendu_0 = 0
+| motifs_du_devis_attendu_0 = 0
+| trois_regles_d_opus_attendu_t = t
+| prudence_attendu_t = t
+| b_lit_son_devis_attendu_1 = 1
+| b_a_sa_liste_attendu_t = t
+| a_a_sa_liste_attendu_t = t
+| a_passe_par_l_enveloppe_attendu_t = t
+| enveloppe_retiree_attendu_0 = 0
+| service_jeton_a_son_devis_attendu_t = t
+| a_devis_de_b_attendu_t = t
+| b_invente_attendu_t = t
+| c_vide_attendu_t = t
+| d_particulier_attendu_t = t
+| e_particulier_invente_attendu_t = t
+| f_definer_devis_de_b_attendu_t = t
+| f_definer_invente_attendu_t = t
+| g_service_devis_de_b_attendu_t = t
+| g_service_invente_attendu_t = t
+| g_service_sans_jeton_attendu_t = t
+| h_visiteur_attendu_t = t
+| origines_differentes_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| une_seule_attendu_t = t
+| argument_attendu_t = t
+| retour_attendu_t = t
+| ensemble_attendu_t = t
+| invoker_attendu_t = t
+| stable_attendu_t = t
+| plpgsql_attendu_t = t
+| search_path_attendu_t = t
+| commentaire_attendu_t = t
+| pas_public_attendu_t = t
+| anon_attendu_f = f
+| connecte_attendu_t = t
+| service_attendu_t = t
+| nomme_exactement_attendu_t = t
+| mots_interdits_attendu_0 = 0
+| lectures_entieres_attendu_0 = 0
+| mots_d_origine_attendu_0 = 0
+| aucune_sequence_ni_insecable_attendu_t = t
+| dependances_attendu_0 = 0
+| definer_ouvertes_attendu_31 = 31
+| definer_fermees_attendu_32 = 32
+| elle_n_y_est_pas_attendu_0 = 0
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| pour_qui_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| reponse_intacte_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| fiche_partie_reponse_restee_attendu_t = t
+| motifs_attendu_t = t
+| reponse_inconnue_refusee_attendu_t = t
+| treize_motifs_existent_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| rangs_d_origine_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| cles_alignees_sur_les_lignes_attendu_t = t
+| reduit_neuf_prudence_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_t = t
+| sans_ligne_attendu_0 = 0
+| ligne_en_trop_attendu_0 = 0
+| regime_vide_aucune_ligne_attendu_0 = 0
+| regime_tva_attendu_1 = 1
+| motifs_attendu_t = t
+| vide_a_la_naissance_attendu_t = t
+| posee_par_la_base_attendu_t = t
+| gardee_par_trois_ecritures_attendu_t = t
+| date_de_2001_ignoree_attendu_t = t
+| effacee_par_non_attendu_t = t
+| nouvelle_date_plus_recente_attendu_t = t
+| gardee_par_la_cascade_attendu_t = t
+| effacee_par_vide_attendu_t = t
+| insertion_date_envoyee_attendu_t = t
+| date_ecrite_par_le_telephone_refusee_attendu_t = t
+| nait_eteinte_attendu_t = t
+| allumee_par_le_client_attendu_t = t
+| deux_postes_urgents_attendu_t = t
+| motifs_attendu_t = t
+| eteinte_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| a_option_urgente_attendu_t = t
+| b_zone_urgente_attendu_t = t
+| c_piece_urgente_attendu_t = t
+| d_reserve_urgente_attendu_t = t
+| e_poste_change_en_option_attendu_t = t
+| f_forme_nommee_d_abord_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| a_la_signature_ecrite_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| signature_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| toutes_les_lignes_chiffrees_urgentes_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| echeance_gardee_sans_acompte_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| aucune_assurance_attendu_0 = 0
+| motifs_attendu_t = t
+| decennale_rang_nature_phrase_attendu_t = t
+| oui_ecrit_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| attestation_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| attestation_date_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| trois_decennales_attendu_3 = 3
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| fuseau_kiritimati_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| la_paire_departage_a_cette_heure_attendu_t = t
+| decennale_valable_de_b_attendu_1 = 1
+| enveloppe_sans_reponse_attendu_t = t
+| enveloppe_oui_attendu_t = t
+| motifs_attendu_t = t
+| enveloppe_retiree_22_attendu_0 = 0
+| origines_differentes_23_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| motifs_attendu_t = t
+| lignes_attendu_14 = 14
+| rangs_dans_l_ordre_attendu_t = t
+| conformes_au_contrat_attendu_14 = 14
+| vingt_deux_cles_quatorze_rangs_attendu_t = t
+| ligne_id_seulement_au_3_attendu_t = t
+| phrases_propres_attendu_t = t
+| phrases_courtes_attendu_t = t
+| gratuit_ecrit_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| vide_ecrit_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| cout_rang_nature_phrase_attendu_t = t
+| payant_ecrit_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| hors_des_totaux_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| aucune_assurance_25_attendu_0 = 0
+| liste_attendu_t = t
+| motifs_attendu_t = t
+| b_ecrit_le_prix_de_a_attendu_0 = 0
+| rien_n_a_change_chez_a_attendu_t = t
+| motifs_attendu_t = t
+| zero_accepte_a_la_creation_attendu_t = t
+| cent_mille_accepte_attendu_t = t
+| motifs_attendu_t = t
+| moins_un_refuse_attendu_t = t
+| cent_mille_un_refuse_attendu_t = t
+| non_dans_le_decor_attendu_t = t
+| le_lieu_de_a_existe_attendu_1 = 1
+| motifs_attendu_t = t
+| vide_ecrit_par_le_client_attendu_t = t
+| motifs_attendu_t = t
+| vide_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| oui_rang_nature_phrase_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| cout_hors_des_totaux_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| sur_place_ecrit_tri_vide_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| non_garde_ce_qui_est_ecrit_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| lieu_de_b_ecrit_attendu_t = t
+| motifs_attendu_t = t
+| motifs_attendu_t = t
+| doublon_accepte_attendu_t = t
+| motifs_attendu_t = t
+| orphelin_garde_par_le_devis_attendu_t = t
+| motifs_attendu_t = t
+| b_lit_les_lieux_de_a_attendu_0 = 0
+| b_ecrit_les_lieux_du_devis_de_a_attendu_0 = 0
+| rien_n_a_change_chez_a_26_attendu_t = t
+| deux_lieux_attendu_2 = 2
+| enveloppe_lieu_de_b_attendu_t = t
+| motifs_attendu_t = t
+| enveloppe_lieu_de_a_attendu_t = t
+| motifs_attendu_t = t
+| enveloppe_retiree_26_attendu_0 = 0
+| origines_differentes_26_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| cles_attendu_t = t
+| x_y_z_identiques_attendu_t = t
+| bornes_basses_et_listes_acceptees_attendu_t = t
+| bornes_hautes_et_aucune_seule_acceptees_attendu_t = t
+| tri_vide_refuse_attendu_t = t
+| sur_place_vide_refuse_attendu_t = t
+| lieux_vide_refuse_attendu_t = t
+| tri_deux_dimensions_refuse_attendu_t = t
+| sur_place_deux_dimensions_refuse_attendu_t = t
+| lieux_deux_dimensions_refuse_attendu_t = t
+| tri_borne_zero_refuse_attendu_t = t
+| sur_place_borne_zero_refuse_attendu_t = t
+| lieux_borne_zero_refuse_attendu_t = t
+| aucune_et_papier_refuse_attendu_t = t
+| broyage_dans_le_tri_refuse_attendu_t = t
+| lieu_vide_refuse_attendu_t = t
+| onze_lieux_refuses_attendu_t = t
+| cout_zero_refuse_attendu_t = t
+| quantite_zero_refusee_attendu_t = t
+| unite_kg_refusee_attendu_t = t
+| sans_depot_faux_refuse_attendu_t = t
+| aucun_dans_le_decor_attendu_t = t
+| totaux_de_depart_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| rang_14_exact_attendu_t = t
+| liste_attendu_t = t
+| rang_14_exact_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| restes_sous_aucun_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| le_signe_de_a_existe_attendu_1 = 1
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| rang_14_exact_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| totaux_inchanges_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| liste_attendu_t = t
+| identifiants_restes_sous_non_attendu_t = t
+| liste_attendu_t = t
+| b_lit_les_sous_traitants_de_a_attendu_0 = 0
+| b_ecrit_un_sous_traitant_de_a_attendu_0 = 0
+| b_ecrit_les_sous_traitants_du_devis_de_a_attendu_0 = 0
+| rien_n_a_change_chez_a_27_attendu_t = t
+| liste_attendu_t = t
+| orphelin_garde_par_le_devis_27_attendu_t = t
+| liste_attendu_t = t
+| labellise_sans_date_pose_attendu_t = t
+| liste_attendu_t = t
+| deux_lignes_de_b_attendu_2 = 2
+| enveloppe_signe_de_b_attendu_t = t
+| liste_attendu_t = t
+| enveloppe_sous_traitant_de_b_attendu_t = t
+| liste_attendu_t = t
+| enveloppe_signe_sans_certificat_de_b_attendu_t = t
+| liste_attendu_t = t
+| enveloppe_signe_de_a_attendu_t = t
+| liste_attendu_t = t
+| enveloppe_retiree_27_attendu_0 = 0
+| dix_neuf_travaux_et_dix_sous_traitants_acceptes_attendu_t = t
+| desembouage_seul_accepte_attendu_t = t
+| aucun_seul_accepte_attendu_t = t
+| travaux_vides_refuses_attendu_t = t
+| aucun_et_chaudiere_refuses_attendu_t = t
+| menuiseries_refusees_attendu_t = t
+| ancienne_cle_refusee_attendu_t = t
+| travaux_deux_dimensions_refuses_attendu_t = t
+| travaux_borne_zero_refuses_attendu_t = t
+| travail_vide_refuse_attendu_t = t
+| declaration_vide_refusee_attendu_t = t
+| aucun_declare_refuse_attendu_t = t
+| menuiseries_declarees_refusees_attendu_t = t
+| declaration_element_vide_refusee_attendu_t = t
+| declaration_deux_dimensions_refusee_attendu_t = t
+| sous_traitants_vides_refuses_attendu_t = t
+| onze_sous_traitants_refuses_attendu_t = t
+| sous_traitant_vide_refuse_attendu_t = t
+| toutes_les_valeurs_jugees_attendu_t = t
+[sortie]
+| CREATE SEQUENCE
+| CREATE FUNCTION
+| CREATE FUNCTION
+| DELETE 0
+| INSERT 0 2
+| BEGIN
+| INSERT 0 3
+| INSERT 0 2
+| INSERT 0 2
+| INSERT 0 2
+| INSERT 0 1
+| COMMIT
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+|
+| === 0. LA DONNÉE EXISTE — un devis de A où rien ne manque : A le lit, la fonction ne rend AUCUNE ligne ===
+|     attendu : devis 1, lignes 1, cles « — » (motifs_attendu_t t), lignes_rendues 0
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| devis_attendu_1 | lignes_attendu_1 | lignes_rendues_attendu_0
+| ----
+| 1 | 1 | 0
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 1. devis_client — allumé (client retiré), puis éteint (client remis) ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_client | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 2. devis_lignes — ni un titre, ni une réserve, ni une OPTION ne sont un poste ; un poste OFFERT en est un ===
+|     attendu : devis_lignes ×5 (sans ligne, zone, pièce, réserve, option), puis « — » (poste offert),
+|               puis devis_lignes (le poste retiré), puis « — » (un poste payant)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 3 a. devis_taux_franchise (LA LOI) en FRANCHISE — UNE ligne par ligne fautive (poste ET option, offerte comprise), dans l’ordre « ordre, id » ===
+|     lignes : zone (sans taux) ; L1 poste 0 % (juste) ; L2 poste 20 % ordre 2000 ; L3 option 10 % ordre 3000 ;
+|              L4 poste OFFERT 5,5 % ordre 4000 ; L5 poste 20 % ordre 1500 (écrit APRÈS, rangé AVANT) ;
+|              L6 option 20 % ordre 4000 (même ordre que L4 : L4 < L6 par identifiant)
+|     attendu : cinq devis_taux_franchise désignant L5, L2, L3, L4, L6, nature loi et la phrase du contrat ;
+|               puis chaque ligne remise à 0 → « — »
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise | t
+|
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| franchise_la_loi_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 3 b. devis_taux_sans_tva (UNE PRUDENCE) au RÉEL — une ligne chiffrée à 0 (poste offert, option) est fautive ; 20 % est juste ===
+|     (la loi permet une ligne sans TVA dans quelques cas — la sous-traitance en autoliquidation, CGI 283 2 nonies —
+|      qu’Opus ne sait pas encore imprimer : ce n’est pas « la loi », c’est une prudence)
+|     attendu : devis_taux_sans_tva ×2 (L2, L3), nature prudence et la phrase du contrat, puis conso_tva_intra de
+|               l’entreprise (A n’a aucun n° de TVA) ;
+|               les deux lignes passées à 20 % et 10 % → il ne reste que conso_tva_intra
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_sans_tva,devis_taux_sans_tva,conso_tva_intra | t
+|
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| reel_sans_tva_prudence_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| conso_tva_intra | t
+|
+| ROLLBACK
+|
+| === 3 c. RÉGIME NON DÉCLARÉ — aucune ligne n’est fautive (le motif regime_tva de l’entreprise le dit), avec ou sans fiche ===
+|     attendu, deux fois : taux_regime 0 ; regime_tva 1
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| taux_regime_sans_fiche_attendu_0 | regime_tva_attendu_1
+| ----
+| 0 | 1
+|
+| RESET
+| INSERT 0 1
+| SET
+| taux_regime_fiche_sans_regime_attendu_0 | regime_tva_attendu_1
+| ----
+| 0 | 1
+|
+| ROLLBACK
+|
+| === 4. devis_lieu — des BLANCS ne sont pas un lieu (espaces, insécable, espace sans chasse) ; un seul des trois suffit ===
+|     attendu : les trois colonnes rangées vides (null) ; devis_lieu ; puis « — » avec la ville seule,
+|               le code postal seul, l’adresse seule
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| ranges_vides_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_lieu | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 5. devis_delai — des blancs ne sont pas un délai ; c’est une RÈGLE D’OPUS (réponse du 05/11) ===
+|     attendu : delai rangé vide ; devis_delai, nature regle_opus, rang 5 ; puis « — » ;
+|     puis un délai fait d’un SEUL U+3000 (espace idéographique, HORS de la classe de blancs du projet) : rangé tel
+|     quel, et la liste ne dit PAS devis_delai — elle vérifie une présence, pas un sens (relecture de 2b-1, BASE-1).
+|     Ce cas FIGE le comportement d’aujourd’hui : il changera, avec lui, le jour où la classe sera élargie dans
+|     toutes ses copies (lot de consolidation) ; c’est 2c qui refusera à l’impression un délai sans lettre ni chiffre.
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| range_vide_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_delai | t
+|
+| rang_nature_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| u3000_range_tel_quel_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 6. devis_validite — allumé (validité retirée), puis éteint (15 jours) ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_validite | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 7. devis_acompte_nature — en %, puis en euros ; pas d’acompte, pas de motif ===
+|     attendu : « — » (aucun acompte) ; devis_acompte_nature (30 %) ; « — » (acompte) ;
+|               devis_acompte_nature (100,00 €) ; « — » (arrhes) ; « — » (acompte retiré, nature retirée)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_nature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_nature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+|
+| === 8. devis_acompte_ramene — EN EUROS seulement : la demande dépasse l’acompte appliqué ===
+|     deux postes de 500,00 € en franchise : TTC 100 000 c
+|     attendu : 2 000,00 € → ramené (acompte appliqué 100 000) ; 1 000,00 € (= TTC) → « — » ;
+|               un poste retiré (TTC 50 000) → ramené SANS toucher à l’acompte ; 100 % → « — » ;
+|               2 000,00 € sans nature → devis_acompte_nature PUIS devis_acompte_ramene (ordre des rangs)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| acompte_applique_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_ramene | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| acompte_ramene_par_le_retrait_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_ramene | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_nature,devis_acompte_ramene | t
+|
+| ROLLBACK
+|
+| === 9. devis_reduction_ramenee — EN EUROS seulement : la demande dépasse la réduction appliquée ===
+|     un poste de 1 000,00 € HT : brut 100 000 c
+|     attendu : 2 000,00 € → ramenée (appliquée 100 000) ; 1 000,00 € (= brut) → « — » ; 500,00 € → « — » ;
+|               100 % → « — » ; sans aucun poste, 0,01 € → devis_lignes PUIS devis_reduction_ramenee
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| reduction_appliquee_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_reduction_ramenee | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cent_pour_cent_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes,devis_reduction_ramenee | t
+|
+| ROLLBACK
+|
+| === 10. LES NEUF RANGS À LA FOIS — rangs 1 à 9, natures, phrases au CARACTÈRE près, aucune ligne en trop ===
+|     un devis NEUF de A (franchise, entreprise complète) : aucun client, aucun lieu, ni délai, ni validité ;
+|     une OPTION à 20 % (fautive en franchise, et pas un poste) ; un acompte de 50,00 € sans nature
+|     (ramené : le TTC vaut 0) ; une réduction de 1,00 € (ramenée : le brut vaut 0) ; 2b-4 : le prix du devis
+|     lui-même GRATUIT (0), 2b-5 : « Non » aux déchets, et 2b-6 : « Aucun » aux travaux d’énergie, pour rester
+|     les NEUF rangs (les rangs 12, 13 et 14 sont éprouvés aux cas 24 à 27)
+|     attendu : rangs 1,2,3,4,5,6,7,8,9 (le rang 3 sous sa clé de franchise) ; chaque phrase = celle du contrat
+|               (annexe B.2 du cahier 2b, revue le 05/11 au soir, plus les deux clés de 2b-2 : DOUZE clés sur neuf rangs) ;
+|               ligne_id posée sur le seul motif 3 ; aucune phrase ne porte de chiffre, d’euro,
+|               d’apostrophe droite, d’espace insécable ni de barre oblique inverse
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee | t
+|
+| lignes_attendu_9 | rangs_dans_l_ordre_attendu_t | conformes_au_contrat_attendu_9 | ligne_id_seulement_au_3_attendu_t | la_bonne_ligne_attendu_t | phrases_propres_attendu_t | rang_smallint_attendu_t
+| ----
+| 9 | t | 9 | t | t | t | t
+|
+| ROLLBACK
+|
+| === 11 a. LES MOTIFS DE L’ENTREPRISE — rang 100 + position, clé et phrase = les deux moitiés coupées au PREMIER « : » ===
+|     A sans fiche « Mon entreprise » ni frais : ses 11 motifs, dans l’ordre d’emetteur_incomplet(A),
+|     rangs 101 à 111 ; frais_deplacement en regle_opus, regime_tva en prudence (relecture de 2b-1, TXT-7 : aucune
+|     loi ne demande de déclarer son régime à Opus), les autres en loi — registre compris ; aucun ligne_id ;
+|     et « cle: phrase » recomposée = l’élément d’emetteur_incomplet, au caractère près
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| motifs_entreprise_attendu_11 | recomposes_attendu_11 | rangs_attendu_t | cles_natures_attendu_t | ligne_id_attendu_0 | phrases_mal_coupees_attendu_0
+| ----
+| 11 | 11 | t | t | 0 | 0
+|
+| motifs_du_devis_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+|
+| === 11 b. LES TROIS RÈGLES D’OPUS DE L’ENTREPRISE (réponse du 05/11) — entreprise lue il y a plus d’un an,
+|           régime réel sans n° de TVA, aucun frais déclaré : nature regle_opus pour les trois ===
+|     attendu : entreprise_ancienne=regle_opus,conso_tva_intra=regle_opus,frais_deplacement=regle_opus
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| trois_regles_d_opus_attendu_t | lues
+| ----
+| t | entreprise_ancienne=regle_opus,conso_tva_intra=regle_opus,frais_deplacement=regle_opus
+|
+| ROLLBACK
+|
+| === 11 c. LA PROFESSION RÉGLEMENTÉE — une PRUDENCE (Opus ne sait pas encore écrire titre, État et ordre) ===
+|     A devient architecte (posé en superutilisateur) ; attendu : conso_profession_reglementee=prudence, seul
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| prudence_attendu_t | lues
+| ----
+| t | conso_profession_reglementee=prudence
+|
+| ROLLBACK
+|
+| === 12. OP027 — LE MÊME CODE ET LE MÊME MESSAGE, D’OÙ QU’ON APPELLE (critique B1) ===
+|     Chaque refus est le dernier ordre de sa transaction (ou suivi d’un rollback to savepoint, 12 f),
+|     relevé aussitôt par :ERROR, LAST_ERROR_SQLSTATE et LAST_ERROR_MESSAGE, et JUGÉ après l’annulation.
+|
+| --- 12 a. A demande la liste du devis de B → OP027 (refus 1/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| b_lit_son_devis_attendu_1
+| ----
+| 1
+|
+| b_a_sa_liste_attendu_t
+| ----
+| t
+|
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 b. A, un identifiant inventé → OP027 (refus 2/38)
+| BEGIN
+| SET
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 c. A, un identifiant vide → OP027 (refus 3/38)
+| BEGIN
+| SET
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 d. P (particulier, sans fiche pro) demande la liste du devis de A → OP027 (refus 4/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| a_a_sa_liste_attendu_t
+| ----
+| t
+|
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 e. P, un identifiant inventé → OP027 (refus 5/38)
+| BEGIN
+| SET
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 f. DEPUIS UNE FONCTION security definer — comme la remise de 2c l’appellera. L’enveloppe est
+|           créée ET retirée dans la même transaction (le rollback la retire : sinon l’essai 49, cas 27b,
+|           compterait une definer de plus). Le devis de A passe (attendu t), puis, derrière deux
+|           savepoints : le devis de B → OP027 (refus 6/38), un identifiant inventé → OP027 (refus 7/38)
+| BEGIN
+| CREATE FUNCTION
+| SET
+| SET
+| INSERT 0 1
+| SET
+| INSERT 0 1
+| a_passe_par_l_enveloppe_attendu_t
+| ----
+| t
+|
+| SAVEPOINT
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| SAVEPOINT
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| ROLLBACK
+| enveloppe_retiree_attendu_0
+| ----
+| 0
+|
+| --- 12 g. PAR LA CLÉ DE SERVICE (bypassrls) — jeton de A : son devis passe (attendu t), le devis de B → OP027
+|           (refus 8/38), un identifiant inventé → OP027 (refus 9/38) ; SANS jeton, le devis de A lui-même
+|           → OP027 (refus 10/38) : la clé de service n’est l’entreprise de personne
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| INSERT 0 1
+| SET
+| service_jeton_a_son_devis_attendu_t
+| ----
+| t
+|
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP027 Ce devis n’existe pas, ou il n’est pas le vôtre.
+| ROLLBACK
+| --- 12 h. UN VISITEUR (anon) → « permission denied for function motifs_refus_remise » (refus 11/38)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function motifs_refus_remise
+| ROLLBACK
+|
+| --- 12 i. LE JUGEMENT : dix OP027 au MÊME message, et le refus du visiteur (attendu : t partout)
+| a_devis_de_b_attendu_t | b_invente_attendu_t | c_vide_attendu_t | d_particulier_attendu_t | e_particulier_invente_attendu_t
+| ----
+| t | t | t | t | t
+|
+| f_definer_devis_de_b_attendu_t | f_definer_invente_attendu_t | g_service_devis_de_b_attendu_t | g_service_invente_attendu_t | g_service_sans_jeton_attendu_t | h_visiteur_attendu_t
+| ----
+| t | t | t | t | t | t
+|
+|
+| === 13. D4-c — AUCUN MOTIF NE DÉPEND DE L’ORIGINE : trois devis identiques sauf leurs liens et la façon dont
+|         ils ont été ouverts (manuelle ; demande + urgence ; urgence seule) rendent la MÊME liste ===
+|     état 1 : pas de réponse « à quel titre » (2b-2), une ligne fautive (option à 20 % en franchise), délai et
+|              validité vides, acompte de 30 % sans nature ; puis P bloque A, toujours dans l’état 1 — la liste ne
+|              le voit pas (c’est la REMISE de 2c qui refusera) ; état 2 : tout corrigé, la réponse donnée.
+|              2b-4 : les trois devis restent SANS prix du devis lui-même — devis_cout (rang 12) est dans les
+|              trois listes, et la preuve D4-c le couvre contre l’origine.
+|              2b-5 : ils restent aussi SANS réponse aux déchets — devis_dechets (rang 13, prudence) est dans les
+|              trois listes, et la preuve D4-c couvre de même le motif nouveau contre l’origine.
+|              2b-6 : et SANS réponse aux travaux d’énergie — devis_energie (rang 14, prudence) clôt les trois
+|              listes : la preuve D4-c couvre le rang 14 contre l’origine.
+|              attendu : non vide, non vide, devis_cout,devis_dechets,devis_energie, et X = Y = Z à chaque fois (t ×3)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 3
+| origines_differentes_attendu_t
+| ----
+| t
+|
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| -- état 1 (attendu : cles_attendu_t t, x_y_z_identiques_attendu_t t)
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets,devis_energie | t | t
+|
+| -- état 1, après que P a bloqué A (attendu : t, t — la liste ne voit pas le blocage)
+| SET
+| INSERT 0 1
+| SET
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_pour_qui,devis_taux_franchise,devis_delai,devis_validite,devis_acompte_nature,devis_cout,devis_dechets,devis_energie | t | t
+|
+| -- état 2, tout corrigé sur les trois devis SAUF le prix du devis lui-même, les déchets et les travaux d’énergie (attendu : cles « devis_cout,devis_dechets,devis_energie », t, t)
+| UPDATE 3
+| UPDATE 3
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_cout,devis_dechets,devis_energie | t | t
+|
+| ROLLBACK
+|
+| === 14. LE CATALOGUE — la forme, les droits, ce que le corps lit et ce qu’il ne lit JAMAIS ===
+| --- 14 a. une seule fonction de ce nom (aucune surcharge), sa signature et son type de retour (attendu : t partout)
+| une_seule_attendu_t | argument_attendu_t | retour_attendu_t | ensemble_attendu_t | invoker_attendu_t | stable_attendu_t | plpgsql_attendu_t | search_path_attendu_t | commentaire_attendu_t
+| ----
+| t | t | t | t | t | t | t | t | t
+|
+| --- 14 b. les droits : ni PUBLIC, ni visiteur ; un compte connecté et la clé de service, oui (attendu : t | f | t | t)
+| pas_public_attendu_t | anon_attendu_f | connecte_attendu_t | service_attendu_t
+| ----
+| t | f | t | t
+|
+| --- 14 c. LE CORPS, commentaires et chaînes retirés : il ne nomme QUE devis, devis_lignes, emetteur et, depuis
+|           2b-3, emetteur_assurances (plus est_mon_entreprise et emetteur_incomplet), et AUCUN des mots de l’origine
+|           ni des lectures entières (D4-c, critique B5) — ni, depuis 2b-2, `clients` (le type de la fiche ne décide de
+|           rien) ; ni `chantier_neuf_conso`, de nouveau depuis le 13/11 : sortie en 2b-3 pour le motif de l’acompte,
+|           elle n’y permet plus rien (CCH L. 271-1, L. 271-2) ; et, depuis 2b-5, emetteur_lieux_depot (les lieux de
+|           dépôt, UNE lecture filtrée par pro_id — cas 26 c) entre dans la liste, et dechets_sur_place, qui ne
+|           complète JAMAIS le tri, dans les mots interdits ; et, depuis 2b-6, emetteur_labels et
+|           emetteur_sous_traitants (les signes de qualité et les sous-traitants, UNE lecture chacune, filtrée par
+|           pro_id — cas 27 c) entrent dans la liste, et les mots du badge public (rge, rge_declare, rge_expire,
+|           rge_url, rge_numero) et de l’identité d’un signe ou d’un sous-traitant (label_categories,
+|           raison_sociale, siret, organisme, intitule, reference) dans les mots interdits — attendu : la liste
+|           exacte, puis 0 | 0 | 0 | t
+| nomme_exactement_attendu_t | mots_interdits_attendu_0 | lectures_entieres_attendu_0 | mots_d_origine_attendu_0 | aucune_sequence_ni_insecable_attendu_t
+| ----
+| t | 0 | 0 | 0 | t
+|
+| --- 14 d. la base ne l’enregistre comme dépendante d’AUCUNE table (plpgsql, pas un corps SQL standard : attendu 0)
+| dependances_attendu_0
+| ----
+| 0
+|
+| --- 14 e. les deux listes security definer NE BOUGENT PAS (essai 49, cas 27b et 27c ; essai 50, cas 13i) :
+|           31 ouvertes, 32 fermées, et motifs_refus_remise dans aucune (attendu : 31 | 32 | 0)
+| definer_ouvertes_attendu_31 | definer_fermees_attendu_32 | elle_n_y_est_pas_attendu_0
+| ----
+| 31 | 32 | 0
+|
+|
+| === 15. « À QUEL TITRE ? » (2b-2) — devis_pour_qui : rang 1, une RÈGLE D’OPUS, EXCLUSIF de devis_client ; la
+|         réponse ne vaut que pour SON client, et la base ne MUTE rien (49.4 ter) ===
+|     a. la réponse retirée → devis_pour_qui (rang 1, regle_opus, la phrase du contrat, aucune ligne) ; remise → « — »
+|     b. la réponse donnée pour un AUTRE client (le témoin vaut C2, le client C1) → devis_pour_qui
+|     c. le client passe à C2, la réponse reste pour C1 → devis_pour_qui, et la réponse est INTACTE ; retour à C1 → « — »
+|     d. client vide : témoin vide → devis_client SEUL ; témoin C1 → devis_client SEUL (jamais les deux)
+|     e. les quatre réponses, chacune donnée pour C1 → « — » ×4 (l’entreprise de A est complète)
+|     f. la fiche C1 SUPPRIMÉE par A : client_id passe à vide (set null), la réponse et son témoin RESTENT tels quels,
+|        et la liste dit devis_client
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_pour_qui | t
+|
+| pour_qui_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_pour_qui | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_pour_qui | t
+|
+| reponse_intacte_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_client | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_client | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| fiche_partie_reponse_restee_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_client | t
+|
+| ROLLBACK
+| --- 15 g. une réponse INCONNUE → devis_pour_qui_check (refus 12/38), jugé en SQL juste après
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_pour_qui_check"
+| ROLLBACK
+| reponse_inconnue_refusee_attendu_t
+| ----
+| t
+|
+|
+| === 16. LE FILTRE ET LES NATURES DE L’ENTREPRISE SELON LA RÉPONSE VALABLE (2b-2) ===
+|     A devient (en superutilisateur) un entrepreneur individuel architecte, établissement qui n’est pas le siège,
+|     adresse non transmise, au RNE, au régime réel : ses DOUZE… treize motifs sont relus d’abord (la donnée existe).
+|     attendu, rang:clé=nature dans l’ordre de sortie :
+|       consommateur, hors de son activité : les treize, les conso_ en loi (conso_tva_intra regle_opus) ;
+|       non_professionnel : les treize, les conso_ en PRUDENCE (conso_tva_intra toujours regle_opus) ;
+|       professionnel : 101, 102, 103 et 112 SEULEMENT — les deux adresses gardées en prudence, des TROUS dans les rangs ;
+|       professionnel donné pour un AUTRE client, ou client vidé (témoin C1), ou fiche supprimée : rien n’est filtré
+| BEGIN
+| UPDATE 1
+| UPDATE 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| treize_motifs_existent_attendu_t
+| ----
+| t
+|
+| INSERT 0 1
+| INSERT 0 1
+| lue | liste_attendu_t
+| ----
+| 101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,104:conso_telephone=prudence,105:conso_email=prudence,106:conso_tva_intra=regle_opus,107:conso_mediateur=prudence,108:conso_garantie_legale=prudence,109:conso_modalites_paiement=prudence,110:conso_modalites_execution=prudence,111:conso_reclamations=prudence,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,112:frais_deplacement=regle_opus | t
+|
+| rangs_d_origine_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_pour_qui=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_client=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 101:conso_adresse_etablissement=prudence,102:nom_ei=loi,103:conso_adresse_siege=prudence,112:frais_deplacement=regle_opus | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_pour_qui=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| UPDATE 1
+| DELETE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_client=regle_opus,101:conso_adresse_etablissement=loi,102:nom_ei=loi,103:conso_adresse_siege=loi,104:conso_telephone=loi,105:conso_email=loi,106:conso_tva_intra=regle_opus,107:conso_mediateur=loi,108:conso_garantie_legale=loi,109:conso_modalites_paiement=loi,110:conso_modalites_execution=loi,111:conso_reclamations=loi,112:frais_deplacement=regle_opus,113:conso_profession_reglementee=prudence | t
+|
+| ROLLBACK
+|
+| === 17. devis_taux_reduit_neuf (2b-2) — au RÉEL, une ligne à 10 % ou 5,5 % quand l’artisan a répondu « Oui » à la
+|         question TVA de « Le chantier » : UNE clé par ligne, et les deux clés du réel ALTERNENT dans l’ordre
+|     lignes : zone L7 (sans taux) ; L1 poste 20 % (juste) ; L2 poste 10 % ordre 2000 ; L5 poste 0 % ordre 2500 ;
+|              L6 poste 5,5 % ordre 3000 ; L3 OPTION 5,5 % ordre 4000 ; L4 poste OFFERT 10 % ordre 5000
+|     attendu : question vide, « Non », ou seule la question des DROITS à « Oui » → devis_taux_sans_tva sur L5 seulement ;
+|               « Oui » → L2 neuf, L5 sans TVA, L6 neuf, L3 neuf, L4 neuf (alignés), nature prudence, la phrase du contrat ;
+|               en franchise → cinq devis_taux_franchise, aucun neuf ; régime vide → aucun motif de ligne ;
+|               au réel, tout passé à 20 % → il ne reste que conso_tva_intra
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_sans_tva,conso_tva_intra | t
+|
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_sans_tva,conso_tva_intra | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_sans_tva,conso_tva_intra | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_taux_reduit_neuf,devis_taux_sans_tva,devis_taux_reduit_neuf,devis_taux_reduit_neuf,devis_taux_reduit_neuf,conso_tva_intra | t
+|
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| cles_alignees_sur_les_lignes_attendu_t
+| ----
+| t
+|
+| reduit_neuf_prudence_attendu_t
+| ----
+| t
+|
+| RESET
+| UPDATE 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise,devis_taux_franchise | t
+|
+| lignes_attendu_t | sans_ligne_attendu_0 | ligne_en_trop_attendu_0
+| ----
+| t | 0 | 0
+|
+| RESET
+| UPDATE 1
+| SET
+| regime_vide_aucune_ligne_attendu_0 | regime_tva_attendu_1
+| ----
+| 0 | 1
+|
+| RESET
+| UPDATE 1
+| SET
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| conso_tva_intra | t
+|
+| ROLLBACK
+|
+| === 18. LA DATE DU « OUI » AU CHANTIER NEUF (2b-2, tient_le_devis, point 1 bis) — posée par la BASE quand la réponse
+|         DEVIENT vraie, gardée ensuite, effacée quand elle cesse de l’être ; une date envoyée est ignorée ===
+|     attendu : vide à la naissance ; posée au « Oui » ; GARDÉE par une autre écriture, par le recalcul d’une ligne,
+|               par un « Oui » renvoyé, par une date de 2001 écrite en superutilisateur, par la cascade d’une fiche
+|               supprimée ; effacée par « Non » et par vide ; un nouveau « Oui » en pose une PLUS RÉCENTE ; à
+|               l’insertion en superutilisateur, une date envoyée est remplacée (Oui) ou vidée (sinon)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| vide_a_la_naissance_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| posee_par_la_base_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| INSERT 0 1
+| UPDATE 1
+| gardee_par_trois_ecritures_attendu_t
+| ----
+| t
+|
+| RESET
+| UPDATE 1
+| SET
+| date_de_2001_ignoree_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| effacee_par_non_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| nouvelle_date_plus_recente_attendu_t
+| ----
+| t
+|
+| DELETE 1
+| gardee_par_la_cascade_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| effacee_par_vide_attendu_t
+| ----
+| t
+|
+| RESET
+| INSERT 0 3
+| insertion_date_envoyee_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| --- 18 b. le TÉLÉPHONE écrit la date → « permission denied for table devis » (refus 13/38), jugé en SQL juste après
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| date_ecrite_par_le_telephone_refusee_attendu_t
+| ----
+| t
+|
+|
+| === 19. LA RÉPARATION URGENTE (2b-3, 49.3 bis) — un POSTE seulement, par une contrainte À PART (devis_ligne_urgence_check) ===
+|     a. la donnée existe : un poste naît ÉTEINT (le défaut) ; A l’allume, en crée un né urgent, puis l’éteint, par
+|        le chemin d’un client (droits de colonne insert ET update) ; la liste n’en dit rien (« — » ×2)
+|     puis six refus, chacun le dernier ordre de sa transaction, jugés en SQL (refus 14 à 19 / 21)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| nait_eteinte_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| allumee_par_le_client_attendu_t
+| ----
+| t
+|
+| INSERT 0 1
+| deux_postes_urgents_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| eteinte_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+| --- 19 a. une OPTION marquée urgente → devis_ligne_urgence_check (refus 14/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| ROLLBACK
+| --- 19 b. une ZONE marquée urgente → devis_ligne_urgence_check (refus 15/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| ROLLBACK
+| --- 19 c. une PIÈCE marquée urgente → devis_ligne_urgence_check (refus 16/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| ROLLBACK
+| --- 19 d. une RÉSERVE marquée urgente → devis_ligne_urgence_check (refus 17/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| ROLLBACK
+| --- 19 e. un POSTE urgent changé en OPTION par update (l’application ne change jamais un type ; un client modifié
+|           le peut, `type` est dans grant update) → devis_ligne_urgence_check (refus 18/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_urgence_check"
+| ROLLBACK
+| --- 19 f. une ZONE urgente ET mal formée (une quantité) → devis_ligne_forme_check, nommée la PREMIÈRE dans l’ordre
+|           alphabétique — la preuve, côté base, que CONTRAINTES_LIGNE range « urgence » en dernier (refus 19/38)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| ROLLBACK
+| --- 19 g. LE JUGEMENT : cinq refus de devis_ligne_urgence_check (23514), et devis_ligne_forme_check nommée devant elle (attendu : t ×6)
+| a_option_urgente_attendu_t | b_zone_urgente_attendu_t | c_piece_urgente_attendu_t | d_reserve_urgente_attendu_t | e_poste_change_en_option_attendu_t | f_forme_nommee_d_abord_attendu_t
+| ----
+| t | t | t | t | t | t
+|
+|
+| === 20. « À LA SIGNATURE » (2b-3, rang 10, devis_acompte_signature, une PRUDENCE) — permis seulement pour un client qui
+|         commande pour son entreprise, ou TOUTES les lignes chiffrées urgentes pour un client à titre privé ou une
+|         association ; JAMAIS par le bâtiment neuf (décision du 13/11, CCH L. 271-1 et L. 271-2) ; jamais sans acompte ===
+|     attendu, dans l’ordre : — (vide) ; — (faux) ; devis_acompte_signature (vrai : rang 10, prudence, la phrase) ;
+|       — (tout urgent, consommateur) ; devis_acompte_signature (une option) ; — (l’option retirée) ;
+|       devis_acompte_signature (un poste OFFERT non urgent) ; — (marqué) ; devis_acompte_signature (un poste non urgent) ;
+|       — (professionnel) ; devis_acompte_signature (chantier neuf, question des droits : ne permet plus, 13/11) ;
+|       devis_acompte_signature (chantier : non) ;
+|       — (tout urgent) ; — (une pièce ajoutée : un titre n’est jamais urgent, il ne compte pas) ;
+|       devis_pour_qui,devis_acompte_signature (réponse vide ET tout urgent : la garde du « is not true ») ;
+|       devis_pour_qui,devis_acompte_signature (réponse donnée pour un AUTRE client) ;
+|       devis_acompte_signature (petite entreprise hors de son activité, tout urgent) ; — (non_professionnel, tout urgent) ;
+|       — (consommateur) ; devis_acompte_signature (en EUROS, petite entreprise) ; — (sans acompte : l’échéance GARDÉE) ;
+|       devis_lignes,devis_acompte_signature (aucune ligne) ×2 (un titre n’est pas une ligne chiffrée)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| a_la_signature_ecrite_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| signature_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| DELETE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| toutes_les_lignes_chiffrees_urgentes_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_pour_qui,devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_pour_qui,devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_acompte_signature | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| echeance_gardee_sans_acompte_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| DELETE 4
+| cles | motifs_attendu_t
+| ----
+| devis_lignes,devis_acompte_signature | t
+|
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_lignes,devis_acompte_signature | t
+|
+| ROLLBACK
+|
+| === 21. L’ATTESTATION DÉCENNALE (2b-3, rang 11) — UNE clé au plus : devis_decennale (pas de réponse, prudence),
+|         devis_attestation_date (« Oui », jointe SANS date, prudence), devis_attestation (« Oui », rien de joint ou des
+|         dates passées, LA LOI) ; « Non » : rien n’est lu. La décennale du décor est retirée d’abord (la donnée existe) ===
+|     attendu, dans l’ordre : 0 assurance ; devis_decennale (rang, nature, phrase) ; devis_attestation (idem) ; — (« Non ») ;
+|       devis_attestation_date (idem) ; devis_decennale SEUL (réponse vidée, même assurance) ;
+|       devis_attestation_date (une sans date + une passée) ; devis_attestation (il ne reste que la passée) ;
+|       devis_attestation (+ une décennale SANS fichier datée 2999, + une RC pro jointe et valable) ;
+|       — (une décennale jointe valable jusqu’au jour de Paris, dans la même transaction) ; trois décennales ;
+|       — (une sans date en plus) ; — (« Non »)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| aucune_assurance_attendu_0
+| ----
+| 0
+|
+| cles | motifs_attendu_t
+| ----
+| devis_decennale | t
+|
+| decennale_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| oui_ecrit_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_attestation | t
+|
+| attestation_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| RESET
+| INSERT 0 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| devis_attestation_date | t
+|
+| attestation_date_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_decennale | t
+|
+| UPDATE 1
+| RESET
+| INSERT 0 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| devis_attestation_date | t
+|
+| RESET
+| DELETE 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| devis_attestation | t
+|
+| RESET
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| devis_attestation | t
+|
+| RESET
+| INSERT 0 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| trois_decennales_attendu_3
+| ----
+| 3
+|
+| RESET
+| INSERT 0 1
+| SET
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+| --- 21 b. LE JOUR DE PARIS, ÉPROUVÉ ET NON LU (relecture BASE, M5) — la fonction tourne sous un AUTRE fuseau :
+|           Kiritimati (UTC+14), une attestation valable jusqu’au jour de Paris → — ; puis UTC−12 (Etc/GMT+12), une
+|           attestation qui finissait HIER à Paris → devis_attestation. Avec `current_date`, l’un des deux rougit À TOUTE
+|           HEURE : le premier quand Paris a passé midi environ, le second avant (attendu : t, —, devis_attestation, t)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| fuseau_kiritimati_attendu_t
+| ----
+| t
+|
+| jour_du_fuseau | jour_de_paris
+| ----
+| <jour> | <jour>
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| RESET
+| UPDATE 1
+| SET
+| SET
+| jour_du_fuseau | jour_de_paris
+| ----
+| <jour> | <jour>
+|
+| cles | motifs_attendu_t
+| ----
+| devis_attestation | t
+|
+| la_paire_departage_a_cette_heure_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|
+| === 22. LA DÉCENNALE D’UNE AUTRE ENTREPRISE NE COMPTE PAS — éprouvé par une ENVELOPPE security definer (relecture
+|         BASE, I2) : comme la remise de 2c l’appellera, la RLS ne filtre plus, et seul `a.pro_id = v_pro` sépare A de B ===
+|     A sans décennale, B avec une décennale jointe et valable. attendu : 1 ; devis_decennale (par l’enveloppe) ;
+|     devis_attestation (par l’enveloppe, « Oui ») ; devis_attestation (appel direct) ; puis l’enveloppe retirée (0)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| INSERT 0 1
+| decennale_valable_de_b_attendu_1
+| ----
+| 1
+|
+| CREATE FUNCTION
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| enveloppe_sans_reponse_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| enveloppe_oui_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_attestation | t
+|
+| ROLLBACK
+| enveloppe_retiree_22_attendu_0
+| ----
+| 0
+|
+|
+| === 23. D4-c, ENCORE (2b-3) — l’urgence est un FAIT DE LIGNE, jamais l’origine : trois devis identiques sauf leurs liens et
+|         la façon dont ils ont été ouverts (manuelle ; demande + urgence ; urgence seule), « à la signature », un acompte,
+|         à titre privé, A sans décennale, rendent la MÊME liste ===
+|     2b-4 : les trois devis restent SANS prix du devis lui-même — devis_cout (rang 12) —, 2b-5, SANS réponse aux
+|     déchets — devis_dechets (rang 13, prudence) —, et, 2b-6, SANS réponse aux travaux d’énergie — devis_energie
+|     (rang 14, prudence) clôt chaque liste ;
+|     état 1 : un poste urgent et un poste NON urgent → devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,
+|     devis_energie ; état 2 : les deux urgents → devis_decennale,devis_cout,devis_dechets,devis_energie ; état 3 : « Non »
+|     à la décennale → devis_cout,devis_dechets,devis_energie (t, t à chaque fois)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| SET
+| SET
+| INSERT 0 3
+| origines_differentes_23_attendu_t
+| ----
+| t
+|
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 3
+| -- état 1 (attendu : t, t)
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,devis_energie | t | t
+|
+| -- état 2 (attendu : t, t)
+| UPDATE 3
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_decennale,devis_cout,devis_dechets,devis_energie | t | t
+|
+| -- état 3 (attendu : devis_cout,devis_dechets,devis_energie, t, t)
+| UPDATE 3
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_cout,devis_dechets,devis_energie | t | t
+|
+| ROLLBACK
+|
+| === 24. LES QUATORZE RANGS À LA FOIS (2b-3, 2b-4, 2b-5, 2b-6) — le devis du cas 10, plus « à la signature », A sans
+|         décennale, le prix du devis lui-même VIDE, les déchets et les travaux d’énergie SANS réponse : rangs 1 à 14,
+|         chaque phrase celle du contrat (VINGT-DEUX clés sur quatorze rangs), ligne_id posée sur le seul motif 3 ; aucune
+|         phrase ne porte d’euro, d’apostrophe droite, d’espace insécable ni de barre oblique, et le seul chiffre est
+|         le « 8e » de « Dès le 8e jour » (le libellé de la pastille) ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| cles | motifs_attendu_t
+| ----
+| devis_client,devis_lignes,devis_taux_franchise,devis_lieu,devis_delai,devis_validite,devis_acompte_nature,devis_acompte_ramene,devis_reduction_ramenee,devis_acompte_signature,devis_decennale,devis_cout,devis_dechets,devis_energie | t
+|
+| lignes_attendu_14 | rangs_dans_l_ordre_attendu_t | conformes_au_contrat_attendu_14 | vingt_deux_cles_quatorze_rangs_attendu_t | ligne_id_seulement_au_3_attendu_t | phrases_propres_attendu_t | phrases_courtes_attendu_t
+| ----
+| 14 | t | 14 | t | t | t | t
+|
+| ROLLBACK
+|
+| === 25. LE PRIX DU DEVIS LUI-MÊME (2b-4, 49.4 quinquies, rang 12, devis_cout, une PRUDENCE — réponse Q2) — vide = le
+|         motif ; 0 (gratuit) et un montant (payant) le taisent pareil ; il ne lit ni la réponse « à quel titre », ni
+|         l’origine, ni les tarifs (cas 14 c) ; la contrainte devis_cout_check borne la colonne de 0 à 100 000 centimes ===
+|     a-d, f. allumé et éteint par le chemin d’un client, sur un devis où rien d’autre ne manque :
+|       0 (le décor) → « — » ; vide → devis_cout (rang 12, prudence, la phrase, aucune ligne) ; 3 000 → « — », les
+|       totaux INCHANGÉS (hors des totaux) ; vide ET la validité vide → 6 puis 12 ; vide pour un client
+|       « professionnel » → toujours 12:devis_cout=prudence (le motif ne lit pas la réponse)
+|     attendu : t | « — » | t | devis_cout | t | t | « — » | t | t | t
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| gratuit_ecrit_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| vide_ecrit_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_cout | t
+|
+| cout_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| payant_ecrit_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| hors_des_totaux_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 6:devis_validite=prudence,12:devis_cout=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 12:devis_cout=prudence | t
+|
+| ROLLBACK
+|     e. vide ET la décennale sans réponse, A sans aucune attestation → 11 puis 12 (attendu : 0 | t)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| aucune_assurance_25_attendu_0
+| ----
+| 0
+|
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 11:devis_decennale=prudence,12:devis_cout=prudence | t
+|
+| ROLLBACK
+|     g. l’artisan B écrit le prix du devis de A → 0 ligne, SANS erreur (la RLS), et rien ne change chez A
+|        (attendu : devis_cout | 0 | t | devis_cout)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_cout | t
+|
+| SET
+| b_ecrit_le_prix_de_a_attendu_0
+| ----
+| 0
+|
+| SET
+| rien_n_a_change_chez_a_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_cout | t
+|
+| ROLLBACK
+| --- 25 h1. le prix du devis lui-même à −1 → devis_cout_check (refus 20/38), jugé en SQL plus bas
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_cout_check"
+| ROLLBACK
+| --- 25 h2. le prix du devis lui-même à 100 001 centimes → devis_cout_check (refus 21/38), jugé en SQL plus bas
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_cout_check"
+| ROLLBACK
+| --- 25 h3. LES BORNES ACCEPTÉES : 0 à la création (le droit d’insertion porte la colonne) et 100 000 en
+|           modification (1 000,00 €, le plafond des tarifs) ; puis LE JUGEMENT des deux refus (attendu : t ×5)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| zero_accepte_a_la_creation_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cent_mille_accepte_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+| moins_un_refuse_attendu_t | cent_mille_un_refuse_attendu_t
+| ----
+| t | t
+|
+|
+| === 26. LES DÉCHETS DU CHANTIER (2b-5, 49.4 sexies, rang 13) — UNE clé au plus : devis_dechets (réponse VIDE,
+|         prudence) ou devis_dechets_rubriques (réponse « Oui », la loi) ; « Non » tait tout. Une rubrique manque :
+|         la quantité ou son unité ; le tri (« sur le chantier » n’y compte JAMAIS) ; un lieu choisi qui EXISTE chez A
+|         (ou « Aucun dépôt ») ; le coût. Les contraintes des huit colonnes, JUGÉES EN SQL ===
+|     a. allumé et éteint par le chemin d’un client, sur un devis où rien d’autre ne manque : « Non » (le décor) →
+|        « — » ; vide → devis_dechets (rang 13, prudence, la phrase, aucune ligne) ; « Oui » → devis_dechets_rubriques
+|        (rang 13, la loi, la phrase) ; il reste tant qu’UNE rubrique manque, et part quand les quatre sont là — les
+|        totaux INCHANGÉS (le coût est hors des totaux) ; chacune retirée SEULE le rallume ; « sur le chantier » ne
+|        remplace pas le tri, {aucune} le remplit ; « Aucun dépôt » remplace les lieux SI le tri ne nomme aucune sorte
+|        (DROIT-R2 : le bois et le plâtre à part le rallument, un lieu de A qui existe l’éteint) ; « Non » le tait SANS RIEN
+|        effacer ; les rangs dans l’ordre (6 puis 13 ; 12 puis 13) ; la réponse « professionnel » ne le lève pas
+|     attendu : t partout, et les listes annoncées
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| non_dans_le_decor_attendu_t
+| ----
+| t
+|
+| le_lieu_de_a_existe_attendu_1
+| ----
+| 1
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| vide_ecrit_par_le_client_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_dechets | t
+|
+| vide_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| oui_rang_nature_phrase_attendu_t
+| ----
+| t
+|
+| -- les rubriques une à une : le point reste tant qu’une manque (attendu : devis_dechets_rubriques ×3, puis « — »)
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| cout_hors_des_totaux_attendu_t
+| ----
+| t
+|
+| -- chacune retirée SEULE le rallume (attendu : rubriques, « — », rubriques, « — »)
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| -- le tri : vide → rubriques ; « sur le chantier » seul ne le remplace PAS → rubriques ; {aucune} le remplit → « — »
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| sur_place_ecrit_tri_vide_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| -- les lieux : aucun → rubriques ; « Aucun dépôt » (le tri dit {aucune}) → « — » ; sans lui → rubriques ; le lieu remis → « — »
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| -- DROIT-R2 (décision du 21/11 : « Le signaler ») : « Aucun dépôt » ne remplit les lieux que si le tri ne nomme
+|    aucune sorte — le bois et le plâtre à part → rubriques ; un lieu de A qui existe → « — » ; le lieu retiré et
+|    {aucune} remis → « — » (attendu : rubriques, « — », « — »)
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| -- le coût retiré → rubriques ; « Non » le tait, et la base n’efface RIEN de ce qui est écrit
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| non_garde_ce_qui_est_ecrit_attendu_t
+| ----
+| t
+|
+| -- les rangs dans l’ordre : 6 puis 13 ; 12 puis 13 ; et la réponse « professionnel » ne le lève pas
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 6:devis_validite=prudence,13:devis_dechets_rubriques=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 12:devis_cout=prudence,13:devis_dechets=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 13:devis_dechets=prudence | t
+|
+| ROLLBACK
+|     b. CE QUI NE COMPTE PAS : le lieu de B écrit dans un devis de A (accepté, jamais compté), un identifiant
+|        INVENTÉ (la même réponse : aucun oracle), un DOUBLON (accepté, compté une fois), puis le lieu de A RETIRÉ —
+|        l’identifiant reste dans le devis, ORPHELIN, et le point REVIENT ; B ne lit pas les lieux de A et n’y écrit
+|        rien (attendu : t, rubriques, rubriques, t, « — », t, rubriques, 0, 0, t)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| lieu_de_b_ecrit_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| doublon_accepte_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| DELETE 1
+| orphelin_garde_par_le_devis_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| SET
+| INSERT 0 1
+| b_lit_les_lieux_de_a_attendu_0
+| ----
+| 0
+|
+| b_ecrit_les_lieux_du_devis_de_a_attendu_0
+| ----
+| 0
+|
+| SET
+| rien_n_a_change_chez_a_26_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|     c. LE FILTRE `l.pro_id = v_pro`, éprouvé par une ENVELOPPE security definer (le modèle du cas 22) : comme la
+|        remise de 2c l’appellera, la RLS ne filtre plus, et seul ce filtre sépare le lieu de B de ceux de A
+|        (attendu : rubriques par l’enveloppe ET en direct avec le lieu de B ; « — » des deux côtés avec celui de A ;
+|        puis l’enveloppe retirée, 0)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| deux_lieux_attendu_2
+| ----
+| 2
+|
+| CREATE FUNCTION
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| enveloppe_lieu_de_b_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| devis_dechets_rubriques | t
+|
+| UPDATE 1
+| enveloppe_lieu_de_a_attendu_t
+| ----
+| t
+|
+| cles | motifs_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+| enveloppe_retiree_26_attendu_0
+| ----
+| 0
+|
+|     d. D4-c, ENCORE (2b-5) — les déchets ne dépendent pas de l’origine : trois devis identiques sauf leurs liens
+|        et la façon dont ils ont été ouverts (manuelle ; demande + urgence ; urgence seule) rendent la MÊME liste —
+|        vide → devis_dechets ; « Oui » et la quantité seule → devis_dechets_rubriques ; tout rempli → « — » (t, t ×3) ;
+|        2b-6 : les trois devis restent SANS réponse aux travaux d’énergie — devis_energie (rang 14) suit chaque liste
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| origines_differentes_26_attendu_t
+| ----
+| t
+|
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| -- état 1, sans réponse (attendu : t, t)
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_dechets,devis_energie | t | t
+|
+| -- état 2, « Oui » et la quantité seule (attendu : t, t)
+| UPDATE 3
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_dechets_rubriques,devis_energie | t | t
+|
+| -- état 3, tout rempli (attendu : devis_energie, t, t)
+| UPDATE 3
+| cles_de_x | cles_attendu_t | x_y_z_identiques_attendu_t
+| ----
+| devis_energie | t | t
+|
+| ROLLBACK
+|     e. LES CONTRAINTES, chacune refusée SOUS SON NOM (23514) derrière un savepoint — les TROIS tableaux : vide
+|        (refus 22 à 24/38), deux dimensions (25 à 27/38), borne basse 0 (28 à 30/38) ; {aucune,papier} et {broyage}
+|        dans le tri (31, 32/38) ; un lieu vide, et onze lieux (33, 34/38) ; un coût de 0 (35/38), une quantité de 0
+|        (36/38), une unité « kg » (37/38), « Aucun dépôt » écrit faux (38/38) — jugés en SQL plus bas
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SAVEPOINT
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_sur_place_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_flux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_lieux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_cout_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_quantite_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_unite_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_dechets_sans_depot_check"
+| ROLLBACK
+| ROLLBACK
+|     f. LES BORNES ACCEPTÉES — 1 et 999 999 999 centimes, 1 et 99 999 999 millièmes, « t », les QUATORZE sortes,
+|        {aucune} seul, dix lieux, {broyage,compostage}, « Aucun dépôt » vrai — puis LE JUGEMENT des dix-sept refus
+|        (attendu : t ×19)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| bornes_basses_et_listes_acceptees_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| bornes_hautes_et_aucune_seule_acceptees_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| tri_vide_refuse_attendu_t | sur_place_vide_refuse_attendu_t | lieux_vide_refuse_attendu_t | tri_deux_dimensions_refuse_attendu_t | sur_place_deux_dimensions_refuse_attendu_t | lieux_deux_dimensions_refuse_attendu_t | tri_borne_zero_refuse_attendu_t | sur_place_borne_zero_refuse_attendu_t | lieux_borne_zero_refuse_attendu_t
+| ----
+| t | t | t | t | t | t | t | t | t
+|
+| aucune_et_papier_refuse_attendu_t | broyage_dans_le_tri_refuse_attendu_t | lieu_vide_refuse_attendu_t | onze_lieux_refuses_attendu_t | cout_zero_refuse_attendu_t | quantite_zero_refusee_attendu_t | unite_kg_refusee_attendu_t | sans_depot_faux_refuse_attendu_t
+| ----
+| t | t | t | t | t | t | t | t
+|
+|
+| === 27. LES TRAVAUX D’ÉNERGIE ET LE LABEL RGE (2b-6, 49.4 septies, rang 14) — UNE clé au plus : devis_energie
+|         (les travaux PAS DITS, prudence), devis_energie_mentions (à titre privé, la loi) ou
+|         devis_energie_mentions_prudence ; « Aucun de ces travaux » tait tout ; les deux réponses « entreprise »
+|         aussi. Une rubrique manque : un travail coché qu’aucun signe de qualité valable et JOINT de A ne couvre,
+|         et que A ne déclare pas sans label (un signe valable SANS certificat empêche la déclaration de le taire) ;
+|         la sous-traitance pas dite ; « Oui » et aucun sous-traitant de A, ou l’un d’eux incomplet ===
+|     a. LES TRAVAUX ET LA DÉCLARATION, allumés et éteints par le chemin d’un client — A range, change et retire
+|        ses signes de qualité lui-même (sa politique) ; le jour de PARIS pour la date de fin ; les deux travaux
+|        comptés par prudence (photovoltaïque, désembouage) ; les quatre réponses « à quel titre » ; les
+|        totaux INCHANGÉS (le label ne touche pas la TVA)
+|     attendu : t partout, et les listes annoncées
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| aucun_dans_le_decor_attendu_t
+| ----
+| t
+|
+| totaux_de_depart_attendu_t
+| ----
+| t
+|
+| -- 01. « Aucun de ces travaux » (le décor) : rien
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 00. les travaux PAS DITS : devis_energie (rang 14, prudence, la phrase, aucune ligne)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie=prudence | t
+|
+| rang_14_exact_attendu_t
+| ----
+| t
+|
+| -- 02. les combles, rien d’autre : devis_energie_mentions (la loi, la phrase)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| rang_14_exact_attendu_t
+| ----
+| t
+|
+| -- V18. la sous-traitance « Non », la déclaration VIDE DE VALEUR, les combles non couverts : la loi (`is not true`)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 03. les combles DÉCLARÉS sans label : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 04. la sous-traitance pas dite : la loi revient
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 01 bis. « Aucun » avec la déclaration et des sous-traitants RESTÉS : rien (la lecture ne tourne pas)
+| UPDATE 1
+| restes_sous_aucun_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- V07. les combles déclarés, les fenêtres ajoutées : la loi (la déclaration ne vaut que pour ce qu’elle nomme)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V11. une clé déclarée pour un travail DÉCOCHÉ reste, sans effet : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- V10. la ventilation déclarée, puis la ventilation ET les combles cochés : la loi
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 05. un signe de qualité de A qui couvre les combles, JOINT et valable : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| INSERT 0 1
+| le_signe_de_a_existe_attendu_1
+| ----
+| 1
+|
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 35. …et la déclaration en plus, inutile : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- V01. le signe valable SANS certificat, et la déclaration : la loi (on ne déclare pas ne pas détenir ce qu’on a dit détenir)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 06. …sans la déclaration : la loi
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V06. un SECOND signe, complet, couvre les combles : rien, même avec la déclaration
+| INSERT 0 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V02. le signe JOINT mais expiré HIER (jour de Paris), et la déclaration : rien (un label à date passée est déclarable)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 07. …sans la déclaration : la loi
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 08. le signe valable jusqu’au jour de Paris : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- V03. le signe expiré ET sans certificat, et la déclaration : rien
+| UPDATE 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 09. un signe d’une AUTRE catégorie (la ventilation) : la loi
+| UPDATE 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 11. les combles ET la ventilation, le signe couvre la ventilation : la loi ; 10. les combles déclarés : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 12. deux signes qui couvrent chacun un des deux travaux : rien
+| UPDATE 1
+| INSERT 0 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- V04. la ventilation non portée et les combles sans certificat, les DEUX déclarés : la loi ; V05. la ventilation seule déclarée : la loi
+| DELETE 1
+| UPDATE 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V08. l’extérieur couvert puis expiré, les combles seuls déclarés : la loi
+| UPDATE 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V09. tout était couvert, le signe RETIRÉ, aucune déclaration : la loi
+| UPDATE 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V12, V13. le photovoltaïque SEUL, puis le désembouage seul, « Non » : devis_energie_mentions_prudence (la phrase)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions_prudence=prudence | t
+|
+| rang_14_exact_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions_prudence=prudence | t
+|
+| -- V14. le photovoltaïque, la sous-traitance pas dite : la loi (la sous-traitance qui manque)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V15. le photovoltaïque et les combles, rien : la loi ; V16. les combles déclarés : la prudence ; V17. le photovoltaïque déclaré : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions_prudence=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 27, 28, V19. pour une association, une copropriété, une société civile : les travaux pas dits → devis_energie ;
+| --     les combles, rien → la prudence ; le photovoltaïque → la prudence
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions_prudence=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions_prudence=prudence | t
+|
+| -- 29, 30, 34. « pour son entreprise » (les deux réponses) : rien, les travaux dits ou non
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 29 bis. une petite entreprise HORS de son activité, les travaux PAS DITS : rien (relecture de 2b-6, banc S9b : sans
+| --     ce cas, cette réponse ajoutée au SEUL bloc du rang 14 faisait sortir devis_energie, et rien ne le voyait)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 31. la réponse VIDE, les combles : devis_pour_qui, puis la prudence
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_pour_qui=regle_opus,14:devis_energie_mentions_prudence=prudence | t
+|
+| -- 32. la réponse donnée pour un AUTRE client, les travaux pas dits : devis_pour_qui, puis devis_energie
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie=prudence | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_pour_qui=regle_opus,14:devis_energie=prudence | t
+|
+| -- 33. sans client : devis_client, puis devis_energie
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 1:devis_client=regle_opus,14:devis_energie=prudence | t
+|
+| totaux_inchanges_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|     b. LES SOUS-TRAITANTS : « Oui » et aucun choisi ; un complet sans label ; sans réponse sur son label ; un label
+|        valable et joint ; expiré hier ; jusqu’au jour de Paris ; sans justificatif ; un complet ET un incomplet ; un
+|        identifiant INVENTÉ ; un doublon ; le sous-traitant de B (la RLS) ; « Non » avec des identifiants RESTÉS ;
+|        B ne lit ni n’écrit rien chez A ; un sous-traitant RETIRÉ laisse un identifiant orphelin, et le point revient
+|     attendu : t partout, et les listes annoncées
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| -- 15. « Oui », aucun sous-traitant choisi : la loi
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 16. un sous-traitant de A, complet, sans label : rien
+| INSERT 0 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 17. son label pas dit : la loi
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 18. un label valable et JOINT : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 19. expiré HIER (jour de Paris) : la loi ; jusqu’au jour de Paris : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 20. sans justificatif : la loi (réponse P13) ; le justificatif remis : rien
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 21. un complet ET un incomplet (son label pas dit) : la loi
+| INSERT 0 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 25. un doublon du même complet : rien (compté DISTINCT)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 24. un identifiant INVENTÉ seul : la loi ; avec le complet : rien (aucun oracle)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- 22. le sous-traitant de B, seul : la loi (la RLS ne le montre pas, et le filtre ne le compte pas)
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 26. « Non » avec des identifiants RESTÉS : rien
+| UPDATE 1
+| identifiants_restes_sous_non_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- B ne lit ni n’écrit rien chez A (0, 0, 0), et rien n’a changé
+| SET
+| b_lit_les_sous_traitants_de_a_attendu_0
+| ----
+| 0
+|
+| b_ecrit_un_sous_traitant_de_a_attendu_0
+| ----
+| 0
+|
+| b_ecrit_les_sous_traitants_du_devis_de_a_attendu_0
+| ----
+| 0
+|
+| SET
+| rien_n_a_change_chez_a_27_attendu_t
+| ----
+| t
+|
+| -- le sous-traitant complet RETIRÉ par A : son identifiant reste ORPHELIN dans le devis, et le point revient
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| DELETE 1
+| orphelin_garde_par_le_devis_27_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| ROLLBACK
+|     b bis. V22 — un sous-traitant labellisé SANS date ne peut pas exister (la croisée) ; elle RETIRÉE dans la
+|        transaction, la forme `is not true` du rang 14 le compte encore incomplet (la seconde barrière) : la loi
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| ALTER TABLE
+| INSERT 0 1
+| labellise_sans_date_pose_attendu_t
+| ----
+| t
+|
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| UPDATE 1
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| ROLLBACK
+|     c. LES FILTRES `g.pro_id = v_pro` ET `s.pro_id = v_pro`, éprouvés par une ENVELOPPE security definer (le
+|        modèle des cas 22 et 26 c) : comme la remise de 2c l’appellera, la RLS ne filtre plus, et seuls ces filtres
+|        séparent le signe et le sous-traitant de B de ceux de A (attendu : la loi par l’enveloppe ET en direct
+|        avec le signe complet de B, puis avec son sous-traitant ; « — » des deux côtés avec le signe SANS certificat
+|        de B et la déclaration de A, puis avec le signe complet de A ; puis l’enveloppe retirée, 0)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| deux_lignes_de_b_attendu_2
+| ----
+| 2
+|
+| CREATE FUNCTION
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| -- 13, 14. le signe complet de B ne couvre pas les combles de A
+| UPDATE 1
+| enveloppe_signe_de_b_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- 22, 23. le sous-traitant de B ne compte pas pour A
+| UPDATE 1
+| enveloppe_sous_traitant_de_b_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| 14:devis_energie_mentions=loi | t
+|
+| -- V20, V21. le signe de B SANS certificat n’empêche pas la déclaration de A
+| RESET
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| enveloppe_signe_sans_certificat_de_b_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| -- le signe complet de A, sans déclaration : rien des deux côtés
+| UPDATE 1
+| INSERT 0 1
+| enveloppe_signe_de_a_attendu_t
+| ----
+| t
+|
+| lue | liste_attendu_t
+| ----
+| — | t
+|
+| ROLLBACK
+| enveloppe_retiree_27_attendu_0
+| ----
+| 0
+|
+|     d. LES CONTRAINTES, chacune refusée SOUS SON NOM (23514) derrière un savepoint — les travaux : vide, {aucun,
+|        chaudiere}, {menuiseries}, l’ancienne clé {entretien_chauffage}, deux dimensions, borne basse 0, un élément
+|        vide (refus 39 à 45/53) ; la déclaration : vide, {aucun}, {menuiseries}, un élément vide, deux dimensions
+|        (46 à 50/53) ; les sous-traitants : vide, onze, un élément vide (51 à 53/53) — jugés en SQL plus bas
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SAVEPOINT
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_travaux_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sans_label_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+| ROLLBACK
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_energie_sous_traitants_check"
+| ROLLBACK
+| ROLLBACK
+|     e. LES BORNES ACCEPTÉES — les dix-neuf travaux, la déclaration de trois clés dont les deux de prudence, dix
+|        sous-traitants ; {desembouage} seul ; {aucun} seul — puis LE JUGEMENT des quinze refus (attendu : t ×18)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| dix_neuf_travaux_et_dix_sous_traitants_acceptes_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| desembouage_seul_accepte_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| aucun_seul_accepte_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| travaux_vides_refuses_attendu_t | aucun_et_chaudiere_refuses_attendu_t | menuiseries_refusees_attendu_t | ancienne_cle_refusee_attendu_t | travaux_deux_dimensions_refuses_attendu_t | travaux_borne_zero_refuses_attendu_t | travail_vide_refuse_attendu_t | declaration_vide_refusee_attendu_t | aucun_declare_refuse_attendu_t | menuiseries_declarees_refusees_attendu_t | declaration_element_vide_refusee_attendu_t | declaration_deux_dimensions_refusee_attendu_t | sous_traitants_vides_refuses_attendu_t | onze_sous_traitants_refuses_attendu_t | sous_traitant_vide_refuse_attendu_t
+| ----
+| t | t | t | t | t | t | t | t | t | t | t | t | t | t | t
+|
+|
+| === 28. LE COMPTE — chaque valeur annoncée a été JUGÉE (attendu : t, et VALEURS_ANNONCEES) ===
+|     Un cas retiré, un ordre qui échoue à la place d’un autre, une transaction déjà annulée : des valeurs
+|     manquent, et ceci vaut f. C’est la 473e colonne « …_attendu_ » du fichier.
+| toutes_les_valeurs_jugees_attendu_t | valeurs_jugees
+| ----
+| t | 472
+|

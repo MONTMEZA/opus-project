@@ -1,0 +1,1061 @@
+# Ce que doit rendre supabase/essais-section-47.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-47` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-47
+
+[partie essai]
+erreurs: 18
+valeurs-jugees: 126
+[erreurs]
+| @ === 2 a. Un taux a 0 -> tarif_taux_horaire_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_taux_horaire_check"
+| @ === 2 b. Un taux a 0,99 EUR -> tarif_taux_horaire_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_taux_horaire_check"
+| @ === 2 c. Une majoration de 201 % -> tarif_majoration_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_majoration_check"
+| @ === 2 d. Un devis a -1 centime -> tarif_devis_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_devis_check"
+| @ === 2 e. Un decompte de 201 caracteres -> tarif_decompte_texte_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_decompte_texte_check"
+| @ === 2 f. Afficher SANS aucun tarif -> tarif_affiche_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| @ === 2 g. Afficher avec la SEULE majoration -> tarif_affiche_check (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| @ === 2 ter a. Un rayon de 0 km -> sos_rayon_check (ERREUR attendue) ===
+|   23514 new row for relation "sos_availability" violates check constraint "sos_rayon_check"
+| @ === 2 ter b. Un rayon de 201 km -> sos_rayon_check (ERREUR attendue) ===
+|   23514 new row for relation "sos_availability" violates check constraint "sos_rayon_check"
+| @ === 2 ter c. Un delai de 4 minutes -> sos_delai_check (ERREUR attendue) ===
+|   23514 new row for relation "sos_availability" violates check constraint "sos_delai_check"
+| @ === 2 ter d. Un delai de 601 minutes -> sos_delai_check (ERREUR attendue) ===
+|   23514 new row for relation "sos_availability" violates check constraint "sos_delai_check"
+| @ === 3 ter. Les blancs INVISIBLES se rognent aussi : un tarif invisible n est pas declare ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| @ === 4 bis. Un visiteur sans compte -> permission denied for table tarifs_pro (ERREUR attendue) ===
+|   42501 permission denied for table tarifs_pro
+| @ === 6. P LIT la ligne affichee, mais n y ecrit RIEN ===
+|   42501 new row violates row-level security policy for table "tarifs_pro"
+| @ === 6 bis b. …mais un UPSERT PARTIEL ({ affiche: true } seul) est refuse : la LIGNE ENTIERE, toujours (ERREUR attendue) ===
+|   23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| @ === 8 bis. Un visiteur l appelle -> permission denied for function artisans_urgence (ERREUR attendue) ===
+|   42501 permission denied for function artisans_urgence
+| @ === 19 a. Les colonnes MORTES : une mise a jour non nulle -> OP012 (ERREUR attendue) ===
+|   OP012 Vos tarifs d’urgence ne se règlent plus ici : mettez à jour l’application Opus, puis réglez-les dans « Mon entreprise ». Votre disponibilité n’a pas été enregistrée.
+| @ === 19 b. …un insert non nul -> OP012 (ERREUR attendue) ===
+|   OP012 Vos tarifs d’urgence ne se règlent plus ici : mettez à jour l’application Opus, puis réglez-les dans « Mon entreprise ». Votre disponibilité n’a pas été enregistrée.
+[valeurs]
+| fiches_pro_attendu_2 = 2
+| a_situe_attendu_t = t
+| tarifs_attendu_1 = 1
+| affichee_attendu_1 = 1
+| sos_attendu_1 = 1
+| nullable_attendu_yes = YES
+| nullable_attendu_yes = YES
+| nullable_attendu_yes = YES
+| nullable_attendu_yes = YES
+| nullable_attendu_yes = YES
+| nullable_attendu_yes = YES
+| conditions_seules_attendu_1 = 1
+| devis_gratuit_seul_attendu_1 = 1
+| taux_seul_attendu_1 = 1
+| blancs_en_null_attendu_t = t
+| affiche_attendu_f = f
+| rogne_attendu_t = t
+| la_meme_apres_le_taux_attendu_t = t
+| eteint_vide_attendu_t = t
+| une_date_neuve_attendu_t = t
+| conditions_invisibles_en_null_attendu_t = t
+| decompte_invisible_en_null_attendu_t = t
+| rogne_aux_deux_bouts_attendu_t = t
+| a_attendu_1 = 1
+| p_attendu_0 = 0
+| b_attendu_0 = 0
+| p_attendu_1 = 1
+| b_attendu_0 = 0
+| a_attendu_1 = 1
+| p_attendu_1 = 1
+| b_est_admin_attendu_t = t
+| b_admin_attendu_0 = 0
+| demande_en_attente_attendu_1 = 1
+| p_est_pro_attendu_f = f
+| p_en_attente_attendu_1 = 1
+| p_est_admin_attendu_t = t
+| p_est_pro_attendu_f = f
+| admin_particulier_lit_attendu_1 = 1
+| p_type_attendu_pro = pro
+| p_fiche_attendu_0 = 0
+| pro_sans_fiche_lit_attendu_1 = 1
+| b_avant_attendu_0 = 0
+| donnees_effacees_attendu_t = t
+| b_est_pro_attendu_f = f
+| b_apres_effacement_lit_attendu_1 = 1
+| p_attendu_1 = 1
+| taux_intact_attendu_6200 = 6200
+| affiche_par_update_attendu_t = t
+| ligne_avec_prix_attendu_1 = 1
+| p_avant_attendu_1 = 1
+| p_sos_avant_attendu_1 = 1
+| p_bloque_attendu_0 = 0
+| p_sos_bloque_attendu_0 = 0
+| p_avant_attendu_1 = 1
+| p_sos_avant_attendu_1 = 1
+| p_bloque_attendu_0 = 0
+| p_sos_bloque_attendu_0 = 0
+| lignes_attendu_1 = 1
+| deplacement_attendu_45_00 = 45.00
+| horaire_attendu_62_00 = 62.00
+| majoration_attendu_40 = 40
+| delai_attendu_45 = 45
+| type_attendu_numeric = numeric
+| type_maj_attendu_integer = integer
+| p_sos_attendu_1 = 1
+| b_sos_attendu_0 = 0
+| a_sos_lui_meme_attendu_1 = 1
+| resultat_identique_attendu_t = t
+| definer_attendu_f = f
+| noms_inchanges_attendu_t = t
+| pas_de_public_attendu_t = t
+| metier_pas_de_public_attendu_t = t
+| est_un_pro_attendu_t = t
+| est_masque_attendu_t = t
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| apres_attendu_0 = 0
+| avant_attendu_1 = 1
+| a_lit_encore_sa_ligne_attendu_1 = 1
+| apres_attendu_0 = 0
+| lignes_attendu_1 = 1
+| deplacement_attendu_0_00 = 0.00
+| inconnue_null_attendu_t = t
+| six_cles_attendu_t = t
+| disponibilite_attendu_1 = 1
+| a_urgences_attendu_1 = 1
+| p_urgences_attendu_1 = 1
+| b_tarifs_nul_attendu_t = t
+| b_disponibilite_attendu_0 = 0
+| b_urgences_attendu_0 = 0
+| tp_anon_select_attendu_f = f
+| tp_anon_insert_attendu_f = f
+| tp_anon_update_attendu_f = f
+| tp_anon_delete_attendu_f = f
+| tp_anon_truncate_attendu_f = f
+| tp_auth_truncate_attendu_f = f
+| sos_anon_select_attendu_f = f
+| sos_anon_insert_attendu_f = f
+| sos_anon_update_attendu_f = f
+| sos_anon_delete_attendu_f = f
+| sos_anon_truncate_attendu_f = f
+| sos_auth_truncate_attendu_f = f
+| liste_fermee_attendu_t = t
+| liste_fermee_attendu_t = t
+| definer_attendu_0 = 0
+| vues_attendu_0 = 0
+| qual_exact_attendu_t = t
+| avant_tarifs_attendu_1 = 1
+| avant_sos_attendu_1 = 1
+| apres_tarifs_attendu_0 = 0
+| apres_sos_attendu_0 = 0
+| mal_nommees_attendu_0 = 0
+| anonymes_attendu_0 = 0
+| tarifs_pro_attendu_8 = 8
+| agregats_attendu_0 = 0
+| lecteurs_attendu_refuse_les_colonnes_mortes_du_sos = refuse_les_colonnes_mortes_du_sos
+| commentaire_non_tenue_attendu_t = t
+[sortie]
+| DELETE 0
+| INSERT 0 2
+| BEGIN
+| INSERT 0 3
+| COMMIT
+| PREPARE
+| PREPARE
+| PREPARE
+|
+| === 0. La donnee EXISTE, et elle est AFFICHEE ===
+| fiches_pro_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| a_metiers_plombier | a_situe_attendu_t
+| ----
+| {plombier} | t
+| (1 row)
+|
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| tarifs_attendu_1 | affichee_attendu_1 | sos_attendu_1
+| ----
+| 1 | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 1. Les six colonnes : toutes nullables, « affiche » eteint par defaut ===
+| column_name | data_type | nullable_attendu_yes | column_default
+| ----
+| taux_horaire_centimes | bigint | YES | ∅
+| majoration_pct | integer | YES | ∅
+| decompte_temps_texte | text | YES | ∅
+| prix_devis_centimes | bigint | YES | ∅
+| affiche | boolean | YES | false
+| affiche_le | timestamp with time zone | YES | ∅
+| (6 rows)
+|
+|
+| === 2 a. Un taux a 0 -> tarif_taux_horaire_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_taux_horaire_check"
+| ROLLBACK
+|
+| === 2 b. Un taux a 0,99 EUR -> tarif_taux_horaire_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_taux_horaire_check"
+| ROLLBACK
+|
+| === 2 c. Une majoration de 201 % -> tarif_majoration_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_majoration_check"
+| ROLLBACK
+|
+| === 2 d. Un devis a -1 centime -> tarif_devis_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_devis_check"
+| ROLLBACK
+|
+| === 2 e. Un decompte de 201 caracteres -> tarif_decompte_texte_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_decompte_texte_check"
+| ROLLBACK
+|
+| === 2 f. Afficher SANS aucun tarif -> tarif_affiche_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| ROLLBACK
+|
+| === 2 g. Afficher avec la SEULE majoration -> tarif_affiche_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| ROLLBACK
+|
+| === 2 bis. Afficher des conditions seules, le seul devis gratuit, un taux seul : ca PASSE ===
+| BEGIN
+| INSERT 0 1
+| conditions_seules_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| devis_gratuit_seul_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| taux_seul_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2 ter a. Un rayon de 0 km -> sos_rayon_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "sos_availability" violates check constraint "sos_rayon_check"
+| ROLLBACK
+|
+| === 2 ter b. Un rayon de 201 km -> sos_rayon_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "sos_availability" violates check constraint "sos_rayon_check"
+| ROLLBACK
+|
+| === 2 ter c. Un delai de 4 minutes -> sos_delai_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "sos_availability" violates check constraint "sos_delai_check"
+| ROLLBACK
+|
+| === 2 ter d. Un delai de 601 minutes -> sos_delai_check (ERREUR attendue) ===
+| BEGIN
+| ERREUR 23514 new row for relation "sos_availability" violates check constraint "sos_delai_check"
+| ROLLBACK
+|
+| === 3. Le nettoyage : un decompte de blancs devient null, un decompte se rogne, affiche null devient faux ===
+| BEGIN
+| INSERT 0 1
+| blancs_en_null_attendu_t | affiche_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| UPDATE 1
+| rogne_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3 bis. La DATE du geste est posee par la base, jamais par le telephone ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| t t
+| UPDATE 1
+| la_meme_apres_le_taux_attendu_t
+| ----
+| t
+| (1 row)
+|
+| UPDATE 1
+| eteint_vide_attendu_t
+| ----
+| t
+| (1 row)
+|
+| UPDATE 1
+| une_date_neuve_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3 ter. Les blancs INVISIBLES se rognent aussi : un tarif invisible n est pas declare ===
+| BEGIN
+| INSERT 0 1
+| conditions_invisibles_en_null_attendu_t | decompte_invisible_en_null_attendu_t
+| ----
+| t | t
+| (1 row)
+|
+| UPDATE 1
+| rogne_aux_deux_bouts_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| ROLLBACK
+|
+| === 4. Une ligne NON affichee : A la lit, P et B non ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| a_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| p_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| b_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4 bis. Un visiteur sans compte -> permission denied for table tarifs_pro (ERREUR attendue) ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| ERREUR 42501 permission denied for table tarifs_pro
+| ROLLBACK
+|
+| === 5. Une ligne AFFICHEE : P la lit, B NON, A toujours ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| p_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| b_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| a_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5 bis. L administration ne lit pas : son compte est un compte pro ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| p_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| b_est_admin_attendu_t
+| ----
+| t
+| (1 row)
+|
+| b_admin_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5 ter. Un particulier « en attente » (porte de secours SIRET) LIT : il n a pas de fiche ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| demande_en_attente_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| SET
+| p_est_pro_attendu_f
+| ----
+| f
+| (1 row)
+|
+| p_en_attente_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5 quater. CE QUE « PARTICULIER » VEUT DIRE ICI : un administrateur PARTICULIER lit ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| p_est_admin_attendu_t | p_est_pro_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+| admin_particulier_lit_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5 quinquies a. Un compte de type « pro » SANS fiche lit : est_un_pro() ne regarde que la fiche ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| p_type_attendu_pro | p_fiche_attendu_0
+| ----
+| pro | 0
+| (1 row)
+|
+| SET
+| SET
+| pro_sans_fiche_lit_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5 quinquies b. Un artisan dont les donnees viennent d etre effacees lit, tant que son jeton vit ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| b_avant_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| donnees_effacees_attendu_t
+| ----
+| t
+| (1 row)
+|
+| b_est_pro_attendu_f
+| ----
+| f
+| (1 row)
+|
+| b_apres_effacement_lit_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. P LIT la ligne affichee, mais n y ecrit RIEN ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| p_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| UPDATE 0
+| DELETE 0
+| RESET
+| taux_intact_attendu_6200
+| ----
+| 6200
+| (1 row)
+|
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "tarifs_pro"
+| ROLLBACK
+|
+| === 6 bis a. A rallume l affichage par un UPDATE : ca passe ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| affiche_par_update_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6 bis b. …mais un UPSERT PARTIEL ({ affiche: true } seul) est refuse : la LIGNE ENTIERE, toujours (ERREUR attendue) ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ligne_avec_prix_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ERREUR 23514 new row for relation "tarifs_pro" violates check constraint "tarif_affiche_check"
+| ROLLBACK
+|
+| === 7. P bloque A : il ne lit plus ses tarifs, et la recherche ne le rend plus ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| p_avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| p_sos_avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| INSERT 0 1
+| SET
+| p_bloque_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| p_sos_bloque_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7 bis. A bloque P (l autre sens) : meme resultat ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| p_avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| p_sos_avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| INSERT 0 1
+| SET
+| p_bloque_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| p_sos_bloque_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 8. La recherche, par P : les tarifs en EUROS, aux types d hier ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| lignes_attendu_1 | deplacement_attendu_45_00 | horaire_attendu_62_00 | majoration_attendu_40 | delai_attendu_45 | type_attendu_numeric | type_maj_attendu_integer
+| ----
+| 1 | 45.00 | 62.00 | 40 | 45 | numeric | integer
+| (1 row)
+|
+| ROLLBACK
+|
+| === 8 bis. Un visiteur l appelle -> permission denied for function artisans_urgence (ERREUR attendue) ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| ERREUR 42501 permission denied for function artisans_urgence
+| ROLLBACK
+|
+| === 8 ter. La recherche appelee par un ARTISAN : aucun autre artisan, au plus lui-meme ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| p_sos_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| b_sos_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| SET
+| a_sos_lui_meme_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 9. Le catalogue : meme signature, meme type, plus d anon ; les fonctions de la politique gardent leur droit ===
+| resultat_identique_attendu_t | definer_attendu_f | noms_inchanges_attendu_t | pas_de_public_attendu_t
+| ----
+| t | f | t | t
+| (1 row)
+|
+| f | r | execute_
+| ----
+| public.artisans_urgence(text, double precision, double precision) | anon | f
+| public.artisans_urgence(text, double precision, double precision) | authenticated | t
+| public.metier_du_sos(text) | anon | f
+| public.metier_du_sos(text) | authenticated | t
+| (4 rows)
+|
+| metier_pas_de_public_attendu_t | est_un_pro_attendu_t | est_masque_attendu_t
+| ----
+| t | t | t
+| (1 row)
+|
+|
+| === 10. Les exclusions : P voit 1, on change UNE chose, P lit 0 ===
+| --- 10 a. affiche eteint
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| UPDATE 1
+| SET
+| SET
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 b. frais en conditions seules
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| UPDATE 1
+| SET
+| SET
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 c. majoration non declaree
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| UPDATE 1
+| SET
+| SET
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 d. le metier d urgence n est plus sur la fiche
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| UPDATE 1
+| SET
+| SET
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 e. la disponibilite eteinte
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| UPDATE 1
+| SET
+| SET
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 f. un point a 30 km (rayon de 20)
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| distance_km_30
+| ----
+| 30
+| (1 row)
+|
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- 10 g. le piege du titulaire : A s y trouve, puis eteint, et ne s y trouve plus
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| avant_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| UPDATE 1
+| a_lit_encore_sa_ligne_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| apres_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 10 bis. Deplacement offert (0) : la recherche le rend, a 0,00 ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| lignes_attendu_1 | deplacement_attendu_0_00
+| ----
+| 1 | 0.00
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. metier_du_sos : les quatre cles, et null pour une cle inconnue ===
+| plombier | electricien | serrurier | chauffagiste | inconnue_null_attendu_t
+| ----
+| plombier | electricien | serrurier | chauffagiste | t
+| (1 row)
+|
+|
+| === 12. L export RGPD : les colonnes nouvelles, la disponibilite, les urgences des deux cotes ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| six_cles_attendu_t | disponibilite_attendu_1 | a_urgences_attendu_1
+| ----
+| t | 1 | 1
+| (1 row)
+|
+| SET
+| p_urgences_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| b_tarifs_nul_attendu_t | b_disponibilite_attendu_0 | b_urgences_attendu_0
+| ----
+| t | 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 13. Les droits de table : anon n a rien sur tarifs_pro, ni sur sos_availability depuis le lot S-d (<jour> : plus aucune lecture sans compte) ===
+| tp_anon_select_attendu_f | tp_anon_insert_attendu_f | tp_anon_update_attendu_f | tp_anon_delete_attendu_f | tp_anon_truncate_attendu_f | tp_auth_truncate_attendu_f
+| ----
+| f | f | f | f | f | f
+| (1 row)
+|
+| sos_anon_select_attendu_f | sos_anon_insert_attendu_f | sos_anon_update_attendu_f | sos_anon_delete_attendu_f | sos_anon_truncate_attendu_f | sos_auth_truncate_attendu_f
+| ----
+| f | f | f | f | f | f
+| (1 row)
+|
+|
+| === 14. Qui lit ces tables : une liste fermee, aucune security definer, aucune vue ===
+| nomment_tarifs_pro | liste_fermee_attendu_t
+| ----
+| artisans_urgence, emetteur_incomplet, mes_donnees, tient_l_urgence | t
+| (1 row)
+|
+| nomment_emetteur | liste_fermee_attendu_t
+| ----
+| emetteur_incomplet, mes_donnees, motifs_refus_remise | t
+| (1 row)
+|
+| definer_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| vues_attendu_0
+| ----
+| 0
+| (1 row)
+|
+|
+| === 15. Les politiques de tarifs_pro : deux, et la lecture publique pour les particuliers seulement ===
+| policyname | cmd | roles | qual
+| ----
+| mes tarifs | ALL | {authenticated} | est_mon_entreprise(pro_id)
+| tarifs affiches | SELECT | {authenticated} | ((affiche IS TRUE) AND (NOT est_un_pro()) AND (NOT est_masque(pro_id)))
+| (2 rows)
+|
+| qual_exact_attendu_t
+| ----
+| t
+| (1 row)
+|
+|
+| === 16. Le compte de A part : ses tarifs et sa disponibilite partent avec lui ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| avant_tarifs_attendu_1 | avant_sos_attendu_1
+| ----
+| 1 | 1
+| (1 row)
+|
+| DELETE 1
+| apres_tarifs_attendu_0 | apres_sos_attendu_0
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 17. Les contraintes : toutes en _check, aucune anonyme ; huit sur tarifs_pro ===
+| mal_nommees_attendu_0 | anonymes_attendu_0
+| ----
+| 0 | 0
+| (1 row)
+|
+| tarifs_pro_attendu_8
+| ----
+| 8
+| (1 row)
+|
+| contraintes_sos
+| ----
+| sos_availability_majoration_check, sos_availability_metier_key_check, sos_delai_check, sos_rayon_check
+| (1 row)
+|
+|
+| === 18. Aucun agregat sur les tarifs de plusieurs artisans ===
+| agregats_attendu_0
+| ----
+| 0
+| (1 row)
+|
+|
+| === 19 a. Les colonnes MORTES : une mise a jour non nulle -> OP012 (ERREUR attendue) ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP012 Vos tarifs d’urgence ne se règlent plus ici : mettez à jour l’application Opus, puis réglez-les dans « Mon entreprise ». Votre disponibilité n’a pas été enregistrée.
+| ROLLBACK
+|
+| === 19 b. …un insert non nul -> OP012 (ERREUR attendue) ===
+| BEGIN
+| SET
+| SET
+| ERREUR OP012 Vos tarifs d’urgence ne se règlent plus ici : mettez à jour l’application Opus, puis réglez-les dans « Mon entreprise ». Votre disponibilité n’a pas été enregistrée.
+| ROLLBACK
+|
+| === 19 c. …un insert a 0 / 0 / 0 PASSE ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| deplacement | horaire | majoration
+| ----
+| 0.00 | 0.00 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 20. Aucune fonction ne LIT les colonnes mortes, sauf celle qui les refuse ===
+| lecteurs_attendu_refuse_les_colonnes_mortes_du_sos
+| ----
+| refuse_les_colonnes_mortes_du_sos
+| (1 row)
+|
+|
+| === 20 bis. sos_availability.updated_at : la base dit qu elle n est plus tenue ===
+| commentaire_non_tenue_attendu_t
+| ----
+| t
+| (1 row)
+|
+| DEALLOCATE
+| DEALLOCATE
+| DEALLOCATE

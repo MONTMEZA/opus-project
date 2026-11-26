@@ -1,0 +1,348 @@
+# Ce que doit rendre supabase/essais-section-35.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-35` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-35
+
+[partie essai]
+erreurs: 2
+valeurs-jugees: 0
+[erreurs]
+| @ === 3 bis. ET IL NE PEUT PAS NON PLUS LE FAIRE A LA MAIN ===
+|   42501 new row violates row-level security policy for table "post_vues"
+| @ === 4. ON NE COMPTE PAS UNE VUE AU NOM DE QUELQU UN D AUTRE ===
+|   42501 new row violates row-level security policy for table "post_vues"
+[valeurs]
+[sortie]
+| INSERT 0 1
+| CREATE FUNCTION
+|
+| === 1. UNE VUE COMPTE UNE FOIS, MEME EN INSISTANT ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| inserees_1er_appel
+| ----
+| 1
+| (1 row)
+|
+| inserees_2e_appel
+| ----
+| 0
+| (1 row)
+|
+| inserees_3e_appel
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| vues_count
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. DEUX PERSONNES DIFFERENTES FONT DEUX VUES ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| vues_count
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3. L AUTEUR NE SE COMPTE PAS LUI-MEME ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| inserees
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| id | vues_count
+| ----
+| 11110000-0000-4000-8000-000000001111 | 0
+| 22220000-0000-4000-8000-000000002222 | 0
+| (2 rows)
+|
+| ROLLBACK
+|
+| === 3 bis. ET IL NE PEUT PAS NON PLUS LE FAIRE A LA MAIN ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "post_vues"
+| ROLLBACK
+|
+| === 4. ON NE COMPTE PAS UNE VUE AU NOM DE QUELQU UN D AUTRE ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "post_vues"
+| ROLLBACK
+|
+| === 5. UN BLOCAGE EMPECHE LA VUE ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| -- avant le blocage
+| inserees
+| ----
+| 1
+| (1 row)
+|
+| INSERT 0 1
+| -- apres le blocage, sur l AUTRE publication du meme auteur
+| inserees
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| id | vues_count
+| ----
+| 11110000-0000-4000-8000-000000001111 | 1
+| 22220000-0000-4000-8000-000000002222 | 0
+| (2 rows)
+|
+| ROLLBACK
+|
+| === 6. UN LOT MELANGE N EST PAS PERDU EN ENTIER ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| inserees
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| id | vues_count
+| ----
+| 33330000-0000-4000-8000-000000003333 | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. L ARTISAN VOIT COMBIEN, JAMAIS QUI ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| -- le spectateur lit SA propre ligne
+| lignes_vues
+| ----
+| 1
+| (1 row)
+|
+| SET
+| -- l auteur de la publication n en lit AUCUNE
+| lignes_vues
+| ----
+| 0
+| (1 row)
+|
+| -- mais il lit bien son compteur
+| vues_count
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 8. LE COMPTEUR NE DESCEND PAS QUAND UN COMPTE PART ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| -- avant
+| compteur | lignes
+| ----
+| 1 | 1
+| (1 row)
+|
+| DELETE 1
+| -- apres la suppression du compte du spectateur
+| compteur | lignes
+| ----
+| 1 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 9. UNE VUE NE SE RETIRE NI NE SE CORRIGE ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| lignes_supprimees
+| ----
+| 0
+| (1 row)
+|
+| lignes_modifiees
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| lignes_restantes
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 10. LA BORNE DE CINQUANTE ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| INSERT 0 60
+| SET
+| SET
+| inserees
+| ----
+| 50
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. L EXPORT RGPD CONTIENT CE QUE J AI REGARDE ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| vues_exportees
+| ----
+| 1
+| (1 row)
+|
+| -- et l export de l AUTEUR n en contient aucune
+| SET
+| vues_exportees
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 12. UNE VUE NE MARQUE PAS LA PUBLICATION « MODIFIEE » ===
+| BEGIN
+| jeu_dessai
+| ----
+|
+| (1 row)
+|
+| SET
+| SET
+| enregistrer_vues
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| vues_count | jamais_modifiee
+| ----
+| 1 | t
+| (1 row)
+|
+| ROLLBACK
+| DELETE 1

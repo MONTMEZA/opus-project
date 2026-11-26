@@ -1,0 +1,272 @@
+# Ce que doit rendre supabase/essais-section-25.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-25` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-25
+
+[partie essai]
+erreurs: 9
+valeurs-jugees: 0
+[erreurs]
+| @ 1. est_admin : admin / tiers / visiteur
+|   42501 permission denied for function est_admin
+| @ 2. un tiers ne verifie personne
+|   42501 Cette action est réservée à l'administration d'Opus.
+| @ 4. un admin refuse de se verifier LUI-MEME
+|   42501 On ne vérifie pas sa propre fiche : le badge atteste qu'un humain a regardé les documents de quelqu'un d'autre. Passez par l'éditeur SQL de Supabase si c'est vraiment ce que vous voulez.
+| @ 6. refus sans motif suffisant
+|   23514 Un refus demande un motif d'au moins dix caractères : l'artisan doit savoir QUOI corriger, sinon il ne revient pas.
+| @ 8. le journal ne secrit pas a la main
+|   42501 new row violates row-level security policy for table "journal_admin"
+| @ 10. un admin ne nomme pas un autre admin
+|   42501 new row violates row-level security policy for table "administrateurs"
+| @ 12. statut inconnu refuse
+|   23514 Statut inconnu : classe-sans-suite (en_examen, traite ou rejete).
+| @ 13. les deux files, et pas par un tiers
+|   42501 Cette action est réservée à l'administration d'Opus.
+| @ 16. admin_exige_droit nest pas appelable
+|   42501 permission denied for function admin_exige_droit
+[valeurs]
+[sortie]
+| 0. LA DONNEE EXISTE avant qu on pretende la proteger (le piege de la section 29)
+|    attendu : Admin Opus pro|t|f|t ; Pro Carreleur pro|t|f|f ; Un Tiers particulier|f||f ; puis 1 | 2
+| nom | type | a_une_fiche | verifie | admin
+| ----
+| Admin Opus | pro | t | f | t
+| Pro Carreleur | pro | t | f | f
+| Un Tiers | particulier | f | ∅ | f
+| (3 rows)
+|
+| signalements | documents
+| ----
+| 1 | 2
+| (1 row)
+|
+| 1. est_admin : admin / tiers / visiteur
+| BEGIN
+| SET
+| SET
+| admin
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| tiers
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function est_admin
+| ROLLBACK
+| 2. un tiers ne verifie personne
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Cette action est réservée à l'administration d'Opus.
+| ROLLBACK
+| 3. LE PIEGE : le pro qui pose son propre badge est annule EN SILENCE
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| verifie | kbis_valide | assurance_valide
+| ----
+| f | f | f
+| (1 row)
+|
+| ROLLBACK
+| 4. un admin refuse de se verifier LUI-MEME
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 On ne vérifie pas sa propre fiche : le badge atteste qu'un humain a regardé les documents de quelqu'un d'autre. Passez par l'éditeur SQL de Supabase si c'est vraiment ce que vous voulez.
+| ROLLBACK
+| 5. il verifie quelquun dautre : badge + journal + notification
+| BEGIN
+| SET
+| SET
+| admin_verifier_pro
+| ----
+|
+| (1 row)
+|
+| verifie | verification_statut
+| ----
+| t | verifie
+| (1 row)
+|
+| action | apres
+| ----
+| pro_verifie | true
+| (1 row)
+|
+| SET
+| type | lu_par_l_artisan
+| ----
+| verification_acceptee | Vos documents ont été contrôlés : Carrelage du Sud affi
+| (1 row)
+|
+| ROLLBACK
+| 6. refus sans motif suffisant
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Un refus demande un motif d'au moins dix caractères : l'artisan doit savoir QUOI corriger, sinon il ne revient pas.
+| ROLLBACK
+| 7. refus motive
+| BEGIN
+| SET
+| SET
+| admin_refuser_pro
+| ----
+|
+| (1 row)
+|
+| verifie | verification_statut
+| ----
+| f | refuse
+| (1 row)
+|
+| ROLLBACK
+| 8. le journal ne secrit pas a la main
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "journal_admin"
+| ROLLBACK
+| 9. et il ne seffface pas
+| BEGIN
+| SET
+| SET
+| admin_verifier_pro
+| ----
+|
+| (1 row)
+|
+| lignes_effacees
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| 10. un admin ne nomme pas un autre admin
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "administrateurs"
+| ROLLBACK
+| 11. trancher un signalement
+| BEGIN
+| SET
+| SET
+| admin_traiter_signalement
+| ----
+|
+| (1 row)
+|
+| statut | pas_encore_date
+| ----
+| en_examen | t
+| (1 row)
+|
+| admin_traiter_signalement
+| ----
+|
+| (1 row)
+|
+| statut | datee
+| ----
+| traite | t
+| (1 row)
+|
+| ROLLBACK
+| 12. statut inconnu refuse
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Statut inconnu : classe-sans-suite (en_examen, traite ou rejete).
+| ROLLBACK
+| 13. les deux files, et pas par un tiers
+| BEGIN
+| SET
+| SET
+| entreprise | a_envoye | est_moi
+| ----
+| Carrelage du Sud | t | f
+| Maconnerie de l Admin | f | t
+| (2 rows)
+|
+| motif | statut | jours | cible_auteur | auteur
+| ----
+| contrefacon | nouveau | 4 | Pro Carreleur | Un Tiers
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Cette action est réservée à l'administration d'Opus.
+| ROLLBACK
+| 14. admin_resume
+| BEGIN
+| SET
+| SET
+| pour_un_tiers
+| ----
+| {"admin": false}
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| pour_l_admin
+| ----
+| {"admin": true, "metiers": 0, "specialites": 0, "demandes_pro": 0, "signalements": 1, "verifications": 1, "profils_non_verifies": 2, "signalements_en_retard": 1}
+| (1 row)
+|
+| ROLLBACK
+| 15. les documents prives
+| BEGIN
+| SET
+| SET
+| qui | count
+| ----
+| admin | 2
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| qui | count
+| ----
+| tiers | 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| qui | count
+| ----
+| proprietaire | 2
+| (1 row)
+|
+| ROLLBACK
+| 16. admin_exige_droit nest pas appelable
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for function admin_exige_droit
+| ROLLBACK

@@ -1,0 +1,667 @@
+# Ce que doit rendre supabase/essais-section-48.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-48` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-48
+
+[partie essai]
+erreurs: 22
+valeurs-jugees: 84
+[erreurs]
+| @ === 2. Un visiteur ne lit RIEN : refus attendu (permission denied) ===
+|   42501 permission denied for table preuves_tva
+| @ === 3. A ne s ECRIT pas de preuve : refus attendu (permission denied) ===
+|   42501 permission denied for table preuves_tva
+| @ === 7. A ne modifie pas et ne supprime pas sa preuve : deux refus attendus ===
+|   42501 permission denied for table preuves_tva
+|   42501 permission denied for table preuves_tva
+| @ === 8. Les contraintes : huit refus attendus, chacun nomme sa contrainte ===
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_cle_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_source_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| @ === 9 bis. Une preuve ESSAI sur un VRAI compte : refus attendu (23514, compte d essai) ===
+|   23514 Une preuve de TVA « essai » ne se pose que sur un compte d’essai (adresse en @exemple-opus.test).
+| @ === 17. Les compteurs : le compte et tout Opus dans UN ordre ; si l un refuse, l autre ne monte pas ===
+|   P0001 compter_essai_tva : clé de compte inattendue.
+| @ === 18. Les compteurs : appelables par la seule cle de service ===
+|   42501 permission denied for function compter_essai_tva
+| @     b. sur un VRAI compte : refus attendu (23514, « ne se pose que par l application… »)
+|   23514 Une déclaration sur l’honneur du numéro de TVA ne se pose que par l’application (la fonction tva), ou sur un compte d’essai (adresse en @exemple-opus.test).
+| @     e. une ligne DECLARATION sans date ni texte (declencheur coupe)
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+|   23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| @ === 23. A ne s ECRIT pas de declaration : refus attendu (permission denied) ===
+|   42501 permission denied for table preuves_tva
+[valeurs]
+| identites_actives_attendu_3 = 3
+| a_sans_tva_attendu_1 = 1
+| c_avec_tva_attendu_1 = 1
+| seul_attendu_conso_tva_intra = conso_tva_intra
+| la_phrase_nomme_vies_attendu_t = t
+| et_la_dgfip_attendu_t = t
+| preuves_de_a_attendu_1 = 1
+| date_posee_par_la_base_attendu_t = t
+| source_vies_attendu_t = t
+| ce_que_a_lit_attendu_1 = 1
+| ce_que_b_lit_attendu_0 = 0
+| motifs_de_a_attendu_0 = 0
+| cle_lettres_attendu_frk1000048017 = FRK1000048017
+| cle_chiffree_attendu_fr18000048017_essai = FR18000048017 essai
+| maintenance_garde_la_date_attendu_t = t
+| controle_rafraichit_attendu_t = t
+| preuve_toujours_la_attendu_1 = 1
+| motif_revenu_attendu_conso_tva_intra = conso_tva_intra
+| c_annuaire_attendu_f = f
+| franchise_attendu_f = f
+| export_a_attendu_fr91000048009 = FR91000048009
+| export_b_vide_attendu_t = t
+| la_cle_existe_attendu_t = t
+| anon_attendu_f = f
+| connecte_attendu_f = f
+| politiques_attendu_1 = 1
+| en_lecture_attendu_t = t
+| pour_connectes_attendu_t = t
+| anon_lit_attendu_f = f
+| connecte_ecrit_attendu_f = f
+| connecte_modifie_attendu_f = f
+| connecte_supprime_attendu_f = f
+| connecte_vide_attendu_f = f
+| preuves_de_a_apres_suppression_attendu_0 = 0
+| et_rien_n_est_perdu_hors_essai_attendu_1 = 1
+| premier_attendu_ok = ok
+| second_attendu_ok = ok
+| troisieme_attendu_compte = compte
+| global_apres_refus_du_compte_attendu_2 = 2
+| autre_compte_attendu_ok = ok
+| tout_opus_attendu_service = service
+| autre_compte_apres_refus_global_attendu_1 = 1
+| anon_attendu_f = f
+| connecte_attendu_f = f
+| service_attendu_t = t
+| avant_attendu_conso_tva_intra = conso_tva_intra
+| declaration_attendu_1 = 1
+| source_declaration_attendu_t = t
+| date_posee_par_la_base_attendu_t = t
+| une_seule_date_attendu_t = t
+| texte_garde_attendu_t = t
+| aucune_date_de_vies_attendu_t = t
+| motifs_de_a_apres_declaration_attendu_0 = 0
+| a_lit_sa_declaration_attendu_1 = 1
+| b_ne_lit_rien_attendu_0 = 0
+| redeclarer_ne_rajeunit_rien_attendu_t = t
+| devenue_vies_attendu_t = t
+| declaration_reste_jointe_attendu_t = t
+| controle_vies_date_attendu_t = t
+| export_vies_complet_attendu_t = t
+| retrait_epargne_la_preuve_vies_attendu_1 = 1
+| declaration_renait_meme_date_attendu_t = t
+| export_declaration_sans_reconnu_attendu_t = t
+| autre_numero_date_nouvelle_attendu_t = t
+| autre_numero_vies_remplace_attendu_t = t
+| retrait_d_une_declaration_attendu_0 = 0
+| essai_posee_par_l_editeur_attendu_1 = 1
+| maintenance_garde_la_date_attendu_t = t
+| vrai_compte_par_la_fonction_attendu_1 = 1
+| refus_21b_vrai_compte_attendu_t = t
+| refus_22a_texte_hors_liste_attendu_t = t
+| refus_22b_sans_texte_attendu_t = t
+| refus_22c_texte_sans_date_attendu_t = t
+| refus_22d_essai_declare_attendu_t = t
+| refus_22e_sans_date_attendu_t = t
+| refus_23_client_attendu_t = t
+| trois_sources_attendu_t = t
+| contrainte_declaration_attendu_1 = 1
+| liste_fermee_attendu_t = t
+| deux_colonnes_attendu_t = t
+| politiques_toujours_attendu_1 = 1
+| declencheur_connecte_attendu_f = f
+| date_ecrite_par_un_client_attendu_f = f
+| reste_attendu_0 = 0
+[sortie]
+| DELETE 0
+| INSERT 0 3
+| BEGIN
+| INSERT 0 3
+| COMMIT
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+|
+| === 0. La donnee EXISTE : trois identites actives, A sans TVA, C avec ===
+| identites_actives_attendu_3 | a_sans_tva_attendu_1 | c_avec_tva_attendu_1
+| ----
+| 3 | 1 | 1
+| (1 row)
+|
+|
+| === 1. A au reel, sans numero publie ni preuve : il ne lui manque QUE conso_tva_intra ===
+| BEGIN
+| SET
+| SET
+| seul_attendu_conso_tva_intra
+| ----
+| conso_tva_intra
+| (1 row)
+|
+| la_phrase_nomme_vies_attendu_t | et_la_dgfip_attendu_t
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. Un visiteur ne lit RIEN : refus attendu (permission denied) ===
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table preuves_tva
+| ROLLBACK
+|
+| === 3. A ne s ECRIT pas de preuve : refus attendu (permission denied) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_tva
+| ROLLBACK
+|
+| === 4. La fonction Edge ecrit la preuve de A (ici en superutilisateur) ; la date envoyee est IGNOREE ===
+| INSERT 0 1
+| preuves_de_a_attendu_1 | date_posee_par_la_base_attendu_t | source_vies_attendu_t
+| ----
+| 1 | t | t
+| (1 row)
+|
+|
+| === 5. A lit SA preuve (1) ; B, le tiers, lit 0 ===
+| BEGIN
+| SET
+| SET
+| ce_que_a_lit_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| ce_que_b_lit_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. Avec la preuve, A ne manque plus de RIEN ===
+| BEGIN
+| SET
+| SET
+| motifs_de_a_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. A ne modifie pas et ne supprime pas sa preuve : deux refus attendus ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_tva
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_tva
+| ROLLBACK
+|
+| === 8. Les contraintes : huit refus attendus, chacun nomme sa contrainte ===
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_cle_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_source_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_numero_check"
+| ROLLBACK
+|
+| === 9. Une cle en LETTRES passe (il en existe d actives) ; une cle chiffree juste aussi ===
+| BEGIN
+| INSERT 0 1
+| cle_lettres_attendu_frk1000048017
+| ----
+| FRK1000048017
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| cle_chiffree_attendu_fr18000048017_essai
+| ----
+| FR18000048017 essai
+| (1 row)
+|
+| ROLLBACK
+|
+| === 9 bis. Une preuve ESSAI sur un VRAI compte : refus attendu (23514, compte d essai) ===
+| BEGIN
+| UPDATE 1
+| ERREUR 23514 Une preuve de TVA « essai » ne se pose que sur un compte d’essai (adresse en @exemple-opus.test).
+| ROLLBACK
+|
+| === 10. La date du controle : un nouveau controle la RAFRAICHIT, une autre ecriture ne la touche PAS ===
+| BEGIN
+| ALTER TABLE
+| UPDATE 1
+| ALTER TABLE
+| UPDATE 1
+| UPDATE 1
+| maintenance_garde_la_date_attendu_t
+| ----
+| t
+| (1 row)
+|
+| SET
+| INSERT 0 1
+| RESET
+| controle_rafraichit_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. A change d ENTREPRISE : sa preuve ne vaut plus, le motif REVIENT ===
+| BEGIN
+| UPDATE 1
+| INSERT 0 1
+| SET
+| SET
+| preuve_toujours_la_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| motif_revenu_attendu_conso_tva_intra
+| ----
+| conso_tva_intra
+| (1 row)
+|
+| ROLLBACK
+|
+| === 12. L annuaire garde le dernier mot : C, au reel, SANS preuve, ne manque pas de TVA ===
+| BEGIN
+| SET
+| SET
+| c_annuaire_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 13. En franchise, sans preuve : pas de motif TVA ===
+| BEGIN
+| DELETE 1
+| UPDATE 1
+| SET
+| SET
+| franchise_attendu_f
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+|
+| === 14. L export RGPD : A y trouve son numero, B rien ===
+| BEGIN
+| SET
+| SET
+| export_a_attendu_fr91000048009
+| ----
+| FR91000048009
+| (1 row)
+|
+| SET
+| export_b_vide_attendu_t | la_cle_existe_attendu_t
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 15. Les portes : le declencheur n est appelable par personne ; une seule politique, en lecture ===
+| anon_attendu_f | connecte_attendu_f
+| ----
+| f | f
+| (1 row)
+|
+| politiques_attendu_1 | en_lecture_attendu_t | pour_connectes_attendu_t
+| ----
+| 1 | t | t
+| (1 row)
+|
+| anon_lit_attendu_f | connecte_ecrit_attendu_f | connecte_modifie_attendu_f | connecte_supprime_attendu_f | connecte_vide_attendu_f
+| ----
+| f | f | f | f | f
+| (1 row)
+|
+|
+| === 16. La preuve PART avec le compte (cascade) ===
+| BEGIN
+| DELETE 1
+| preuves_de_a_apres_suppression_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| et_rien_n_est_perdu_hors_essai_attendu_1
+| ----
+| 1
+| (1 row)
+|
+|
+| === 17. Les compteurs : le compte et tout Opus dans UN ordre ; si l un refuse, l autre ne monte pas ===
+| BEGIN
+| SET
+| premier_attendu_ok | second_attendu_ok | troisieme_attendu_compte
+| ----
+| ok | ok | compte
+| (1 row)
+|
+| RESET
+| global_apres_refus_du_compte_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| SET
+| autre_compte_attendu_ok | tout_opus_attendu_service
+| ----
+| ok | service
+| (1 row)
+|
+| RESET
+| autre_compte_apres_refus_global_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| ERREUR P0001 compter_essai_tva : clé de compte inattendue.
+| ROLLBACK
+|
+| === 18. Les compteurs : appelables par la seule cle de service ===
+| anon_attendu_f | connecte_attendu_f | service_attendu_t
+| ----
+| f | f | t
+| (1 row)
+|
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for function compter_essai_tva
+| ROLLBACK
+|
+| === 19. LA DECLARATION SUR L HONNEUR (2b-2), posee par la FONCTION (service_role) : sa date et reconnu_le posees
+|         par la BASE (une date envoyee est ignoree), le texte garde, et le motif conso_tva_intra s eteint ===
+| BEGIN
+| DELETE 1
+| SET
+| SET
+| avant_attendu_conso_tva_intra
+| ----
+| conso_tva_intra
+| (1 row)
+|
+| RESET
+| SET
+| INSERT 0 1
+| RESET
+| declaration_attendu_1 | source_declaration_attendu_t | date_posee_par_la_base_attendu_t | une_seule_date_attendu_t | texte_garde_attendu_t | aucune_date_de_vies_attendu_t
+| ----
+| 1 | t | t | t | t | t
+| (1 row)
+|
+| SET
+| SET
+| motifs_de_a_apres_declaration_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| a_lit_sa_declaration_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| b_ne_lit_rien_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 20. CE QUE LA BASE FAIT D UNE DECLARATION (l en-tete de la section 48, mot pour mot) ===
+|     a. la MEME declaration renvoyee (upsert de la fonction) : rien ne rajeunit, ni la date, ni le texte
+|     b. VIES reconnait le MEME numero (upsert vies) : la ligne devient vies, la declaration RESTE JOINTE
+|     c. VIES le refuse de nouveau : la fonction la fait RENAITRE (update source = declaration) — meme date
+|     d. VIES reconnait un AUTRE numero : la declaration est REMPLACEE (effacee)
+|     e. une declaration d un AUTRE numero remplace une declaration : date NOUVELLE, plus recente
+|     f. le retrait (delete … source = declaration) : 0 ligne sur une preuve vies, 1 sur une declaration
+| BEGIN
+| DELETE 1
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| INSERT 0 1
+| RESET
+| redeclarer_ne_rajeunit_rien_attendu_t
+| ----
+| t
+| (1 row)
+|
+| SET
+| INSERT 0 1
+| RESET
+| devenue_vies_attendu_t | declaration_reste_jointe_attendu_t | controle_vies_date_attendu_t
+| ----
+| t | t | t
+| (1 row)
+|
+| SET
+| SET
+| export_vies_complet_attendu_t
+| ----
+| t
+| (1 row)
+|
+| RESET
+| SET
+| DELETE 0
+| RESET
+| retrait_epargne_la_preuve_vies_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| UPDATE 1
+| RESET
+| declaration_renait_meme_date_attendu_t
+| ----
+| t
+| (1 row)
+|
+| SET
+| SET
+| export_declaration_sans_reconnu_attendu_t
+| ----
+| t
+| (1 row)
+|
+| RESET
+| SET
+| INSERT 0 1
+| RESET
+| autre_numero_date_nouvelle_attendu_t
+| ----
+| t
+| (1 row)
+|
+| SET
+| INSERT 0 1
+| RESET
+| autre_numero_vies_remplace_attendu_t
+| ----
+| t
+| (1 row)
+|
+| SET
+| UPDATE 1
+| DELETE 1
+| RESET
+| retrait_d_une_declaration_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 21. LA GARDE I1 : une declaration NOUVELLE posee hors de la fonction (l editeur SQL, le connecteur) ===
+|     a. sur un compte d essai (A, @exemple-opus.test) : posee
+|     b. sur un VRAI compte : refus attendu (23514, « ne se pose que par l application… »)
+| BEGIN
+| DELETE 1
+| INSERT 0 1
+| essai_posee_par_l_editeur_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| UPDATE 1
+| maintenance_garde_la_date_attendu_t
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| UPDATE 1
+| ERREUR 23514 Une déclaration sur l’honneur du numéro de TVA ne se pose que par l’application (la fonction tva), ou sur un compte d’essai (adresse en @exemple-opus.test).
+| ROLLBACK
+|     c. sur ce MEME vrai compte, par la fonction (service_role) : posee — la garde ne lit pas auth.users pour elle
+| BEGIN
+| UPDATE 1
+| SET
+| INSERT 0 1
+| RESET
+| vrai_compte_par_la_fonction_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 22. LA CONTRAINTE preuve_tva_declaration_check : cinq refus attendus, chacun la nomme ===
+|     a. un texte HORS DE LA LISTE (apostrophes droites), par la fonction
+|     b. une declaration SANS texte, par la fonction (la date est posee, le texte manque)
+|     c. un texte SANS date (declencheur coupe, comme au cas 10)
+|     d. une ligne ESSAI qui porte une declaration (declencheur coupe)
+|     e. une ligne DECLARATION sans date ni texte (declencheur coupe)
+| BEGIN
+| SET
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| ROLLBACK
+| BEGIN
+| SET
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| ROLLBACK
+| BEGIN
+| ALTER TABLE
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| ROLLBACK
+| BEGIN
+| ALTER TABLE
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| ROLLBACK
+| BEGIN
+| ALTER TABLE
+| ERREUR 23514 new row for relation "preuves_tva" violates check constraint "preuve_tva_declaration_check"
+| ROLLBACK
+|
+| === 23. A ne s ECRIT pas de declaration : refus attendu (permission denied) ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_tva
+| ROLLBACK
+|
+| === 23 bis. LES SEPT REFUS DE LA DECLARATION, JUGES EN SQL : chacun est venu, avec son code et son motif (attendu : t ×7) ===
+| refus_21b_vrai_compte_attendu_t | refus_22a_texte_hors_liste_attendu_t | refus_22b_sans_texte_attendu_t | refus_22c_texte_sans_date_attendu_t | refus_22d_essai_declare_attendu_t | refus_22e_sans_date_attendu_t | refus_23_client_attendu_t
+| ----
+| t | t | t | t | t | t | t
+| (1 row)
+|
+|
+| === 24. LE CATALOGUE : trois sources, la contrainte et sa liste fermee, deux colonnes nullables sans defaut ;
+|         toujours UNE politique, en lecture ; le declencheur appelable par personne ===
+| trois_sources_attendu_t
+| ----
+| t
+| (1 row)
+|
+| contrainte_declaration_attendu_1 | liste_fermee_attendu_t
+| ----
+| 1 | t
+| (1 row)
+|
+| deux_colonnes_attendu_t
+| ----
+| t
+| (1 row)
+|
+| politiques_toujours_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| declencheur_connecte_attendu_f | date_ecrite_par_un_client_attendu_f
+| ----
+| f | f
+| (1 row)
+|
+| DELETE 3
+| reste_attendu_0
+| ----
+| 0
+| (1 row)
+|

@@ -1,0 +1,287 @@
+# Ce que doit rendre supabase/essais-section-47-rattrapage.sql (douze étapes, sur le schéma de d0560e8), joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-47-rattrapage` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-47-rattrapage
+notice-premier-rejeu: Section 47 : 4 ligne(s) de tarifs créées ou complétées ; 4 ligne(s) SOS dont une valeur n'a pas été copiée ; 1 ligne(s) SOS éteinte(s).
+
+[partie avant]
+erreurs: 0
+valeurs-jugees: 4
+[erreurs]
+[valeurs]
+| fiches_attendu_6 = 6
+| lignes_sos_attendu_7 = 7
+| non_nulles_attendu_6 = 6
+| lignes_tarifs_attendu_2 = 2
+[sortie]
+|
+| === AVANT — les donnees, en superutilisateur, sur le schema de d0560e8 ===
+| DELETE 0
+| INSERT 0 6
+| BEGIN
+| INSERT 0 7
+| INSERT 0 7
+| INSERT 0 1
+| INSERT 0 1
+| COMMIT
+| fiches_attendu_6
+| ----
+| 6
+| (1 row)
+|
+| lignes_sos_attendu_7 | non_nulles_attendu_6
+| ----
+| 7 | 6
+| (1 row)
+|
+| lignes_tarifs_attendu_2
+| ----
+| 2
+| (1 row)
+|
+
+[partie apres-1]
+erreurs: 0
+valeurs-jugees: 14
+[erreurs]
+[valeurs]
+| r1_attendu_t = t
+| r2_aucune_ligne_attendu_t = t
+| r3_le_devis_gagne_attendu_t = t
+| r4_aucune_ligne_attendu_t = t
+| r5_conditions_intactes_attendu_t = t
+| r6_la_ligne_active_attendu_t = t
+| affichees_attendu_0 = 0
+| r1_actif_attendu_t = t
+| r2_eteinte_attendu_f = f
+| lignes_attendu_7 = 7
+| a_zero_attendu_7 = 7
+| r1_si_affiche_attendu_1 = 1
+| rien_de_publie_attendu_0 = 0
+| tarifs_lus_par_q_attendu_0 = 0
+[sortie]
+|
+| === APRES — ce que le rattrapage a fait, ligne par ligne ===
+| r | frais | conditions | taux | maj | affiche | affiche_le_null
+| ----
+| R1 | 4500 | f | 6200 | 40 | f | t
+| R3 | 3000 | f | 5500 | 25 | f | t
+| R5 | ∅ | t | 6000 | 30 | f | t
+| R6 | 4000 | f | 5000 | 20 | f | t
+| (4 rows)
+|
+| r1_attendu_t | r2_aucune_ligne_attendu_t | r3_le_devis_gagne_attendu_t | r4_aucune_ligne_attendu_t | r5_conditions_intactes_attendu_t | r6_la_ligne_active_attendu_t
+| ----
+| t | t | t | t | t | t
+| (1 row)
+|
+| affichees_attendu_0
+| ----
+| 0
+| (1 row)
+|
+|
+| --- les disponibilites : R2 eteinte (macon sur l electricite), les autres comme avant
+| r | metier_key | actif
+| ----
+| R1 | plomberie | t
+| R2 | electricite | f
+| R3 | plomberie | t
+| R4 | serrurerie | t
+| R5 | chauffage | t
+| R6 | chauffage | f
+| R6 | plomberie | t
+| (7 rows)
+|
+| r1_actif_attendu_t | r2_eteinte_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+|
+| --- les colonnes mortes : les SEPT lignes a 0 / 0 / 0
+| lignes_attendu_7 | a_zero_attendu_7
+| ----
+| 7 | 7
+| (1 row)
+|
+|
+| --- la recherche par Q : la donnee est LA (transaction annulee) mais rien n est publie
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| r1_si_affiche_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| rien_de_publie_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| tarifs_lus_par_q_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+
+[partie apres-2]
+erreurs: 0
+valeurs-jugees: 14
+[erreurs]
+[valeurs]
+| r1_attendu_t = t
+| r2_aucune_ligne_attendu_t = t
+| r3_le_devis_gagne_attendu_t = t
+| r4_aucune_ligne_attendu_t = t
+| r5_conditions_intactes_attendu_t = t
+| r6_la_ligne_active_attendu_t = t
+| affichees_attendu_0 = 0
+| r1_actif_attendu_t = t
+| r2_eteinte_attendu_f = f
+| lignes_attendu_7 = 7
+| a_zero_attendu_7 = 7
+| r1_si_affiche_attendu_1 = 1
+| rien_de_publie_attendu_0 = 0
+| tarifs_lus_par_q_attendu_0 = 0
+[sortie]
+|
+| === APRES — ce que le rattrapage a fait, ligne par ligne ===
+| r | frais | conditions | taux | maj | affiche | affiche_le_null
+| ----
+| R1 | 4500 | f | 6200 | 40 | f | t
+| R3 | 3000 | f | 5500 | 25 | f | t
+| R5 | ∅ | t | 6000 | 30 | f | t
+| R6 | 4000 | f | 5000 | 20 | f | t
+| (4 rows)
+|
+| r1_attendu_t | r2_aucune_ligne_attendu_t | r3_le_devis_gagne_attendu_t | r4_aucune_ligne_attendu_t | r5_conditions_intactes_attendu_t | r6_la_ligne_active_attendu_t
+| ----
+| t | t | t | t | t | t
+| (1 row)
+|
+| affichees_attendu_0
+| ----
+| 0
+| (1 row)
+|
+|
+| --- les disponibilites : R2 eteinte (macon sur l electricite), les autres comme avant
+| r | metier_key | actif
+| ----
+| R1 | plomberie | t
+| R2 | electricite | f
+| R3 | plomberie | t
+| R4 | serrurerie | t
+| R5 | chauffage | t
+| R6 | chauffage | f
+| R6 | plomberie | t
+| (7 rows)
+|
+| r1_actif_attendu_t | r2_eteinte_attendu_f
+| ----
+| t | f
+| (1 row)
+|
+|
+| --- les colonnes mortes : les SEPT lignes a 0 / 0 / 0
+| lignes_attendu_7 | a_zero_attendu_7
+| ----
+| 7 | 7
+| (1 row)
+|
+|
+| --- la recherche par Q : la donnee est LA (transaction annulee) mais rien n est publie
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| r1_si_affiche_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| rien_de_publie_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| tarifs_lus_par_q_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+
+[partie retrait]
+erreurs: 0
+valeurs-jugees: 1
+[erreurs]
+[valeurs]
+| colonnes_mortes_restantes_attendu_0 = 0
+[sortie]
+|
+| === RETRAIT — les colonnes mortes retirees, comme le fera un jour le lot de nettoyage ===
+| ALTER TABLE
+| colonnes_mortes_restantes_attendu_0
+| ----
+| 0
+| (1 row)
+|
+
+[partie apres-retrait]
+erreurs: 0
+valeurs-jugees: 4
+[erreurs]
+[valeurs]
+| r1_si_affiche_attendu_1 = 1
+| deplacement_attendu_45_00 = 45.00
+| rien_de_publie_attendu_0 = 0
+| commentaires_morte_attendu_0 = 0
+[sortie]
+|
+| === APRES RETRAIT — l ecriture passe (le corps tolerant), la recherche rend les memes lignes ===
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| r1_si_affiche_attendu_1 | deplacement_attendu_45_00
+| ----
+| 1 | 45.00
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| rien_de_publie_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| commentaires_morte_attendu_0
+| ----
+| 0
+| (1 row)
+|

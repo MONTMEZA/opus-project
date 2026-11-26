@@ -1,0 +1,172 @@
+# Ce que doit rendre supabase/essais-section-45-bis.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-45-bis` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-45-bis
+
+[partie essai]
+erreurs: 5
+valeurs-jugees: 0
+[erreurs]
+| @ --- B4. un COMPTE NEUF s'inscrit avec le même SIRET (attendu : ERROR OP007 — le schéma d'avant le laissait passer)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| @ --- B5. …ni un particulier qui passe pro (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| @ --- B7. un client ne LIT pas la table (attendu : ERROR permission denied for table sirens_reserves)
+|   42501 permission denied for table sirens_reserves
+| @ --- B8. …ni sans compte (attendu : ERROR permission denied for table sirens_reserves)
+|   42501 permission denied for table sirens_reserves
+| @ --- B9. un client n'APPELLE pas la fonction : elle dirait qu'un compte a été écarté (attendu : ERROR permission denied for function siren_reserve)
+|   42501 permission denied for function siren_reserve
+[valeurs]
+[sortie]
+|
+| ##### A. LA DONNÉE EXISTE #####
+| --- A1. S tient 000000240, T a une demande ouverte, et aucune réserve n'existe encore (attendu : 1 | nouvelle | 0)
+| tenue_par_s | demande_de_t | reserves
+| ----
+| 1 | nouvelle | 0
+| (1 row)
+|
+| --- A2. la table ne référence ni la fiche ni le compte : aucune clé étrangère (attendu : 0)
+| cles_etrangeres
+| ----
+| 0
+| (1 row)
+|
+| --- A3. l'ancienne colonne a disparu (attendu : 0)
+| colonne_gele
+| ----
+| 0
+| (1 row)
+|
+|
+| ##### B. LE SQUATTEUR PART, ET LA RÉSERVE RESTE #####
+| --- B1. l'administration retire l'entreprise à S (attendu : true, puis 1 réserve active posée par l'administrateur)
+| SET
+| SET
+| retiree
+| ----
+| true
+| (1 row)
+|
+| RESET
+| RESET
+| reserves_actives | par_l_administrateur
+| ----
+| 1 | t
+| (1 row)
+|
+| --- B2. S SUPPRIME SON COMPTE — la cascade du chemin de l'application (attendu : DELETE 1, puis 0 identité de S, 0 ligne pour 000000240)
+| DELETE 1
+| identites_de_s | lignes_du_siren
+| ----
+| 0 | 0
+| (1 row)
+|
+| --- B3. LE CŒUR DU LOT : la réserve a SURVÉCU (attendu : 1 | t — le schéma d'avant rendait 0 ici)
+| reserves_actives | reserve
+| ----
+| 1 | t
+| (1 row)
+|
+| --- B4. un COMPTE NEUF s'inscrit avec le même SIRET (attendu : ERROR OP007 — le schéma d'avant le laissait passer)
+| BEGIN
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B5. …ni un particulier qui passe pro (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B6. la file de l'administration DIT que l'entreprise est réservée (attendu : t)
+| BEGIN
+| SET
+| SET
+| la_file_le_dit
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- B7. un client ne LIT pas la table (attendu : ERROR permission denied for table sirens_reserves)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table sirens_reserves
+| ROLLBACK
+| --- B8. …ni sans compte (attendu : ERROR permission denied for table sirens_reserves)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table sirens_reserves
+| ROLLBACK
+| --- B9. un client n'APPELLE pas la fonction : elle dirait qu'un compte a été écarté (attendu : ERROR permission denied for function siren_reserve)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for function siren_reserve
+| ROLLBACK
+| --- B10. …mais la clé de service, celle de la fonction Edge, l'appelle (attendu : t)
+| BEGIN
+| SET
+| reserve_vue_par_l_edge
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### C. LE CHEMIN LÉGITIME PASSE ENCORE #####
+| --- C1. l'administration ACCEPTE la demande du vrai titulaire : la réserve se LÈVE, sans s'effacer (attendu : acceptee | pro | 1 identité active chez T | 0 réserve active | 1 ligne levée par l'administrateur)
+| BEGIN
+| SET
+| SET
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| RESET
+| type_de_t | active_chez_t | reserves_actives | levees
+| ----
+| pro | 1 | 0 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- C2. un SECOND retrait du même SIREN REPOSE la réserve (attendu : 1 réserve active, et une seule ligne pour ce SIREN)
+| BEGIN
+| SET
+| SET
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| retiree
+| ----
+| true
+| (1 row)
+|
+| RESET
+| reserves_actives | lignes
+| ----
+| 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- C3. un SIREN qui n'a jamais été retiré n'est pas réservé (attendu : f)
+| reserve
+| ----
+| f
+| (1 row)
+|
+| --- FIN. ménage fait (attendu : 0 | 0)
+| comptes | reserves
+| ----
+| 0 | 0
+| (1 row)
+|

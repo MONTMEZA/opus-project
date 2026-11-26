@@ -1,0 +1,419 @@
+# Ce que doit rendre supabase/essais-section-51a.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-51a` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-51a
+
+[partie essai]
+erreurs: 8
+valeurs-jugees: 0
+[erreurs]
+| @ --- B2. A REMPLACE sa pièce jointe par la sonde « upsert » de storage-api (attendu : ERROR … row-level security … — avant le lot : INSERT 0 1)
+|   42501 new row violates row-level security policy (USING expression) for table "objects"
+| @ --- C1 (suite). PENDANT la suspension, A ne change pas ses métiers (attendu : ERROR … tant que votre badge est suspendu …)
+|   23514 Vos métiers ne se modifient pas tant que votre badge est suspendu : déposez une demande de modification.
+| @ --- C3. l administration revalide LA pièce qu elle a vue : le badge revient, la suspension s efface, et le verrou des métiers est celui d une fiche vérifiée (attendu : t | f, puis ERROR … profil vérifié …)
+|   23514 Les métiers d'un profil vérifié ne se modifient pas directement : déposez une demande de modification.
+| @ --- C3 bis. l artisan change ENCORE de pièce après que l administration a ouvert la fiche : la validation est refusée (attendu : ERROR … a changé de pièce …)
+|   OP024 L'artisan a changé de pièce depuis que vous avez ouvert sa fiche : rechargez la file et regardez la nouvelle avant de valider.
+| @ --- C3 ter. on ne valide pas une pièce RETIRÉE, même par l ancienne fonction (attendu : ERROR … n a plus la pièce …)
+|   OP024 Cette fiche n'a plus la pièce que vous voulez valider : l'artisan l'a retirée. Rechargez la file.
+| @ --- C10. un pro range dans SA fiche le Kbis d un AUTRE (attendu : ERROR … pro_pieces_dossier_check)
+|   23514 new row for relation "professional_profiles" violates check constraint "pro_pieces_dossier_check"
+| @ --- C11. OP009 : une fiche vérifiée SANS entreprise ne s en rattache pas une seule, ni avant ni PENDANT une suspension (attendu : ERROR … OP009, deux fois)
+|   OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+|   OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+[valeurs]
+[sortie]
+| NOTICE policy "essai lecture devis titulaire" for relation "storage.objects" does not exist, skipping
+|
+| ##### A. LA DONNÉE EXISTE #####
+| --- A1. A est pro et vérifié, ses deux pièces validées et rangées (attendu : t | t | t | verifie | (vide))
+| verifie | kbis_valide | assurance_valide | verification_statut | badge_suspendu_le
+| ----
+| t | t | t | verifie | ∅
+| (1 row)
+|
+| --- A2. les fichiers existent (attendu : 8)
+| fichiers
+| ----
+| 8
+| (1 row)
+|
+| --- A3. CAS 0 DU STOCKAGE : A VOIT chaque ligne qu on va essayer de lui faire retirer — documents, pièce jointe, devis, photo, média (attendu : 2 | 1 | 1 | 1 | 1)
+| BEGIN
+| SET
+| SET
+| documents | piece_jointe | devis | photo | media
+| ----
+| 2 | 1 | 1 | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### B. LE STOCKAGE #####
+| --- B1. A retire la pièce jointe qu il a ENVOYÉE dans la conversation (attendu : DELETE 0 — avant le lot : DELETE 1)
+| BEGIN
+| SET
+| SET
+| DELETE 0
+| ROLLBACK
+| --- B2. A REMPLACE sa pièce jointe par la sonde « upsert » de storage-api (attendu : ERROR … row-level security … — avant le lot : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy (USING expression) for table "objects"
+| ROLLBACK
+| --- B2 bis. la pièce jointe SORT de sa conversation (le « move » d un nom) (attendu : UPDATE 0 — avant le lot : ERROR, déjà — la nouvelle ligne n est plus lisible par la règle des pièces jointes : ce cas ne distingue pas avant et après, il garde la porte)
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- B3. A retire son Kbis (attendu : DELETE 0 — avant le lot : DELETE 1)
+| BEGIN
+| SET
+| SET
+| DELETE 0
+| ROLLBACK
+| --- B4. A DÉPLACE son Kbis vers un espace public (le « move » de storage-api est un UPDATE) (attendu : UPDATE 0 — avant le lot : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- B5. A déplace un fichier public VERS l espace des devis (attendu : UPDATE 0 — avant le lot : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- B6. l espace des devis n hérite de rien : A ne falsifie ni ne retire son devis remis (attendu : UPDATE 0, puis DELETE 0 — avant le lot : UPDATE 1, puis DELETE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| DELETE 0
+| ROLLBACK
+| --- B7. A RETIRE sa photo de profil et son média publics — D5 (attendu : DELETE 1, puis DELETE 1 — avant le lot : DELETE 1, puis DELETE 1)
+| BEGIN
+| SET
+| SET
+| DELETE 1
+| DELETE 1
+| ROLLBACK
+| --- B8. A ne retire PAS la photo de profil de B (attendu : DELETE 0 — avant le lot : DELETE 0)
+| BEGIN
+| SET
+| SET
+| DELETE 0
+| ROLLBACK
+| --- B9. A ne remplace pas non plus SA photo publique sous la même adresse (attendu : UPDATE 0 — avant le lot : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- B10. LA SONDE « UPSERT » VERS UN CHEMIN NEUF PASSE, sans aucune règle de remplacement — photo, Kbis, pièce jointe dans la vraie conversation (attendu : trois fois une ligne rendue)
+| BEGIN
+| SET
+| SET
+| bucket_id
+| ----
+| avatars
+| (1 row)
+|
+| INSERT 0 1
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| bucket_id
+| ----
+| documents
+| (1 row)
+|
+| INSERT 0 1
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| bucket_id
+| ----
+| pieces-jointes
+| (1 row)
+|
+| INSERT 0 1
+| ROLLBACK
+| --- B11. LA LISTE des espaces publics : un visiteur, puis A (attendu : 0, puis 2 | 0 — avant le lot : 4, puis 2 | 2)
+| BEGIN
+| SET
+| visiteur_liste
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| a_liste_le_sien | a_liste_les_autres
+| ----
+| 2 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- B12. le CATALOGUE, texte EXACT des trois règles changées (attendu : t | t | t — avant le lot : f | f | f)
+| remplacement_ferme | suppression_trois_espaces | liste_a_soi
+| ----
+| t | t | t
+| (1 row)
+|
+| --- B13. le CATALOGUE : les seules règles UPDATE, DELETE ou ALL de storage.objects sont ces deux-là (attendu : remplacement de mes fichiers:UPDATE, suppression de mes fichiers:DELETE — avant le lot : les mêmes NOMS ; c est leur texte qui change, et B12 le lit)
+| regles_de_modification
+| ----
+| remplacement de mes fichiers:UPDATE, suppression de mes fichiers:DELETE
+| (1 row)
+|
+|
+| ##### C. LE BADGE SUSPENDU #####
+| --- C1. A REMPLACE son Kbis validé (attendu : UPDATE 1, puis f | f | t | en_attente | t | 1 notification « verification_suspendue »)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | kbis_valide | assurance_valide | verification_statut | suspendu | notifications
+| ----
+| f | f | t | en_attente | t | 1
+| (1 row)
+|
+| --- C1 (suite). la notification ne promet pas l issue (attendu : t)
+| sans_promesse
+| ----
+| t
+| (1 row)
+|
+| --- C1 (suite). la fiche revient dans la file de l administration (attendu : 1)
+| SET
+| SET
+| dans_la_file
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| --- C1 (suite). PENDANT la suspension, A ne change pas ses métiers (attendu : ERROR … tant que votre badge est suspendu …)
+| SET
+| SET
+| ERREUR 23514 Vos métiers ne se modifient pas tant que votre badge est suspendu : déposez une demande de modification.
+| ROLLBACK
+| --- C2. A ne lève pas la suspension lui-même (attendu : UPDATE 1, UPDATE 1, puis f | t)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| RESET
+| verifie | suspendu
+| ----
+| f | t
+| (1 row)
+|
+| ROLLBACK
+| --- C3. l administration revalide LA pièce qu elle a vue : le badge revient, la suspension s efface, et le verrou des métiers est celui d une fiche vérifiée (attendu : t | f, puis ERROR … profil vérifié …)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| SET
+| admin_valider_pieces
+| ----
+|
+| (1 row)
+|
+| RESET
+| verifie | suspendu
+| ----
+| t | f
+| (1 row)
+|
+| SET
+| SET
+| ERREUR 23514 Les métiers d'un profil vérifié ne se modifient pas directement : déposez une demande de modification.
+| ROLLBACK
+| --- C3 bis. l artisan change ENCORE de pièce après que l administration a ouvert la fiche : la validation est refusée (attendu : ERROR … a changé de pièce …)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| SET
+| ERREUR OP024 L'artisan a changé de pièce depuis que vous avez ouvert sa fiche : rechargez la file et regardez la nouvelle avant de valider.
+| ROLLBACK
+| --- C3 ter. on ne valide pas une pièce RETIRÉE, même par l ancienne fonction (attendu : ERROR … n a plus la pièce …)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| SET
+| ERREUR OP024 Cette fiche n'a plus la pièce que vous voulez valider : l'artisan l'a retirée. Rechargez la file.
+| ROLLBACK
+| --- C4. l administration REFUSE : la suspension s efface et les métiers redeviennent libres (attendu : refuse | f, puis UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| SET
+| admin_refuser_pro
+| ----
+|
+| (1 row)
+|
+| RESET
+| verification_statut | suspendu
+| ----
+| refuse | f
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- C5. renvoyer le MÊME chemin ne change rien (attendu : UPDATE 1, puis t | f | 0 notification)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | suspendu | notifications
+| ----
+| t | f | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C6. une fiche « vérifiée SANS fichier » (la forme des 3 fiches de démonstration de la vraie base) : son PREMIER envoi suspend le badge (attendu : t, puis f | t | en_attente)
+| BEGIN
+| UPDATE 1
+| avant_toujours_verifie
+| ----
+| t
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | suspendu | verification_statut
+| ----
+| f | t | en_attente
+| (1 row)
+|
+| ROLLBACK
+| --- C7. un Kbis RETIRÉ sans attestation rangée : « non soumis », et la notification dit qu une pièce a été retirée (attendu : f | non_soumis | t)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | verification_statut | dit_retiree
+| ----
+| f | non_soumis | t
+| (1 row)
+|
+| ROLLBACK
+| --- C8. un pro NON vérifié dont seul le Kbis est validé le remplace : la pièce est suspendue, mais il n y a pas de badge à suspendre (attendu : f | f | f | 0)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | kbis_valide | suspendu | notifications
+| ----
+| f | f | f | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C9. la fiche suspendue passe EN TÊTE de la file, devant une demande plus ancienne (attendu : Entreprise A, puis Entreprise B)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| SET
+| entreprise
+| ----
+| Entreprise A
+| Entreprise B
+| (2 rows)
+|
+| ROLLBACK
+| --- C10. un pro range dans SA fiche le Kbis d un AUTRE (attendu : ERROR … pro_pieces_dossier_check)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "professional_profiles" violates check constraint "pro_pieces_dossier_check"
+| ROLLBACK
+| --- C11. OP009 : une fiche vérifiée SANS entreprise ne s en rattache pas une seule, ni avant ni PENDANT une suspension (attendu : ERROR … OP009, deux fois)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| ERREUR OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+| ROLLBACK
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| UPDATE 1
+| ERREUR OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+| ROLLBACK
+|
+| ##### D. CE QUI DOIT RESTER PERMIS #####
+| --- D1. un envoi RGE seul ne touche pas au badge (attendu : t | f)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | suspendu
+| ----
+| t | f
+| (1 row)
+|
+| ROLLBACK
+| --- D2. un pro vérifié modifie sa présentation : il reste vérifié (attendu : t | f)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| verifie | suspendu
+| ----
+| t | f
+| (1 row)
+|
+| ROLLBACK
+| --- D3. l éditeur SQL (auth.uid() vide) garde la main : changer un chemin, dans le dossier du titulaire, n y suspend rien (attendu : t | f)
+| BEGIN
+| UPDATE 1
+| verifie | suspendu
+| ----
+| t | f
+| (1 row)
+|
+| ROLLBACK
+| --- D4. le ménage de compte (rôle de service, qui ignore la RLS) retire encore tout ce que A a rangé (attendu : DELETE 6)
+| BEGIN
+| SET
+| DELETE 6
+| ROLLBACK

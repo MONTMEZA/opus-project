@@ -36,8 +36,11 @@
  *
  *   npm run verifier-atelier
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
+/* La liste fermée des essais SQL, lue sans rien lancer : le module ne fait
+   rien d'autre que se déclarer quand on l'importe. */
+import { ESSAIS, HORS_LISTE, PARITES, ORACLE, DOSSIER_ATTENDUS } from './jouer-essais-sql.mjs';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -145,6 +148,79 @@ console.log('\nCe qui tourne tout seul');
       /platform ios/.test(ci) && /platform android/.test(ci),
       'une construction qui ne passe que d’un côté se découvre trop tard');
   }
+}
+
+console.log('\nLes essais SQL : une liste fermée, hors de cette commande (étape 2c-E)');
+{
+  /* `npm run essais-sql` joue les fichiers `supabase/essais-*.sql` sur une
+     grappe PostgreSQL qu'il crée ; cette commande-ci doit passer partout,
+     y compris sans base. Ce qui se vérifie ICI, donc sur toutes les
+     machines : qu'un essai ajouté demain n'échappe pas à la liste. C'est
+     l'incident du 15-17/10 — sept fichiers d'essais cassés pendant deux
+     jours, parce que rien ne les rejouait. */
+  const surLeDisque = readdirSync('supabase').filter((f) => /^essais-.*\.sql$/.test(f)).map((f) => f.replace(/\.sql$/, ''));
+  const dedans = new Set(ESSAIS.map((e) => e.nom));
+  const dehors = new Set(HORS_LISTE.map((e) => e.nom));
+  const orphelins = surLeDisque.filter((n) => !dedans.has(n) && !dehors.has(n));
+  verifier(`chacun des ${surLeDisque.length} fichiers supabase/essais-*.sql est dans la liste fermée, ou hors d’elle avec sa raison`,
+    orphelins.length === 0,
+    `${orphelins.join(', ')} — rangez-le dans ESSAIS (scripts/jouer-essais-sql.mjs) et figez son oracle, `
+    + 'ou dans HORS_LISTE avec sa raison : un essai que rien ne rejoue ne protège de rien');
+  const fantomes = [...ESSAIS, ...HORS_LISTE].filter((e) => !surLeDisque.includes(e.nom)).map((e) => e.nom);
+  verifier('…et chaque entrée de la liste a son fichier', fantomes.length === 0, fantomes.join(', '));
+  const sansRaison = [...ESSAIS, ...HORS_LISTE].filter((e) => !(e.raison || '').trim()).map((e) => e.nom);
+  verifier('…et sa raison', sansRaison.length === 0, sansRaison.join(', '));
+  const doublons = [...dedans].filter((n) => dehors.has(n));
+  verifier('…et aucun n’est à la fois dedans et dehors', doublons.length === 0, doublons.join(', '));
+
+  /* Chaque essai de la liste a son ORACLE, à la version du script : sans
+     lui, `npm run essais-sql` ne peut que rougir — sur GitHub, par un
+     e-mail « Run failed ». */
+  const doivent = [...ESSAIS.map((e) => e.nom), ...PARITES.map((p) => p.nom)];
+  const fichiers = existsSync(DOSSIER_ATTENDUS)
+    ? readdirSync(DOSSIER_ATTENDUS).filter((f) => f.endsWith('.txt')).map((f) => f.replace(/\.txt$/, '')) : [];
+  const sansOracle = doivent.filter((n) => !fichiers.includes(n));
+  verifier(`chacun des ${doivent.length} a son oracle dans ${DOSSIER_ATTENDUS}/`, sansOracle.length === 0,
+    `${sansOracle.join(', ')} — \`npm run essais-sql -- --figer <nom>\`, relire, commiter`);
+  const perimes = doivent.filter((n) => fichiers.includes(n)
+    && Number((lire(`${DOSSIER_ATTENDUS}/${n}.txt`).match(/^oracle: (\d+)$/m) || [])[1]) !== ORACLE);
+  verifier(`…à la version ${ORACLE} de l’oracle`, perimes.length === 0,
+    `${perimes.join(', ')} — la façon de juger a changé : \`npm run essais-sql -- --figer --oracle\``);
+  const sansEntree = fichiers.filter((n) => !doivent.includes(n));
+  verifier('…et aucun oracle n’est orphelin', sansEntree.length === 0, sansEntree.join(', '));
+
+  /* Le NOM tient tout : `scripts/verifier.mjs` lance ce qui commence par
+     `verifier-`. Préfixés ainsi, les essais demanderaient une base à tout
+     `npm run verifier`. */
+  const scripts = JSON.parse(lire('package.json')).scripts || {};
+  verifier('`npm run essais-sql` existe', /scripts\/jouer-essais-sql\.mjs/.test(scripts['essais-sql'] || ''));
+  const prefixes = Object.entries(scripts).filter(([n, c]) => n.startsWith('verifier-') && /jouer-essais-sql/.test(c)).map(([n]) => n);
+  verifier('…et aucun contrôle `verifier-` ne le lance', prefixes.length === 0,
+    `${prefixes.join(', ')} — \`npm run verifier\` aurait besoin d’une base, et rougirait partout ailleurs`);
+
+  if (existsSync('.github/workflows/verifier.yml')) {
+    /* Les commentaires d'abord retirés : celui qui présente le job nomme la
+       commande, et un contrôle qui lit du code ne doit pas accuser (ni
+       croire) sa documentation. */
+    const ci = lire('.github/workflows/verifier.yml').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    const [avant, apres = ''] = ci.split(/^ {2}essais-sql:\s*$/m);
+    const job = apres.split(/^ {2}[a-z][a-z-]*:\s*$/m)[0];
+    verifier('GitHub les joue, dans un job À PART', /npm run essais-sql/.test(job) && !/npm run essais-sql/.test(avant),
+      'sans lui, ils ne tournent que si quelqu’un y pense');
+    verifier('…avec l’historique entier (le rattrapage du lot T lit d0560e8)', /fetch-depth:\s*0\b/.test(job));
+  }
+}
+
+console.log('\nUn contrôle qui boucle ne bloque plus tout');
+{
+  /* Le délai par contrôle de `scripts/verifier.mjs` (26/11/2026), et ce qui
+     le rend vrai : arrêter le GROUPE, sinon le petit-enfant de `npm run`
+     survit en tenant les tuyaux, et le coureur attend toujours. */
+  const v = lire('scripts/verifier.mjs');
+  const d = Number((v.match(/DELAI_PAR_DEFAUT_S = (\d+)/) || [])[1]);
+  verifier(`chaque contrôle a un délai (${d || '?'} s)`, d > 0, 'un contrôle qui ne finit pas bloquerait tous les suivants');
+  verifier('…et c’est le GROUPE qui est arrêté', /detached: true/.test(v) && /process\.kill\(-/.test(v),
+    'tuer `npm` seul laisse son petit-enfant tenir les tuyaux');
 }
 
 console.log('');

@@ -1,0 +1,1043 @@
+# Ce que doit rendre supabase/essais-section-45.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-45` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-45
+
+[partie essai]
+erreurs: 43
+valeurs-jugees: 0
+[erreurs]
+| @ --- B1. inscription pro SANS preuve (attendu : ERROR OP006, et aucun compte)
+|   OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| @ --- B2. inscription pro avec une preuve EXPIRÉE (attendu : ERROR OP006)
+|   OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| @ --- B3. une preuve ESSAI pour une adresse ordinaire (attendu : ERROR OP006)
+|   OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| @ --- B3 bis. …ou pour une AUTRE adresse du domaine d'essai, inventée (attendu : ERROR OP006 — la preuve nomme UN compte, pas un domaine)
+|   OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| @ --- B3 ter. une preuve essai qui ne nomme personne, ou une adresse hors du domaine d'essai (attendu : ERROR preuve_essai_check, deux fois)
+|   23514 new row for relation "preuves_siret" violates check constraint "preuve_essai_check"
+|   23514 new row for relation "preuves_siret" violates check constraint "preuve_essai_check"
+| @ --- B4. le MÊME SIREN qu'un autre compte, par un autre établissement (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| @ --- B6. un client LIT les preuves (attendu : ERROR permission denied for table preuves_siret)
+|   42501 permission denied for table preuves_siret
+| @ --- B7. un client ÉCRIT une preuve (attendu : ERROR permission denied for table preuves_siret)
+|   42501 permission denied for table preuves_siret
+| @ --- B8. un client lit les compteurs d'appels (attendu : ERROR permission denied for table siret_limites)
+|   42501 permission denied for table siret_limites
+| @ --- B9. un visiteur VIDE les compteurs (attendu : ERROR permission denied for table siret_limites)
+|   42501 permission denied for table siret_limites
+| @ --- B13. A réécrit SON identité (attendu : ERROR permission denied for table entreprise_registre)
+|   42501 permission denied for table entreprise_registre
+| @ --- B14. A s'insère une identité de plus (attendu : ERROR permission denied for table entreprise_registre)
+|   42501 permission denied for table entreprise_registre
+| @ --- B15. un visiteur lit une identité ou une demande (attendu : ERROR permission denied for table entreprise_registre)
+|   42501 permission denied for table entreprise_registre
+| @ --- B16. un particulier s'insère une fiche pro (attendu : ERROR OP010)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| @ --- B17. un compte PRO resté sans fiche (le cas du 14/09) se la crée (attendu : pro | f, puis ERROR OP010)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| @ --- B18. un client s'insère une demande déjà ACCEPTÉE (attendu : ERROR permission denied for table demandes_pro — le statut et la note ne s'écrivent plus du tout par le client ; la politique reste derrière, B18 bis)
+|   42501 permission denied for table demandes_pro
+| @ --- B19. …ou une demande signée par l'administration (attendu : ERROR permission denied for table demandes_pro)
+|   42501 permission denied for table demandes_pro
+| @ --- B18 bis. …ou ANTIDATÉE pour passer en tête de la file (attendu : ERROR permission denied for table demandes_pro)
+|   42501 permission denied for table demandes_pro
+| @ --- B18 ter. la politique tient encore SEULE : avec les droits de table rendus, une demande « acceptée » (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "demandes_pro"
+| @ --- B18 quater. le demandeur lit QUI l'a refusé (attendu : ERROR permission denied for table demandes_pro)
+|   42501 permission denied for table demandes_pro
+| @ --- B20. un PRO dépose une demande (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "demandes_pro"
+| @ --- B21. une seconde demande OUVERTE (attendu : ERROR duplicate key idx_demandes_pro_une_ouverte)
+|   23505 duplicate key value violates unique constraint "idx_demandes_pro_une_ouverte"
+| @ --- B22. un justificatif rangé dans le dossier d'un AUTRE (attendu : ERROR demande_pro_justificatif_check)
+|   23514 new row for relation "demandes_pro" violates check constraint "demande_pro_justificatif_check"
+| @ --- B23. compléter une demande qu'on n'a pas (attendu : ERROR aucune demande … en attente)
+|   P0002 Vous n'avez aucune demande de compte professionnel en attente : il n'y a rien à compléter.
+| @ --- B24. devenir pro SANS preuve (attendu : ERROR OP006)
+|   OP006 Ce SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures : touchez « Vérifier » à nouveau.
+| @ --- B25. devenir pro avec l'entreprise de quelqu'un d'autre (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| @ --- B26. un PRO « devient pro » une seconde fois (attendu : ERROR déjà un compte professionnel)
+|   42501 Ce compte est déjà un compte professionnel : il n'y a rien à faire passer.
+| @ --- B27. A rattache une AUTRE entreprise (attendu : ERROR OP008)
+|   OP008 Ce numéro désigne une autre entreprise que celle de votre compte. Un compte Opus correspond à une seule entreprise : en changer ne peut pas encore se faire depuis l'application.
+| @ --- B28. une fiche BADGÉE sans entreprise rattache un SIRET (attendu : ERROR OP009)
+|   OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+| @ --- B29. une fiche sans entreprise prend celle du squatteur (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+| @ --- B30. un PARTICULIER rattache un SIRET (attendu : ERROR seul un compte professionnel)
+|   42501 Seul un compte professionnel rattache une entreprise. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| @ --- B34. un client appelle le compteur d'appels (attendu : ERROR permission denied for function compter_appel_siret)
+|   42501 permission denied for function compter_appel_siret
+| @ --- B35. le particulier change son type lui-même (attendu : ERROR OP004, et le message désigne Profil → Passer en compte professionnel)
+|   OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| @ --- B37. un non-administrateur tranche une demande (attendu : ERROR réservée à l'administration)
+|   42501 Cette action est réservée à l'administration d'Opus.
+| @ --- B38. ACCEPTER une entreprise déjà tenue par un autre (attendu : ERROR OP007 « retirez d'abord … »)
+|   OP007 Cette entreprise est déjà rattachée à un autre compte : retirez d'abord l'entreprise du compte qui la détient, ou choisissez « Transférer ».
+| @ --- B39. REFUSER sans motif (attendu : ERROR au moins dix caractères)
+|   23514 Un refus demande une note d'au moins dix caractères : la personne doit savoir pourquoi, et quoi faire.
+| @ --- B40. TRANSFÉRER sans motif (attendu : ERROR au moins dix caractères)
+|   23514 Un transfert demande une note d'au moins dix caractères : celui qui perd l'entreprise doit savoir pourquoi.
+| @ --- B41. RETIRER sans motif (attendu : ERROR au moins dix caractères)
+|   23514 Un retrait demande un motif d'au moins dix caractères : celui qui perd l'entreprise doit savoir pourquoi.
+| @ --- B42. UN RETRAIT TIENT : l'administration retire au squatteur S son entreprise, et il la RATTACHE aussitôt (attendu : retiree = true, puis ERROR OP007 — la première version le laissait la reprendre)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+| @ --- B43. …ni par un COMPTE NEUF, à l'inscription (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| @ --- B44. …ni par un particulier qui passe pro (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| @ --- C13. …et le squatteur ne peut pas la REPRENDRE (attendu : ERROR OP007)
+|   OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+[valeurs]
+[sortie]
+|
+| ##### A. LA DONNÉE EXISTE, ET LA LECTURE MARCHE #####
+| --- A1. huit preuves, dont une expirée (attendu : 8 | 1)
+| preuves | expirees
+| ----
+| 8 | 1
+| (1 row)
+|
+| --- A2. A est né pro, avec sa fiche ET son identité (attendu : pro | t | 000000208 | 00000020800017 | registre | MACONNERIE DU REPERTOIRE | t)
+| type | a_une_fiche | siren | siret | source | denomination | date_de_la_preuve
+| ----
+| pro | t | 000000208 | 00000020800017 | registre | MACONNERIE DU REPERTOIRE | t
+| (1 row)
+|
+| --- A3. S, le squatteur, tient 000000240 (attendu : pro | 000000240)
+| type | siren
+| ----
+| pro | 000000240
+| (1 row)
+|
+| --- A4. C, D et T sont nés PARTICULIERS, chacun avec une demande ouverte (attendu : 3 lignes particulier | nouvelle ; métiers C = {couvreur}, D = {plombier}, T = {macon})
+| nom | type | statut | motif | siret | metiers
+| ----
+| C Couvreur | particulier | nouvelle | introuvable | 00000022400014 | {couvreur}
+| D Plombier | particulier | nouvelle | non_diffusible | 00000023200017 | {plombier}
+| T Titulaire | particulier | nouvelle | deja_utilise | 00000024000010 | {macon}
+| (3 rows)
+|
+| --- A5. aucun des trois n'a de fiche, ni d'identité (attendu : 0 | 0)
+| fiches | identites
+| ----
+| 0 | 0
+| (1 row)
+|
+| --- A6. l'administrateur a été prévenu trois fois, avec la demande et le demandeur (attendu : 3 | 3 | 3)
+| notifications | avec_la_demande | avec_le_demandeur
+| ----
+| 3 | 3 | 3
+| (1 row)
+|
+| --- A7. A lit SON identité par la règle RLS (attendu : 1)
+| BEGIN
+| SET
+| SET
+| mon_identite
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- A8. C lit SA demande (attendu : 1)
+| BEGIN
+| SET
+| SET
+| ma_demande
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- A9. l'administration lit les identités et la file (attendu : 2 | 3 demandes, les plus anciennes d'abord : C, D, T)
+| BEGIN
+| SET
+| SET
+| identites_lues
+| ----
+| 2
+| (1 row)
+|
+| motif | compte | le_repertoire_dit | detenteur
+| ----
+| introuvable | C Couvreur | TOITURES DE PROVENCE | ∅
+| non_diffusible | D Plombier | ∅ | ∅
+| deja_utilise | T Titulaire | LE VRAI TITULAIRE | Le Vrai Titulaire
+| (3 rows)
+|
+| ROLLBACK
+| --- A10. …et la file ne montre ni e-mail, ni téléphone, ni adresse (attendu : f | f | f)
+| BEGIN
+| SET
+| SET
+| un_email | une_adresse | un_telephone
+| ----
+| f | f | f
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### B. CHAQUE PORTE EST FERMÉE #####
+| --- B1. inscription pro SANS preuve (attendu : ERROR OP006, et aucun compte)
+| BEGIN
+| ERREUR OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| ROLLBACK
+| --- B2. inscription pro avec une preuve EXPIRÉE (attendu : ERROR OP006)
+| BEGIN
+| ERREUR OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| ROLLBACK
+| --- B3. une preuve ESSAI pour une adresse ordinaire (attendu : ERROR OP006)
+| BEGIN
+| ERREUR OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| ROLLBACK
+| --- B3 bis. …ou pour une AUTRE adresse du domaine d'essai, inventée (attendu : ERROR OP006 — la preuve nomme UN compte, pas un domaine)
+| BEGIN
+| ERREUR OP006 Inscription professionnelle impossible : votre SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures. Revenez à l'étape « Votre entreprise » et touchez « Vérifier ».
+| ROLLBACK
+| --- B3 ter. une preuve essai qui ne nomme personne, ou une adresse hors du domaine d'essai (attendu : ERROR preuve_essai_check, deux fois)
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_siret" violates check constraint "preuve_essai_check"
+| ROLLBACK
+| BEGIN
+| ERREUR 23514 new row for relation "preuves_siret" violates check constraint "preuve_essai_check"
+| ROLLBACK
+| --- B4. le MÊME SIREN qu'un autre compte, par un autre établissement (attendu : ERROR OP007)
+| BEGIN
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B5. …et le refus n'a rien laissé derrière lui (attendu : 0 | 0)
+| auth | users
+| ----
+| 0 | 0
+| (1 row)
+|
+| --- B6. un client LIT les preuves (attendu : ERROR permission denied for table preuves_siret)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_siret
+| ROLLBACK
+| --- B7. un client ÉCRIT une preuve (attendu : ERROR permission denied for table preuves_siret)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table preuves_siret
+| ROLLBACK
+| --- B8. un client lit les compteurs d'appels (attendu : ERROR permission denied for table siret_limites)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table siret_limites
+| ROLLBACK
+| --- B9. un visiteur VIDE les compteurs (attendu : ERROR permission denied for table siret_limites)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table siret_limites
+| ROLLBACK
+| --- B10. les droits de table, en une fois (attendu : f PARTOUT, sauf authenticated lit entreprise_registre — demandes_pro passe désormais par des droits de COLONNE, voir B10 bis)
+| nom | role | lit | insere | modifie | supprime
+| ----
+| public.demandes_pro | anon | f | f | f | f
+| public.demandes_pro | authenticated | f | f | f | f
+| public.entreprise_registre | anon | f | f | f | f
+| public.entreprise_registre | authenticated | t | f | f | f
+| public.preuves_siret | anon | f | f | f | f
+| public.preuves_siret | authenticated | f | f | f | f
+| public.siret_limites | anon | f | f | f | f
+| public.siret_limites | authenticated | f | f | f | f
+| (8 rows)
+|
+| --- B10 bis. demandes_pro, colonne par colonne, pour authenticated (attendu : lit tout SAUF traitee_par ; n'insère QUE compte_id, siret, motif, entreprise, metiers, message, justificatif)
+| colonne | lit | insere
+| ----
+| id | t | f
+| compte_id | t | t
+| siret | t | t
+| motif | t | t
+| entreprise | t | t
+| metiers | t | t
+| message | t | t
+| justificatif | t | t
+| statut | t | f
+| note | t | f
+| created_at | t | f
+| traitee_le | t | f
+| traitee_par | f | f
+| (13 rows)
+|
+| --- B11. B lit l'identité de A (attendu : 0 — et A7 prouve qu'il y avait une identité à lire)
+| BEGIN
+| SET
+| SET
+| identites_d_autrui
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- B12. B lit la demande de C (attendu : 0 — et A8 prouve qu'elle existe)
+| BEGIN
+| SET
+| SET
+| demandes_d_autrui
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- B13. A réécrit SON identité (attendu : ERROR permission denied for table entreprise_registre)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table entreprise_registre
+| ROLLBACK
+| --- B14. A s'insère une identité de plus (attendu : ERROR permission denied for table entreprise_registre)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table entreprise_registre
+| ROLLBACK
+| --- B15. un visiteur lit une identité ou une demande (attendu : ERROR permission denied for table entreprise_registre)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table entreprise_registre
+| ROLLBACK
+| --- B16. un particulier s'insère une fiche pro (attendu : ERROR OP010)
+| BEGIN
+| SET
+| SET
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+| --- B17. un compte PRO resté sans fiche (le cas du 14/09) se la crée (attendu : pro | f, puis ERROR OP010)
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| type | a_une_fiche
+| ----
+| pro | f
+| (1 row)
+|
+| SET
+| SET
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+| --- B18. un client s'insère une demande déjà ACCEPTÉE (attendu : ERROR permission denied for table demandes_pro — le statut et la note ne s'écrivent plus du tout par le client ; la politique reste derrière, B18 bis)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table demandes_pro
+| ROLLBACK
+| --- B19. …ou une demande signée par l'administration (attendu : ERROR permission denied for table demandes_pro)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table demandes_pro
+| ROLLBACK
+| --- B18 bis. …ou ANTIDATÉE pour passer en tête de la file (attendu : ERROR permission denied for table demandes_pro)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table demandes_pro
+| ROLLBACK
+| --- B18 ter. la politique tient encore SEULE : avec les droits de table rendus, une demande « acceptée » (attendu : ERROR row-level security)
+| BEGIN
+| GRANT
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "demandes_pro"
+| ROLLBACK
+| --- B18 quater. le demandeur lit QUI l'a refusé (attendu : ERROR permission denied for table demandes_pro)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table demandes_pro
+| ROLLBACK
+| --- B20. un PRO dépose une demande (attendu : ERROR row-level security)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "demandes_pro"
+| ROLLBACK
+| --- B21. une seconde demande OUVERTE (attendu : ERROR duplicate key idx_demandes_pro_une_ouverte)
+| BEGIN
+| SET
+| SET
+| ERREUR 23505 duplicate key value violates unique constraint "idx_demandes_pro_une_ouverte"
+| ROLLBACK
+| --- B22. un justificatif rangé dans le dossier d'un AUTRE (attendu : ERROR demande_pro_justificatif_check)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "demandes_pro" violates check constraint "demande_pro_justificatif_check"
+| ROLLBACK
+| --- B23. compléter une demande qu'on n'a pas (attendu : ERROR aucune demande … en attente)
+| BEGIN
+| SET
+| SET
+| ERREUR P0002 Vous n'avez aucune demande de compte professionnel en attente : il n'y a rien à compléter.
+| ROLLBACK
+| --- B24. devenir pro SANS preuve (attendu : ERROR OP006)
+| BEGIN
+| SET
+| SET
+| ERREUR OP006 Ce SIRET n'a pas été retrouvé au répertoire Sirene depuis moins de 24 heures : touchez « Vérifier » à nouveau.
+| ROLLBACK
+| --- B25. devenir pro avec l'entreprise de quelqu'un d'autre (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B26. un PRO « devient pro » une seconde fois (attendu : ERROR déjà un compte professionnel)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Ce compte est déjà un compte professionnel : il n'y a rien à faire passer.
+| ROLLBACK
+| --- B27. A rattache une AUTRE entreprise (attendu : ERROR OP008)
+| BEGIN
+| SET
+| SET
+| ERREUR OP008 Ce numéro désigne une autre entreprise que celle de votre compte. Un compte Opus correspond à une seule entreprise : en changer ne peut pas encore se faire depuis l'application.
+| ROLLBACK
+| --- B28. une fiche BADGÉE sans entreprise rattache un SIRET (attendu : ERROR OP009)
+| BEGIN
+| SET
+| SET
+| ERREUR OP009 Votre fiche porte le badge « vérifié » (ou l'attend, le temps d'un examen), accordé avant que les entreprises soient rattachées : y lier une entreprise ne peut pas se faire automatiquement, et ne peut pas encore se demander depuis l'application.
+| ROLLBACK
+| --- B29. une fiche sans entreprise prend celle du squatteur (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+| ROLLBACK
+| --- B30. un PARTICULIER rattache un SIRET (attendu : ERROR seul un compte professionnel)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Seul un compte professionnel rattache une entreprise. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ROLLBACK
+| --- B31. l'ancien SIRET libre ne se réécrit plus par son titulaire (attendu : 812 345 678 00019 avant ET après, aucune erreur)
+| BEGIN
+| avant
+| ----
+| 812 345 678 00019
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| RESET
+| apres | le_reste_passe
+| ----
+| 812 345 678 00019 | 0600000000
+| (1 row)
+|
+| ROLLBACK
+| --- B32. aucune fonction nouvelle n'est appelable sans compte (attendu : 8 lignes, anon = f partout ; compter_appel_siret : authenticated = f aussi)
+| proname | anon | authentifie
+| ----
+| admin_demandes_pro | f | t
+| admin_retirer_entreprise | f | t
+| admin_traiter_demande_pro | f | t
+| annuler_ma_demande_pro | f | t
+| completer_ma_demande_pro | f | t
+| compter_appel_siret | f | f
+| devenir_pro | f | t
+| rattacher_mon_siret | f | t
+| (8 rows)
+|
+| --- B33. …ni les deux déclencheurs nouveaux, par personne (attendu : f | f, deux fois)
+| proname | anon | authentifie
+| ----
+| fige_le_siret_libre | f | f
+| notifie_demande_pro | f | f
+| (2 rows)
+|
+| --- B34. un client appelle le compteur d'appels (attendu : ERROR permission denied for function compter_appel_siret)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for function compter_appel_siret
+| ROLLBACK
+| --- B35. le particulier change son type lui-même (attendu : ERROR OP004, et le message désigne Profil → Passer en compte professionnel)
+| BEGIN
+| SET
+| SET
+| ERREUR OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ROLLBACK
+| --- B36. CE QUE LE VERROU 44.1 LAISSE PASSER : un déclencheur security definer qui écrit users.type (attendu : pro — c'est pourquoi verifier-pro tient la liste des trois seules fonctions permises)
+| BEGIN
+| CREATE FUNCTION
+| CREATE TRIGGER
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| promu_par_un_definer
+| ----
+| pro
+| (1 row)
+|
+| ROLLBACK
+| --- B37. un non-administrateur tranche une demande (attendu : ERROR réservée à l'administration)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Cette action est réservée à l'administration d'Opus.
+| ROLLBACK
+| --- B38. ACCEPTER une entreprise déjà tenue par un autre (attendu : ERROR OP007 « retirez d'abord … »)
+| BEGIN
+| SET
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un autre compte : retirez d'abord l'entreprise du compte qui la détient, ou choisissez « Transférer ».
+| ROLLBACK
+| --- B39. REFUSER sans motif (attendu : ERROR au moins dix caractères)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Un refus demande une note d'au moins dix caractères : la personne doit savoir pourquoi, et quoi faire.
+| ROLLBACK
+| --- B40. TRANSFÉRER sans motif (attendu : ERROR au moins dix caractères)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Un transfert demande une note d'au moins dix caractères : celui qui perd l'entreprise doit savoir pourquoi.
+| ROLLBACK
+| --- B41. RETIRER sans motif (attendu : ERROR au moins dix caractères)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 Un retrait demande un motif d'au moins dix caractères : celui qui perd l'entreprise doit savoir pourquoi.
+| ROLLBACK
+| --- B42. UN RETRAIT TIENT : l'administration retire au squatteur S son entreprise, et il la RATTACHE aussitôt (attendu : retiree = true, puis ERROR OP007 — la première version le laissait la reprendre)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| true
+| (1 row)
+|
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+| ROLLBACK
+| --- B43. …ni par un COMPTE NEUF, à l'inscription (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| t
+| (1 row)
+|
+| RESET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus. Si c'est la vôtre, inscrivez-vous en demandant une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B44. …ni par un particulier qui passe pro (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| t
+| (1 row)
+|
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un autre compte Opus. Si c'est la vôtre, demandez une vérification à la main : l'administration examinera votre demande.
+| ROLLBACK
+| --- B45. …et la fonction Edge la voit PRISE : la requête de son étape 2 (attendu : 0 identité active | 1 prise — elle répondra deja_utilise, pas ok)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| t
+| (1 row)
+|
+| RESET
+| identites_actives | prise_pour_l_edge
+| ----
+| 0 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- B46. UNE RAFALE ne sonne qu'une fois : B dépose et annule cinq fois (attendu : 5 demandes | 1 notification | 0 annulation dans la file des décisions | les 3 demandes ouvertes du jeu, et celle de B)
+| BEGIN
+| SET
+| SET
+| RESET
+| demandes_de_b | sonneries
+| ----
+| 5 | 1
+| (1 row)
+|
+| SET
+| SET
+| annulations_dans_la_file | ouvertes
+| ----
+| 0 | 4
+| (1 row)
+|
+| ROLLBACK
+| --- B47. LA PROPRIÉTÉ, VUE PAR LE CATALOGUE : quelles fonctions security definer écrivent users.type ? (attendu : exactement admin_traiter_demande_pro | cree_fiche_utilisateur | devenir_pro)
+| proname
+| ----
+| admin_traiter_demande_pro
+| cree_fiche_utilisateur
+| devenir_pro
+| (3 rows)
+|
+|
+| ##### C. LE CHEMIN LÉGITIME PASSE #####
+| --- C1. A a son identité DEPUIS LA PREUVE, pas depuis le formulaire (attendu : MACONNERIE DU REPERTOIRE | Maçonnerie A — le nom public reste celui choisi)
+| identite_privee | nom_public
+| ----
+| MACONNERIE DU REPERTOIRE | Maçonnerie A
+| (1 row)
+|
+| --- C2. une preuve ESSAI pour une adresse d'essai (attendu : pro | essai)
+| BEGIN
+| INSERT 0 1
+| type | source
+| ----
+| pro | essai
+| (1 row)
+|
+| ROLLBACK
+| --- C3. UNE MÉTADONNÉE MALFORMÉE NE COÛTE JAMAIS UN COMPTE (attendu : 4 comptes particuliers | 0 demande)
+| BEGIN
+| INSERT 0 4
+| comptes | demandes
+| ----
+| 4 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C3 bis. …et un métier INVENTÉ ne coûte pas la demande : la liste retombe à vide, comme l'inscription pro retombe sur « macon » (attendu : nouvelle | {})
+| BEGIN
+| INSERT 0 1
+| statut | metiers
+| ----
+| nouvelle | {}
+| (1 row)
+|
+| ROLLBACK
+| --- C4. B DEVIENT PRO par le répertoire, depuis l'application (attendu : pro | 000000216 | BOIS ET CHARPENTE | f — le nom brut ne sort pas ; puis t ; puis pro | Jean Dupont — entreprise vide, on prend le nom du compte | Charleval (13) | 13350 | {charpentier} | t | <jour>)
+| BEGIN
+| SET
+| SET
+| type | siren | nom_commercial | nom_brut_rendu
+| ----
+| pro | 000000216 | BOIS ET CHARPENTE | f
+| (1 row)
+|
+| est_un_pro
+| ----
+| t
+| (1 row)
+|
+| RESET
+| type | entreprise | ville | code_postal | metiers | placee | cgu_version
+| ----
+| pro | Jean Dupont | Charleval (13) | 13350 | {charpentier} | t | <jour>
+| (1 row)
+|
+| ROLLBACK
+| --- C5. …et sa demande de secours se ferme toute seule (attendu : acceptee | « Ouverte automatiquement … »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| devenu_pro
+| ----
+| t
+| (1 row)
+|
+| statut | note
+| ----
+| acceptee | Ouverte automatiquement : l'entreprise est active au répertoire Sirene (INSEE).
+| (1 row)
+|
+| ROLLBACK
+| --- C6. A DÉMÉNAGE : même SIREN, autre SIRET (attendu : 2 lignes — l'ancienne retirée « transfert de siège », la nouvelle active)
+| BEGIN
+| SET
+| SET
+| nouveau_siret
+| ----
+| 00000020800025
+| (1 row)
+|
+| RESET
+| siret | retiree | retrait_motif
+| ----
+| 00000020800017 | t | transfert de siège
+| 00000020800025 | f | ∅
+| (2 rows)
+|
+| ROLLBACK
+| --- C7. une fiche d'avant ce lot, sans badge, rattache son SIRET (attendu : AUTRE ENTREPRISE | registre)
+| BEGIN
+| SET
+| SET
+| denomination | source
+| ----
+| AUTRE ENTREPRISE | registre
+| (1 row)
+|
+| ROLLBACK
+| --- C8. C complète sa demande, puis l'annule, puis en dépose une neuve (attendu : message + justificatif posés, annulee, INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| message | justificatif
+| ----
+| Mon entreprise vient d'être créée. | a4500000-0000-4000-8000-00000000000c/demande-pro/avis.pdf
+| (1 row)
+|
+| message_garde
+| ----
+| Mon entreprise vient d'être créée.
+| (1 row)
+|
+| statut
+| ----
+| annulee
+| (1 row)
+|
+| INSERT 0 1
+| ROLLBACK
+| --- C9. l'administration ACCEPTE C, que le répertoire connaît (attendu : pro | Toitures C | {couvreur} | registre | TOITURES DE PROVENCE | acceptee | compte_pro_ouvert avec la demande, sans acteur)
+| BEGIN
+| SET
+| SET
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| RESET
+| type | entreprise | metiers | source | denomination | statut
+| ----
+| pro | Toitures C | {couvreur} | registre | TOITURES DE PROVENCE | acceptee
+| (1 row)
+|
+| type | mene_a_la_demande | sans_acteur
+| ----
+| compte_pro_ouvert | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- C10. …et le JOURNAL ne garde que l'état (attendu : demande_pro_acceptee | demande_pro | {motif,siren,statut} deux fois)
+| BEGIN
+| SET
+| SET
+| fait
+| ----
+| t
+| (1 row)
+|
+| RESET
+| action | cible_type | cles_avant | cles_apres
+| ----
+| demande_pro_acceptee | demande_pro | {motif,siren,statut} | {motif,siren,statut}
+| (1 row)
+|
+| ROLLBACK
+| --- C11. l'administration ACCEPTE D, que le répertoire ne montre pas (attendu : pro | administration | un SIRET, rien d'autre)
+| BEGIN
+| SET
+| SET
+| fait
+| ----
+| t
+| (1 row)
+|
+| RESET
+| type | source | siret | denomination
+| ----
+| pro | administration | 00000023200017 | ∅
+| (1 row)
+|
+| ROLLBACK
+| --- C12. LE SQUAT : T récupère son entreprise par un TRANSFERT (attendu : S retirée avec la note, T pro et titulaire, S prévenu, deux lignes au journal)
+| BEGIN
+| SET
+| SET
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| RESET
+| chez_le_squatteur | retiree | retrait_motif
+| ----
+| t | t | Attestation d'assurance nominative de T vue : S ne l'a pas.
+| f | f | ∅
+| (2 rows)
+|
+| type_de_t
+| ----
+| pro
+| (1 row)
+|
+| type | sans_acteur
+| ----
+| entreprise_retiree | t
+| (1 row)
+|
+| action | cible_type | cles_apres
+| ----
+| entreprise_transferee | entreprise | {siren,statut}
+| demande_pro_acceptee | demande_pro | {motif,siren,statut}
+| (2 rows)
+|
+| ROLLBACK
+| --- C13. …et le squatteur ne peut pas la REPRENDRE (attendu : ERROR OP007)
+| BEGIN
+| SET
+| SET
+| fait
+| ----
+| t
+| (1 row)
+|
+| SET
+| ERREUR OP007 Cette entreprise est déjà rattachée à un compte Opus, ou réservée par l'administration d'Opus : elle ne peut pas être rattachée automatiquement.
+| ROLLBACK
+| --- C14. l'administration REFUSE C, avec une note (attendu : refusee | la note | demande_pro_refusee menant à la demande | journal demande_pro_refusee)
+| BEGIN
+| SET
+| SET
+| fait
+| ----
+| t
+| (1 row)
+|
+| RESET
+| statut | note | tranchee_par_l_admin
+| ----
+| refusee | Aucune entreprise à ce numéro, même avec votre avis Sirene. | t
+| (1 row)
+|
+| type | mene_a_la_demande
+| ----
+| demande_pro_refusee | t
+| (1 row)
+|
+| action
+| ----
+| demande_pro_refusee
+| (1 row)
+|
+| ROLLBACK
+| --- C15. RETIRER une entreprise sans la donner à personne (attendu : retiree | entreprise_retiree | {siren,statut} | notification)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| true
+| (1 row)
+|
+| RESET
+| action | cible_type | cles_apres
+| ----
+| entreprise_retiree | entreprise | {siren,statut}
+| (1 row)
+|
+| prevenu
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- C16. le résumé de l'administration compte les demandes ouvertes (attendu : 3)
+| BEGIN
+| SET
+| SET
+| demandes_pro
+| ----
+| 3
+| (1 row)
+|
+| ROLLBACK
+| --- C17. l'export RGPD de A porte son entreprise, retirées comprises ; celui de C, sa demande (attendu : 2 | 1)
+| BEGIN
+| SET
+| SET
+| demenage
+| ----
+| t
+| (1 row)
+|
+| identites_de_a
+| ----
+| 2
+| (1 row)
+|
+| SET
+| demandes_de_c
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- C18. A supprime son compte : l'identité part avec lui ; C aussi : sa demande part (attendu : 0 | 0 | 0 | 0)
+| BEGIN
+| SET
+| SET
+| donnees_effacees
+| ----
+| t
+| (1 row)
+|
+| SET
+| donnees_effacees
+| ----
+| t
+| (1 row)
+|
+| RESET
+| identites_de_a | fiche_de_a | demandes_de_c | notifs_de_la_demande
+| ----
+| 0 | 0 | 0 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C19. …et par la cascade depuis auth.users, le second chemin (attendu : 0 | 0)
+| BEGIN
+| DELETE 2
+| identites_de_a | demandes_de_t
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C20. LE JOURNAL DU BADGE ne garde plus la fiche : l'artisan part, plus de téléphone ni de SIRET (attendu : badge_pose = t, puis {assurance_valide,kbis_valide,rge,verification_statut,verifie} | f | f)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| admin_verifier_pro
+| ----
+|
+| (1 row)
+|
+| RESET
+| badge_pose
+| ----
+| t
+| (1 row)
+|
+| SET
+| SET
+| compte_parti
+| ----
+| t
+| (1 row)
+|
+| RESET
+| cles_apres | garde_le_telephone | garde_le_siret
+| ----
+| {assurance_valide,kbis_valide,rge,verification_statut,verifie} | f | f
+| (1 row)
+|
+| ROLLBACK
+| --- C21. le compteur d'appels, appelé par la fonction Edge (attendu : t | t | f — la troisième dépasse 2)
+| BEGIN
+| SET
+| premier | second | troisieme
+| ----
+| t | t | f
+| (1 row)
+|
+| ROLLBACK
+| --- C22. l'éditeur SQL (auth.uid() vide) change encore un type : la porte de l'administration (attendu : UPDATE 1)
+| BEGIN
+| UPDATE 1
+| ROLLBACK
+| --- C23. …le VRAI TITULAIRE la récupère par sa demande : l'administration ACCEPTE après le retrait, et lève le gel (attendu : t | acceptee | pro | 1 identité active, chez T | 0 gelée)
+| BEGIN
+| SET
+| SET
+| retiree
+| ----
+| t
+| (1 row)
+|
+| statut
+| ----
+| acceptee
+| (1 row)
+|
+| RESET
+| type_de_t | active_chez_t | gelees
+| ----
+| pro | 1 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C24. une demande pour UN numéro, puis un passage pro avec UN AUTRE : la demande est ANNULÉE, pas « acceptée » (attendu : annulee | « Compte ouvert avec une autre entreprise (SIREN 000000216) … »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| devenu_pro
+| ----
+| t
+| (1 row)
+|
+| RESET
+| statut | note
+| ----
+| annulee | Compte ouvert avec une autre entreprise (SIREN 000000216) : cette demande est close.
+| (1 row)
+|
+| ROLLBACK
+| --- C25. compléter ou annuler SA demande ne rend pas l'administrateur, ni l'export RGPD (attendu : f | f | f)
+| BEGIN
+| SET
+| SET
+| complete_le_rend | annule_le_rend | export_le_rend
+| ----
+| f | f | f
+| (1 row)
+|
+| ROLLBACK
+| --- C26. LE JOURNAL D'UNE DEMANDE DE MÉTIERS ne garde que l'état, même après le départ de l'artisan (attendu : {statut} | {statut} | la note de l'administration | f — le motif libre de l'artisan est parti)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| admin_traiter_metier_demande
+| ----
+|
+| (1 row)
+|
+| RESET
+| DELETE 1
+| cles_avant | cles_apres | motif | garde_le_texte_du_pro
+| ----
+| {statut} | {statut} | Couvreur demande une décennale à votre nom. | f
+| (1 row)
+|
+| ROLLBACK
+|
+| --- FIN. Ménage fait (attendu : 0 | 0 | 0)
+| comptes | preuves | demandes
+| ----
+| 0 | 0 | 0
+| (1 row)
+|

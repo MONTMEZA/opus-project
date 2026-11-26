@@ -1,0 +1,237 @@
+# Ce que doit rendre supabase/essais-section-41.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-41` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-41
+
+[partie essai]
+erreurs: 6
+valeurs-jugees: 7
+[erreurs]
+| @ === 7. …et un VISITEUR sans compte est REFUSE, pas juste a zero ===
+|   42501 permission denied for table clients
+| @ === 8. B ne peut pas ECRIRE dans le carnet de A ===
+|   42501 new row violates row-level security policy for table "clients"
+| @ === 9. Un nom vide est refuse ===
+|   23514 new row for relation "clients" violates check constraint "client_nom_check"
+| @ === 10. Un SIRET de trois chiffres est refuse ===
+|   23514 new row for relation "clients" violates check constraint "client_siret_check"
+| @ === 11. Un code postal qui n en est pas un est refuse ===
+|   23514 new row for relation "clients" violates check constraint "client_code_postal_check"
+| @ === 12. Une adresse qui ne PEUT PAS etre un e-mail est refusee ===
+|   23514 new row for relation "clients" violates check constraint "client_email_check"
+[valeurs]
+| deux_martin_attendu_2 = 2
+| vraiment_en_base_attendu_1 = 1
+| ce_que_b_lit_attendu_0 = 0
+| vraiment_en_base_attendu_1 = 1
+| apres_suppression_attendu_0 = 0
+| toujours_la_attendu_1 = 1
+| carnet_restant_attendu_0 = 0
+[sortie]
+| INSERT 0 2
+| BEGIN
+| INSERT 0 2
+| COMMIT
+|
+| === 1. A ecrit une fiche client, et le declencheur la nettoie ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| nom | siret | telephone | email | adresse | code_postal | ville | notes_vidées | archive | type
+| ----
+| SCI du Moulin | 12345678900012 | 06 12 34 56 78 | contact@sci-moulin.fr | 4 rue des Lilas | 13410 | Lambesc | t | f | entreprise
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. Un PARTICULIER perd son SIRET, sans un mot ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| nom | type | siret_vidé
+| ----
+| Mme Dupont | particulier | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3. …et le changement de type le vide AUSSI ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| avant
+| ----
+| 12345678900012
+| (1 row)
+|
+| UPDATE 1
+| RESET
+| type | siret_vidé
+| ----
+| particulier | t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4. DEUX Martin differents sont acceptes ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 2
+| RESET
+| deux_martin_attendu_2
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5. `modifie_le` est posee par la BASE ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| date_du_client_ignorée
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. B ne LIT RIEN du carnet de A ===
+| BEGIN
+| INSERT 0 1
+| vraiment_en_base_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| SET
+| ce_que_b_lit_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. …et un VISITEUR sans compte est REFUSE, pas juste a zero ===
+| BEGIN
+| INSERT 0 1
+| vraiment_en_base_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| SET
+| ERREUR 42501 permission denied for table clients
+| ROLLBACK
+|
+| === 8. B ne peut pas ECRIRE dans le carnet de A ===
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "clients"
+| ROLLBACK
+|
+| === 9. Un nom vide est refuse ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "clients" violates check constraint "client_nom_check"
+| ROLLBACK
+|
+| === 10. Un SIRET de trois chiffres est refuse ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "clients" violates check constraint "client_siret_check"
+| ROLLBACK
+|
+| === 11. Un code postal qui n en est pas un est refuse ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "clients" violates check constraint "client_code_postal_check"
+| ROLLBACK
+|
+| === 12. Une adresse qui ne PEUT PAS etre un e-mail est refusee ===
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "clients" violates check constraint "client_email_check"
+| ROLLBACK
+|
+| === 13. A supprime une fiche de SON carnet — c est son droit ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| DELETE 1
+| RESET
+| apres_suppression_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 14. B ne supprime pas une fiche de A ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| DELETE 0
+| RESET
+| toujours_la_attendu_1
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 15. L EXPORT RGPD contient le carnet ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| la_clé_existe | combien
+| ----
+| t | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 16. Le compte part, le carnet part avec lui ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| compte_prepare
+| ----
+| t
+| (1 row)
+|
+| RESET
+| carnet_restant_attendu_0
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| DELETE 2
+| COMMIT
+| DELETE 2
+|
+| ############ FIN DES ESSAIS DE LA SECTION 41 ############

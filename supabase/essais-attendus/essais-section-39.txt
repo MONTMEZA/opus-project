@@ -1,0 +1,172 @@
+# Ce que doit rendre supabase/essais-section-39.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-39` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-39
+
+[partie essai]
+erreurs: 1
+valeurs-jugees: 0
+[erreurs]
+| @ === 7. UN RECIT TROP LONG EST REFUSE ===
+|   23514 new row for relation "chantiers" violates check constraint "chantier_recit_court"
+[valeurs]
+[sortie]
+| CREATE FUNCTION
+| === 0. LE JEU D ESSAI EST BIEN CE QU IL PRETEND ETRE ===
+| -- attendu : Autre | pro | t ; Moi | pro | t ; puis un chantier a Moi
+| BEGIN
+| nom | type | a_une_fiche
+| ----
+| Autre | pro | t
+| Moi | pro | t
+| (2 rows)
+|
+| chantier_a_moi
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 1. UN CHANTIER NAIT SANS RECIT ===
+| BEGIN
+| pas_de_recit | pas_de_date
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| === 2. ECRIRE LE RECIT POSE LA DATE TOUT SEUL ===
+| BEGIN
+| UPDATE 1
+| date_posee | date_fraiche
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| === 3. UNE DATE ENVOYEE PAR LE CLIENT EST IGNOREE ===
+| BEGIN
+| UPDATE 1
+| la_base_a_decide
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 4. LE RECIT NE BOUGE PAS => SA DATE NON PLUS ===
+| BEGIN
+| UPDATE 1
+| pg_sleep
+| ----
+|
+| (1 row)
+|
+| UPDATE 1
+| date_inchangee
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 5. EFFACER LE RECIT EFFACE SA DATE ===
+| BEGIN
+| UPDATE 1
+| UPDATE 1
+| plus_de_recit | plus_de_date
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| === 6. UNE CHAINE DE BLANCS N EST PAS UN RECIT ===
+| BEGIN
+| UPDATE 1
+| ramene_a_null | sans_date
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| === 7. UN RECIT TROP LONG EST REFUSE ===
+| BEGIN
+| ERREUR 23514 new row for relation "chantiers" violates check constraint "chantier_recit_court"
+| ROLLBACK
+| === 8. …ET 2000 PASSE ===
+| BEGIN
+| UPDATE 1
+| longueur
+| ----
+| 2000
+| (1 row)
+|
+| ROLLBACK
+| === 9. UN AUTRE PRO NE PEUT PAS ECRIRE MON RECIT ===
+| BEGIN
+| SET
+| SET
+| UPDATE 0
+| -- doit afficher UPDATE 0 :
+| RESET
+| recit_intact
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| === 10. …ET SON PROPRIETAIRE, SI ===
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| recit_ecrit | date_posee
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| === 11. LE RECIT EST PUBLIC — c est la vitrine ===
+| BEGIN
+| UPDATE 1
+| SET
+| ce_qu_un_visiteur_lit
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| ROLLBACK
+| === 12. L EXPORT RGPD EMPORTE LE RECIT ===
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| recit_exporte
+| ----
+| Un texte exporte.
+| (1 row)
+|
+| RESET
+| ROLLBACK
+| === 13. SUPPRIMER LE CHANTIER EMPORTE LE RECIT, PAS LES ETAPES ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| DELETE 1
+| publications_restantes
+| ----
+| 1
+| (1 row)
+|
+| publications_decousues
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === FIN DES ESSAIS DE LA SECTION 39 ===

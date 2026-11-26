@@ -1,0 +1,1899 @@
+# Ce que doit rendre supabase/essais-section-49.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-49` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-49
+
+[partie essai]
+erreurs: 79
+valeurs-jugees: 200
+[erreurs]
+| @ --- 4a. quantité 0 → devis_ligne_quantite_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| @ --- 4b. quantité −1 → devis_ligne_quantite_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| @ --- 4c. quantité 100 000 000 (100 000 m²) → devis_ligne_quantite_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| @ --- 4d. quantité 3 000 000 000 → devis_ligne_quantite_check (jamais un 22003)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| @ --- 4e. prix −1 → devis_ligne_prix_check (et NON offert_check : l écart n° 1, « <> 0 »)
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_prix_check"
+| @ --- 4f. prix 0 sans « Offert » → devis_ligne_offert_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_offert_check"
+| @ --- 4g. taux 1960 (l ancien taux normal) → devis_ligne_taux_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_taux_check"
+| @ --- 4h. taux 105 (1,05 %, outre-mer) sur une LIGNE → devis_ligne_taux_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_taux_check"
+| @ --- 4i. un titre qui porte un prix → devis_ligne_forme_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| @ --- 4j. un type « remise » → devis_ligne_type_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_type_check"
+| @ --- 4k. l unité « ml » → devis_ligne_unite_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_unite_check"
+| @ --- 4l. une désignation faite d un U+200B → devis_ligne_designation_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_designation_check"
+| @ --- 4m. des surfaces sur un POSTE → devis_ligne_forme_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| @ --- 4n. une surface de 0 sur une PIÈCE → devis_ligne_surfaces_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_surfaces_check"
+| @ --- 4o. un poste SANS taux → devis_ligne_forme_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| @ --- 4p. un « Offert » dont la VALEUR dépasse le plafond → devis_ligne_total_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_total_check"
+| @ --- retenue 501 (5,01 %) → devis_retenue_check
+|   23514 new row for relation "devis" violates check constraint "devis_retenue_check"
+| @ --- retenue 0 → devis_retenue_check (0 n est pas « aucune » : aucune, c est vide)
+|   23514 new row for relation "devis" violates check constraint "devis_retenue_check"
+| @ --- source « qr » → devis_source_check
+|   23514 new row for relation "devis" violates check constraint "devis_source_check"
+| @ --- statut « remis » écrit par un CLIENT → permission denied for table devis (lot 2a : le droit de colonne refuse AVANT la contrainte, 49.7)
+|   42501 permission denied for table devis
+| @ --- statut « remis » écrit en SUPERUTILISATEUR (la contrainte reste la garde de tout ce qui n est pas un client) → devis_statut_check
+|   23514 new row for relation "devis" violates check constraint "devis_statut_check"
+| @ --- code postal « 1341 » → devis_lieu_code_postal_check
+|   23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| @ --- objet de 1 001 caractères → devis_objet_check
+|   23514 new row for relation "devis" violates check constraint "devis_objet_check"
+| @ === 4 ter. LA DOUBLE FAUTE : quantité 0 ET prix 0 sans « Offert » → devis_ligne_offert_check (l ordre alphabétique) ===
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_offert_check"
+| @ --- 5a. envoyé par A → permission denied for table devis_lignes
+|   42501 permission denied for table devis_lignes
+| @ --- 10a. par A → permission denied for table devis (lot 2a : le droit de colonne, 49.7)
+|   42501 permission denied for table devis
+| @ --- 11b. insert direct → permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+| @ --- 11c. update → permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+| @ --- 11d. delete → permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+| @ --- 11e. les trois, chacune derrière un savepoint (insert, update, delete → permission denied for table devis_tva ×3), puis la ventilation relue en superutilisateur : intacte
+|   42501 permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+|   42501 permission denied for table devis_tva
+| @ -- un visiteur sans compte → permission denied for table devis (le droit de table, pas une liste vide)
+|   42501 permission denied for table devis
+| @ --- 13a. B crée un devis au nom de A → new row violates row-level security policy for table "devis"
+|   42501 new row violates row-level security policy for table "devis"
+| @ --- 13b. B ajoute une ligne au devis de A → new row violates row-level security policy for table "devis_lignes"
+|   42501 new row violates row-level security policy for table "devis_lignes"
+| @ --- 14a. client_id = la fiche de B → OP013
+|   OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| @ --- 14b. quote_request_id = la demande adressée à B → OP013
+|   OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| @ --- 14c. sos_request_id = l urgence adressée à B → OP013
+|   OP013 Cette urgence ne vous a pas été adressée : un devis ne se rattache qu'à vos propres urgences.
+| @ --- 14d. une fiche qui N EXISTE PAS → OP013 aussi (jamais 23503 : aucun oracle par l erreur)
+|   OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| @ -- A le remet à QA, qui n est plus à lui → OP013 (c est ce refus qui rend crédibles les deux UPDATE 1)
+|   OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| @ --- le devis : INSERT 0 1, puis le même identifiant → 23505 devis_pkey
+|   23505 duplicate key value violates unique constraint "devis_pkey"
+| @ --- la ligne : INSERT 0 1, puis le même identifiant → 23505 devis_lignes_pkey
+|   23505 duplicate key value violates unique constraint "devis_lignes_pkey"
+| @ --- a. une création liée à la fiche de B → OP013
+|   OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| @ --- b. une création liée à la demande adressée à B → OP013
+|   OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| @ --- c. une création liée à l urgence adressée à B → OP013
+|   OP013 Cette urgence ne vous a pas été adressée : un devis ne se rattache qu'à vos propres urgences.
+| @ --- d. une création liée à une fiche qui N EXISTE PAS → OP013 (jamais 23503)
+|   OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| @ --- 15a. A déplace le receveur dans son second devis → permission denied for table devis_lignes
+|   42501 permission denied for table devis_lignes
+| @ --- 16a. q = 1351, p = 7 401 924 500 → total = plafond + 1 c → devis_ligne_total_check
+|   23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_total_check"
+| @ --- 16c. un poste de 90 000 000,00 € à 20 % : HT sous le plafond, TTC au-dessus → devis_plafond_check
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @ --- 16d. deux postes de 60 000 000,00 € : la SECONDE ligne → devis_plafond_check
+|   23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| @ -- la 501e → OP014, phrase complète
+|   OP014 Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.
+| @ -- la ligne passe dans le devis plein → OP014
+|   OP014 Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.
+| @ --- 19a. A envoie une date de création → permission denied for table devis
+|   42501 permission denied for table devis
+| @ --- 19a bis. A change la source → permission denied for table devis
+|   42501 permission denied for table devis
+| @ -- U+2002 n est PAS dans la liste (JavaScript non plus) → devis_lieu_code_postal_check
+|   23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| @ -- la LETTRE v n est pas un blanc : 13v410 → devis_lieu_code_postal_check
+|   23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| @ --- 32a. une modification ancienne (n° 11) arrivée APRÈS la plus récente (n° 12) → OP015 ; la base garde 60 €
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32b. une ligne écrite SANS numéro (0, la valeur par défaut) → OP016 (« mettez Opus à jour », et non « un autre appareil »)
+|   OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour cette ligne : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| @ --- 32c. une modification de ligne qui ne change PAS le numéro → OP015
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32d. l en-tête : la plus récente (n° 12, « Nouveau ») passe ; l ancienne (n° 11) → OP015
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32e. l en-tête écrit SANS numéro neuf → OP015 (l horloge ne fait que monter)
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32f. L INSERTION TARDIVE d une ligne retirée : la file LÈVE l horloge (n° 12), supprime sous condition (n° 13) ; l insertion (n° 11) arrive → OP015
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32j. l horloge ne RECULE jamais : A tente de la ramener à 5 → OP015
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32k. LA FRONTIÈRE : une ligne écrite au numéro ÉGAL à l horloge (10) — la « même milliseconde » de 49.5 bis → OP015 (relecture des essais, M2 : rien ne tenait le « <= »)
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32l. LE DÉPLACEMENT TARDIF (49.5 bis, point 6) : la ligne est retouchée au n° 20 dans son devis ; un déplacement plus ancien (n° 15) vers un second devis (horloge 1) arrive ensuite → OP015 — en SUPERUTILISATEUR depuis le lot 2a : un client ne déplace plus de ligne (15a)
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32m. LE CONTRAT « un ordre = une ligne » : deux lignes écrites par UN SEUL ordre, au MÊME numéro → la seconde OP015 (et deux numéros distincts et croissants passent : le cas 6)
+|   OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| @ --- 32n. LES BORNES DU NUMÉRO (OP016) : generation NULL sur une ligne → OP016 (et non 23502 en anglais)
+|   OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour cette ligne : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| @ --- 32o. un devis qui naîtrait à l horloge −1 (sous lui, une ligne SANS numéro passait) → OP016
+|   OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour ce devis : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| @ --- 32p. un en-tête poussé au-delà de 2^53 − 1 (le devis ne s écrirait plus, ni ne se supprimerait par la file) → OP016
+|   OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour ce devis : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| @ --- 33a. un visiteur appelle mes_donnees() → permission denied for function mes_donnees
+|   42501 permission denied for function mes_donnees
+| @ --- 33b. un visiteur appelle recalcule_devis() → permission denied for function recalcule_devis
+|   42501 permission denied for function recalcule_devis
+| @ --- 33c. un visiteur appelle mes_entreprises() → permission denied for function mes_entreprises
+|   42501 permission denied for function mes_entreprises
+| @ --- 33d. un connecté SANS sub : A lit 1, puis le jeton vide lit 0 / 0 / 0, son export ne rend aucun devis, et sa création au nom de A → row-level security policy for table "devis"
+|   42501 new row violates row-level security policy for table "devis"
+| @ --- 33e. un sub INCONNU (aucun compte) : 0, puis sa création au nom de A → row-level security policy for table "devis"
+|   42501 new row violates row-level security policy for table "devis"
+| @ --- 33h. B envoie l identifiant du devis de A → 23505 devis_pkey : il apprend que cet UUID EXISTE, et rien d autre (dit en 49.2)
+|   23505 duplicate key value violates unique constraint "devis_pkey"
+| @ --- 33j. …« on conflict (id) do update » sur le devis de A → new row violates row-level security policy (USING expression) for table "devis"
+|   42501 new row violates row-level security policy (USING expression) for table "devis"
+| @ --- 33k. …et sur une LIGNE de A, par une ligne posée dans SON PROPRE devis (l insertion passe la politique, le conflit vise la ligne de A) → new row violates row-level security policy (USING expression) for table "devis_lignes"
+|   42501 new row violates row-level security policy (USING expression) for table "devis_lignes"
+| @ --- 34a. vingt devis de A liés à QA ET SA : INSERT 0 20 ; le 21e → OP017
+|   OP017 Vous avez déjà 20 devis pour cette demande : supprimez un brouillon dont vous n'avez plus besoin avant d'en commencer un autre.
+| @ --- 34b. le 21e par une MODIFICATION (un devis sans lien qu on rattache à l urgence) → OP017
+|   OP017 Vous avez déjà 20 devis pour cette urgence : supprimez un brouillon dont vous n'avez plus besoin avant d'en commencer un autre.
+[valeurs]
+| devis_de_a_attendu_1 = 1
+| lignes_attendu_9 = 9
+| taux_presents_attendu_2 = 2
+| devis_en_superutilisateur_attendu_1 = 1
+| liste_fermee_attendu_t = t
+| liste_fermee_attendu_t = t
+| liste_fermee_attendu_t = t
+| colonnes_interdites_attendu_0 = 0
+| check_attendu_45 = 45
+| non_suffixees_attendu_0 = 0
+| numerotees_attendu_0 = 0
+| prix_attendu_1000 = 1000
+| total_attendu_0 = 0
+| prix_attendu_1000 = 1000
+| total_attendu_1000 = 1000
+| sept_unites_acceptees_attendu_t = t
+| lignes_attendu_7 = 7
+| total_attendu_8333 = 8333
+| tva_5c_10pc_attendu_1 = 1
+| tva_300c_5_5pc_attendu_17 = 17
+| tva_1000c_1_05pc_attendu_11 = 11
+| tva_200c_1_75pc_attendu_4 = 4
+| negatif_attendu_null = ∅
+| ligne_attendu_8333 = 8333
+| quantite_nulle_attendu_null = ∅
+| prix_negatif_attendu_null = ∅
+| taux_9224_attendu_null = ∅
+| taux_9000_attendu_899999999999999 = 899999999999999
+| taux_9001_attendu_null = ∅
+| lignes_avant_attendu_9 = 9
+| lignes_apres_attendu_8 = 8
+| lignes_apres_attendu_0 = 0
+| ecart_ttc_attendu_0 = 0
+| ecart_ht_aux_lignes_attendu_0 = 0
+| ecart_tva_aux_lignes_attendu_0 = 0
+| couples_compares_attendu_4 = 4
+| ecarts_ventilation_attendu_0 = 0
+| ventilation_lue_attendu_2 = 2
+| a_lit_son_devis_attendu_1 = 1
+| b_devis_attendu_0 = 0
+| b_lignes_attendu_0 = 0
+| b_tva_attendu_0 = 0
+| p_devis_attendu_0 = 0
+| p_lignes_attendu_0 = 0
+| p_tva_attendu_0 = 0
+| devis_avant_attendu_1 = 1
+| lignes_avant_attendu_9 = 9
+| devis_attendu_1 = 1
+| lignes_attendu_9 = 9
+| liens_remis_attendu_t = t
+| cree_avec_ses_liens_attendu_1 = 1
+| premiere_acceptee_attendu_1 = 1
+| lignes_attendu_500 = 500
+| plein_attendu_500 = 500
+| second_attendu_1 = 1
+| cree_aujourd_hui_attendu_t = t
+| source_attendu_demande = demande
+| toujours_aujourd_hui_attendu_t = t
+| modifie_le_a_bouge_attendu_t = t
+| objet_vide_attendu_t = t
+| cp_attendu_13410 = 13410
+| delai_vide_attendu_t = t
+| designation_attendu_pose = pose
+| cp_nbsp_attendu_13410 = 13410
+| cp_espace_fine_attendu_13410 = 13410
+| cp_tab_verticale_attendu_13410 = 13410
+| fiche_avant_attendu_1 = 1
+| fiche_apres_attendu_0 = 0
+| devis_attendu_1 = 1
+| lignes_attendu_9 = 9
+| client_vide_attendu_t = t
+| autres_liens_intacts_attendu_t = t
+| horloge_inchangee_attendu_10 = 10
+| qa_avant_attendu_1 = 1
+| sa_avant_attendu_1 = 1
+| compte_p_attendu_0 = 0
+| qa_apres_attendu_0 = 0
+| sa_apres_attendu_0 = 0
+| devis_attendu_1 = 1
+| demande_vide_attendu_t = t
+| urgence_vide_attendu_t = t
+| fiche_intacte_attendu_t = t
+| source_attendu_demande = demande
+| lignes_attendu_9 = 9
+| devis_emis_attendu_1 = 1
+| devis_lignes_attendu_9 = 9
+| devis_tva_attendu_2 = 2
+| demandes_de_devis_presente_attendu_t = t
+| cle_devis_attendu_f = f
+| premiere_ligne_attendu_rez_de_chaussee = Rez-de-chaussée
+| horloge_exportee_attendu_10 = 10
+| b_devis_attendu_0 = 0
+| b_lignes_attendu_0 = 0
+| b_tva_attendu_0 = 0
+| demandes_envoyees_attendu_2 = 2
+| p_devis_attendu_0 = 0
+| anon_un_droit_attendu_f = f
+| anon_un_droit_attendu_f = f
+| anon_un_droit_attendu_f = f
+| devis_et_lignes_table_select_delete_attendu_t = t
+| ventilation_lecture_seule_attendu_t = t
+| recalcule_public_attendu_f = f
+| recalcule_anon_attendu_f = f
+| recalcule_authentifie_attendu_f = f
+| public_attendu_f = f
+| anon_attendu_f = f
+| authentifie_attendu_f = f
+| public_attendu_f = f
+| anon_attendu_f = f
+| authentifie_attendu_f = f
+| public_attendu_f = f
+| anon_attendu_f = f
+| authentifie_attendu_f = f
+| public_attendu_f = f
+| anon_attendu_f = f
+| authentifie_attendu_f = f
+| authentifie_attendu_t = t
+| anon_attendu_f = f
+| authentifie_attendu_t = t
+| anon_attendu_f = f
+| authentifie_attendu_t = t
+| anon_attendu_f = f
+| public_un_droit_attendu_f = f
+| public_un_droit_attendu_f = f
+| public_un_droit_attendu_f = f
+| anon_colonne_attendu_f = f
+| public_colonne_attendu_f = f
+| authentifie_colonne_interdite_attendu_f = f
+| anon_colonne_attendu_f = f
+| public_colonne_attendu_f = f
+| authentifie_colonne_interdite_attendu_f = f
+| anon_colonne_attendu_f = f
+| public_colonne_attendu_f = f
+| authentifie_colonne_interdite_attendu_f = f
+| liste_fermee_attendu_t = t
+| definer_attendu_recalcule_devis = recalcule_devis
+| admin_attendu_0 = 0
+| definer_ouvertes_attendu_31 = 31
+| nouvelles_attendu_tiret = —
+| definer_fermees_attendu_32 = 32
+| nouvelles_attendu_tiret = —
+| fonctions_dependantes_attendu_tiret = —
+| vues_ou_regles_attendu_0 = 0
+| declencheurs_exacts_attendu_t = t
+| regles_sur_elles_attendu_0 = 0
+| using_exact_attendu_t = t
+| with_check_exact_attendu_t = t
+| using_exact_attendu_t = t
+| with_check_exact_attendu_t = t
+| using_exact_attendu_t = t
+| with_check_exact_attendu_t = t
+| politiques_attendu_3 = 3
+| anon_ou_public_attendu_0 = 0
+| fautes_attendu_0 = 0
+| ecriture_sur_tva_attendu_0 = 0
+| devis_sans_lien_attendu_2 = 2
+| nombre_annonce_attendu_69 = 69
+| cas_lus_attendu_69 = 69
+| suites_attendu_66 = 66
+| conditions_attendu_23 = 23
+| appels_attendu_19 = 19
+| ecarts_des_cas_attendu_0 = 0
+| bilan_attendu_ecarts_0 = écarts : 0
+| devis_restants_attendu_0 = 0
+| ordre_attendu_ri_puis_trg_recalcule_devis = RI_ConstraintTrigger_c_… → RI_ConstraintTrigger_c_… → trg_recalcule_devis
+| prix_attendu_6000 = 6000
+| objet_attendu_nouveau = Nouveau
+| horloge_attendu_12 = 12
+| avant_attendu_0 = 0
+| apres_attendu_0 = 0
+| avant_attendu_0 = 0
+| apres_attendu_0 = 0
+| ligne_revenue_attendu_1 = 1
+| avant_attendu_1 = 1
+| apres_attendu_1 = 1
+| avant_attendu_1 = 1
+| apres_attendu_1 = 1
+| horloge_attendu_10 = 10
+| designation_attendu_retouchee = Retouchée
+| numero_attendu_20 = 20
+| horloge_attendu_9007199254740991 = 9007199254740991
+| a_lit_son_devis_attendu_1 = 1
+| sans_sub_devis_attendu_0 = 0
+| sans_sub_lignes_attendu_0 = 0
+| sans_sub_tva_attendu_0 = 0
+| sans_sub_export_attendu_0 = 0
+| a_lit_son_devis_attendu_1 = 1
+| inconnu_lit_attendu_0 = 0
+| b_est_admin_attendu_t = t
+| admin_lit_devis_attendu_0 = 0
+| admin_lit_lignes_attendu_0 = 0
+| a_bloque_lit_toujours_attendu_1 = 1
+| b_lit_attendu_0 = 0
+| toujours_a_a_attendu_t = t
+| devis_lies_attendu_20 = 20
+| urgence_liee_attendu_20 = 20
+| lies_attendu_20 = 20
+| lies_avant_attendu_20 = 20
+| suppression_de_p_attendu_t = t
+| devis_detaches_attendu_20 = 20
+[sortie]
+| DELETE 0
+| INSERT 0 2
+| BEGIN
+| INSERT 0 3
+| INSERT 0 2
+| INSERT 0 2
+| INSERT 0 2
+| COMMIT
+| PREPARE
+| PREPARE
+| PREPARE
+| PREPARE
+|
+| === 0. LA DONNÉE EXISTE — A lit son devis de référence, et les totaux sont ceux calculés à la main ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| devis_de_a_attendu_1
+| ----
+| 1
+|
+| lignes_attendu_9
+| ----
+| 9
+|
+| taux_presents_attendu_2
+| ----
+| 2
+|
+| -- attendu : 155045 | 20904 | 175949 | 1000:101055:10106:3,2000:53990:10798:2 | horloge 10
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 155045 | 20904 | 175949 | 1000:101055:10106:3,2000:53990:10798:2 | 10
+|
+| -- la ligne « Offert » : prix 4500 GARDÉ, total 0 ; l'option : 22000, hors totaux
+| designation | prix | total | offert
+| ----
+| Joint silicone | 4500 | 0 | t
+| Niche murale | 22000 | 22000 | f
+|
+| RESET
+| devis_en_superutilisateur_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 1. LES COLONNES — la liste FERMÉE (cahier §2.2-2.4, plus `generation`, 49.5 bis, plus les CONDITIONS du lot 2a, 49.4 bis : neuf sur devis, une sur devis_tva, plus « À QUEL TITRE » ET LE CHANTIER, 2b-2, 49.4 ter : cinq sur devis, toutes nullables, plus 2b-3 : la RÉPARATION URGENTE sur une ligne, 49.3 bis, not null, et la DÉCENNALE et le MOMENT DE L’ACOMPTE sur devis, 49.4 quater, nullables, plus 2b-4 : le PRIX DU DEVIS LUI-MÊME sur devis, 49.4 quinquies, nullable, plus 2b-5 : les DÉCHETS DU CHANTIER sur devis, 49.4 sexies, huit nullables dont trois TABLEAUX, lus par leur udt_name (_text, _uuid : data_type ne dit que « ARRAY »), plus 2b-6 : les TRAVAUX D’ÉNERGIE ET LE LABEL RGE sur devis, 49.4 septies, quatre nullables dont trois TABLEAUX — 48 colonnes sur devis) ===
+| table_name | liste_fermee_attendu_t | colonnes
+| ----
+| devis | t | 48
+| devis_lignes | t | 18
+| devis_tva | t | 6
+|
+| colonnes_interdites_attendu_0
+| ----
+| 0
+|
+|
+| === 2. LES CONTRAINTES — 45 check (23 du lot 1, neuf du lot 2a : acompte, acompte_nature, acompte_une_forme, calculs, remise, remise_une_forme, validite, tva_remise, tva_vide ; une de 2b-2 : pour_qui ; une de 2b-3 : ligne_urgence ; une de 2b-4 : cout ; sept de 2b-5 : dechets_cout, dechets_flux, dechets_lieux, dechets_quantite, dechets_sans_depot, dechets_sur_place, dechets_unite ; trois de 2b-6 : energie_sans_label, energie_sous_traitants, energie_travaux), toutes en _check, aucune numérotée ===
+| check_attendu_45 | non_suffixees_attendu_0 | numerotees_attendu_0
+| ----
+| 45 | 0 | 0
+|
+| -- les onze de devis_lignes, dans l'ordre où PostgreSQL les applique (designation < forme < offert < prix < quantite < surfaces < taux < total < type < unite < urgence)
+| contraintes_de_ligne
+| ----
+| devis_ligne_designation_check devis_ligne_forme_check devis_ligne_offert_check devis_ligne_prix_check devis_ligne_quantite_check devis_ligne_surfaces_check devis_ligne_taux_check devis_ligne_total_check devis_ligne_type_check devis_ligne_unite_check devis_ligne_urgence_check
+|
+|
+| === 3. D4-a — les seules clés obligatoires : l entreprise, le devis ; les liens en SET NULL ===
+| table_ | colonne | obligatoire | en_suppression
+| ----
+| devis | client_id | f | n
+| devis | pro_id | t | c
+| devis | quote_request_id | f | n
+| devis | sos_request_id | f | n
+| devis_lignes | devis_id | t | c
+| devis_tva | devis_id | t | c
+|
+| -- attendu : devis.pro_id t c ; client_id, quote_request_id, sos_request_id f n ; devis_lignes.devis_id t c ; devis_tva.devis_id t c
+|
+| === 4. LES REFUS DE FORME d une ligne — chaque nom lu (A, jeton, un devis vide) ===
+| --- 4a. quantité 0 → devis_ligne_quantite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| ROLLBACK
+| --- 4b. quantité −1 → devis_ligne_quantite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| ROLLBACK
+| --- 4c. quantité 100 000 000 (100 000 m²) → devis_ligne_quantite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| ROLLBACK
+| --- 4d. quantité 3 000 000 000 → devis_ligne_quantite_check (jamais un 22003)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_quantite_check"
+| ROLLBACK
+| --- 4e. prix −1 → devis_ligne_prix_check (et NON offert_check : l écart n° 1, « <> 0 »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_prix_check"
+| ROLLBACK
+| --- 4f. prix 0 sans « Offert » → devis_ligne_offert_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_offert_check"
+| ROLLBACK
+| --- 4g. taux 1960 (l ancien taux normal) → devis_ligne_taux_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_taux_check"
+| ROLLBACK
+| --- 4h. taux 105 (1,05 %, outre-mer) sur une LIGNE → devis_ligne_taux_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_taux_check"
+| ROLLBACK
+| --- 4i. un titre qui porte un prix → devis_ligne_forme_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| ROLLBACK
+| --- 4j. un type « remise » → devis_ligne_type_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_type_check"
+| ROLLBACK
+| --- 4k. l unité « ml » → devis_ligne_unite_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_unite_check"
+| ROLLBACK
+| --- 4l. une désignation faite d un U+200B → devis_ligne_designation_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_designation_check"
+| ROLLBACK
+| --- 4m. des surfaces sur un POSTE → devis_ligne_forme_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| ROLLBACK
+| --- 4n. une surface de 0 sur une PIÈCE → devis_ligne_surfaces_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_surfaces_check"
+| ROLLBACK
+| --- 4o. un poste SANS taux → devis_ligne_forme_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_forme_check"
+| ROLLBACK
+| --- 4p. un « Offert » dont la VALEUR dépasse le plafond → devis_ligne_total_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_total_check"
+| ROLLBACK
+|
+| === 4 bis. LES REFUS DU DEVIS — chaque nom lu ===
+| --- retenue 501 (5,01 %) → devis_retenue_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_retenue_check"
+| ROLLBACK
+| --- retenue 0 → devis_retenue_check (0 n est pas « aucune » : aucune, c est vide)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_retenue_check"
+| ROLLBACK
+| --- source « qr » → devis_source_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_source_check"
+| ROLLBACK
+| --- statut « remis » écrit par un CLIENT → permission denied for table devis (lot 2a : le droit de colonne refuse AVANT la contrainte, 49.7)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- statut « remis » écrit en SUPERUTILISATEUR (la contrainte reste la garde de tout ce qui n est pas un client) → devis_statut_check
+| BEGIN
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_statut_check"
+| ROLLBACK
+| --- code postal « 1341 » → devis_lieu_code_postal_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| ROLLBACK
+| --- objet de 1 001 caractères → devis_objet_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_objet_check"
+| ROLLBACK
+|
+| === 4 ter. LA DOUBLE FAUTE : quantité 0 ET prix 0 sans « Offert » → devis_ligne_offert_check (l ordre alphabétique) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_offert_check"
+| ROLLBACK
+|
+| === 4 quater. CE QUE LA v1 REFUSAIT ET QUE LA v2 ACCEPTE ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| -- un poste « Main-d œuvre » AU M² : INSERT 0 1 attendu (arrêté du 24/01/2017, art. 2)
+| INSERT 0 1
+| -- un « Offert » sur 10,00 € : prix 1000, total 0
+| INSERT 0 1
+| prix_attendu_1000 | total_attendu_0
+| ----
+| 1000 | 0
+|
+| -- « Offert » éteint : total 1000, le prix revenu tout seul
+| UPDATE 1
+| prix_attendu_1000 | total_attendu_1000
+| ----
+| 1000 | 1000
+|
+| -- les sept unités de devis.js (UNITES), une ligne chacune : INSERT 0 7 attendu, puis les sept relues
+| INSERT 0 7
+| sept_unites_acceptees_attendu_t | lignes_attendu_7
+| ----
+| t | 7
+|
+| ROLLBACK
+|
+| === 5. LE TOTAL D UNE LIGNE VIENT DE LA BASE — total_centimes = 1 sur 2,5 m² à 33,33 € ===
+| --- 5a. envoyé par A → permission denied for table devis_lignes
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis_lignes
+| ROLLBACK
+| --- 5b. envoyé en superutilisateur : remplacé par la base
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| total_attendu_8333
+| ----
+| 8333
+|
+| ROLLBACK
+|
+| === 6. LA MÉTHODE — 3 postes à 33,33 € à 10 % : base 9999, TVA 1000 (et non 999) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| -- attendu : 9999 | 1000 | 10999 | 1000:9999:1000:3
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 9999 | 1000 | 10999 | 1000:9999:1000:3 | 4
+|
+| ROLLBACK
+|
+| === 7. LES FONCTIONS SEULES ===
+| tva_5c_10pc_attendu_1 | tva_300c_5_5pc_attendu_17 | tva_1000c_1_05pc_attendu_11 | tva_200c_1_75pc_attendu_4 | negatif_attendu_null
+| ----
+| 1 | 17 | 11 | 4 | ∅
+|
+| ligne_attendu_8333 | quantite_nulle_attendu_null | prix_negatif_attendu_null
+| ----
+| 8333 | ∅ | ∅
+|
+| -- la borne du taux (écart n° 2) : au-delà de 9000, NULL — et non une erreur 22003 en anglais
+| taux_9224_attendu_null | taux_9000_attendu_899999999999999 | taux_9001_attendu_null
+| ----
+| ∅ | 899999999999999 | ∅
+|
+|
+| === 8. LE RECALCUL DANS LES DEUX SENS ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| -- A retire les gravats (150,00 € à 20 %) — attendu : 140045 | 17904 | 157949 | 1000:101055:10106:3,2000:38990:7798:1
+| lignes_avant_attendu_9
+| ----
+| 9
+|
+| DELETE 1
+| lignes_apres_attendu_8
+| ----
+| 8
+|
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 140045 | 17904 | 157949 | 1000:101055:10106:3,2000:38990:7798:1 | 10
+|
+| -- A passe le receveur de 20 % à 10 % — attendu : 140045 | 14005 | 154050 | 1000:140045:14005:4,2000:0:0:0 (le taux disparu reste, À ZÉRO)
+| UPDATE 1
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 140045 | 14005 | 154050 | 1000:140045:14005:4,2000:0:0:0 | 11
+|
+| -- A retire TOUT — attendu : 0 | 0 | 0 | 1000:0:0:0,2000:0:0:0
+| DELETE 8
+| lignes_apres_attendu_0
+| ----
+| 0
+|
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 0 | 0 | 0 | 1000:0:0:0,2000:0:0:0 | 11
+|
+| ROLLBACK
+|
+| === 9. LES INVARIANTS, sur tous les devis de la base d essai — comparés aux LIGNES, pas à la ventilation elle-même ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| INSERT 0 1
+| INSERT 0 2
+| RESET
+| devis_examines_au_moins_2 | ecart_ttc_attendu_0 | ecart_ht_aux_lignes_attendu_0 | ecart_tva_aux_lignes_attendu_0
+| ----
+| 2 | 0 | 0 | 0
+|
+| -- la ventilation contre les lignes groupées par taux, jointure COMPLÈTE : d abord combien de couples (devis, taux) se comparent (le « 4 » qui rend le « 0 » crédible)
+| couples_compares_attendu_4 | ecarts_ventilation_attendu_0
+| ----
+| 4 | 0
+|
+| ROLLBACK
+|
+| === 10. LES TOTAUX NE S ÉCRIVENT PAS — 100 / 100 envoyés ===
+| --- 10a. par A → permission denied for table devis (lot 2a : le droit de colonne, 49.7)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- 10b. en superutilisateur : la base les RELIT quand même
+| BEGIN
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| -- attendu : relus, 155045 | 20904 | 175949
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 155045 | 20904 | 175949 | 1000:101055:10106:3,2000:53990:10798:2 | 11
+|
+| ROLLBACK
+|
+| === 11. devis_tva NE S ÉCRIT PAS — c est le DROIT DE TABLE qui refuse ===
+| --- 11a. A LIT sa ventilation (le « 1 » qui rend crédibles les refus)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ventilation_lue_attendu_2
+| ----
+| 2
+|
+| ROLLBACK
+| --- 11b. insert direct → permission denied for table devis_tva
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| --- 11c. update → permission denied for table devis_tva
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| --- 11d. delete → permission denied for table devis_tva
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| --- 11e. les trois, chacune derrière un savepoint (insert, update, delete → permission denied for table devis_tva ×3), puis la ventilation relue en superutilisateur : intacte
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SAVEPOINT
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| SAVEPOINT
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| SAVEPOINT
+| ERREUR 42501 permission denied for table devis_tva
+| ROLLBACK
+| RESET
+| -- attendu : 1000:101055:10106:3,2000:53990:10798:2
+| ventilation
+| ----
+| 1000:101055:10106:3,2000:53990:10798:2
+|
+| ROLLBACK
+|
+| === 12. QUI LIT — A, puis B, puis P, puis un visiteur ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| a_lit_son_devis_attendu_1
+| ----
+| 1
+|
+| SET
+| b_devis_attendu_0 | b_lignes_attendu_0 | b_tva_attendu_0
+| ----
+| 0 | 0 | 0
+|
+| SET
+| p_devis_attendu_0 | p_lignes_attendu_0 | p_tva_attendu_0
+| ----
+| 0 | 0 | 0
+|
+| -- un visiteur sans compte → permission denied for table devis (le droit de table, pas une liste vide)
+| SET
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+|
+| === 13. QUI ÉCRIT CHEZ UN AUTRE — B ===
+| --- 13a. B crée un devis au nom de A → new row violates row-level security policy for table "devis"
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "devis"
+| ROLLBACK
+| --- 13b. B ajoute une ligne au devis de A → new row violates row-level security policy for table "devis_lignes"
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "devis_lignes"
+| ROLLBACK
+| --- 13c. B modifie, puis supprime, le devis de A : UPDATE 0, DELETE 0 ; puis 1 devis et 9 lignes, comptés en superutilisateur
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| devis_avant_attendu_1 | lignes_avant_attendu_9
+| ----
+| 1 | 9
+|
+| SET
+| SET
+| UPDATE 0
+| UPDATE 0
+| DELETE 0
+| DELETE 0
+| RESET
+| devis_attendu_1 | lignes_attendu_9 | objet_inchange
+| ----
+| 1 | 9 | Rénovation de la salle de bain
+|
+| ROLLBACK
+|
+| === 14. OP013 — un lien vers la fiche, la demande ou l urgence d UN AUTRE ===
+| --- 14a. client_id = la fiche de B → OP013
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| ROLLBACK
+| --- 14b. quote_request_id = la demande adressée à B → OP013
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| ROLLBACK
+| --- 14c. sos_request_id = l urgence adressée à B → OP013
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP013 Cette urgence ne vous a pas été adressée : un devis ne se rattache qu'à vos propres urgences.
+| ROLLBACK
+| --- 14d. une fiche qui N EXISTE PAS → OP013 aussi (jamais 23503 : aucun oracle par l erreur)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| ROLLBACK
+| --- 14e. les trois liens VIDÉS : UPDATE 1 ; puis remis à C1, QA, SA : UPDATE 1
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| UPDATE 1
+| liens_remis_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|
+| === 14 bis. UN LIEN INCHANGÉ NE SE REVÉRIFIE PAS — et l essai PEUT échouer ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| -- en superutilisateur, la demande QA passe à B
+| UPDATE 1
+| SET
+| SET
+| -- A change l objet, lien inchangé : UPDATE 1
+| UPDATE 1
+| -- A vide quote_request_id : UPDATE 1
+| UPDATE 1
+| -- A le remet à QA, qui n est plus à lui → OP013 (c est ce refus qui rend crédibles les deux UPDATE 1)
+| ERREUR OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| ROLLBACK
+|
+| === 14 ter. LA PRÉMISSE D OP013 — sans la garde, la clé étrangère laisse passer la fiche d un autre ===
+| BEGIN
+| ALTER TABLE
+| SET
+| SET
+| -- attendu : INSERT 0 1 — c est ce « 1 » qui rend la garde NÉCESSAIRE
+| INSERT 0 1
+| ROLLBACK
+|
+| === 14 quater. LES IDENTIFIANTS CHOISIS PAR LE TÉLÉPHONE — renvoyer ne double rien ===
+| --- le devis : INSERT 0 1, puis le même identifiant → 23505 devis_pkey
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "devis_pkey"
+| ROLLBACK
+| --- la ligne : INSERT 0 1, puis le même identifiant → 23505 devis_lignes_pkey
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "devis_lignes_pkey"
+| ROLLBACK
+|
+| === 14 quinquies. OP013 À LA CRÉATION — la même garde, sur un INSERT (relecture des essais de l étape 3, I-1) ===
+| --- a. une création liée à la fiche de B → OP013
+| BEGIN
+| SET
+| SET
+| ERREUR OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| ROLLBACK
+| --- b. une création liée à la demande adressée à B → OP013
+| BEGIN
+| SET
+| SET
+| ERREUR OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| ROLLBACK
+| --- c. une création liée à l urgence adressée à B → OP013
+| BEGIN
+| SET
+| SET
+| ERREUR OP013 Cette urgence ne vous a pas été adressée : un devis ne se rattache qu'à vos propres urgences.
+| ROLLBACK
+| --- d. une création liée à une fiche qui N EXISTE PAS → OP013 (jamais 23503)
+| BEGIN
+| SET
+| SET
+| ERREUR OP013 Cette fiche n'est pas dans votre carnet : un devis ne se rattache qu'à vos propres clients.
+| ROLLBACK
+| --- e. le « 1 » qui rend ces quatre refus crédibles : une création liée à SES C1, QA, SA → INSERT 0 1
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| cree_avec_ses_liens_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 15. UNE LIGNE CHANGE DE DEVIS — par un client, refusé ; en superutilisateur, les deux totaux suivent ===
+| --- 15a. A déplace le receveur dans son second devis → permission denied for table devis_lignes
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis_lignes
+| ROLLBACK
+| --- 15b. en superutilisateur : le receveur (389,90 € à 20 %) passe dans le second devis
+| BEGIN
+| INSERT 0 1
+| INSERT 0 9
+| INSERT 0 1
+| UPDATE 1
+| -- attendu : 116055 | 13106 | 129161 | 1000:101055:10106:3,2000:15000:3000:1 | horloge 11 — le devis QUITTÉ reçoit AUSSI le numéro du déplacement (49.5 bis, point 6)
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 116055 | 13106 | 129161 | 1000:101055:10106:3,2000:15000:3000:1 | 11
+|
+| -- attendu : 38990 | 7798 | 46788 | 2000:38990:7798:1
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 38990 | 7798 | 46788 | 2000:38990:7798:1 | 11
+|
+| ROLLBACK
+|
+| === 16. LES PLAFONDS, À LA BORNE ===
+| --- 16a. q = 1351, p = 7 401 924 500 → total = plafond + 1 c → devis_ligne_total_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis_lignes" violates check constraint "devis_ligne_total_check"
+| ROLLBACK
+| --- 16b. q = 1001, p = 9 990 009 989, en franchise → accepté, total 9999999999 AU plafond
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| -- attendu : 9999999999 | 0 | 9999999999 | 0:9999999999:0:1
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 9999999999 | 0 | 9999999999 | 0:9999999999:0:1 | 2
+|
+| ROLLBACK
+| --- 16c. un poste de 90 000 000,00 € à 20 % : HT sous le plafond, TTC au-dessus → devis_plafond_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| ROLLBACK
+| --- 16d. deux postes de 60 000 000,00 € : la SECONDE ligne → devis_plafond_check
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| premiere_acceptee_attendu_1
+| ----
+| 1
+|
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_plafond_check"
+| ROLLBACK
+|
+| === 16 bis. OP014 — 500 lignes, puis une 501e ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| Timing is on.
+| INSERT 0 500
+| Timing is off.
+| lignes_attendu_500
+| ----
+| 500
+|
+| -- attendu : 50000 | 5000 | 55000 | 1000:50000:5000:500
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 50000 | 5000 | 55000 | 1000:50000:5000:500 | 501
+|
+| -- la 501e → OP014, phrase complète
+| ERREUR OP014 Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.
+| ROLLBACK
+|
+| === 16 ter. OP014 PAR UN DÉPLACEMENT — une ligne qui rejoint un devis déjà plein ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 500
+| INSERT 0 1
+| INSERT 0 1
+| plein_attendu_500 | second_attendu_1
+| ----
+| 500 | 1
+|
+| -- la ligne passe dans le devis plein → OP014
+| ERREUR OP014 Un devis porte au plus 500 lignes : celui-ci est plein. Commencez-en un second, ou regroupez des lignes.
+| ROLLBACK
+|
+| === 17. L OPTION HORS DES TOTAUX ET HORS DE devis_tva ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 3
+| -- attendu : 3333 | 333 | 3666 | 1000:3333:333:1 — aucune ligne 2000 (l option à 20 % n entre pas), nb_lignes 1 (et non 2)
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 3333 | 333 | 3666 | 1000:3333:333:1 | 4
+|
+| ROLLBACK
+|
+| === 18. « OFFERT » SEUL À SON TAUX, avec une valeur ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 2
+| -- attendu : 1000 | 100 | 1100 | 1000:1000:100:1,2000:0:0:1 — le taux de l « Offert » est là, à base 0, nb_lignes 1
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 1000 | 100 | 1100 | 1000:1000:100:1,2000:0:0:1 | 3
+|
+| ROLLBACK
+|
+| === 19. CE QUE LA BASE POSE — la date de création, la source ===
+| --- 19a. A envoie une date de création → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- 19a bis. A change la source → permission denied for table devis
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table devis
+| ROLLBACK
+| --- 19b. en superutilisateur : la date et la source posées par la base
+| BEGIN
+| INSERT 0 1
+| cree_aujourd_hui_attendu_t | source_attendu_demande
+| ----
+| t | demande
+|
+| SELECT 1
+| UPDATE 1
+| toujours_aujourd_hui_attendu_t | source_toujours_demande | modifie_le_a_bouge_attendu_t
+| ----
+| t | demande | t
+|
+| ROLLBACK
+|
+| === 20. LE NETTOYAGE — un blanc n est pas une valeur ; le code postal perd ses espaces (liste EXPLICITE) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| objet_vide_attendu_t | cp_attendu_13410 | delai_vide_attendu_t
+| ----
+| t | 13410 | t
+|
+| INSERT 0 1
+| designation_attendu_pose
+| ----
+| pose
+|
+| -- U+00A0 et U+202F (l espace fine des milliers) sont retirés : 13410 ×2
+| UPDATE 1
+| cp_nbsp_attendu_13410
+| ----
+| 13410
+|
+| UPDATE 1
+| cp_espace_fine_attendu_13410
+| ----
+| 13410
+|
+| -- la tabulation VERTICALE est retirée : 13410 (relecture de la migration, 22/10)
+| UPDATE 1
+| cp_tab_verticale_attendu_13410
+| ----
+| 13410
+|
+| -- U+2002 n est PAS dans la liste (JavaScript non plus) → devis_lieu_code_postal_check
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| -- la LETTRE v n est pas un blanc : 13v410 → devis_lieu_code_postal_check
+| ERREUR 23514 new row for relation "devis" violates check constraint "devis_lieu_code_postal_check"
+| ROLLBACK
+|
+| === 21. SUPPRIMER UN BROUILLON — compté avant, compté après ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| -- avant : 1 / 9 / 2
+| devis | lignes | tva
+| ----
+| 1 | 9 | 2
+|
+| SET
+| SET
+| DELETE 1
+| RESET
+| -- après : 0 / 0 / 0, et aucune erreur du recalcul pendant la cascade
+| devis | lignes | tva
+| ----
+| 0 | 0 | 0
+|
+| ROLLBACK
+|
+| === 22. SUPPRIMER LA FICHE C1 — le devis reste, détaché ; la cascade passe SANS numéro ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| fiche_avant_attendu_1
+| ----
+| 1
+|
+| DELETE 1
+| fiche_apres_attendu_0
+| ----
+| 0
+|
+| RESET
+| devis_attendu_1 | lignes_attendu_9 | client_vide_attendu_t | autres_liens_intacts_attendu_t | horloge_inchangee_attendu_10
+| ----
+| 1 | 9 | t | t | 10
+|
+| -- totaux intacts : 155045 | 20904 | 175949
+| ht | tva | ttc | ventilation_toutes_lignes | horloge
+| ----
+| 155045 | 20904 | 175949 | 1000:101055:10106:3,2000:53990:10798:2 | 10
+|
+| ROLLBACK
+|
+| === 23. D3 — LE PARTICULIER PART : le devis reste, ses deux liens vides, source « demande » ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| qa_avant_attendu_1 | sa_avant_attendu_1
+| ----
+| 1 | 1
+|
+| SET
+| SET
+| preparer_suppression_compte
+| ----
+| {"compte": "a4900000-0000-4000-8000-00000000000e", "prepare_le": "<horodatage>", "avis_anonymises": 0, "commentaires_anonymises": 0}
+|
+| RESET
+| DELETE 1
+| compte_p_attendu_0 | qa_apres_attendu_0 | sa_apres_attendu_0
+| ----
+| 0 | 0 | 0
+|
+| devis_attendu_1 | demande_vide_attendu_t | urgence_vide_attendu_t | fiche_intacte_attendu_t | source_attendu_demande | lignes_attendu_9
+| ----
+| 1 | t | t | t | demande | 9
+|
+| -- D11 : les clés vidées, comptées sur tous les devis de A — attendu 1 et 1
+| demandes_videes | urgences_videes
+| ----
+| 1 | 1
+|
+| ROLLBACK
+|
+| === 24. L ARTISAN PART — la double cascade (set null PUIS delete sur la même ligne) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| -- avant : 1 / 9 / 2 / 1 fiche
+| devis | lignes | tva | fiches
+| ----
+| 1 | 9 | 2 | 1
+|
+| SET
+| SET
+| preparer_suppression_compte
+| ----
+| {"compte": "a4900000-0000-4000-8000-00000000000a", "prepare_le": "<horodatage>", "avis_anonymises": 0, "commentaires_anonymises": 0}
+|
+| RESET
+| DELETE 1
+| -- après : 0 / 0 / 0 / 0
+| devis | lignes | tva | fiches
+| ----
+| 0 | 0 | 0 | 0
+|
+| ROLLBACK
+|
+| === 25. L EXPORT — mes_donnees() pour A, B et P ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| devis_emis_attendu_1 | devis_lignes_attendu_9 | devis_tva_attendu_2 | demandes_de_devis_presente_attendu_t | cle_devis_attendu_f | premiere_ligne_attendu_rez_de_chaussee | horloge_exportee_attendu_10
+| ----
+| 1 | 9 | 2 | t | f | Rez-de-chaussée | 10
+|
+| SET
+| b_devis_attendu_0 | b_lignes_attendu_0 | b_tva_attendu_0
+| ----
+| 0 | 0 | 0
+|
+| SET
+| -- P : les demandes qu il a ENVOYÉES (QA à A, QB à B) — c est ce qui justifie le nom
+| demandes_envoyees_attendu_2 | p_devis_attendu_0
+| ----
+| 2 | 0
+|
+| ROLLBACK
+|
+| === 26. LES DROITS ===
+| table_ | anon_un_droit_attendu_f
+| ----
+| public.devis | f
+| public.devis_lignes | f
+| public.devis_tva | f
+|
+| -- authenticated : LIRE et SUPPRIMER devis et lignes au niveau de la table — l écriture se donne COLONNE PAR COLONNE depuis le lot 2a (49.7 ; la liste est lue colonne par colonne par essais-section-49-conditions.sql, cas 18) ; LIRE la ventilation ; rien d autre — ni truncate, ni references, ni trigger (relecture sécurité, M2)
+| table_ | droits_authentifie
+| ----
+| public.devis | delete,select
+| public.devis_lignes | delete,select
+| public.devis_tva | select
+|
+| devis_et_lignes_table_select_delete_attendu_t | ventilation_lecture_seule_attendu_t
+| ----
+| t | t
+|
+| recalcule_public_attendu_f | recalcule_anon_attendu_f | recalcule_authentifie_attendu_f
+| ----
+| f | f | f
+|
+| -- les QUATRE fonctions de déclencheur (recalcule_apres_reduction depuis le lot 2a), pour les TROIS rôles (relecture des essais, M7) : f partout
+| fonction | public_attendu_f | anon_attendu_f | authentifie_attendu_f
+| ----
+| public.recalcule_apres_ligne_de_devis() | f | f | f
+| public.recalcule_apres_reduction() | f | f | f
+| public.tient_la_ligne_de_devis() | f | f | f
+| public.tient_le_devis() | f | f | f
+|
+| -- les gardiennes : appelées par une contrainte (les deux arrondis) ou par les politiques (mes_entreprises) — t pour authenticated, f pour anon
+| fonction | authentifie_attendu_t | anon_attendu_f
+| ----
+| public.devis_total_ligne(bigint, bigint) | t | f
+| public.devis_tva_de(bigint, integer) | t | f
+| public.mes_entreprises() | t | f
+|
+| -- PUBLIC : aucun droit de table (f partout)
+| table_ | public_un_droit_attendu_f
+| ----
+| public.devis | f
+| public.devis_lignes | f
+| public.devis_tva | f
+|
+| -- les droits de COLONNE : aucun pour anon ni PUBLIC ; pour authenticated, ni references, ni l écriture d une colonne de devis_tva (f partout)
+| table_ | anon_colonne_attendu_f | public_colonne_attendu_f | authentifie_colonne_interdite_attendu_f
+| ----
+| public.devis | f | f | f
+| public.devis_lignes | f | f | f
+| public.devis_tva | f | f | f
+|
+|
+| === 27. LE CATALOGUE — qui nomme les trois tables, LU DANS LA BASE et non dans un texte ===
+| --- 27a. le motif : qui nomme les tables (prosrc + prosqlbody, guillemets dépliés, commentaires et chaînes retirés, AUCUN regard en avant)
+| liste_fermee_attendu_t | qui_les_nomme | definer_attendu_recalcule_devis | admin_attendu_0
+| ----
+| t | public.mes_donnees, public.motifs_refus_remise, public.recalcule_devis, public.tient_le_devis | recalcule_devis | 0
+|
+| --- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le <jour>, plus admin_valider_pieces (lot S-a, <jour> : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, <jour> : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) et remonter_publication (lot S-c, <jour> : la seule écriture de la remise en avant, et de son historique, que le client ne peut pas écrire), et quatre du lot S-d (<jour>) : profil_public (la fiche publique d un particulier, ville aux seuls pros), ma_fiche_pro (SA fiche pro entière, colonnes privées comprises), admin_etat_des_fiches (la suspension, pour l administration seule) et mes_donnees_sans_masquage (ce que la RLS cacherait à tort dans l export, et seulement ce qui concerne l appelant) — une NOUVELLE, quelle qu elle soit, rougit
+| definer_ouvertes_attendu_31 | nouvelles_attendu_tiret
+| ----
+| 31 | —
+|
+| --- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le <jour>, plus trois du lot S-b (<jour>) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (<jour>) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale), et une du lot 2a (<jour>) : recalcule_apres_reduction (il appelle le recalcul quand la réduction sur le total change) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)
+| definer_fermees_attendu_32 | nouvelles_attendu_tiret
+| ----
+| 32 | —
+|
+| --- 27d. sans texte : les fonctions que la BASE a enregistrées comme dépendant des trois tables (corps SQL standard)
+| fonctions_dependantes_attendu_tiret
+| ----
+| —
+|
+| --- 27e. sans texte : les VUES et les RÈGLES (create rule) posées ailleurs qui les lisent ou les écrivent — elles agissent avec les droits du propriétaire de leur table, par-dessus la RLS
+| vues_ou_regles_attendu_0
+| ----
+| 0
+|
+| --- 27f. sans texte : les déclencheurs posés sur les trois tables (hors clés étrangères) — exactement les cinq nommés (trg_tient_le_lien_du_devis depuis le lot S-b : un nouveau lien vers la demande d une personne en blocage, OP020 ; trg_recalcule_apres_reduction depuis le lot 2a : la réduction change, la ventilation se refait), et aucune règle sur elles
+| declencheurs_exacts_attendu_t | declencheurs | regles_sur_elles_attendu_0
+| ----
+| t | devis.trg_recalcule_apres_reduction, devis.trg_tient_le_devis, devis.trg_tient_le_lien_du_devis, devis_lignes.trg_recalcule_devis, devis_lignes.trg_tient_la_ligne_de_devis | 0
+|
+|
+| === 28. LES POLITIQUES — trois, les chaînes exactes COMPARÉES ===
+| tablename | using_exact_attendu_t | with_check_exact_attendu_t | cmd | roles
+| ----
+| devis | t | t | ALL | {authenticated}
+| devis_lignes | t | t | ALL | {authenticated}
+| devis_tva | t | t | SELECT | {authenticated}
+|
+| politiques_attendu_3 | anon_ou_public_attendu_0 | fautes_attendu_0 | ecriture_sur_tva_attendu_0
+| ----
+| 3 | 0 | 0 | 0
+|
+|
+| === 29. D4-b — une origine SANS lien : aucune contrainte « origine ⇒ lien » ===
+| BEGIN
+| SET
+| SET
+| -- attendu : INSERT 0 1, deux fois
+| INSERT 0 1
+| INSERT 0 1
+| devis_sans_lien_attendu_2
+| ----
+| 2
+|
+| ROLLBACK
+|
+| === 30. LES CAS D ARGENT, JOUÉS PAR POSTGRESQL — supabase/cas-devis.json, les MÊMES attendus que JavaScript ===
+| CREATE FUNCTION
+| CREATE FUNCTION
+| nombre_annonce_attendu_69 | cas_lus_attendu_69 | suites_attendu_66 | conditions_attendu_23 | appels_attendu_19 | refus_attendus_30
+| ----
+| 69 | 69 | 66 | 23 | 19 | 30
+|
+| -- les écarts, un par ligne (VIDE = aucun)
+| cas | obtenu | attendu
+| ----
+|
+| cas | fonction | obtenu | attendu
+| ----
+|
+| ecarts_des_cas_attendu_0 | bilan_attendu_ecarts_0
+| ----
+| 0 | écarts : 0
+|
+| -- et la preuve que le joueur JOUE : cinq cas lus en entier (un accepté, un refusé, un retrait ; une réduction répartie, une condition refusée)
+| cas | obtenu
+| ----
+| C01 | 9999|1000|10999|1000:9999:1000:3|—
+| C09 | REFUS:devis_ligne_offert_check
+| C14c | 0|0|0|—|—
+| R01 | 29900|3538|33438|2000:9966:34:1993:1,1000:9967:33:997:1,550:9967:33:548:1|—|100|0|33438
+| R18 | REFUS:devis_remise_une_forme_check
+|
+| devis_restants_attendu_0
+| ----
+| 0
+|
+|
+| === 31. L ORDRE DES DÉCLENCHEURS — les AFTER ROW de devis_lignes, dans l ordre où ils partent ===
+| ordre_attendu_ri_puis_trg_recalcule_devis
+| ----
+| RI_ConstraintTrigger_c_… → RI_ConstraintTrigger_c_… → trg_recalcule_devis
+|
+| les_cinq_declencheurs_nommes
+| ----
+| trg_recalcule_apres_reduction, trg_recalcule_devis, trg_tient_la_ligne_de_devis, trg_tient_le_devis, trg_tient_le_lien_du_devis
+|
+|
+| === 32. LA REQUÊTE TARDIVE (49.5 bis) — les formes qui se jouent l une après l autre ===
+| --- 32a. une modification ancienne (n° 11) arrivée APRÈS la plus récente (n° 12) → OP015 ; la base garde 60 €
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| prix_attendu_6000
+| ----
+| 6000
+|
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32b. une ligne écrite SANS numéro (0, la valeur par défaut) → OP016 (« mettez Opus à jour », et non « un autre appareil »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour cette ligne : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| ROLLBACK
+| --- 32c. une modification de ligne qui ne change PAS le numéro → OP015
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32d. l en-tête : la plus récente (n° 12, « Nouveau ») passe ; l ancienne (n° 11) → OP015
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| objet_attendu_nouveau | horloge_attendu_12
+| ----
+| Nouveau | 12
+|
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32e. l en-tête écrit SANS numéro neuf → OP015 (l horloge ne fait que monter)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32f. L INSERTION TARDIVE d une ligne retirée : la file LÈVE l horloge (n° 12), supprime sous condition (n° 13) ; l insertion (n° 11) arrive → OP015
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| avant_attendu_0
+| ----
+| 0
+|
+| DELETE 0
+| apres_attendu_0
+| ----
+| 0
+|
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32g. …et SANS la levée, la même insertion PASSE : la ligne retirée revient (c est pourquoi la file lève)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| avant_attendu_0
+| ----
+| 0
+|
+| DELETE 0
+| apres_attendu_0
+| ----
+| 0
+|
+| INSERT 0 1
+| ligne_revenue_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+| --- 32h. LA SUPPRESSION TARDIVE d une ligne retouchée ensuite : partie au n° 12, la ligne porte le n° 13 → DELETE 0 — la protection est la CONDITION que la file pose (`generation < N`) : la base n a AUCUNE règle sur une suppression
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| avant_attendu_1
+| ----
+| 1
+|
+| DELETE 0
+| apres_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+| --- 32i. LA SUPPRESSION TARDIVE du brouillon retouché ensuite : partie au n° 11, l horloge est à 12 → DELETE 0 — ici aussi, c est la condition de la file qui protège
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| avant_attendu_1
+| ----
+| 1
+|
+| DELETE 0
+| apres_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+| --- 32j. l horloge ne RECULE jamais : A tente de la ramener à 5 → OP015
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Celle-ci, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32k. LA FRONTIÈRE : une ligne écrite au numéro ÉGAL à l horloge (10) — la « même milliseconde » de 49.5 bis → OP015 (relecture des essais, M2 : rien ne tenait le « <= »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| horloge_attendu_10
+| ----
+| 10
+|
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32l. LE DÉPLACEMENT TARDIF (49.5 bis, point 6) : la ligne est retouchée au n° 20 dans son devis ; un déplacement plus ancien (n° 15) vers un second devis (horloge 1) arrive ensuite → OP015 — en SUPERUTILISATEUR depuis le lot 2a : un client ne déplace plus de ligne (15a)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 9
+| INSERT 0 1
+| UPDATE 1
+| designation_attendu_retouchee | numero_attendu_20
+| ----
+| Retouchée | 20
+|
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32m. LE CONTRAT « un ordre = une ligne » : deux lignes écrites par UN SEUL ordre, au MÊME numéro → la seconde OP015 (et deux numéros distincts et croissants passent : le cas 6)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR OP015 Ce devis a reçu entre-temps une modification plus récente — peut-être depuis un autre appareil. Cette ligne, plus ancienne, n'a pas été enregistrée, pour ne pas écraser la plus récente. Rien de ce qui est enregistré n'est perdu : rouvrez le devis pour voir sa dernière version, puis réessayez.
+| ROLLBACK
+| --- 32n. LES BORNES DU NUMÉRO (OP016) : generation NULL sur une ligne → OP016 (et non 23502 en anglais)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour cette ligne : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| ROLLBACK
+| --- 32o. un devis qui naîtrait à l horloge −1 (sous lui, une ligne SANS numéro passait) → OP016
+| BEGIN
+| SET
+| SET
+| ERREUR OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour ce devis : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| ROLLBACK
+| --- 32p. un en-tête poussé au-delà de 2^53 − 1 (le devis ne s écrirait plus, ni ne se supprimerait par la file) → OP016
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| ERREUR OP016 Cette version d'Opus n'envoie pas de numéro d'écriture valable pour ce devis : rien n'a été enregistré. Mettez l'application à jour, puis réessayez.
+| ROLLBACK
+| --- 32q. …et la borne elle-même PASSE (2^53 − 1) : le « 1 » qui rend les trois refus crédibles
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| UPDATE 1
+| horloge_attendu_9007199254740991
+| ----
+| 9007199254740991
+|
+| ROLLBACK
+|
+| === 33. CEUX QUI N ONT RIEN À FAIRE ICI — visiteur, jeton sans compte, compte inconnu, administrateur, blocage, upsert (relecture sécurité, M3) ===
+| --- 33a. un visiteur appelle mes_donnees() → permission denied for function mes_donnees
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function mes_donnees
+| ROLLBACK
+| --- 33b. un visiteur appelle recalcule_devis() → permission denied for function recalcule_devis
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function recalcule_devis
+| ROLLBACK
+| --- 33c. un visiteur appelle mes_entreprises() → permission denied for function mes_entreprises
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function mes_entreprises
+| ROLLBACK
+| --- 33d. un connecté SANS sub : A lit 1, puis le jeton vide lit 0 / 0 / 0, son export ne rend aucun devis, et sa création au nom de A → row-level security policy for table "devis"
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| a_lit_son_devis_attendu_1
+| ----
+| 1
+|
+| SET
+| sans_sub_devis_attendu_0 | sans_sub_lignes_attendu_0 | sans_sub_tva_attendu_0 | sans_sub_export_attendu_0
+| ----
+| 0 | 0 | 0 | 0
+|
+| ERREUR 42501 new row violates row-level security policy for table "devis"
+| ROLLBACK
+| --- 33e. un sub INCONNU (aucun compte) : 0, puis sa création au nom de A → row-level security policy for table "devis"
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| a_lit_son_devis_attendu_1
+| ----
+| 1
+|
+| SET
+| inconnu_lit_attendu_0
+| ----
+| 0
+|
+| ERREUR 42501 new row violates row-level security policy for table "devis"
+| ROLLBACK
+| --- 33f. un ADMINISTRATEUR (B, nommé) ne lit RIEN de A : aucune porte d administration (D6)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| INSERT 0 1
+| SET
+| SET
+| b_est_admin_attendu_t | admin_lit_devis_attendu_0 | admin_lit_lignes_attendu_0
+| ----
+| t | 0 | 0
+|
+| ROLLBACK
+| --- 33g. LE BLOCAGE ne change rien au devis (D6) : P bloque A, A bloque B ; A lit toujours son devis, B (bloqué) lit 0
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| RESET
+| INSERT 0 2
+| SET
+| SET
+| a_bloque_lit_toujours_attendu_1
+| ----
+| 1
+|
+| SET
+| b_lit_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+| --- 33h. B envoie l identifiant du devis de A → 23505 devis_pkey : il apprend que cet UUID EXISTE, et rien d autre (dit en 49.2)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SET
+| ERREUR 23505 duplicate key value violates unique constraint "devis_pkey"
+| ROLLBACK
+| --- 33i. …« on conflict (id) do nothing » : INSERT 0 0, et le devis de A est intact
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SET
+| INSERT 0 0
+| RESET
+| toujours_a_a_attendu_t | objet_inchange
+| ----
+| t | Rénovation de la salle de bain
+|
+| ROLLBACK
+| --- 33j. …« on conflict (id) do update » sur le devis de A → new row violates row-level security policy (USING expression) for table "devis"
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SET
+| ERREUR 42501 new row violates row-level security policy (USING expression) for table "devis"
+| ROLLBACK
+| --- 33k. …et sur une LIGNE de A, par une ligne posée dans SON PROPRE devis (l insertion passe la politique, le conflit vise la ligne de A) → new row violates row-level security policy (USING expression) for table "devis_lignes"
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 9
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy (USING expression) for table "devis_lignes"
+| ROLLBACK
+|
+| === 34. LE PLAFOND PAR DEMANDE ET PAR URGENCE (OP017) — relecture sécurité, I1 ===
+| --- 34a. vingt devis de A liés à QA ET SA : INSERT 0 20 ; le 21e → OP017
+| BEGIN
+| SET
+| SET
+| INSERT 0 20
+| devis_lies_attendu_20
+| ----
+| 20
+|
+| ERREUR OP017 Vous avez déjà 20 devis pour cette demande : supprimez un brouillon dont vous n'avez plus besoin avant d'en commencer un autre.
+| ROLLBACK
+| --- 34b. le 21e par une MODIFICATION (un devis sans lien qu on rattache à l urgence) → OP017
+| BEGIN
+| SET
+| SET
+| INSERT 0 20
+| INSERT 0 1
+| urgence_liee_attendu_20
+| ----
+| 20
+|
+| ERREUR OP017 Vous avez déjà 20 devis pour cette urgence : supprimez un brouillon dont vous n'avez plus besoin avant d'en commencer un autre.
+| ROLLBACK
+| --- 34c. le plafond ne compte QUE quand le lien est posé ou change : à 20, A retouche l objet d un devis déjà lié → UPDATE 1
+| BEGIN
+| SET
+| SET
+| INSERT 0 19
+| INSERT 0 1
+| lies_attendu_20
+| ----
+| 20
+|
+| UPDATE 1
+| objet_retouche
+| ----
+| Retouché, toujours lié
+|
+| ROLLBACK
+| --- 34d. P supprime son compte : les 20 devis liés se détachent, sans erreur, et vite (le chronomètre le dit)
+| BEGIN
+| SET
+| SET
+| INSERT 0 20
+| RESET
+| lies_avant_attendu_20
+| ----
+| 20
+|
+| SET
+| SET
+| SET
+| Timing is on.
+| suppression_de_p_attendu_t
+| ----
+| t
+|
+| Timing is off.
+| RESET
+| devis_detaches_attendu_20
+| ----
+| 20
+|
+| ROLLBACK
+|
+| === FIN — 79 refus attendus, chacun annoncé par son nom ci-dessus ===

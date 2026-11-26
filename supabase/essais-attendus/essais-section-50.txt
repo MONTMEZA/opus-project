@@ -1,0 +1,1397 @@
+# Ce que doit rendre supabase/essais-section-50.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-50` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-50
+
+[partie essai]
+erreurs: 50
+valeurs-jugees: 184
+[erreurs]
+| @ --- 1a. un U+200B seul (la phrase rognée devient vide) → base_poste_designation_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| @ --- 1b. 2 001 caractères → base_poste_designation_check (la garde rend une clé NULL, la contrainte de la clé se tait)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| @ --- 1c. l unité « ml » → base_poste_unite_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_unite_check"
+| @ --- 1d. aucune unité → base_poste_unite_check (et pas 23502 : la colonne est NULLABLE, la contrainte NOMMÉE)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_unite_check"
+| @ --- 1e. un prix de référence de 0 → base_poste_prix_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| @ --- 1f. un prix de −1 → base_poste_prix_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| @ --- 1g. un prix de 10 000 000 000 c → base_poste_prix_check (jamais un 22003)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| @ --- 1i. « — » seul (une clé VIDE) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1j. « … » seul → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1k. « « » » seuls → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1l. un remplisseur hangûl seul, chr(12644) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1m. un sélecteur de variante seul, chr(65039) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1 bis a. U+3000 seul, chr(12288) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1 bis b. U+202F seul, chr(8239) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1 bis c. la tabulation verticale seule, chr(11) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1 bis d. U+0085 seul, chr(133) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 1 bis e. U+2028 seul, chr(8232) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 2a. une phrase vide ET « ml » → base_poste_designation_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| @ --- 2b. « — » ET « ml » → base_poste_rapprochement_check (r avant u)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 2c. « — » ET un prix 0 → base_poste_prix_check (p avant r)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| @ --- 2d. 2 001 « é » → base_poste_designation_check (la garde rend une clé NULL)
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| @ --- 4b. le devis de B → 23503 base_postes_devis_origine_fkey, « Key is not present in table "devis" », SANS valeur
+|   23503 insert or update on table "base_postes" violates foreign key constraint "base_postes_devis_origine_fkey"
+| @ --- 4c. un devis qui n existe pas → le MÊME 23503, le même message : aucun oracle
+|   23503 insert or update on table "base_postes" violates foreign key constraint "base_postes_devis_origine_fkey"
+| @ --- 5b. un visiteur, alors que le poste existe → permission denied for table base_postes (et pas une liste vide)
+|   42501 permission denied for table base_postes
+| @ --- 6b. B crée un poste AU NOM DE A → new row violates row-level security policy for table "base_postes"
+|   42501 new row violates row-level security policy for table "base_postes"
+| @ --- 6c. un particulier crée un poste → new row violates row-level security policy for table "base_postes"
+|   42501 new row violates row-level security policy for table "base_postes"
+| @ === 6 bis. PAS D ORACLE DU NOMBRE — A au plafond ; B écrit au nom de A → row-level security policy, JAMAIS OP018 ===
+|   42501 new row violates row-level security policy for table "base_postes"
+| @ --- 7a. la même phrase en minuscules → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7b. sans accents → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7c. « Chapes sèches avant carrelage collé. » (pluriel et point) → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7d. la forme DÉCOMPOSÉE (un e suivi de son accent, chr(768) et chr(769)) → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7e. une espace insécable et un double espace → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7f. un U+200B au milieu d un mot, chr(8203) → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7g. un U+FE0F à la fin, chr(65039) → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 7h. « CHAPE SÈCHE, AVANT CARRELAGE COLLÉ. » → 23505 idx_base_postes_rapprochement
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 9a. 1 000 postes, puis le 1 001e → OP018 « Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez. »
+|   OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| @ --- 9b. 1 001 postes d UN SEUL ordre, derrière un savepoint (dit) → OP018, et RIEN n est inséré
+|   OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| @ --- 9c. l ÉDITEUR SQL, sans jeton, au plafond → OP018 : il reste COMPTÉ
+|   OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| @ --- 15a. A renvoie l identifiant de SON devis → 23505 devis_pkey, jamais idx_devis_id_pro
+|   23505 duplicate key value violates unique constraint "devis_pkey"
+| @ --- 15b. A envoie l identifiant du devis de B → 23505 devis_pkey
+|   23505 duplicate key value violates unique constraint "devis_pkey"
+| @ === 16. LE CONTRAT DE L UPSERT — A au plafond, « on conflict (id) do update » sur un poste existant → OP018 ===
+|   OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| @ --- 19a. A envoie cle_rapprochement à l insertion → 428C9 (la base calcule cette cle, elle ne s envoie pas)
+|   428C9 cle_rapprochement : la base calcule cette cle, elle ne s'envoie pas.
+| @ --- 19b. …et à la modification → 428C9 (la base calcule cette cle, elle ne s ecrit que par son recalcul exact)
+|   428C9 cle_rapprochement : la base calcule cette cle, elle ne s'ecrit que par son recalcul exact.
+| @ --- 19e. dans une transaction ANNULÉE, le droit retiré à authenticated : l insertion suivante (le déclencheur, security invoker, appelle la fonction) → permission denied for function cle_de_rapprochement
+|   42501 permission denied for function cle_de_rapprochement
+| @ --- 21 bis c. la réécriture, sous le verrou du contrat, tombe sur le doublon que la nouvelle règle crée → 23505 idx_base_postes_rapprochement, et TOUT est annulé
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| @ --- 23a. P au nom de A → new row violates row-level security policy for table "base_postes"
+|   42501 new row violates row-level security policy for table "base_postes"
+| @ --- 23b. B au nom de A → new row violates row-level security policy for table "base_postes"
+|   42501 new row violates row-level security policy for table "base_postes"
+| @ --- 26a. U+2800 seul (le motif braille vide) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 26b. une étiquette et un sélecteur de variante seuls (U+E0001, U+E0100) → base_poste_rapprochement_check
+|   23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| @ --- 26c. la même phrase qu un poste rangé, un U+E0100 glissé à la fin → 23505 idx_base_postes_rapprochement (c était un second poste)
+|   23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+[valeurs]
+| postes_de_a_attendu_2 = 2
+| phrase_rognee_attendu_t = t
+| prix_attendu_4500 = 4500
+| cle_attendu_t = t
+| prix_vide_reste_vide_attendu_t = t
+| en_superutilisateur_attendu_2 = 2
+| caracteres_attendu_2000 = 2000
+| octets_de_la_cle_attendu_8000 = 8000
+| reserve_faite_d_un_blanc_attendu_1 = 1
+| creation_posee_par_la_base_attendu_t = t
+| modifie_le_egale_creation_attendu_t = t
+| prix_fixe_a_la_creation_attendu_t = t
+| date_du_prix_gardee_attendu_t = t
+| modifie_le_avance_attendu_t = t
+| date_du_prix_avance_attendu_t = t
+| date_du_prix_videe_attendu_t = t
+| lie_a_son_devis_attendu_1 = 1
+| origine_inchangee_attendu_t = t
+| origine_videe_attendu_t = t
+| devis_supprime_attendu_1 = 1
+| poste_reste_attendu_1 = 1
+| lien_vide_attendu_t = t
+| modifie_le_inchangee_attendu_t = t
+| modification_conditionnee_attendu_1 = 1
+| fiche_supprimee_attendu_1 = 1
+| devis_supprime_attendu_1 = 1
+| fiche_attendu_0 = 0
+| devis_attendu_0 = 0
+| poste_attendu_1 = 1
+| nomme_encore_attendu_t = t
+| lien_vide_attendu_t = t
+| export_contient_la_phrase_attendu_1 = 1
+| a_lit_attendu_1 = 1
+| b_lit_attendu_0 = 0
+| p_lit_attendu_0 = 0
+| existe_en_superutilisateur_attendu_1 = 1
+| a_lit_attendu_1 = 1
+| b_est_admin_attendu_t = t
+| admin_lit_attendu_0 = 0
+| a_lit_attendu_1 = 1
+| jeton_sans_compte_lit_attendu_0 = 0
+| jeton_vide_lit_attendu_0 = 0
+| a_lit_attendu_1 = 1
+| b_modifie_attendu_0 = 0
+| b_retire_attendu_0 = 0
+| toujours_la_attendu_1 = 1
+| intact_attendu_t = t
+| mise_a_jour_attendu_1 = 1
+| toujours_chez_a_attendu_t = t
+| b_lit_attendu_0 = 0
+| a_au_plafond_attendu_1000 = 1000
+| trois_postes_de_a_attendu_3 = 3
+| cinq_postes_attendu_5 = 5
+| cinq_cles_attendu_5 = 5
+| b_a_la_meme_phrase_attendu_1 = 1
+| premiere_modification_attendu_1 = 1
+| seconde_meme_date_lue_attendu_0 = 0
+| prix_de_la_premiere_attendu_5000 = 5000
+| suppression_date_perimee_attendu_0 = 0
+| poste_toujours_la_attendu_1 = 1
+| au_plafond_attendu_1000 = 1000
+| rien_insere_attendu_0 = 0
+| sans_jeton_attendu_t = t
+| au_plafond_attendu_1000 = 1000
+| a_postes_exportes_attendu_2 = 2
+| cle_presente_attendu_t = t
+| la_ligne_entiere_attendu_t = t
+| b_postes_exportes_attendu_0 = 0
+| p_postes_exportes_attendu_0 = 0
+| avant_attendu_2 = 2
+| suppression_preparee_attendu_t = t
+| apres_attendu_0 = 0
+| anon_un_droit_attendu_f = f
+| public_un_droit_attendu_f = f
+| authentifie_quatre_droits_attendu_t = t
+| colonnes_attendu_12 = 12
+| droits_de_colonne_attendu_0 = 0
+| poste_public_attendu_f = f
+| poste_anon_attendu_f = f
+| poste_authentifie_attendu_f = f
+| liste_fermee_attendu_t = t
+| definer_attendu_0 = 0
+| admin_attendu_0 = 0
+| fonctions_dependantes_attendu_tiret = —
+| vues_ou_regles_attendu_0 = 0
+| declencheur_exact_attendu_t = t
+| regles_attendu_0 = 0
+| poste_definer_attendu_f = f
+| politiques_attendu_1 = 1
+| using_exact_attendu_t = t
+| with_check_exact_attendu_t = t
+| tous_verbes_authentifie_attendu_t = t
+| vers_devis_attendu_t = t
+| en_suppression_attendu_n = n
+| deux_colonnes_attendu_t = t
+| set_null_d_une_seule_attendu_t = t
+| rapprochement_unique_attendu_t = t
+| devis_id_pro_unique_attendu_t = t
+| definer_ouvertes_attendu_31 = 31
+| definer_fermees_attendu_32 = 32
+| mise_a_jour_attendu_1 = 1
+| identifiant_garde_attendu_t = t
+| ancien_attendu_1 = 1
+| nouveau_attendu_0 = 0
+| au_plafond_attendu_1000 = 1000
+| retire_attendu_1 = 1
+| le_poste_revient_attendu_1 = 1
+| nombre_annonce_attendu_188 = 188
+| cas_lus_attendu_188 = 188
+| paires_lues_attendu_22 = 22
+| ecarts_attendu_0 = 0
+| attendus_null_attendu_2 = 2
+| paires_confondues_attendu_0 = 0
+| dix_cas_attendu_10 = 10
+| dix_cas_justes_attendu_t = t
+| null_rend_null_attendu_t = t
+| points_attendu_63487 = 63487
+| empreinte_du_fichier_attendu_t = t
+| sous_c_attendu_t = t
+| sous_und_icu_attendu_t = t
+| sous_fr_icu_attendu_t = t
+| sous_tr_icu_attendu_t = t
+| sous_scs_off_attendu_t = t
+| recalcul_exact_accepte_attendu_1 = 1
+| cle_inchangee_attendu_t = t
+| cle_recalculee_attendu_t = t
+| cle_authentifie_attendu_t = t
+| cle_anon_attendu_f = f
+| cle_public_attendu_f = f
+| droit_rendu_par_le_rollback_attendu_t = t
+| colonne_ordinaire_attendu_t = t
+| expression_ou_defaut_attendu_0 = 0
+| appels_dans_le_declencheur_attendu_3 = 3
+| refus_428c9_attendu_2 = 2
+| seulement_si_la_phrase_change_attendu_t = t
+| sans_jeton_sur_le_role_attendu_t = t
+| immuable_attendu_t = t
+| stricte_attendu_t = t
+| cle_definer_attendu_f = f
+| search_path_attendu_t = t
+| aucune_table_unicode_attendu_t = t
+| barre_oblique_inverse_attendu_0 = 0
+| chr_92_attendu_3 = 3
+| commence_par_la_garde_attendu_t = t
+| table_avant_les_remplacements_attendu_t = t
+| groupes_de_seize_apres_le_premier_attendu_318 = 318
+| nom_attendu_t = t
+| empreinte_uuid_attendu_t = t
+| unite_collation_c_attendu_t = t
+| seulement_0_et_c_attendu_t = t
+| dependance_attendu_0 = 0
+| avant_attendu_t = t
+| rangee_ne_change_pas_attendu_t = t
+| prix_seul_cle_gardee_attendu_t = t
+| meme_phrase_cle_gardee_attendu_t = t
+| reecrites_attendu_1 = 1
+| reecrite_change_attendu_t = t
+| fonction_restauree_attendu_t = t
+| doublons_a_trancher_attendu_1 = 1
+| devis_supprime_attendu_1 = 1
+| cle_inchangee_par_la_cascade_attendu_t = t
+| lien_vide_attendu_t = t
+| ancienne_regle_restauree_attendu_t = t
+| appels_apres_insertion_attendu_1 = 1
+| devis_supprime_attendu_1 = 1
+| appels_apres_prix_rien_et_cascade_attendu_1 = 1
+| lien_vide_attendu_t = t
+| appels_apres_phrase_changee_attendu_2 = 2
+| dix_mo_null_attendu_t = t
+| moins_d_une_seconde_attendu_t = t
+| deux_mille_attendu_t = t
+| deux_mille_un_null_attendu_t = t
+| pire_cas_cle_entiere_attendu_t = t
+| pire_cas_moins_d_une_seconde_attendu_t = t
+| a_au_plafond_attendu_1000 = 1000
+| plinthes_sous_off_attendu_t = t
+| mur_bas_sous_off_attendu_t = t
+| inf_attendu_t = t
+| bas_garde_son_s_attendu_t = t
+| euro_attendu_t = t
+| frais_50_euros_meme_cle_attendu_t = t
+| braille_separe_attendu_t = t
+| marque_arabe_supprimee_attendu_t = t
+| reserve_2065_supprimee_attendu_t = t
+[sortie]
+| DELETE 0
+| INSERT 0 2
+| BEGIN
+| INSERT 0 3
+| INSERT 0 3
+| COMMIT
+| PREPARE
+| PREPARE
+| PREPARE
+|
+| === 0. LA DONNÉE EXISTE — A range deux postes et les relit ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 2
+| postes_de_a_attendu_2
+| ----
+| 2
+|
+| -- la phrase ROGNÉE (U+00A0 et U+200B en bord, partis), son prix, sa clé ; un prix vide reste vide
+| phrase_rognee_attendu_t | prix_attendu_4500 | cle_attendu_t | cle
+| ----
+| t | 4500 | t | chape seche avant carrelage colle
+|
+| prix_vide_reste_vide_attendu_t
+| ----
+| t
+|
+| RESET
+| en_superutilisateur_attendu_2
+| ----
+| 2
+|
+| ROLLBACK
+|
+| === 1. LA FORME — chaque refus lu PAR SON NOM (23514), jamais un 22003 ; ce qui passe, et pourquoi ===
+| --- 1a. un U+200B seul (la phrase rognée devient vide) → base_poste_designation_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| ROLLBACK
+| --- 1b. 2 001 caractères → base_poste_designation_check (la garde rend une clé NULL, la contrainte de la clé se tait)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| ROLLBACK
+| --- 1c. l unité « ml » → base_poste_unite_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_unite_check"
+| ROLLBACK
+| --- 1d. aucune unité → base_poste_unite_check (et pas 23502 : la colonne est NULLABLE, la contrainte NOMMÉE)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_unite_check"
+| ROLLBACK
+| --- 1e. un prix de référence de 0 → base_poste_prix_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| ROLLBACK
+| --- 1f. un prix de −1 → base_poste_prix_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| ROLLBACK
+| --- 1g. un prix de 10 000 000 000 c → base_poste_prix_check (jamais un 22003)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| ROLLBACK
+| --- 1h. 2 000 caractères de QUATRE octets : ACCEPTÉ — une clé de 8 000 octets, que l index tient par son empreinte
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| caracteres_attendu_2000 | octets_de_la_cle_attendu_8000
+| ----
+| 2000 | 8000
+|
+| ROLLBACK
+| --- 1i. « — » seul (une clé VIDE) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1j. « … » seul → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1k. « « » » seuls → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1l. un remplisseur hangûl seul, chr(12644) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1m. un sélecteur de variante seul, chr(65039) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+|
+| === 1 bis. LES BLANCS QUE LA CLASSE DU PROJET NE CONNAÎT PAS — refusés ici, toujours acceptés par devis_lignes (lot S) ===
+| --- 1 bis a. U+3000 seul, chr(12288) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1 bis b. U+202F seul, chr(8239) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1 bis c. la tabulation verticale seule, chr(11) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1 bis d. U+0085 seul, chr(133) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1 bis e. U+2028 seul, chr(8232) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 1 bis f. …et le défaut reste OUVERT pour devis_lignes : la même phrase y fait une réserve (INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| reserve_faite_d_un_blanc_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 2. L ORDRE DES NOMS — quand une phrase viole deux contraintes, PostgreSQL nomme la première dans l ordre alphabétique ===
+| --- 2a. une phrase vide ET « ml » → base_poste_designation_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| ROLLBACK
+| --- 2b. « — » ET « ml » → base_poste_rapprochement_check (r avant u)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 2c. « — » ET un prix 0 → base_poste_prix_check (p avant r)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_prix_check"
+| ROLLBACK
+| --- 2d. 2 001 « é » → base_poste_designation_check (la garde rend une clé NULL)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_designation_check"
+| ROLLBACK
+|
+| === 3. LES DATES APPARTIENNENT À LA BASE ===
+| BEGIN
+| SET
+| SET
+| -- A envoie 2001 pour les trois dates : ignoré
+| INSERT 0 1
+| creation_posee_par_la_base_attendu_t | modifie_le_egale_creation_attendu_t | prix_fixe_a_la_creation_attendu_t
+| ----
+| t | t | t
+|
+| -- seule la phrase change (et A renvoie 2001 pour la date du prix) : la date du prix est GARDÉE, modifie_le avance
+| UPDATE 1
+| date_du_prix_gardee_attendu_t | modifie_le_avance_attendu_t
+| ----
+| t | t
+|
+| -- le prix change : sa date avance
+| UPDATE 1
+| date_du_prix_avance_attendu_t
+| ----
+| t
+|
+| -- le prix est vidé : sa date se vide avec lui
+| UPDATE 1
+| date_du_prix_videe_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|
+| === 4. LE LIEN VERS LE DEVIS D ORIGINE — une clé COMPOSÉE, aucun oracle, une origine qui ne se récrit pas ===
+| --- 4a. son propre devis : accepté
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| lie_a_son_devis_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+| --- 4b. le devis de B → 23503 base_postes_devis_origine_fkey, « Key is not present in table "devis" », SANS valeur
+| BEGIN
+| SET
+| SET
+| ERREUR 23503 insert or update on table "base_postes" violates foreign key constraint "base_postes_devis_origine_fkey"
+| ROLLBACK
+| --- 4c. un devis qui n existe pas → le MÊME 23503, le même message : aucun oracle
+| BEGIN
+| SET
+| SET
+| ERREUR 23503 insert or update on table "base_postes" violates foreign key constraint "base_postes_devis_origine_fkey"
+| ROLLBACK
+| --- 4d. l origine ne se RÉCRIT pas (vers DA2 : elle reste DA) ; elle se VIDE
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| origine_inchangee_attendu_t
+| ----
+| t
+|
+| UPDATE 1
+| origine_videe_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| --- 4e. A supprime son devis : le poste RESTE, le lien est vide, modifie_le est INCHANGÉE, et la modification conditionnée passe ensuite
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| devis_supprime_attendu_1
+| ----
+| 1
+|
+| poste_reste_attendu_1 | lien_vide_attendu_t | modifie_le_inchangee_attendu_t
+| ----
+| 1 | t | t
+|
+| modification_conditionnee_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 4 bis. UNE PHRASE QUI NOMME UN CLIENT survit à la fiche ET au devis — et l export la contient ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| fiche_supprimee_attendu_1
+| ----
+| 1
+|
+| devis_supprime_attendu_1
+| ----
+| 1
+|
+| fiche_attendu_0 | devis_attendu_0 | poste_attendu_1 | nomme_encore_attendu_t | lien_vide_attendu_t
+| ----
+| 0 | 0 | 1 | t | t
+|
+| export_contient_la_phrase_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 5. QUI LIT — A, puis B, puis P (un compte SANS fiche), puis un visiteur ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| a_lit_attendu_1
+| ----
+| 1
+|
+| SET
+| b_lit_attendu_0
+| ----
+| 0
+|
+| SET
+| p_lit_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+| --- 5b. un visiteur, alors que le poste existe → permission denied for table base_postes (et pas une liste vide)
+| BEGIN
+| INSERT 0 1
+| existe_en_superutilisateur_attendu_1
+| ----
+| 1
+|
+| SET
+| ERREUR 42501 permission denied for table base_postes
+| ROLLBACK
+|
+| === 5 bis. L ADMINISTRATION ne lit RIEN — B nommé administrateur lit 0 alors que A a son poste ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| a_lit_attendu_1
+| ----
+| 1
+|
+| RESET
+| INSERT 0 1
+| SET
+| SET
+| b_est_admin_attendu_t | admin_lit_attendu_0
+| ----
+| t | 0
+|
+| ROLLBACK
+|
+| === 5 ter. UN JETON SANS COMPTE, ET UN JETON VIDE — 0 ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| a_lit_attendu_1
+| ----
+| 1
+|
+| SET
+| jeton_sans_compte_lit_attendu_0
+| ----
+| 0
+|
+| SET
+| jeton_vide_lit_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+|
+| === 6. QUI ÉCRIT — B chez A, B au nom de A, un particulier, A qui déplace son poste ===
+| --- 6a. B modifie et retire le poste de A : 0 ligne, et le poste de A est intact
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| a_lit_attendu_1
+| ----
+| 1
+|
+| SET
+| b_modifie_attendu_0
+| ----
+| 0
+|
+| b_retire_attendu_0
+| ----
+| 0
+|
+| SET
+| toujours_la_attendu_1 | intact_attendu_t
+| ----
+| 1 | t
+|
+| ROLLBACK
+| --- 6b. B crée un poste AU NOM DE A → new row violates row-level security policy for table "base_postes"
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "base_postes"
+| ROLLBACK
+| --- 6c. un particulier crée un poste → new row violates row-level security policy for table "base_postes"
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "base_postes"
+| ROLLBACK
+| --- 6d. A tente de DÉPLACER son poste chez B : UPDATE 1, et le poste RESTE chez A (pro_id figé) ; B lit toujours 0
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| mise_a_jour_attendu_1 | toujours_chez_a_attendu_t
+| ----
+| 1 | t
+|
+| SET
+| b_lit_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+|
+| === 6 bis. PAS D ORACLE DU NOMBRE — A au plafond ; B écrit au nom de A → row-level security policy, JAMAIS OP018 ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 999
+| a_au_plafond_attendu_1000
+| ----
+| 1000
+|
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "base_postes"
+| ROLLBACK
+|
+| === 7. LE DOUBLON — une phrase PRESQUE identique est un doublon (23505 idx_base_postes_rapprochement) ===
+| --- 7a. la même phrase en minuscules → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7b. sans accents → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7c. « Chapes sèches avant carrelage collé. » (pluriel et point) → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7d. la forme DÉCOMPOSÉE (un e suivi de son accent, chr(768) et chr(769)) → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7e. une espace insécable et un double espace → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7f. un U+200B au milieu d un mot, chr(8203) → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7g. un U+FE0F à la fin, chr(65039) → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7h. « CHAPE SÈCHE, AVANT CARRELAGE COLLÉ. » → 23505 idx_base_postes_rapprochement
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 7i. ce qui RESTE permis : au forfait, fourniture non comprise, chez B ; et les signes qui portent un sens
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| trois_postes_de_a_attendu_3
+| ----
+| 3
+|
+| -- « Plancher bas » et « Plancher BA », « Déplacement < 20 km », « > 20 km » et « 20 km » : CINQ postes
+| INSERT 0 5
+| cinq_postes_attendu_5 | cinq_cles_attendu_5
+| ----
+| 5 | 5
+|
+| SET
+| INSERT 0 1
+| b_a_la_meme_phrase_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 8. L ÉCRITURE TARDIVE, EN SÉQUENCE — sous condition sur modifie_le, sans horloge ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| premiere_modification_attendu_1
+| ----
+| 1
+|
+| seconde_meme_date_lue_attendu_0
+| ----
+| 0
+|
+| prix_de_la_premiere_attendu_5000
+| ----
+| 5000
+|
+| suppression_date_perimee_attendu_0
+| ----
+| 0
+|
+| poste_toujours_la_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 8 bis. L ÉCRITURE TARDIVE À DEUX SESSIONS — la procédure B de l en-tête (elle ne tient pas dans un seul psql) ===
+| -- attendu : la tardive ATTEND le verrou de la récente, puis UPDATE 0 ; le prix de la récente est gardé ; la suppression tardive : DELETE 0
+|
+| === 9. LE PLAFOND — 1 000 postes par entreprise (OP018), et la phrase en toutes lettres ===
+| --- 9a. 1 000 postes, puis le 1 001e → OP018 « Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez. »
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 999
+| au_plafond_attendu_1000
+| ----
+| 1000
+|
+| ERREUR OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| ROLLBACK
+| --- 9b. 1 001 postes d UN SEUL ordre, derrière un savepoint (dit) → OP018, et RIEN n est inséré
+| BEGIN
+| SET
+| SET
+| SAVEPOINT
+| ERREUR OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| ROLLBACK
+| rien_insere_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+| --- 9c. l ÉDITEUR SQL, sans jeton, au plafond → OP018 : il reste COMPTÉ
+| BEGIN
+| INSERT 0 1
+| INSERT 0 999
+| sans_jeton_attendu_t | au_plafond_attendu_1000
+| ----
+| t | 1000
+|
+| ERREUR OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| ROLLBACK
+|
+| === 10. L EXPORT — mes_donnees() pour A, B et P ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 2
+| a_postes_exportes_attendu_2 | cle_presente_attendu_t | la_ligne_entiere_attendu_t
+| ----
+| 2 | t | t
+|
+| SET
+| b_postes_exportes_attendu_0
+| ----
+| 0
+|
+| SET
+| p_postes_exportes_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+|
+| === 11. LE COMPTE PART — preparer_suppression_compte(), puis la cascade depuis auth.users : 0 poste ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 2
+| RESET
+| avant_attendu_2
+| ----
+| 2
+|
+| SET
+| SET
+| suppression_preparee_attendu_t
+| ----
+| t
+|
+| RESET
+| DELETE 1
+| apres_attendu_0
+| ----
+| 0
+|
+| ROLLBACK
+|
+| === 12. LES DROITS — demandés au catalogue ===
+| anon_un_droit_attendu_f | public_un_droit_attendu_f | authentifie_quatre_droits_attendu_t | droits_authentifie
+| ----
+| f | f | t | delete,insert,select,update
+|
+| -- les droits de COLONNE, lus dans pg_attribute.attacl — jamais dans information_schema.column_privileges, qui en invente
+| colonnes_attendu_12 | droits_de_colonne_attendu_0
+| ----
+| 12 | 0
+|
+| -- la fonction du déclencheur, pour les TROIS rôles : f partout (le balayage de la section 43)
+| poste_public_attendu_f | poste_anon_attendu_f | poste_authentifie_attendu_f
+| ----
+| f | f | f
+|
+|
+| === 13. LE CATALOGUE — qui nomme la table, LU DANS LA BASE et non dans un texte ===
+| --- 13a. le motif NORMALISÉ du cas 27a de l essai 49 (prosrc + prosqlbody, guillemets dépliés, commentaires et chaînes retirés)
+| liste_fermee_attendu_t | qui_la_nomme | definer_attendu_0 | admin_attendu_0
+| ----
+| t | public.mes_donnees, public.tient_le_poste | 0 | 0
+|
+| --- 13b. sans texte : les fonctions que la BASE a enregistrées comme dépendant de la table (analogue de 27d)
+| fonctions_dependantes_attendu_tiret
+| ----
+| —
+|
+| --- 13c. sans texte : les VUES et les RÈGLES qui la lisent ou l écrivent (analogue de 27e)
+| vues_ou_regles_attendu_0
+| ----
+| 0
+|
+| --- 13d. sans texte : ses déclencheurs (hors clés étrangères) — exactement trg_tient_le_poste, aucune règle (analogue de 27f)
+| declencheur_exact_attendu_t | regles_attendu_0
+| ----
+| t | 0
+|
+| --- 13e. tient_le_poste est security INVOKER (en definer, B apprendrait que la base de A est pleine)
+| poste_definer_attendu_f
+| ----
+| f
+|
+| --- 13f. la politique — UNE, la chaîne exacte comparée
+| politiques_attendu_1 | using_exact_attendu_t | with_check_exact_attendu_t | tous_verbes_authentifie_attendu_t
+| ----
+| 1 | t | t | t
+|
+| --- 13g. la clé composée, et sa liste `set null` (confdelsetcols) : devis_origine_id SEULE
+| vers_devis_attendu_t | en_suppression_attendu_n | deux_colonnes_attendu_t | set_null_d_une_seule_attendu_t
+| ----
+| t | n | t | t
+|
+| --- 13h. les deux index UNIQUES
+| rapprochement_unique_attendu_t | devis_id_pro_unique_attendu_t
+| ----
+| t | t
+|
+| --- 13i. les listes 27b et 27c de l essai 49 : le lot P n y ajoute aucune fonction security definer (31 = les 24 d avant lui, plus admin_valider_pieces du lot S-a, peut_faire_un_devis du lot S-b, remonter_publication du lot S-c, et profil_public, ma_fiche_pro, admin_etat_des_fiches, mes_donnees_sans_masquage du lot S-d ; 32 = les 27 d avant, plus les trois déclencheurs definer du lot S-b, tient_le_signalement du lot S-d et recalcule_apres_reduction du lot 2a)
+| definer_ouvertes_attendu_31 | definer_fermees_attendu_32
+| ----
+| 31 | 32
+|
+|
+| === 14. L IDENTIFIANT EST FIGÉ — update … set id = <autre> : il reste ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| mise_a_jour_attendu_1 | identifiant_garde_attendu_t
+| ----
+| 1 | t
+|
+| ancien_attendu_1 | nouveau_attendu_0
+| ----
+| 1 | 0
+|
+| ROLLBACK
+|
+| === 15. devis_pkey D ABORD — le second index unique de devis ne parle jamais le premier ===
+| --- 15a. A renvoie l identifiant de SON devis → 23505 devis_pkey, jamais idx_devis_id_pro
+| BEGIN
+| SET
+| SET
+| ERREUR 23505 duplicate key value violates unique constraint "devis_pkey"
+| ROLLBACK
+| --- 15b. A envoie l identifiant du devis de B → 23505 devis_pkey
+| BEGIN
+| SET
+| SET
+| ERREUR 23505 duplicate key value violates unique constraint "devis_pkey"
+| ROLLBACK
+|
+| === 16. LE CONTRAT DE L UPSERT — A au plafond, « on conflict (id) do update » sur un poste existant → OP018 ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 999
+| au_plafond_attendu_1000
+| ----
+| 1000
+|
+| ERREUR OP018 Votre base compte déjà 1 000 postes : retirez-en un dont vous ne vous servez plus, puis réessayez.
+| ROLLBACK
+|
+| === 17. LE CONTRAT DE L AJOUT TARDIF — ajout, retrait, puis le même ajout : le poste REVIENT (non couvert, et dit) ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| retire_attendu_1
+| ----
+| 1
+|
+| INSERT 0 1
+| le_poste_revient_attendu_1
+| ----
+| 1
+|
+| ROLLBACK
+|
+| === 18. LA CLÉ, LES CAS PARTAGÉS — supabase/cas-rapprochement.json, les MÊMES attendus que JavaScript ===
+| nombre_annonce_attendu_188 | cas_lus_attendu_188 | paires_lues_attendu_22
+| ----
+| 188 | 188 | 22
+|
+| -- les écarts, un par ligne (AUCUNE ligne attendue)
+| cas | obtenu | attendu
+| ----
+|
+| ecarts_attendu_0 | attendus_null_attendu_2
+| ----
+| 0 | 2
+|
+| paires_confondues_attendu_0
+| ----
+| 0
+|
+| -- la preuve que le joueur JOUE : dix cas lus en entier
+| cas | phrase | obtenu | attendu
+| ----
+| D01 | Chape sèche avant carrelage collé | chape seche avant carrelage colle | chape seche avant carrelage colle
+| E02 | Planchers bas | plancher bas | plancher bas
+| G02 | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa | ∅ | ∅
+| I04 | Isolant 10​0 mm | isolant 100 mm | isolant 100 mm
+| L01 | İstanbul | istanbul | istanbul
+| N04 | 🔥 Chape | 🔥 chape | 🔥 chape
+| R01 | Chape sèche avant carrelage collé | chape seche avant carrelage colle | chape seche avant carrelage colle
+| S03 | Évacuation des gravats | evacuation de gravat | evacuation de gravat
+| V01 | — |  |
+| Y01 | Déplacement < 20 km | deplacement inf 20 km | deplacement inf 20 km
+|
+| dix_cas_attendu_10 | dix_cas_justes_attendu_t
+| ----
+| 10 | t
+|
+| null_rend_null_attendu_t
+| ----
+| t
+|
+|
+| === 18 bis. L EMPREINTE DU PLAN DE BASE — la même que node, sous quatre collations et sous standard_conforming_strings = off ===
+| points_attendu_63487 | empreinte_du_fichier_attendu_t | empreinte
+| ----
+| 63487 | t | f7d1ccf4d41f431c125dc9ba2b46bf09
+|
+| sous_c_attendu_t
+| ----
+| t
+|
+| sous_und_icu_attendu_t
+| ----
+| t
+|
+| sous_fr_icu_attendu_t
+| ----
+| t
+|
+| sous_tr_icu_attendu_t
+| ----
+| t
+|
+| BEGIN
+| SET
+| sous_scs_off_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+|
+| === 19. LA CLÉ POSÉE PAR LE DÉCLENCHEUR — la base seule l écrit, et la fonction reste exécutable par celui qui écrit ===
+| --- 19a. A envoie cle_rapprochement à l insertion → 428C9 (la base calcule cette cle, elle ne s envoie pas)
+| BEGIN
+| SET
+| SET
+| ERREUR 428C9 cle_rapprochement : la base calcule cette cle, elle ne s'envoie pas.
+| ROLLBACK
+| --- 19b. …et à la modification → 428C9 (la base calcule cette cle, elle ne s ecrit que par son recalcul exact)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 428C9 cle_rapprochement : la base calcule cette cle, elle ne s'ecrit que par son recalcul exact.
+| ROLLBACK
+| --- 19b bis. …mais son recalcul EXACT passe : c est la réécriture du contrat (50.0), et elle ne change rien ici
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| recalcul_exact_accepte_attendu_1 | cle_inchangee_attendu_t
+| ----
+| 1 | t
+|
+| ROLLBACK
+| --- 19c. une phrase modifiée RECALCULE la clé : « POSES DE PLINTHES » → pose de plinthe
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| cle_recalculee_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| --- 19d. le droit d exécuter la fonction de la clé : authenticated oui, anon et PUBLIC non
+| cle_authentifie_attendu_t | cle_anon_attendu_f | cle_public_attendu_f
+| ----
+| t | f | f
+|
+| --- 19e. dans une transaction ANNULÉE, le droit retiré à authenticated : l insertion suivante (le déclencheur, security invoker, appelle la fonction) → permission denied for function cle_de_rapprochement
+| BEGIN
+| REVOKE
+| SET
+| SET
+| ERREUR 42501 permission denied for function cle_de_rapprochement
+| ROLLBACK
+| droit_rendu_par_le_rollback_attendu_t
+| ----
+| t
+|
+|
+| === 20. LE CATALOGUE DE LA CLÉ — la colonne, la fonction, son corps, l index ===
+| -- la colonne est ORDINAIRE : ni générée, ni défaut (une colonne générée se recalculait à CHAQUE modification de la ligne)
+| colonne_ordinaire_attendu_t | expression_ou_defaut_attendu_0
+| ----
+| t | 0
+|
+| -- le déclencheur l écrit : trois appels à la fonction (l insertion, la vérification d une clé écrite, la phrase changée), deux refus 428C9, et le « sans jeton » décidé sur le RÔLE
+| appels_dans_le_declencheur_attendu_3 | refus_428c9_attendu_2 | seulement_si_la_phrase_change_attendu_t | sans_jeton_sur_le_role_attendu_t
+| ----
+| 3 | 2 | t | t
+|
+| immuable_attendu_t | stricte_attendu_t | cle_definer_attendu_f | search_path_attendu_t | aucune_table_unicode_attendu_t | barre_oblique_inverse_attendu_0 | chr_92_attendu_3 | commence_par_la_garde_attendu_t | table_avant_les_remplacements_attendu_t | groupes_de_seize_apres_le_premier_attendu_318
+| ----
+| t | t | f | t | t | 0 | 3 | t | t | 318
+|
+| nom_attendu_t | empreinte_uuid_attendu_t | unite_collation_c_attendu_t | seulement_0_et_c_attendu_t | definition
+| ----
+| t | t | t | t | CREATE UNIQUE INDEX idx_base_postes_rapprochement ON public.base_postes USING btree (pro_id, ((md5(cle_rapprochement))::uuid), unite COLLATE "C", fourniture_non_comprise)
+|
+| -- et plus aucune expression de la table ne dépend de la fonction (pg_depend : 0)
+| dependance_attendu_0
+| ----
+| 0
+|
+|
+| === 21. LE CONTRAT DE LA RÈGLE — remplacer la fonction ne change AUCUNE clé rangée ; seule la réécriture du contrat les recalcule ===
+| BEGIN
+| INSERT 0 1
+| avant_attendu_t
+| ----
+| t
+|
+| CREATE FUNCTION
+| rangee_ne_change_pas_attendu_t
+| ----
+| t
+|
+| --- 21a. le PRIX seul change : la clé ne bouge pas (avec la colonne générée, elle était recalculée — relecture BASE1)
+| UPDATE 1
+| prix_seul_cle_gardee_attendu_t
+| ----
+| t
+|
+| --- 21b. la phrase renvoyée À L IDENTIQUE : la clé ne bouge pas non plus
+| UPDATE 1
+| meme_phrase_cle_gardee_attendu_t
+| ----
+| t
+|
+| --- 21c. la RÉÉCRITURE du contrat : la seule écriture de la clé acceptée, exactement son recalcul
+| reecrites_attendu_1
+| ----
+| 1
+|
+| reecrite_change_attendu_t
+| ----
+| t
+|
+| ROLLBACK
+| fonction_restauree_attendu_t
+| ----
+| t
+|
+|
+| === 21 bis. ENTRE LE REMPLACEMENT ET LA RÉÉCRITURE — la cascade d un devis ne touche plus la clé ; la réécriture tombe sur le doublon et annule TOUT ===
+| BEGIN
+| INSERT 0 2
+| --- 21 bis a. AVANT la migration, la recherche des doublons par une fonction TEMPORAIRE qui porte la nouvelle règle (une lecture)
+| CREATE FUNCTION
+| doublons_a_trancher_attendu_1
+| ----
+| 1
+|
+| CREATE FUNCTION
+| --- 21 bis b. A supprime SON devis : la cascade passe, la clé du poste qui le citait ne bouge pas
+| SET
+| SET
+| devis_supprime_attendu_1
+| ----
+| 1
+|
+| RESET
+| cle_inchangee_par_la_cascade_attendu_t | lien_vide_attendu_t
+| ----
+| t | t
+|
+| --- 21 bis c. la réécriture, sous le verrou du contrat, tombe sur le doublon que la nouvelle règle crée → 23505 idx_base_postes_rapprochement, et TOUT est annulé
+| LOCK TABLE
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| ancienne_regle_restauree_attendu_t
+| ----
+| t
+|
+|
+| === 21 ter. LE COÛT — la clé ne se calcule qu à l insertion et quand la phrase change : un prix, une cascade, 0 appel ===
+| BEGIN
+| SET
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| appels_apres_insertion_attendu_1
+| ----
+| 1
+|
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| devis_supprime_attendu_1
+| ----
+| 1
+|
+| RESET
+| appels_apres_prix_rien_et_cascade_attendu_1 | lien_vide_attendu_t
+| ----
+| 1 | t
+|
+| SET
+| SET
+| UPDATE 1
+| RESET
+| appels_apres_phrase_changee_attendu_2
+| ----
+| 2
+|
+| ROLLBACK
+|
+| === 22. LA GARDE — 10 Mo rendent NULL en moins d une seconde ; 2 000 points de code ont une clé, 2 001 non ===
+| BEGIN
+| SET
+| dix_mo_null_attendu_t | moins_d_une_seconde_attendu_t
+| ----
+| t | t
+|
+| deux_mille_attendu_t | deux_mille_un_null_attendu_t
+| ----
+| t | t
+|
+| -- le PIRE cas n est pas une phrase longue mais une phrase courte qui s allonge : 1 990 « % », chacun devenu « pourcent » (~50 ms mesurés)
+| pire_cas_cle_entiere_attendu_t | pire_cas_moins_d_une_seconde_attendu_t
+| ----
+| t | t
+|
+| ROLLBACK
+|
+| === 23. L ÉTRANGER NE COMPTE PAS — A au plafond ; P puis B au nom de A : row-level security policy, JAMAIS OP018 ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 999
+| a_au_plafond_attendu_1000
+| ----
+| 1000
+|
+| SAVEPOINT
+| --- 23a. P au nom de A → new row violates row-level security policy for table "base_postes"
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "base_postes"
+| ROLLBACK
+| --- 23b. B au nom de A → new row violates row-level security policy for table "base_postes"
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "base_postes"
+| ROLLBACK
+|
+| === 24. LE RÉGLAGE DE SESSION — standard_conforming_strings = off ne change aucune clé ===
+| BEGIN
+| SET
+| plinthes_sous_off_attendu_t | mur_bas_sous_off_attendu_t
+| ----
+| t | t
+|
+| ROLLBACK
+|
+| === 25. LES SIGNES DE SENS ET L EXCEPTION — trois clés lues dans la COLONNE, depuis une vraie insertion ===
+| BEGIN
+| SET
+| SET
+| INSERT 0 3
+| designation | cle_rapprochement
+| ----
+| Déplacement < 20 km | deplacement inf 20 km
+| Frais 50€ | frai 50 euro
+| Planchers bas | plancher bas
+|
+| inf_attendu_t | bas_garde_son_s_attendu_t | euro_attendu_t | frais_50_euros_meme_cle_attendu_t
+| ----
+| t | t | t | t
+|
+| ROLLBACK
+|
+| === 26. LES INVISIBLES — toute la propriété Default_Ignorable_Code_Point est supprimée, U+2800 est un séparateur ===
+| --- 26a. U+2800 seul (le motif braille vide) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 26b. une étiquette et un sélecteur de variante seuls (U+E0001, U+E0100) → base_poste_rapprochement_check
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "base_postes" violates check constraint "base_poste_rapprochement_check"
+| ROLLBACK
+| --- 26c. la même phrase qu un poste rangé, un U+E0100 glissé à la fin → 23505 idx_base_postes_rapprochement (c était un second poste)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 23505 duplicate key value violates unique constraint "idx_base_postes_rapprochement"
+| ROLLBACK
+| --- 26d. trois clés lues dans la COLONNE : U+2800 sépare, U+061C et U+2065 disparaissent
+| BEGIN
+| SET
+| SET
+| INSERT 0 3
+| braille_separe_attendu_t | marque_arabe_supprimee_attendu_t | reserve_2065_supprimee_attendu_t
+| ----
+| t | t | t
+|
+| ROLLBACK
+|
+| === FIN — 50 refus attendus, chacun annoncé par son nom ci-dessus ; les valeurs attendues sont dans le nom des colonnes ===

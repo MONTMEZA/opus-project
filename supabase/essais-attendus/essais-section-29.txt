@@ -1,0 +1,162 @@
+# Ce que doit rendre supabase/essais-section-29.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-29` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-29
+
+[partie essai]
+erreurs: 0
+valeurs-jugees: 0
+[erreurs]
+[valeurs]
+[sortie]
+| === jeu d essai ===
+| -- attendu : INSERT 0 4, puis 3 pros avec fiche et 1 particulier sans, puis INSERT 0 1 et « depart | 0 »
+| INSERT 0 4
+| nom | type | metier | a_une_fiche
+| ----
+| A Maçonnerie | pro | macon | t
+| B Plomberie | pro | plombier | t
+| C Peinture | pro | peintre-en-batiment | t
+| Un particulier | particulier | ∅ | f
+| (4 rows)
+|
+| INSERT 0 1
+| quoi | nb_reponses
+| ----
+| depart | 0
+| (1 row)
+|
+|
+| === 1. le compteur monte quand une reponse arrive ===
+| BEGIN
+| INSERT 0 1
+| quoi | nb_reponses
+| ----
+| apres insert | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. il redescend quand elle part ===
+| BEGIN
+| INSERT 0 1
+| DELETE 1
+| quoi | nb_reponses
+| ----
+| apres delete | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3. il ne descend jamais sous zero ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| DELETE 1
+| quoi | nb_reponses
+| ----
+| apres un delete de trop | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4. le rattrapage RECALCULE, il n incremente pas ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| quoi | nb_reponses
+| ----
+| apres deux rattrapages | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5. l auteur est prevenu, et le TITRE est dans le texte ===
+| BEGIN
+| INSERT 0 1
+| quoi | pour_l_auteur | type | texte
+| ----
+| notification | t | annonce | B Plomberie a répondu à « Plaquiste du 12 au 20 octobre »
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. repondre a SA PROPRE annonce ne notifie personne ===
+| BEGIN
+| INSERT 0 1
+| quoi | count
+| ----
+| notifications | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === la reponse de B, pour les essais de lecture ===
+| INSERT 0 1
+|
+| === 7. celui qui a repondu relit SA reponse ===
+| BEGIN
+| SET
+| SET
+| quoi | count
+| ----
+| B voit | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| === 8. l auteur de l annonce lit les reponses qu on lui a faites ===
+| BEGIN
+| SET
+| SET
+| quoi | count | message
+| ----
+| A voit | 1 | Disponible sur ces dates, 28 EUR/m2.
+| (1 row)
+|
+| ROLLBACK
+|
+| === 9. un TIERS ne lit rien du tout  <- LE CAS QUI COMPTE ===
+| BEGIN
+| SET
+| SET
+| quoi | count
+| ----
+| C voit | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 10. apres un blocage, la reponse disparait ===
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| quoi | count
+| ----
+| A voit, apres avoir bloque B | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. un particulier ne lit rien, meme sa propre ligne ===
+| BEGIN
+| SET
+| SET
+| quoi | count
+| ----
+| le particulier voit | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === menage ===
+| DELETE 1
+| DELETE 1
+| DELETE 4
+| DELETE 3

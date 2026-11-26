@@ -7,7 +7,8 @@
 #
 # Ce que ça vérifie, dans l'ordre du moins cher au plus cher :
 #   1. les contrôles du projet (quelques secondes) ;
-#   2. la construction du paquet, iOS ET Android.
+#   2. la construction du paquet, iOS ET Android ;
+#   3. dans un job À PART, les essais SQL de `supabase/` (étape 2c-E).
 #
 # Pourquoi les DEUX plateformes : une construction qui ne passe que d'un côté
 # se découvre au pire moment. Le code est pourtant le même — il n'y a aucun
@@ -53,3 +54,59 @@ jobs:
 
       - name: Construire le paquet Android
         run: npx expo export --platform android --output-dir /tmp/paquet-android
+
+  # LES ESSAIS SQL — étape 2c-E (26/11/2026). Un job À PART : il lui faut
+  # un PostgreSQL, et `npm run verifier` doit passer partout, y compris sans
+  # base. Le job ci-dessus ne change pas.
+  #
+  # Aucun service Docker, et c'est voulu. `npm run essais-sql` crée SA grappe
+  # (initdb dans un dossier temporaire, une socket privée, aucun port, aucun
+  # mot de passe), y joue les 33 essais de `supabase/`, les procédures à deux
+  # sessions et la parité de `cas-remise.json`, puis la détruit — EXACTEMENT
+  # ce qu'il fait dans le conteneur de travail, où il a passé avant d'être
+  # poussé. Un service `postgres:16` serait une Debian (glibc, ICU) que ce
+  # conteneur ne peut pas lancer : on pousserait ce qu'on n'a pas joué.
+  #
+  # Un rouge ici veut dire qu'un essai ne rend plus ce qu'il rendait. Lire le
+  # journal (il nomme l'essai, le cas et l'écart, et imprime d'abord la
+  # version de PostgreSQL, d'ICU et de la glibc : quand GitHub rougit et pas
+  # le conteneur, c'est la première chose à comparer), puis l'artefact
+  # « sorties-essais-sql ».
+  essais-sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Le rattrapage du lot T rejoue `schema.sql` tel que la vraie base
+          # l'avait reçu (commit d0560e8) : il faut l'historique entier.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # L'image ubuntu-24.04 porte PostgreSQL 16, service arrêté : le script
+      # n'en prend que les programmes. S'ils manquent un jour, on les installe
+      # plutôt que de rougir sur une question de machine.
+      - name: PostgreSQL 16
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-16
+          fi
+          /usr/lib/postgresql/16/bin/postgres --version
+
+      # Aucun `npm ci` : le script et `generer-cas-remise` n'importent aucun
+      # paquet (prouvé par `npm run essais-sql -- --comme-github`, qui joue
+      # depuis un clone sans node_modules).
+      - name: Les essais SQL
+        run: npm run essais-sql -- --sorties "$RUNNER_TEMP/sorties-essais-sql"
+
+      - name: Garder les sorties brutes si un essai a rougi
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sorties-essais-sql
+          path: ${{ runner.temp }}/sorties-essais-sql
+          retention-days: 7

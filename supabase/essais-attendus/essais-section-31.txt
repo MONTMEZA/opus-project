@@ -1,0 +1,163 @@
+# Ce que doit rendre supabase/essais-section-31.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-31` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-31
+
+[partie essai]
+erreurs: 3
+valeurs-jugees: 0
+[erreurs]
+| @ --- 5a. le client s insere une fiche avec le badge (attendu : ERROR OP010)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| @ --- le pro tente de supprimer SA fiche ---
+|   23514 Une fiche professionnelle ne se supprime pas tant que le compte existe : elle emporterait les avis que vos clients ont écrits sur vous, et les demandes qu'ils vous ont adressées. Pour fermer le compte entier, passez par Profil → Supprimer mon compte.
+| @ === 8. …et l avis est TOUJOURS la apres la tentative ===
+|   23514 Une fiche professionnelle ne se supprime pas tant que le compte existe : elle emporterait les avis que vos clients ont écrits sur vous, et les demandes qu'ils vous ont adressées. Pour fermer le compte entier, passez par Profil → Supprimer mon compte.
+[valeurs]
+[sortie]
+| INSERT 0 1
+|
+| === 1. Un artisan s inscrit : les DEUX moities naissent ensemble ===
+| BEGIN
+| INSERT 0 1
+| type | nom | cgu_enregistrees | entreprise | metier | metiers | ville | verifie | verification_statut
+| ----
+| pro | Belaid Maconnerie | t | Belaid Maconnerie | macon | {macon,carreleur} | Marseille (13) | f | non_soumis
+| (1 row)
+|
+| ROLLBACK
+|
+| === 2. Un metier INVENTE ne fait pas echouer l inscription ===
+| BEGIN
+| INSERT 0 1
+| metier | metiers
+| ----
+| macon | {macon}
+| (1 row)
+|
+| ROLLBACK
+|
+| === 3. Des metadonnees qui reclament le badge sont IGNOREES ===
+| BEGIN
+| INSERT 0 1
+| verifie | kbis_valide | assurance_valide | rge | verification_statut
+| ----
+| f | f | f | f | non_soumis
+| (1 row)
+|
+| ROLLBACK
+|
+| === 4. Un PARTICULIER n a pas de fiche professionnelle ===
+| BEGIN
+| INSERT 0 1
+| type | fiches_pro
+| ----
+| particulier | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 5. LE BADGE NE SE DECERNE PAS A LA CREATION (faille du 05/10) ===
+| --- 5a. le client s insere une fiche avec le badge (attendu : ERROR OP010)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+| --- 5b. une fonction de la base cree la fiche POUR son titulaire, badge glisse dedans (attendu : f | f | f | non_soumis)
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| SET
+| INSERT 0 1
+| verifie | kbis_valide | assurance_valide | verification_statut
+| ----
+| f | f | f | non_soumis
+| (1 row)
+|
+| ROLLBACK
+|
+| === 6. L administration, elle, pose toujours le badge ===
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| verifie | verification_statut
+| ----
+| t | verifie
+| (1 row)
+|
+| ROLLBACK
+|
+| === 7. UNE FICHE PRO NE SE SUPPRIME PAS — et les avis survivent ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| --- avant : combien d avis ? ---
+| avis
+| ----
+| 1
+| (1 row)
+|
+| --- le pro tente de supprimer SA fiche ---
+| SET
+| SET
+| ERREUR 23514 Une fiche professionnelle ne se supprime pas tant que le compte existe : elle emporterait les avis que vos clients ont écrits sur vous, et les demandes qu'ils vous ont adressées. Pour fermer le compte entier, passez par Profil → Supprimer mon compte.
+| ROLLBACK
+|
+| === 8. …et l avis est TOUJOURS la apres la tentative ===
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SAVEPOINT
+| SET
+| SET
+| ERREUR 23514 Une fiche professionnelle ne se supprime pas tant que le compte existe : elle emporterait les avis que vos clients ont écrits sur vous, et les demandes qu'ils vous ont adressées. Pour fermer le compte entier, passez par Profil → Supprimer mon compte.
+| ROLLBACK
+| avis_toujours_la | anonymises
+| ----
+| 1 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 9. LA CASCADE DOIT PASSER : supprimer son compte reste un droit ===
+| BEGIN
+| INSERT 0 1
+| DELETE 1
+| comptes | fiches
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 10. …et la cascade depuis auth.users aussi (le 2e des 3 chemins) ===
+| BEGIN
+| INSERT 0 1
+| DELETE 1
+| comptes | fiches
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+|
+| === 11. Une inscription SANS metadonnees ne casse pas ===
+| BEGIN
+| INSERT 0 1
+| type | nom | sans_cgu
+| ----
+| particulier | Vous | t
+| (1 row)
+|
+| ROLLBACK
+| DELETE 1
+|
+| === FIN DES ESSAIS DE LA SECTION 31 ===

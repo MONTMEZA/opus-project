@@ -1,0 +1,760 @@
+# Ce que doit rendre supabase/essais-section-51c.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-51c` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-51c
+
+[partie essai]
+erreurs: 17
+valeurs-jugees: 0
+[erreurs]
+| @ --- B3. Une demande reçue datée en modification : OP019 tient toujours, la date du jour reste (attendu : ERROR OP019)
+|   OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| @ --- B4. Une réponse à une annonce datée en modification : OP021 tient toujours (attendu : ERROR OP021)
+|   OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| @ --- C2. Un signalement né « traité par l administrateur » (attendu : ERROR permission denied for table signalements). Avant le lot : INSERT 0 1.
+|   42501 permission denied for table signalements
+| @ --- C3. Une demande de métiers née « acceptée » (attendu : ERROR permission denied for table metier_demandes)
+|   42501 permission denied for table metier_demandes
+| @ --- C4. Une spécialité née « ajoutée », datée 2001 (attendu : ERROR permission denied for table specialites_proposees)
+|   42501 permission denied for table specialites_proposees
+| @ --- E4. Une publicité AVEC un auteur (attendu : ERROR new row … violates check constraint "post_publicite_sans_auteur_check"). Avant le lot : INSERT 0 1.
+|   23514 new row for relation "posts" violates check constraint "post_publicite_sans_auteur_check"
+| @ --- E5. Une publication sans auteur ni publicité : refusée par l ancienne contrainte, qui reste (attendu : ERROR … "post_a_un_auteur_ou_est_une_pub")
+|   23514 new row for relation "posts" violates check constraint "post_a_un_auteur_ou_est_une_pub"
+| @ --- F2. LE VERROU OP001 NE SE CONTOURNE PLUS : P date son commentaire 2099, Q lui répond, P veut le récrire (attendu : ERROR OP001). Avant le lot : UPDATE 1 — la conversation se récrivait.
+|   OP001 Ce commentaire ne peut plus être corrigé : quelqu'un a répondu après lui.
+| @ --- H2. P veut DÉPLACER son avis vers B (attendu : ERROR permission denied for table reviews). Avant le lot : UPDATE 1.
+|   42501 permission denied for table reviews
+| @ --- H3. P « upserte » son avis pour le récrire (attendu : ERROR permission denied for table reviews)
+|   42501 permission denied for table reviews
+| @ --- H7. Un second avis du même client (attendu : ERROR … "reviews_professional_id_author_id_key")
+|   23505 duplicate key value violates unique constraint "reviews_professional_id_author_id_key"
+| @ --- I1. P récrit sa trace des CGU (attendu : ERROR OP023). Avant le lot : UPDATE 1.
+|   OP023 Ces informations du compte ne se changent pas ici. Si vous voyez ce message, mettez Opus à jour.
+| @ --- I2. P récrit son e-mail (attendu : ERROR OP023)
+|   OP023 Ces informations du compte ne se changent pas ici. Si vous voyez ce message, mettez Opus à jour.
+| @ --- J8. Un visiteur ne peut pas l appeler (attendu : ERROR permission denied for function remonter_publication)
+|   42501 permission denied for function remonter_publication
+| @ --- J9. Un connecté SANS identité : refusé (attendu : ERROR Connectez-vous pour remettre une publication en avant.)
+|   42501 Connectez-vous pour remettre une publication en avant.
+| @ --- J11. L historique : A lit le sien, P rien ; personne ne l écrit ni ne le vide (attendu : 1 | 0, puis ERROR permission denied for table remontees)
+|   42501 permission denied for table remontees
+| @ --- J12. Ni vider ni supprimer l historique (attendu : ERROR permission denied for table remontees)
+|   42501 permission denied for table remontees
+[valeurs]
+[sortie]
+|
+| ##### A. LA DONNÉE EXISTE #####
+| --- A1. A est pro avec sa fiche, P particulier, 6 publications, la conversation (attendu : t | t | 6 | 1)
+| a_est_pro | p_particulier | publications | conversation
+| ----
+| t | t | 6 | 1
+| (1 row)
+|
+| --- A2. La version des CGU : P garde « <jour> », Q (« version-inventee-2099 ») n en a pas (attendu : t | t). Avant le lot : Q gardait la version inventée.
+| p_garde_sa_version | q_version_ecartee
+| ----
+| t | t
+| (1 row)
+|
+|
+| ##### B. LES DATES — posées par la base #####
+| --- B1. Le client écrit 2099 ou 2001 à la CRÉATION, dans dix tables : chaque date est celle du jour (attendu : t sur toute la ligne). Avant le lot : 2099 et 2001 étaient gardées.
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| commentaire | devis | rappel | urgence | message | vue | avis | demande | publication | reponse_demande | chantier | reponse_annonce | annonce
+| ----
+| t | t | t | t | t | t | t | t | t | t | t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- B2. Le client récrit la date en MODIFICATION, là où c est le mode : annonce, demande, chantier, fiche, compte (attendu : t sur toute la ligne)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| RESET
+| SET
+| SET
+| UPDATE 1
+| RESET
+| annonce_gardee_texte_change | chantier_garde_sa_date | fiche_gardee | compte_garde | demande_gardee
+| ----
+| t | t | t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- B3. Une demande reçue datée en modification : OP019 tient toujours, la date du jour reste (attendu : ERROR OP019)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| ERREUR OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| ROLLBACK
+| --- B4. Une réponse à une annonce datée en modification : OP021 tient toujours (attendu : ERROR OP021)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| ROLLBACK
+| --- B5. L éditeur SQL (postgres) garde ses dates — c est ce qui permet les reprises et les essais (attendu : t)
+| BEGIN
+| INSERT 0 1
+| date_de_l_editeur_gardee
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- B6. Le carnet : création datée 2099 par A → date du jour ; modification datée 2001 → date gardée, le nom change ; l éditeur SQL aussi remis à l horloge (attendu : t | t | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| RESET
+| INSERT 0 1
+| creation_du_jour | modification_gardee | nom_change | editeur_aussi_a_l_horloge
+| ----
+| t | t | t | t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### C. LES FILES DE L ADMINISTRATION — droits de colonne #####
+| --- C1. Les colonnes que l application envoie passent : un signalement (8), une demande de métiers (4, avec returning), une spécialité (3) (attendu : INSERT 0 1, une ligne rendue, INSERT 0 1, puis t | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| statut
+| ----
+| en_attente
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| signalement_neuf | demande_metiers_neuve | specialite_neuve
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- C2. Un signalement né « traité par l administrateur » (attendu : ERROR permission denied for table signalements). Avant le lot : INSERT 0 1.
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table signalements
+| ROLLBACK
+| --- C3. Une demande de métiers née « acceptée » (attendu : ERROR permission denied for table metier_demandes)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table metier_demandes
+| ROLLBACK
+| --- C4. Une spécialité née « ajoutée », datée 2001 (attendu : ERROR permission denied for table specialites_proposees)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table specialites_proposees
+| ROLLBACK
+|
+| ##### D. LA RÉPUTATION D UNE FICHE #####
+| --- D1. A forge ses avis, ses notes, ses abonnés, et pose « demandes vues » en 2099 (attendu : t | t | t | t). Avant le lot : 9999, 5,00, 9999, 2099.
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| avis_gardes | notes_gardees | abonnes_gardes | vue_a_l_heure_de_la_base
+| ----
+| t | t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- D2. Les vrais gestes font toujours bouger les compteurs : un abonnement, un avis (attendu : 1 | 1 | 4.00)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| followers_count | avis_count | note_qualite
+| ----
+| 1 | 1 | 4.00
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### E. LES PUBLICATIONS — elles naissent sans rien #####
+| --- E1. A publie avec 9999 j aime, en fausse publicité, déjà « modifiée » et « remise en avant » (attendu : t | t | t). Avant le lot : tout était gardé.
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| compteurs_a_zero | pas_une_publicite | ni_modifiee_ni_remontee
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- E2. Le client « upserte » sa publication pour récrire sa date, sa remise en avant, ses j aime (attendu : t | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| date_gardee | pas_remontee | jaime_gardes
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- E3. L éditeur SQL pose une VRAIE publicité, sans auteur, avec un métier et des coordonnées (attendu : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| ROLLBACK
+| --- E4. Une publicité AVEC un auteur (attendu : ERROR new row … violates check constraint "post_publicite_sans_auteur_check"). Avant le lot : INSERT 0 1.
+| BEGIN
+| ERREUR 23514 new row for relation "posts" violates check constraint "post_publicite_sans_auteur_check"
+| ROLLBACK
+| --- E5. Une publication sans auteur ni publicité : refusée par l ancienne contrainte, qui reste (attendu : ERROR … "post_a_un_auteur_ou_est_une_pub")
+| BEGIN
+| ERREUR 23514 new row for relation "posts" violates check constraint "post_a_un_auteur_ou_est_une_pub"
+| ROLLBACK
+|
+| ##### F. LES COMMENTAIRES #####
+| --- F1. P commente en 2099, « modifié » et « auteur supprimé » (attendu : t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| date_du_jour | ni_modifie_ni_supprime
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| --- F2. LE VERROU OP001 NE SE CONTOURNE PLUS : P date son commentaire 2099, Q lui répond, P veut le récrire (attendu : ERROR OP001). Avant le lot : UPDATE 1 — la conversation se récrivait.
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| ERREUR OP001 Ce commentaire ne peut plus être corrigé : quelqu'un a répondu après lui.
+| ROLLBACK
+|
+| ##### G. LES CHANTIERS #####
+| --- G1. A crée un chantier « 9999 publications », puis le récrit ; une vraie publication le recalcule (attendu : t | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| ne_sans_rien
+| ----
+| t
+| (1 row)
+|
+| SET
+| SET
+| UPDATE 1
+| RESET
+| compteurs_gardes_statut_change
+| ----
+| t
+| (1 row)
+|
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| recalcule_par_la_base
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### H. LES AVIS — figés, mais retirables (décision du 29/10) #####
+| --- H1. P publie un avis daté 2001, « auteur supprimé », « client vérifié » (attendu : t | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| date_du_jour | auteur_present | verifie_par_la_base
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- H2. P veut DÉPLACER son avis vers B (attendu : ERROR permission denied for table reviews). Avant le lot : UPDATE 1.
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 permission denied for table reviews
+| ROLLBACK
+| --- H3. P « upserte » son avis pour le récrire (attendu : ERROR permission denied for table reviews)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 permission denied for table reviews
+| ROLLBACK
+| --- H4. P RETIRE son avis, puis en écrit un autre ; la note suit (attendu : DELETE 1, INSERT 0 1, puis 1 | 5.00)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| INSERT 0 1
+| RESET
+| avis_count | note_qualite
+| ----
+| 1 | 5.00
+| (1 row)
+|
+| ROLLBACK
+| --- H5. P a bloqué A : il peut encore RETIRER son avis (clore, oui) (attendu : DELETE 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| ROLLBACK
+| --- H6. Q ne retire pas l avis de P (attendu : DELETE 0)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| DELETE 0
+| ROLLBACK
+| --- H7. Un second avis du même client (attendu : ERROR … "reviews_professional_id_author_id_key")
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 23505 duplicate key value violates unique constraint "reviews_professional_id_author_id_key"
+| ROLLBACK
+| --- H8. L anonymisation passe malgré le droit retiré : P supprime son compte, son avis reste, détaché (attendu : t)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| suppression_preparee
+| ----
+| t
+| (1 row)
+|
+| RESET
+| avis_anonymise
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### I. LE COMPTE #####
+| --- I1. P récrit sa trace des CGU (attendu : ERROR OP023). Avant le lot : UPDATE 1.
+| BEGIN
+| SET
+| SET
+| ERREUR OP023 Ces informations du compte ne se changent pas ici. Si vous voyez ce message, mettez Opus à jour.
+| ROLLBACK
+| --- I2. P récrit son e-mail (attendu : ERROR OP023)
+| BEGIN
+| SET
+| SET
+| ERREUR OP023 Ces informations du compte ne se changent pas ici. Si vous voyez ce message, mettez Opus à jour.
+| ROLLBACK
+| --- I3. « Modifier mon profil » d un particulier (sept colonnes, comme l application) passe (attendu : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- I4. La seconde porte : P efface ses données puis recrée sa ligne avec une trace de CGU et un e-mail (attendu : t)
+| BEGIN
+| SET
+| SET
+| suppression_preparee
+| ----
+| t
+| (1 row)
+|
+| INSERT 0 1
+| RESET
+| ligne_recree_sans_trace
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- I5. devenir_pro écarte une version inventée (la précédente reste) et garde une version plausible (attendu : t, puis t)
+| BEGIN
+| SET
+| SET
+| appel
+| ----
+| t
+| (1 row)
+|
+| RESET
+| version_inventee_ecartee
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| appel
+| ----
+| t
+| (1 row)
+|
+| RESET
+| version_plausible_gardee
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- I6. version_cgu_ou_null : forme, vraie date, ni avant 09/2026 ni plus tard que demain (attendu : t sur toute la ligne)
+| juste | blancs | date_impossible | futur | trop_ancienne | pas_une_date | vide
+| ----
+| t | t | t | t | t | t | t
+| (1 row)
+|
+|
+| ##### J. LA REMISE EN AVANT #####
+| --- J1. A remet en avant sa publication d il y a 10 jours : la date de publication ne bouge pas, la remise est datée, l historique en garde une (attendu : t | t | 1)
+| BEGIN
+| SET
+| SET
+| remontee
+| ----
+| t
+| (1 row)
+|
+| RESET
+| date_de_publication_gardee | remise_datee | historique
+| ----
+| t | t | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J2. Elle passe EN TÊTE du fil, devant la publication de B d il y a 1 h (attendu : t)
+| BEGIN
+| SET
+| SET
+| remontee
+| ----
+| t
+| (1 row)
+|
+| RESET
+| SET
+| SET
+| en_tete
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- J3. Une publication de moins de sept jours : OP022 « publication », le hint dit « publication + 7 jours », à la seconde supérieure (attendu : t | t | t)
+| BEGIN
+| SET
+| SET
+| CREATE TABLE
+| DO
+| RESET
+| refus_publication | hint_iso_utc_a_la_seconde | hint_arrondi_au_dessus
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J4. Deux fois la même : OP022 « publication », hint = remise + 7 jours (attendu : t | t)
+| BEGIN
+| SET
+| SET
+| premiere
+| ----
+| t
+| (1 row)
+|
+| CREATE TABLE
+| DO
+| RESET
+| refus_publication | hint_remise_plus_sept_jours
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J5. La QUATRIÈME de la semaine : OP022 « artisan », hint = la plus ancienne des trois + 7 jours, à la seconde supérieure (attendu : 3 | t | t)
+| BEGIN
+| SET
+| SET
+| ?column? | ?column? | ?column?
+| ----
+| t | t | t
+| (1 row)
+|
+| CREATE TABLE
+| DO
+| RESET
+| historique | refus_artisan | hint_premiere_plus_sept_jours
+| ----
+| 3 | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J6. Supprimer une publication remise en avant NE REND PAS sa place (attendu : 3 | 2 | t)
+| BEGIN
+| SET
+| SET
+| ?column? | ?column? | ?column?
+| ----
+| t | t | t
+| (1 row)
+|
+| DELETE 1
+| CREATE TABLE
+| DO
+| RESET
+| historique | encore_rattachees | la_place_reste_prise
+| ----
+| 3 | 2 | t
+| (1 row)
+|
+| ROLLBACK
+| --- J7. La publication d un autre, une publicité, un identifiant inconnu : OP022 « absente », LA MÊME phrase (attendu : 3 | 1 | 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| CREATE TABLE
+| DO
+| RESET
+| absentes | une_seule_phrase | un_seul_code
+| ----
+| 3 | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J8. Un visiteur ne peut pas l appeler (attendu : ERROR permission denied for function remonter_publication)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function remonter_publication
+| ROLLBACK
+| --- J9. Un connecté SANS identité : refusé (attendu : ERROR Connectez-vous pour remettre une publication en avant.)
+| BEGIN
+| SET
+| ERREUR 42501 Connectez-vous pour remettre une publication en avant.
+| ROLLBACK
+| --- J10. Le client écrit remonte_le lui-même : remise à vide par tient_le_texte (attendu : t)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| RESET
+| remise_refusee_texte_corrige
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- J11. L historique : A lit le sien, P rien ; personne ne l écrit ni ne le vide (attendu : 1 | 0, puis ERROR permission denied for table remontees)
+| BEGIN
+| SET
+| SET
+| remontee
+| ----
+| t
+| (1 row)
+|
+| a_lit
+| ----
+| 1
+| (1 row)
+|
+| RESET
+| SET
+| SET
+| p_lit
+| ----
+| 0
+| (1 row)
+|
+| RESET
+| SET
+| SET
+| ERREUR 42501 permission denied for table remontees
+| ROLLBACK
+| --- J12. Ni vider ni supprimer l historique (attendu : ERROR permission denied for table remontees)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table remontees
+| ROLLBACK
+| --- J13. L export RGPD de A porte ses remises en avant (attendu : 1)
+| BEGIN
+| SET
+| SET
+| remontee
+| ----
+| t
+| (1 row)
+|
+| dans_l_export
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### K. LE FIL #####
+| --- K1. Les publicités : dans le fil sans filtre et dans « Abonnements » ; jamais sous le métier, la distance, la note, le badge, les vidéos (attendu : t | t | 0 | 0 | 0 | 0 | 0). Avant le lot : métier 1, distance 1.
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| sans_filtre | abonnements | metier | distance | note | badge | videos
+| ----
+| t | t | 0 | 0 | 0 | 0 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- K2. LA PAGINATION traverse une publication remise en avant posée EXACTEMENT au bout de la première page : 45 publications de B, 3 remises en avant, pages de 20. Le curseur de l application (la clé de tri) ne perd rien et ne double rien ; le TÉMOIN — le curseur d avant, la date de publication — en perd (attendu : 51 | 51 | 0 | t | t)
+| BEGIN
+| INSERT 0 45
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| SET
+| SET
+| CREATE TABLE
+| DO
+| RESET
+| dans_la_base | vues_distinctes | doublons | la_vingtieme_est_remontee | le_temoin_perd_des_publications
+| ----
+| 51 | 51 | 0 | t | t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### L. LE CATALOGUE #####
+| --- L1. Les quinze déclencheurs de date, un par table, et leurs verbes (attendu : 15 lignes ; INSERT seul sur les dix, INSERT OR UPDATE sur les cinq)
+| table_ | declencheur | verbes
+| ----
+| annonce_reponses | trg_pose_la_date_annonce_reponses | insert
+| callback_requests | trg_pose_la_date_callback_requests | insert
+| comments | trg_pose_la_date_comments | insert
+| demande_reponses | trg_pose_la_date_demande_reponses | insert
+| messages | trg_pose_la_date_messages | insert
+| post_vues | trg_pose_la_date_post_vues | insert
+| posts | trg_pose_la_date_posts | insert
+| quote_requests | trg_pose_la_date_quote_requests | insert
+| reviews | trg_pose_la_date_reviews | insert
+| sos_requests | trg_pose_la_date_sos_requests | insert
+| annonces_pro | trg_pose_la_date_annonces_pro | insert or update
+| chantiers | trg_pose_la_date_chantiers | insert or update
+| demandes | trg_pose_la_date_demandes | insert or update
+| professional_profiles | trg_pose_la_date_professional_profiles | insert or update
+| users | trg_pose_la_date_users | insert or update
+| (15 rows)
+|
+| --- L2. Chaque déclencheur de date porte le nom de SA table (attendu : 0)
+| mal_nommes
+| ----
+| 0
+| (1 row)
+|
+| --- L3. Les gardes nouvelles sont security invoker et regardent current_user (R-A) (attendu : 7 lignes, toutes t | t)
+| proname | invoker | regle_ra
+| ----
+| pose_la_date | t | t
+| tient_l_avis_neuf | t | t
+| tient_la_publication_neuve | t | t
+| tient_la_reputation | t | t
+| tient_le_commentaire_neuf | t | t
+| tient_le_compte | t | t
+| tient_les_compteurs_du_chantier | t | t
+| (7 rows)
+|
+| --- L4. remonter_publication : definer, VOLATILE, exécutable par authenticated seul (attendu : t | v | f | f | t)
+| definer | volatilite | anon | public_ | connecte
+| ----
+| t | v | f | f | t
+| (1 row)
+|
+| --- L5. Les droits : avis sans UPDATE, historique sans écriture, files sans droit de table à l INSERT (attendu : f | f | f | f | f | f | t)
+| avis_update | historique_ecrit | historique_vide | historique_visiteur | files_par_table | traite_par | motif
+| ----
+| f | f | f | f | f | f | t
+| (1 row)
+|
+| --- L6. Le curseur de fil_filtre est écrit SANS coalesce, l ordre AVEC (attendu : t | t)
+| curseur_sans_coalesce | ordre
+| ----
+| t | t
+| (1 row)
+|
+| --- L7. Une seule fil_filtre (aucune surcharge) (attendu : 1)
+| fil_filtre
+| ----
+| 1
+| (1 row)
+|
+| FIN des essais du lot S-c

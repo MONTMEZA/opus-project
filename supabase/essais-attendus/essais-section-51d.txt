@@ -1,0 +1,912 @@
+# Ce que doit rendre supabase/essais-section-51d.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-51d` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-51d
+
+[partie essai]
+erreurs: 23
+valeurs-jugees: 2
+[erreurs]
+| @ --- B1. Un visiteur ne lit plus rien de `users` (attendu : ERROR permission denied for table users — avant : 5 lignes, ville et code postal compris)
+|   42501 permission denied for table users
+| @ --- B7. Un visiteur ne peut pas l appeler (attendu : ERROR permission denied for function profil_public)
+|   42501 permission denied for function profil_public
+| @ --- E3. TRUNCATE refusé à un compte connecté (attendu : ERROR permission denied for table clients — avant : TRUNCATE TABLE)
+|   42501 permission denied for table clients
+| @ --- F2. … mais plus la note (attendu : ERROR permission denied for table signalements — avant : déjà averti deux fois)
+|   42501 permission denied for table signalements
+| @ --- F3. … ni l administrateur (attendu : ERROR permission denied for table signalements — avant : son identifiant)
+|   42501 permission denied for table signalements
+| @ --- G1. P (particulier) ouvre une conversation avec Q en se mettant « professionnel » (attendu : ERROR new row violates row-level security policy — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "conversations"
+| @ --- G2. … ni dans l autre sens (attendu : ERROR new row violates row-level security policy — avant : INSERT 0 1, une SECONDE conversation)
+|   42501 new row violates row-level security policy for table "conversations"
+| @ --- H1. Un visiteur ne la lit plus (attendu : ERROR permission denied for table sos_availability — avant : 1 ligne)
+|   42501 permission denied for table sos_availability
+| @ --- I3. … un particulier non (attendu : ERROR … réservé à l administration)
+|   42501 Cette action est réservée à l'administration d'Opus.
+| @ --- J9. Un visiteur ne peut appeler ni l export ni sa partie sans masquage (attendu : ERROR permission denied for function mes_donnees_sans_masquage)
+|   42501 permission denied for function mes_donnees_sans_masquage
+| @ --- J9 bis. … ni l export lui-même (attendu : ERROR permission denied for function mes_donnees)
+|   42501 permission denied for function mes_donnees
+| @ --- J10 sexies. SIGNALER N EST PAS UN MOYEN DE LIRE (relecture du 31/10) — Q ne lit pas la demande de P ; il la signale, puis ne retrouve son texte ni dans son export, ni dans sa ligne (attendu : 0 | f puis ERROR permission denied for table signalements — avant : 0 | t puis P | Fuite sous l évier)
+|   42501 permission denied for table signalements
+| @ --- J10 septies. On ne signale qu en SON nom, et le refus est le même que la conversation soit la sienne ou non : Q au nom de P (une partie), puis au nom de B (attendu : ERROR OP026, deux fois — avant : ERROR row-level security, puis OP026)
+|   OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+|   OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| @ --- J10 bis. Une cible inventée est refusée (attendu : ERROR OP026 — avant : INSERT 0 1)
+|   OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| @ --- J10 ter. Q ne signale pas un message d une conversation où il n est pas (attendu : ERROR OP026)
+|   OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| @ --- J10 quater. … et A ne signale pas son PROPRE message (attendu : ERROR OP026)
+|   OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| @ --- J10 quinquies. Une précision de plus de 1 000 caractères est refusée (attendu : ERROR signalements_details_check)
+|   23514 new row for relation "signalements" violates check constraint "signalements_details_check"
+| @ --- M4. … mais plus sa ville (attendu : ERROR permission denied for table users — avant : Brest (29))
+|   42501 permission denied for table users
+| @ --- M5. … ni sa date d inscription, ni son code postal, même en filtrant dessus (attendu : ERROR permission denied for table users — avant : 1)
+|   42501 permission denied for table users
+| @ --- M6. Un VISITEUR ne lit plus le motif de refus de A (attendu : ERROR permission denied for table professional_profiles — avant : Kbis illisible)
+|   42501 permission denied for table professional_profiles
+| @ --- M7. … ni B (pro connecté) son n° RGE déclaré, même par un filtre (attendu : ERROR permission denied for table professional_profiles — avant : 1)
+|   42501 permission denied for table professional_profiles
+| @ --- M9. `select *` sur une fiche pro est refusé — l application ne le fait plus (attendu : ERROR permission denied for table professional_profiles — avant : 1 ligne)
+|   42501 permission denied for table professional_profiles
+[valeurs]
+| declaration_exportee_sans_reconnu_attendu_t = t
+| nb_cles_attendu_51 = 51
+[sortie]
+| === 0. La donnée existe : 5 comptes, 2 j aime, 1 abonnement, 2 réponses, 1 conversation, 2 messages, 1 signalement, 1 dispo (attendu : 5 | 2 | 1 | 2 | 1 | 2 | 1 | 1)
+| comptes | j_aime | abonnements | reponses | conversations | messages | signalements | dispo
+| ----
+| 5 | 2 | 1 | 2 | 1 | 2 | 1 | 1
+| (1 row)
+|
+| --- B1. Un visiteur ne lit plus rien de `users` (attendu : ERROR permission denied for table users — avant : 5 lignes, ville et code postal compris)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table users
+| ROLLBACK
+| --- B2. `anon` n a plus AUCUN droit sur `users`, ni de table ni de colonne ; `authenticated` lit encore `nom` (attendu : f | f | f | f | f | t)
+| anon_lit | anon_ecrit | anon_nom | anon_ville | anon_une_colonne | connecte_nom
+| ----
+| f | f | f | f | f | t
+| (1 row)
+|
+| --- B3. Un compte connecté lit le NOM d un autre (attendu : Quentin Q.)
+| BEGIN
+| SET
+| SET
+| nom
+| ----
+| Quentin Q.
+| (1 row)
+|
+| ROLLBACK
+| --- B4. `profil_public()` : P sur lui-même (sa ville), P sur Q (pas de ville), A sur P (sa ville), B sur P (sa ville), P sur A (un pro : pas de ville de compte) (attendu : Brest (29) | null | Brest (29) | Brest (29) | null)
+| BEGIN
+| SET
+| SET
+| p_sur_p | p_sur_q
+| ----
+| Brest (29) | null
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| a_sur_p
+| ----
+| Brest (29)
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| b_sur_p
+| ----
+| Brest (29)
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| p_sur_a | type_de_a
+| ----
+| null | pro
+| (1 row)
+|
+| ROLLBACK
+| --- B5. Un blocage, dans un sens ou dans l autre, retire la ville au pro (attendu : null | null)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| p_a_bloque_a
+| ----
+| null
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| a_a_bloque_p
+| ----
+| null
+| (1 row)
+|
+| ROLLBACK
+| --- B6. … et la fonction rend : ni code postal, ni date d inscription (attendu : id, nom, avatar_url, type, ville)
+| colonnes
+| ----
+| id, nom, avatar_url, type, ville
+| (1 row)
+|
+| --- B7. Un visiteur ne peut pas l appeler (attendu : ERROR permission denied for function profil_public)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function profil_public
+| ROLLBACK
+| --- B8. Un particulier enregistre toujours son profil (attendu : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- C1. Q ne lit plus les j aime de P, ni les abonnements de P ; P lit les siens (attendu : 0 | 0 | 1 | 1 — avant : 1 | 1 | 1 | 1)
+| BEGIN
+| SET
+| SET
+| q_lit_jaime_de_p | q_lit_abonnements_de_p
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| p_lit_ses_jaime | p_lit_ses_abonnements
+| ----
+| 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- C2. Un visiteur ne lit AUCUNE ligne, sans erreur (attendu : 0 | 0 — avant : 2 | 1)
+| BEGIN
+| SET
+| visiteur_jaime | visiteur_abonnements
+| ----
+| 0 | 0
+| (1 row)
+|
+| ROLLBACK
+| --- C3. … et le fil marche toujours pour un visiteur : `fil_filtre()` nomme `follows` (attendu : t, sans erreur)
+| BEGIN
+| SET
+| fil_du_visiteur
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- C4. L onglet « Abonnements » de P contient la publication de A ; les nombres restent justes (attendu : t | 2 | 1)
+| BEGIN
+| SET
+| SET
+| abonnement_de_p | likes_count | followers_count
+| ----
+| t | 2 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- C5. `anon` garde la LECTURE de ces deux tables (la politique ne lui rend rien), plus l écriture (attendu : t | t | f | f)
+| anon_lit_jaime | anon_lit_follows | anon_ecrit_jaime | anon_ecrit_follows
+| ----
+| t | t | f | f
+| (1 row)
+|
+| --- C6. Aimer et retirer passent toujours (attendu : INSERT 0 1 puis DELETE 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| DELETE 1
+| ROLLBACK
+| --- D1. Q (particulier, pas l auteur) ne lit aucune réponse (attendu : 0 — avant : 2)
+| BEGIN
+| SET
+| SET
+| q_lit
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- D2. B (pro qui a répondu) ne lit que la SIENNE (attendu : 1 — avant : 2)
+| BEGIN
+| SET
+| SET
+| b_lit
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- D3. P (l auteur) lit les deux (attendu : 2)
+| BEGIN
+| SET
+| SET
+| p_lit
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+| --- D4. P a bloqué A : il lit toujours les deux ; A a bloqué P : idem (attendu : 2 | 2 — avant : 1 | 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| p_a_bloque_a
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| a_a_bloque_p
+| ----
+| 2
+| (1 row)
+|
+| ROLLBACK
+| --- E1. Aucune table de public n accorde TRUNCATE, REFERENCES ni TRIGGER à anon ni à authenticated (attendu : 0 — avant : plusieurs centaines)
+| droits_restants
+| ----
+| 0
+| (1 row)
+|
+| --- E2. Une table créée APRÈS naît sans eux, et garde la lecture (attendu : f | f | f | t)
+| BEGIN
+| CREATE TABLE
+| truncate_naissant | trigger_naissant | references_naissant | lecture_naissante
+| ----
+| f | f | f | t
+| (1 row)
+|
+| ROLLBACK
+| --- E3. TRUNCATE refusé à un compte connecté (attendu : ERROR permission denied for table clients — avant : TRUNCATE TABLE)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table clients
+| ROLLBACK
+| --- F1. L auteur lit son signalement (attendu : 1 | traite)
+| BEGIN
+| SET
+| SET
+| lus | statut
+| ----
+| 1 | traite
+| (1 row)
+|
+| ROLLBACK
+| --- F2. … mais plus la note (attendu : ERROR permission denied for table signalements — avant : déjà averti deux fois)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table signalements
+| ROLLBACK
+| --- F3. … ni l administrateur (attendu : ERROR permission denied for table signalements — avant : son identifiant)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table signalements
+| ROLLBACK
+| --- F4. Signaler passe toujours (attendu : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| --- G1. P (particulier) ouvre une conversation avec Q en se mettant « professionnel » (attendu : ERROR new row violates row-level security policy — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "conversations"
+| ROLLBACK
+| --- G2. … ni dans l autre sens (attendu : ERROR new row violates row-level security policy — avant : INSERT 0 1, une SECONDE conversation)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "conversations"
+| ROLLBACK
+| --- G3. Un particulier écrit à un pro, un pro à un particulier, un pro à un pro : inchangés (attendu : INSERT 0 1 ×3)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| --- H1. Un visiteur ne la lit plus (attendu : ERROR permission denied for table sos_availability — avant : 1 ligne)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table sos_availability
+| ROLLBACK
+| --- H2. Un particulier connecté la lit (attendu : 1)
+| BEGIN
+| SET
+| SET
+| p_lit
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- I1. A lit SA fiche entière, motif de refus et RGE compris ; P n en reçoit aucune (attendu : 1 | Kbis illisible | RGE-0001 | 0)
+| BEGIN
+| SET
+| SET
+| a_lit | note | rge
+| ----
+| 1 | Kbis illisible | RGE-0001
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| p_recoit
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- I2. L administration lit l état des fiches (attendu : 1)
+| BEGIN
+| SET
+| SET
+| admin_lit
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- I3. … un particulier non (attendu : ERROR … réservé à l administration)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 Cette action est réservée à l'administration d'Opus.
+| ROLLBACK
+| --- J1. Les clés de l export, en LISTE FERMÉE — depuis 2b-5, mes_lieux_de_depot (section 46.2 bis) en plus ; depuis 2b-6, mes_signes_de_qualite et mes_sous_traitants (46.2 ter et quater) (attendu : 51 | t | t)
+| BEGIN
+| SET
+| SET
+| nb_cles | liste_fermee | total_pas_en_tete
+| ----
+| 51 | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J1 quater. (2b-2) Un n° de TVA DÉCLARÉ SUR L HONNEUR s exporte sous la MÊME clé, avec son texte et sa date, mais SANS reconnu_le ni vies_le — l export ne dit jamais « reconnu » pour une déclaration ; et la liste fermée des clés ne bouge pas (attendu : t | 51 — 48 jusqu’à 2b-4, mes_lieux_de_depot en plus depuis 2b-5, mes_signes_de_qualite et mes_sous_traitants en plus depuis 2b-6)
+| BEGIN
+| SET
+| INSERT 0 1
+| RESET
+| SET
+| SET
+| declaration_exportee_sans_reconnu_attendu_t | nb_cles_attendu_51
+| ----
+| t | 51
+| (1 row)
+|
+| ROLLBACK
+| --- J1 bis. Les clés de la partie SANS MASQUAGE, en liste fermée — elle est appelable seule par `rpc/mes_donnees_sans_masquage` ; et chaque partie bornée dit son total, ses lignes rendues et celles écartées, rien d autre (attendu : 15 | t | t)
+| BEGIN
+| SET
+| SET
+| nb_cles | liste_fermee | limites_fermees
+| ----
+| 15 | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J1 ter. LA TAILLE D UNE LIGNE COMPTE TOUTES SES COLONNES DE LONGUEUR VARIABLE — relu dans le CATALOGUE : pour chaque partie bornée, les colonnes que `octet_length(z.…)` compte sont exactement celles de la table (ou de la liste choisie) dont la longueur n est pas fixe (attendu : 10 | 0 — avant : 10 parties, 4 incomplètes)
+| parties | incompletes
+| ----
+| 10 | 0
+| (1 row)
+|
+| --- J2. L export de P : ses j aime, ses enregistrements, ses messages, les reçus, la conversation, les deux réponses, ses informations d inscription (attendu : 1 | 1 | 1 | 1 | 1 | 2 | Brest (29))
+| BEGIN
+| SET
+| SET
+| j_aime | enregistrees | messages | recus | conversations | reponses | inscription
+| ----
+| 1 | 1 | 1 | 1 | 1 | 2 | Brest (29)
+| (1 row)
+|
+| ROLLBACK
+| --- J3. L export de A : la réponse à son annonce, l avis reçu, sa réponse écrite, le signalement qui le vise — sans son auteur, ses détails ni la note — et sa fiche entière (attendu : 1 | 1 | 1 | 1 | f | f | f | Kbis illisible)
+| BEGIN
+| SET
+| SET
+| reponses_annonce | avis_recus | ses_reponses | signalements_le_visant | auteur_rendu | details_rendus | note_rendue | fiche
+| ----
+| 1 | 1 | 1 | 1 | f | f | f | Kbis illisible
+| (1 row)
+|
+| ROLLBACK
+| --- J4. L export de Q : son signalement, sans la note ni l administrateur, ni l auteur ni l extrait que la BASE a relevés sur ce qu il vise (attendu : 1 | f | f | f | f)
+| BEGIN
+| SET
+| SET
+| deposes | note_rendue | admin_rendu | auteur_releve_rendu | extrait_rendu
+| ----
+| 1 | f | f | f | f
+| (1 row)
+|
+| ROLLBACK
+| --- J5. Aucune clé de l export ne porte `admin_id`, `traite_par` ni `admin_supprime` (attendu : f)
+| BEGIN
+| SET
+| SET
+| identite_admin
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+| --- J6. Les décisions de l administration sur SA fiche, sans l administrateur (attendu : t | f)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| une_decision | admin_rendu
+| ----
+| t | f
+| (1 row)
+|
+| ROLLBACK
+| --- J7. UN BLOCAGE NE FAIT RIEN DISPARAÎTRE DE L EXPORT — dans un sens puis dans l autre, aucune clé de P, de A ni de Q ne RACCOURCIT (`personnes_bloquees`, elle, s allonge) (attendu : 0 | 0 | 0 | 0 | 0 | 0 — avant : P perdait son message, A la réponse de B à son annonce)
+| BEGIN
+| SET
+| SET
+| SET
+| SET
+| ROLLBACK
+| BEGIN
+| INSERT 0 3
+| SET
+| SET
+| p_cles_raccourcies
+| ----
+| 0
+| (1 row)
+|
+| SET
+| a_cles_raccourcies
+| ----
+| 0
+| (1 row)
+|
+| SET
+| q_cles_raccourcies
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| BEGIN
+| INSERT 0 3
+| SET
+| SET
+| p_cles_raccourcies_2
+| ----
+| 0
+| (1 row)
+|
+| SET
+| a_cles_raccourcies_2
+| ----
+| 0
+| (1 row)
+|
+| SET
+| q_cles_raccourcies_2
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- J8. UN TIERS NE FAIT PAS ÉCHOUER L EXPORT D UN AUTRE — A inonde la conversation de 300 000 messages ; l export de P passe sous le délai de 8 s de la vraie base, borné et le disant (attendu : 5000 | 300001 | 5000 | 1 — avant : 2,4 s pour l export actuel, plus de 8 s pour les reçus)
+| BEGIN
+| INSERT 0 300000
+| SET
+| SET
+| SET
+| recus_rendus | recus_total | limite_rendus | ses_messages
+| ----
+| 5000 | 300001 | 5000 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J9. Un visiteur ne peut appeler ni l export ni sa partie sans masquage (attendu : ERROR permission denied for function mes_donnees_sans_masquage)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function mes_donnees_sans_masquage
+| ROLLBACK
+| --- J9 bis. … ni l export lui-même (attendu : ERROR permission denied for function mes_donnees)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function mes_donnees
+| ROLLBACK
+| --- J10. UN SIGNALEMENT NE S INVENTE PLUS (relecture du 30/10) — Q signale la demande de P en désignant A et un texte de son choix : la base relève l auteur et l extrait VRAIS (attendu : P | Fuite sous l évier — avant : A | texte inventé)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| auteur_releve | extrait
+| ----
+| P | Fuite sous l évier
+| (1 row)
+|
+| ROLLBACK
+| --- J10 sexies. SIGNALER N EST PAS UN MOYEN DE LIRE (relecture du 31/10) — Q ne lit pas la demande de P ; il la signale, puis ne retrouve son texte ni dans son export, ni dans sa ligne (attendu : 0 | f puis ERROR permission denied for table signalements — avant : 0 | t puis P | Fuite sous l évier)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| demande_lisible | texte_dans_son_export
+| ----
+| 0 | f
+| (1 row)
+|
+| ERREUR 42501 permission denied for table signalements
+| ROLLBACK
+| --- J10 septies. On ne signale qu en SON nom, et le refus est le même que la conversation soit la sienne ou non : Q au nom de P (une partie), puis au nom de B (attendu : ERROR OP026, deux fois — avant : ERROR row-level security, puis OP026)
+| BEGIN
+| SET
+| SET
+| ERREUR OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| ROLLBACK
+| BEGIN
+| SET
+| SET
+| ERREUR OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| ROLLBACK
+| --- J10 bis. Une cible inventée est refusée (attendu : ERROR OP026 — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| ROLLBACK
+| --- J10 ter. Q ne signale pas un message d une conversation où il n est pas (attendu : ERROR OP026)
+| BEGIN
+| SET
+| SET
+| ERREUR OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| ROLLBACK
+| --- J10 quater. … et A ne signale pas son PROPRE message (attendu : ERROR OP026)
+| BEGIN
+| SET
+| SET
+| ERREUR OP026 Ce contenu ne peut pas être signalé : il n'existe plus, ou il ne vous est pas adressé. · HINT : Rien n'a été enregistré.
+| ROLLBACK
+| --- J10 quinquies. Une précision de plus de 1 000 caractères est refusée (attendu : ERROR signalements_details_check)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "signalements" violates check constraint "signalements_details_check"
+| ROLLBACK
+| --- J11. LE SIGNALEMENT D UN MESSAGE N ENTRE PAS DANS L EXPORT DE SON AUTEUR : dans une conversation à deux, il dirait qui l a déposé (attendu : 0 | 1 | 1 — avant : 1)
+| BEGIN
+| SET
+| SET
+| messages_signales_rendus | autres_rendus | total_dit
+| ----
+| 0 | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J12. LA BORNE EST AUSSI EN TAILLE — A écrit 5 000 messages de 56 ko : l export de P passe, borné à 10 Mo, et le dit (attendu : t | 5001 | t | t — avant : ERROR total size of jsonb array elements exceeds the maximum)
+| BEGIN
+| INSERT 0 5000
+| SET
+| SET
+| SET
+| rendus_dans_10_mo | total | rendus_dits | export_sous_20_mo
+| ----
+| t | 5001 | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J12 bis. LA TAILLE EST CELLE DE LA LIGNE ENTIÈRE (relecture du 31/10) — A écrit 5 000 messages au texte court mais à la pièce jointe de 60 ko (`piece_url`, une colonne qu on ne comptait pas) : l export de P passe, borné à 10 Mo (attendu : t | t | t — avant : ERROR total size of jsonb array elements exceeds the maximum)
+| BEGIN
+| INSERT 0 5000
+| SET
+| SET
+| SET
+| rendus_dans_10_mo | rendus_dits | export_sous_20_mo
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J12 ter. … de même pour 5 000 demandes de devis au BUDGET de 60 ko, et 5 000 rappels au NUMÉRO de 60 ko : l export de A passe (attendu : t | t | t — avant : ERROR total size of jsonb array elements exceeds the maximum)
+| BEGIN
+| INSERT 0 5000
+| INSERT 0 5000
+| SET
+| SET
+| SET
+| devis_dans_5_mo | rappels_dans_2_mo | export_sous_20_mo
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- J12 quater. UNE LIGNE ÉNORME EN TÊTE NE VIDE PLUS LA PARTIE (relecture du 31/10) — Q écrit sous la publication de A un commentaire de 6 Mo, puis prend un nom de 3 Mo et commente encore : chez A, les autres commentaires et notifications restent, la ligne énorme est écartée et comptée (attendu : t | 1 | t | t | 1 — avant : 0 commentaire rendu, 0 notification rendue)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| UPDATE 1
+| INSERT 0 1
+| SET
+| autres_commentaires_rendus | commentaires_ecartes | autres_notifications_rendues | rendues_dites | notifications_ecartees
+| ----
+| t | 1 | t | t | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J13. Un particulier qui inonde un artisan de 50 000 demandes de devis ne fait pas échouer son export : ses demandes REÇUES sont bornées, celles de P à lui-même restent (attendu : 5000 | 50001 | 5000 — avant : délai dépassé à 200 000)
+| BEGIN
+| INSERT 0 50000
+| INSERT 0 1
+| SET
+| SET
+| SET
+| rendues | total | rendus
+| ----
+| 5000 | 50001 | 5000
+| (1 row)
+|
+| ROLLBACK
+| --- J14. RIEN DE CE QUI NE CONCERNE PAS P N EST DANS SON EXPORT, ni dans sa partie sans masquage : la conversation A — B, la réponse de A à l annonce de B, l abonnement de Q (attendu : f | f | f | f | f)
+| BEGIN
+| SET
+| SET
+| message_etranger | reponse_etrangere | conversation_etrangere | sans_masquage_etranger | abonnement_etranger
+| ----
+| f | f | f | f | f
+| (1 row)
+|
+| ROLLBACK
+| --- J14 bis. NI QUI VOUS A BLOQUÉ, NI QUI VOUS SUIT, NI QUI VOUS A SIGNALÉ — trois comptes DÉDIÉS, qui n ont rien d autre à voir avec P ni avec A : R bloque P, F suit A, S signale la publication de A ; leur identifiant n est nulle part dans le texte ENTIER des deux exports, sans masquage compris (attendu : f | f | f | f | f | f | 1 — la dernière colonne prouve que le signalement de S est bien chez A)
+| BEGIN
+| INSERT 0 3
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| SET
+| p_voit_qui_la_bloque | p_le_voit_sans_masquage | a_voit_qui_le_suit | a_voit_qui_l_a_signale | a_le_voit_sans_masquage | a_lit_ce_que_s_a_ecrit | signalement_de_s_rendu
+| ----
+| f | f | f | f | f | f | 1
+| (1 row)
+|
+| ROLLBACK
+| --- J15. CE QU ON VOUS ÉCRIT EST DANS VOTRE EXPORT : A reçoit le commentaire de Q sous sa publication, Q la réponse de P à son commentaire — et une réponse à une RÉPONSE, rangée sous la racine du fil, va à celui qui a parlé AVANT elle, comme sa notification ; ce qui précède sa participation, non (attendu : t | t | 3 | 3 | t | f | 1 — avant : P ne recevait pas la réponse de B)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| SET
+| SET
+| a_recoit_q | q_recoit_p | total_q | rendus_q | p_recoit_b | p_recoit_avant | total_p
+| ----
+| t | t | 3 | 3 | t | f | 1
+| (1 row)
+|
+| ROLLBACK
+| --- K1. Q part : sa notification chez A part avec lui, celle de l administration reste (attendu : 0 | 1 — avant : 1 | 1, avec son nom dans le texte)
+| BEGIN
+| DELETE 1
+| de_q | de_l_administration
+| ----
+| 0 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- K2. La clé est bien en cascade (attendu : c)
+| confdeltype
+| ----
+| c
+| (1 row)
+|
+| --- L1. Aucune fonction INVOKER exécutable par un visiteur ne nomme une table dont un visiteur ne peut lire AUCUNE colonne (attendu : aucune ligne — sinon elle tomberait sur « permission denied » ; celles qui ne lisent que des colonnes ouvertes sont éprouvées en M12)
+| fonction | table_nommee
+| ----
+| (0 rows)
+|
+| --- L1 bis. Les fonctions INVOKER (déclencheurs compris) dont le corps nomme `users` ou une fiche pro sont EXACTEMENT ces huit, chacune appelée en M12 ou en M12 bis — après M2, une colonne fermée nommée par l une d elles la ferait échouer EN ENTIER (relecture M2, BASE-1 et APP-M2-2 ; attendu : ajoute_au_portfolio, artisans_urgence, emetteur_incomplet, est_un_pro, exige_un_compte_pro, fil_filtre, mes_conversations, tient_l_urgence)
+| fonction
+| ----
+| ajoute_au_portfolio
+| artisans_urgence
+| emetteur_incomplet
+| est_un_pro
+| exige_un_compte_pro
+| fil_filtre
+| mes_conversations
+| tient_l_urgence
+| (8 rows)
+|
+| --- L2. Les quatre fonctions du lot : definer, appelables par un compte connecté, jamais par un visiteur (attendu : 4 | 4 | 0)
+| definer | connecte | visiteur
+| ----
+| 4 | 4 | 0
+| (1 row)
+|
+| --- L3. Le déclencheur des signalements : definer, appelable par PERSONNE ; et un compte connecté ne lit ni `cible_auteur_id` ni `extrait` (attendu : t | f | f | f | f)
+| definer | connecte | visiteur | lit_l_auteur | lit_l_extrait
+| ----
+| t | f | f | f | f
+| (1 row)
+|
+| --- M1. `users` : un compte connecté ne lit plus que QUATRE colonnes, et plus la table entière ; un visiteur, aucune (attendu : avatar_url, id, nom, type | f | 0 — avant : dix colonnes, ville, code postal et date d inscription comprises)
+| connecte_lit | connecte_lit_la_table | visiteur_lit
+| ----
+| avatar_url, id, nom, type | f | 0
+| (1 row)
+|
+| --- M2. Fiches pro : aucune des HUIT colonnes privées ne se lit, les 38 de la vitrine oui, pour un visiteur comme pour un compte connecté ; plus personne ne lit la table entière (attendu : 0 | 38 | 38 | 46 | f | agent_propositions, badge_suspendu_le, code_insee, created_at, demandes_vues_le, rge_numero, siret, verification_note — avant : 8 | 46 | 46 | 46 | t)
+| privees_lisibles | visiteur_lit | connecte_lit | colonnes | table_entiere | fermees
+| ----
+| 0 | 38 | 38 | 46 | f | agent_propositions, badge_suspendu_le, code_insee, created_at, demandes_vues_le, rge_numero, siret, verification_note
+| (1 row)
+|
+| --- M3. Q (connecté) lit le nom, la photo et le type de P (attendu : Paule P. | particulier)
+| BEGIN
+| SET
+| SET
+| nom | type
+| ----
+| Paule P. | particulier
+| (1 row)
+|
+| ROLLBACK
+| --- M4. … mais plus sa ville (attendu : ERROR permission denied for table users — avant : Brest (29))
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table users
+| ROLLBACK
+| --- M5. … ni sa date d inscription, ni son code postal, même en filtrant dessus (attendu : ERROR permission denied for table users — avant : 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table users
+| ROLLBACK
+| --- M6. Un VISITEUR ne lit plus le motif de refus de A (attendu : ERROR permission denied for table professional_profiles — avant : Kbis illisible)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table professional_profiles
+| ROLLBACK
+| --- M7. … ni B (pro connecté) son n° RGE déclaré, même par un filtre (attendu : ERROR permission denied for table professional_profiles — avant : 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table professional_profiles
+| ROLLBACK
+| --- M8. La VITRINE se lit, colonne par colonne, telle que l application la demande — par un visiteur et par B (attendu : 1 | 1)
+| BEGIN
+| SET
+| SET
+| SET
+| visiteur | pro_b
+| ----
+| 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- M9. `select *` sur une fiche pro est refusé — l application ne le fait plus (attendu : ERROR permission denied for table professional_profiles — avant : 1 ligne)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for table professional_profiles
+| ROLLBACK
+| --- M10. A ÉCRIT toujours ce que l application écrit — la visite des Demandes, son n° RGE, le compteur de l agent — et le relit par `ma_fiche_pro()` (attendu : UPDATE 1 ×3 puis t | RGE-0002 | 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| vu | rge_numero | agent_propositions
+| ----
+| t | RGE-0002 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- M11. P enregistre toujours sa ville, son code postal et sa position, et la relit par `mon_compte()` (attendu : UPDATE 1 puis Lille (59) | 59000)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| ville | code_postal
+| ----
+| Lille (59) | 59000
+| (1 row)
+|
+| ROLLBACK
+| --- M12. Les fonctions INVOKER qui nomment `users` ou les fiches pro marchent toujours, pour un visiteur comme pour un compte connecté (attendu : t | t | t | t | t | t | t)
+| BEGIN
+| SET
+| SET
+| SET
+| SET
+| fil_visiteur | urgences | conversations | export_p | emetteur_de_a | a_est_pro | export_a_entier
+| ----
+| t | t | t | t | t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- M12 bis. Les trois autres fonctions INVOKER de la liste (L1 bis) marchent toujours : A ajoute une réalisation à son portfolio, P envoie une urgence à A, et une fiche insérée depuis un client est refusée par SA règle (OP010), jamais par un droit de colonne (attendu : t | t | OP010)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| SET
+| INSERT 0 1
+| CREATE TABLE
+| DO
+| portfolio | urgence | fiche_inseree_par_un_client
+| ----
+| t | t | OP010
+| (1 row)
+|
+| ROLLBACK
+| --- M13. Aucune POLITIQUE ne nomme une colonne fermée de `users` ou des fiches pro — une politique s exécute avec les droits de celui qui lit, elle tomberait sur « permission denied » (attendu : aucune ligne)
+| tablename | policyname
+| ----
+| (0 rows)
+|
+| --- M14. La seconde porte de la section 44 reste fermée : P, données effacées, recrée sa ligne — en particulier, et sans relire de colonne fermée (attendu : INSERT 0 1 puis particulier)
+| BEGIN
+| DELETE 1
+| SET
+| SET
+| INSERT 0 1
+| type
+| ----
+| particulier
+| (1 row)
+|
+| ROLLBACK
+| FIN des essais du lot S-d (étapes M1d et M2)

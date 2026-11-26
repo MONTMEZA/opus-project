@@ -1,0 +1,232 @@
+# Ce que doit rendre supabase/essais-section-44.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-44` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-44
+
+[partie essai]
+erreurs: 12
+valeurs-jugees: 0
+[erreurs]
+| @ --- B1. le particulier se déclare pro (attendu : ERROR OP004)
+|   OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| @ --- B2. il s'insère une fiche pro, comme le faisait ensureProProfile (attendu : ERROR OP010 — depuis la section 45 une fiche ne se crée plus depuis l'application ; c'était OP005)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| @ --- B3. MÊME en passant par la porte du type d'abord, dans la même transaction (attendu : ERROR OP004, rien d'autre ne part)
+|   OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+|   25P02 current transaction is aborted, commands ignored until end of transaction block
+| @ --- B6. il publie dans le fil (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "posts"
+| @ --- B7. il ouvre un carnet de clients (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "clients"
+| @ --- B8. il crée un chantier public (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "chantiers"
+| @ --- B9. il pose une annonce dans la Place des pros (attendu : ERROR row-level security)
+|   42501 new row violates row-level security policy for table "annonces_pro"
+| @ --- B10. LA SECONDE PORTE : il efface ses données, recrée sa ligne en pro (attendu : t, puis ERROR OP004)
+|   OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| @ --- B11. …et la fiche qui suivait n'a plus de compte pro où naître (attendu : t, INSERT 0 1, ERROR OP010 — c'était OP005)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| @ --- C5. mais il ne peut pas redevenir particulier tout seul (attendu : ERROR OP004)
+|   OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| @ --- C7. CHANGÉ PAR LA SECTION 45 : un compte pro resté SANS fiche ne se répare PLUS depuis l'application (attendu : pro | f, puis ERROR OP010 — c'était INSERT 0 1)
+|   OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+[valeurs]
+[sortie]
+|
+| ##### A. LA DONNÉE EXISTE, ET LA LECTURE MARCHE #####
+| --- A1. le vrai pro a bien été créé PAR LE DÉCLENCHEUR, avec sa fiche (attendu : pro | t)
+| type | a_une_fiche
+| ----
+| pro | t
+| (1 row)
+|
+| --- A2. le particulier n'a PAS de fiche (attendu : particulier | f)
+| type | a_une_fiche
+| ----
+| particulier | f
+| (1 row)
+|
+| --- A3. le VRAI pro lit la demande de Monsieur Dupont (attendu : 1)
+| BEGIN
+| SET
+| SET
+| demandes_lues_par_le_vrai_pro
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### B. LE TROU EST FERMÉ — chaque porte du 12/10, une par une #####
+| --- B1. le particulier se déclare pro (attendu : ERROR OP004)
+| BEGIN
+| SET
+| SET
+| ERREUR OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ROLLBACK
+| --- B2. il s'insère une fiche pro, comme le faisait ensureProProfile (attendu : ERROR OP010 — depuis la section 45 une fiche ne se crée plus depuis l'application ; c'était OP005)
+| BEGIN
+| SET
+| SET
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+| --- B3. MÊME en passant par la porte du type d'abord, dans la même transaction (attendu : ERROR OP004, rien d'autre ne part)
+| BEGIN
+| SET
+| SET
+| ERREUR OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ERREUR 25P02 current transaction is aborted, commands ignored until end of transaction block
+| ROLLBACK
+| --- B4. donc est_un_pro() reste FAUX (attendu : f)
+| BEGIN
+| SET
+| SET
+| est_un_pro
+| ----
+| f
+| (1 row)
+|
+| ROLLBACK
+| --- B5. il ne lit PAS la demande de Monsieur Dupont (attendu : 0 — et A3 prouve qu'il y avait 1 demande à lire)
+| BEGIN
+| SET
+| SET
+| demandes_lues_par_le_particulier
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- B6. il publie dans le fil (attendu : ERROR row-level security)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "posts"
+| ROLLBACK
+| --- B7. il ouvre un carnet de clients (attendu : ERROR row-level security)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "clients"
+| ROLLBACK
+| --- B8. il crée un chantier public (attendu : ERROR row-level security)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "chantiers"
+| ROLLBACK
+| --- B9. il pose une annonce dans la Place des pros (attendu : ERROR row-level security)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "annonces_pro"
+| ROLLBACK
+| --- B10. LA SECONDE PORTE : il efface ses données, recrée sa ligne en pro (attendu : t, puis ERROR OP004)
+| BEGIN
+| SET
+| SET
+| donnees_effacees
+| ----
+| t
+| (1 row)
+|
+| ERREUR OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ROLLBACK
+| --- B11. …et la fiche qui suivait n'a plus de compte pro où naître (attendu : t, INSERT 0 1, ERROR OP010 — c'était OP005)
+| BEGIN
+| SET
+| SET
+| donnees_effacees
+| ----
+| t
+| (1 row)
+|
+| INSERT 0 1
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+|
+| ##### C. LE CHEMIN LÉGITIME PASSE TOUJOURS #####
+| --- C1. le vrai pro publie (attendu : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| --- C2. il pose une annonce (attendu : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| --- C3. il enregistre un client, et crée un chantier (attendu : INSERT 0 1, deux fois)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| ROLLBACK
+| --- C4. il enregistre son profil en renvoyant son type INCHANGÉ, comme le fait l'application (attendu : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- C5. mais il ne peut pas redevenir particulier tout seul (attendu : ERROR OP004)
+| BEGIN
+| SET
+| SET
+| ERREUR OP004 Le type de votre compte ne se change pas directement. Pour passer en compte professionnel : Profil → Passer en compte professionnel.
+| ROLLBACK
+| --- C6. il RETIRE une publication : la condition n'est que dans with check (attendu : DELETE 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| ROLLBACK
+| --- C7. CHANGÉ PAR LA SECTION 45 : un compte pro resté SANS fiche ne se répare PLUS depuis l'application (attendu : pro | f, puis ERROR OP010 — c'était INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| type | a_une_fiche
+| ----
+| pro | f
+| (1 row)
+|
+| SET
+| SET
+| ERREUR OP010 Une fiche professionnelle ne se crée pas depuis l'application : elle naît avec votre compte professionnel.
+| ROLLBACK
+| --- C8. l'éditeur SQL (auth.uid() vide) peut corriger un type : c'est la porte de l'administration (attendu : UPDATE 1)
+| BEGIN
+| UPDATE 1
+| ROLLBACK
+| --- C9. un vrai pro supprime son compte : la cascade passe (attendu : 0 ligne restante)
+| BEGIN
+| SET
+| SET
+| preparer_suppression_compte
+| ----
+| {"compte": "a0000000-0000-0000-0000-00000000000a", "prepare_le": "<horodatage>", "avis_anonymises": 0, "commentaires_anonymises": 0}
+| (1 row)
+|
+| RESET
+| lignes_restantes
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- C10. une inscription en pro par GoTrue crée toujours les deux moitiés (attendu : pro | t)
+| BEGIN
+| INSERT 0 1
+| type | a_une_fiche
+| ----
+| pro | t
+| (1 row)
+|
+| ROLLBACK

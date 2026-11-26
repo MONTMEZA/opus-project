@@ -1,0 +1,1294 @@
+# Ce que doit rendre supabase/essais-section-51b.sql, joué par `npm run essais-sql`
+# (scripts/jouer-essais-sql.mjs). ENGENDRÉ par
+# `npm run essais-sql -- --figer essais-section-51b` : ne s'écrit pas à la main. Un changement
+# se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
+# ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
+# rester celui que l’essai ANNONCE quand il en annonce un.
+oracle: 1
+essai: essais-section-51b
+
+[partie essai]
+erreurs: 53
+valeurs-jugees: 0
+[erreurs]
+| @ --- B1. P dépose une demande de devis DÉJÀ « accepte » (attendu : ERROR … row-level security — avant le lot : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "quote_requests"
+| @ --- B1 bis. … un rappel « accepte » (attendu : ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "callback_requests"
+| @ --- B1 ter. … une urgence « acceptee » (attendu : ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "sos_requests"
+| @ --- B3. A modifie la DESCRIPTION de la demande reçue (attendu : ERROR OP019 « Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état. » — avant : UPDATE 1)
+|   OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| @ --- B3 bis. A récrit le NOM et le numéro du client en même temps qu il accepte (attendu : ERROR OP019 — avant : UPDATE 1)
+|   OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| @ --- B5. une demande ACCEPTÉE ne se refuse plus (attendu : ERROR OP019 « Cette demande a déjà été acceptée : vous pouvez la marquer terminée. » — avant : UPDATE 1)
+|   OP019 Cette demande a déjà été acceptée : vous pouvez la marquer terminée.
+| @ --- B6. une demande EN ATTENTE ne se termine pas (attendu : ERROR OP019 « Cette demande n a pas encore été acceptée : acceptez-la ou refusez-la d abord. » — avant : UPDATE 1)
+|   OP019 Cette demande n'a pas encore été acceptée : acceptez-la ou refusez-la d'abord.
+| @ --- B7. une demande REFUSÉE ne revient pas (attendu : ERROR OP019 « Cette demande a déjà été refusée : elle ne peut plus changer. » — avant : UPDATE 1)
+|   OP019 Cette demande a déjà été refusée : elle ne peut plus changer.
+| @ --- B8. une demande TERMINÉE ne revient pas (attendu : ERROR OP019 « Cette demande est déjà terminée : elle ne peut plus changer. » — avant : UPDATE 1)
+|   OP019 Cette demande est déjà terminée : elle ne peut plus changer.
+| @ --- B12. A se demande un devis À LUI-MÊME (attendu : ERROR … quote_requests_pas_soi_meme_check — avant : INSERT 0 1)
+|   23514 new row for relation "quote_requests" violates check constraint "quote_requests_pas_soi_meme_check"
+| @ --- B12 bis. … un rappel à lui-même (attendu : ERROR … callback_requests_pas_soi_meme_check — avant : INSERT 0 1)
+|   23514 new row for relation "callback_requests" violates check constraint "callback_requests_pas_soi_meme_check"
+| @ --- B12 ter. … une conversation avec lui-même (attendu : ERROR … conversations_pas_soi_meme_check — avant : INSERT 0 1)
+|   23514 new row for relation "conversations" violates check constraint "conversations_pas_soi_meme_check"
+| @ --- B13. P a bloqué A : A ne peut plus ACCEPTER la demande (attendu : ERROR OP020 « Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser. » — avant : UPDATE 1)
+|   OP020 Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.
+| @ --- B15. dans l AUTRE sens — décision Q1 : A a bloqué Q, il ne peut plus accepter, mais son REFUS arrive bien chez Q, qui n a bloqué personne (attendu : ERROR OP020 au premier essai ; dans un second temps UPDATE 1 et 1 notification « demande_refusee »)
+|   OP020 Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.
+| @ --- C1. P envoie une urgence à B, électricien SANS ligne d urgence ni tarifs (attendu : ERROR OP025 « Cet artisan ne répond plus aux urgences de ce métier… » — avant : INSERT 0 1)
+|   OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| @ --- C2. P envoie à A une urgence de SERRURERIE — A ne répond qu aux urgences de plomberie (attendu : ERROR OP025 — avant : INSERT 0 1)
+|   OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| @ --- C3. P envoie à A une urgence d un métier INVENTÉ (attendu : ERROR OP025 — le déclencheur joue avant la contrainte ; avant : INSERT 0 1)
+|   OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| @ --- C3 bis. … et la contrainte garde la porte de la base elle-même (`postgres`, sans le déclencheur) (attendu : ERROR … sos_metier_key_check)
+|   23514 new row for relation "sos_requests" violates check constraint "sos_metier_key_check"
+| @ --- C4. A n AFFICHE plus ses tarifs : plus d urgence vers lui (attendu : ERROR OP025 — avant : INSERT 0 1)
+|   OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| @ --- C5. un compte PRO (B) n envoie pas d urgence — il ne lit aucun tarif (attendu : ERROR OP025 — avant : INSERT 0 1)
+|   OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| @ --- D2. P a bloqué A — un blocage que A ne VOIT pas : `peut_faire_un_devis` dit non, et un NOUVEAU devis est refusé (attendu : f, puis ERROR OP020 « Vous ne pouvez plus rattacher un nouveau devis à cette demande… » — avant : INSERT 0 1)
+|   OP020 Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.
+| @ --- D4. A a bloqué Q (l autre sens) : pas de nouveau devis sur sa demande (attendu : ERROR OP020 — avant : INSERT 0 1)
+|   OP020 Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.
+| @ --- D5. « pas à vous » est décidé AVANT le blocage : B tente de rattacher son devis à la demande de P adressée à A, P ayant bloqué A (attendu : ERROR OP013 — jamais OP020 : B n apprend rien du blocage)
+|   OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| @ --- D7. un visiteur ne l appelle pas (attendu : ERROR permission denied for function peut_faire_un_devis)
+|   42501 permission denied for function peut_faire_un_devis
+| @ --- F1. P aime la publication de A, puis celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "post_likes"
+| @ --- F2. P commente la publication de A, puis celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "comments"
+| @ --- F2 bis. B a commenté sous la publication de A (un TIERS) ; P, qui a bloqué B, lui répond (attendu : ERROR « Le commentaire parent n existe pas » — la lecture lui cache le commentaire de B)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F2 ter. LE FIL INDIRECT (relecture du 26/10) : P a bloqué B. B a un commentaire d origine sous la publication de A, Q y a répondu ; P répond à la réponse de Q (attendu : ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, rangée sous le commentaire de B)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F2 ter b. … l autre sens : P a un commentaire d origine, Q y a répondu ; B, que P a bloqué, répond à la réponse de Q (attendu : ERROR « Le commentaire parent n existe pas »)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F2 ter d. UNE RÉPONSE VIT SOUS LA PUBLICATION DE SON PARENT (seconde relecture du 27/10) : P a bloqué B ; Q a commenté la publication de B ; P lit ce commentaire (pas la publication), et y répond en déclarant la publication de A (attendu : 0 | 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, accroché au fil de la publication de B)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F2 ter e. … et c est une règle d intégrité, pas de blocage : sans aucun blocage, A répond au même commentaire en déclarant SA publication, puis en déclarant la bonne (attendu : ERROR « Le commentaire parent n existe pas », puis INSERT 0 1)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F2 ter g. LE MARCHEPIED (troisième relecture du 27/10) : une réponse incohérente R, écrite avant la règle (Q, déclarée sur la publication de A, parent sous la publication de B) ; P a bloqué B, lit R, et répond à R en déclarant la publication de A (attendu : 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, rangée sous le commentaire de la publication de B)
+|   P0001 Le commentaire parent n'existe pas
+| @ --- F3. P s abonne à A, puis à B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "follows"
+| @ --- F3 bis. … et B, bloqué par P, ne s abonne pas à P non plus — les deux sens (attendu : ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "follows"
+| @ --- F3 ter. un « j aime » ne se DÉPLACE pas (relecture du 26/10) : P aime la publication de A, puis le déplace vers celle de B (attendu : INSERT 0 1, puis ERROR permission denied for table post_likes — avant : UPDATE 1, et le compteur de A gardait +1 sans ligne)
+|   42501 permission denied for table post_likes
+| @ --- F3 quater. … un abonnement non plus (attendu : INSERT 0 1, puis ERROR permission denied for table follows — avant : UPDATE 1)
+|   42501 permission denied for table follows
+| @ --- F4. P laisse un avis à A, puis à B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "reviews"
+| @ --- F6. … P, après le blocage, ne CORRIGE plus son avis, mais peut le RETIRER (attendu : ERROR permission denied for table reviews au premier essai — depuis le lot S-c, plus personne ne corrige un avis une fois publié, blocage ou non, et c est le droit de table qui refuse, avant la règle ; le blocage sur l ÉCRITURE d un avis reste éprouvé par F4 ; DELETE 1 au second)
+|   42501 permission denied for table reviews
+| @ --- F7. RÉPONDRE À UNE ANNONCE — A répond à celle de C, puis B a bloqué A et A répond à celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "annonce_reponses"
+| @ --- F7 bis. … à SA PROPRE annonce, et à une annonce POURVUE (attendu : ERROR … row-level security, deux fois — avant : INSERT 0 1, deux fois)
+|   42501 new row violates row-level security policy for table "annonce_reponses"
+|   42501 new row violates row-level security policy for table "annonce_reponses"
+| @ --- G3. A DÉPLACE sa réponse vers la demande de Q (attendu : ERROR OP021 « Une réponse ne se déplace pas : seul son message peut changer. » — avant : UPDATE 1)
+|   OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| @ --- G5. P a bloqué B : B ne répond plus à sa demande (attendu : ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "demande_reponses"
+| @ --- G6. une demande POURVUE ne reçoit plus de réponse (attendu : ERROR … row-level security — avant : INSERT 0 1)
+|   42501 new row violates row-level security policy for table "demande_reponses"
+| @ --- G7. un visiteur ne lit plus aucune réponse (attendu : ERROR permission denied for table demande_reponses — avant : 1 ligne, avec le message)
+|   42501 permission denied for table demande_reponses
+| @ --- G9. une réponse d ANNONCE ne se déplace pas non plus (attendu : ERROR OP021)
+|   OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| @ --- H1. un visiteur ne lit plus rien, pas même un partenariat accepté (attendu : ERROR permission denied for table professional_partners — avant : 2 lignes, la demande en attente comprise)
+|   42501 permission denied for table professional_partners
+| @ --- H4. B demande un partenariat déjà « accepte » (attendu : ERROR … row-level security, avant comme après)
+|   42501 new row violates row-level security policy for table "professional_partners"
+| @ --- H6. B choisit sa DATE de demande (attendu : ERROR permission denied for table professional_partners — avant : INSERT 0 1)
+|   42501 permission denied for table professional_partners
+| @ --- H7. DÉFAUT N° 2 DU 19/10 : A, en ACCEPTANT la demande de B, en change l AUTEUR pour C (attendu : ERROR permission denied for table professional_partners — avant : UPDATE 1, et C se retrouvait partenaire de A sans rien avoir demandé)
+|   42501 permission denied for table professional_partners
+| @ --- H11. sous blocage, on ne PROPOSE pas — dans les deux sens (attendu : ERROR OP020 « Vous ne pouvez pas proposer ce partenariat. », deux fois — avant : INSERT 0 1)
+|   OP020 Vous ne pouvez pas proposer ce partenariat.
+|   OP020 Vous ne pouvez pas proposer ce partenariat.
+| @ --- H12. une demande déposée AVANT le blocage : A ne l ACCEPTE plus, mais la REFUSE (attendu : ERROR OP020 « Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser. » ; puis UPDATE 1)
+|   OP020 Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser.
+[valeurs]
+[sortie]
+|
+| ##### A. LA DONNÉE EXISTE #####
+| --- A1. A est pro, plombier, ses tarifs sont affichés, sa ligne d urgence active (attendu : t | {plombier} | t | t)
+| pro | metiers | affiche | urgences
+| ----
+| t | {plombier} | t | t
+| (1 row)
+|
+| --- A2. P LIT les tarifs de A et le trouve dans la recherche d urgence (attendu : 1 | 1)
+| BEGIN
+| SET
+| SET
+| tarifs_lus | dans_la_recherche
+| ----
+| 1 | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### B. LES DEMANDES REÇUES — section 24.4 et 13.5 #####
+| --- B1. P dépose une demande de devis DÉJÀ « accepte » (attendu : ERROR … row-level security — avant le lot : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "quote_requests"
+| ROLLBACK
+| --- B1 bis. … un rappel « accepte » (attendu : ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "callback_requests"
+| ROLLBACK
+| --- B1 ter. … une urgence « acceptee » (attendu : ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "sos_requests"
+| ROLLBACK
+| --- B2. P dépose une demande de devis et une demande de rappel, sans statut (attendu : INSERT 0 1, INSERT 0 1, puis A a 2 notifications : « Paule P. vous demande un devis » et « Paule P. attend votre appel »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| type | texte
+| ----
+| devis | Paule P. vous demande un devis
+| rappel | Paule P. attend votre appel
+| (2 rows)
+|
+| ROLLBACK
+| --- B3. A modifie la DESCRIPTION de la demande reçue (attendu : ERROR OP019 « Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| ROLLBACK
+| --- B3 bis. A récrit le NOM et le numéro du client en même temps qu il accepte (attendu : ERROR OP019 — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP019 Une demande reçue ne se modifie pas : seuls Accepter, Refuser et Marquer terminé changent son état.
+| ROLLBACK
+| --- B4. A ACCEPTE, puis renvoie « accepte » (un double appui), puis la MARQUE TERMINÉE (attendu : UPDATE 1, UPDATE 1, UPDATE 1, puis P a 1 notification « devis_accepte »)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| UPDATE 1
+| UPDATE 1
+| RESET
+| type | count
+| ----
+| devis_accepte | 1
+| (1 row)
+|
+| ROLLBACK
+| --- B5. une demande ACCEPTÉE ne se refuse plus (attendu : ERROR OP019 « Cette demande a déjà été acceptée : vous pouvez la marquer terminée. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| ERREUR OP019 Cette demande a déjà été acceptée : vous pouvez la marquer terminée.
+| ROLLBACK
+| --- B6. une demande EN ATTENTE ne se termine pas (attendu : ERROR OP019 « Cette demande n a pas encore été acceptée : acceptez-la ou refusez-la d abord. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP019 Cette demande n'a pas encore été acceptée : acceptez-la ou refusez-la d'abord.
+| ROLLBACK
+| --- B7. une demande REFUSÉE ne revient pas (attendu : ERROR OP019 « Cette demande a déjà été refusée : elle ne peut plus changer. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| UPDATE 1
+| SET
+| SET
+| ERREUR OP019 Cette demande a déjà été refusée : elle ne peut plus changer.
+| ROLLBACK
+| --- B8. une demande TERMINÉE ne revient pas (attendu : ERROR OP019 « Cette demande est déjà terminée : elle ne peut plus changer. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| SET
+| SET
+| ERREUR OP019 Cette demande est déjà terminée : elle ne peut plus changer.
+| ROLLBACK
+| --- B9. les mots de l urgence : A accepte, puis termine une urgence (attendu : INSERT 0 1 par P, UPDATE 1, UPDATE 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| UPDATE 1
+| UPDATE 1
+| ROLLBACK
+| --- B10. R-A : l éditeur SQL (ici `postgres`) corrige une demande — une migration doit pouvoir réparer (attendu : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| UPDATE 1
+| ROLLBACK
+| --- B11. le CLIENT ne change pas le statut de sa demande (attendu : UPDATE 0 — aucune politique, avant comme après)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- B12. A se demande un devis À LUI-MÊME (attendu : ERROR … quote_requests_pas_soi_meme_check — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "quote_requests" violates check constraint "quote_requests_pas_soi_meme_check"
+| ROLLBACK
+| --- B12 bis. … un rappel à lui-même (attendu : ERROR … callback_requests_pas_soi_meme_check — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "callback_requests" violates check constraint "callback_requests_pas_soi_meme_check"
+| ROLLBACK
+| --- B12 ter. … une conversation avec lui-même (attendu : ERROR … conversations_pas_soi_meme_check — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 23514 new row for relation "conversations" violates check constraint "conversations_pas_soi_meme_check"
+| ROLLBACK
+| --- B12 quater. les trois contraintes posées sur des tables qui ont DÉJÀ une ligne « soi-même » sur la vraie base sont `not valid` ; celle des urgences, table vide, est valide (attendu : f | f | f | t)
+| conname | convalidated
+| ----
+| callback_requests_pas_soi_meme_check | f
+| conversations_pas_soi_meme_check | f
+| quote_requests_pas_soi_meme_check | f
+| sos_requests_pas_soi_meme_check | t
+| (4 rows)
+|
+| --- B13. P a bloqué A : A ne peut plus ACCEPTER la demande (attendu : ERROR OP020 « Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser. » — avant : UPDATE 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.
+| ROLLBACK
+| --- B14. … mais il peut la REFUSER, et P — qui a bloqué A — ne reçoit pas la notification de A (attendu : UPDATE 1, puis 0 notification « demande_refusee » chez P — avant : 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| refus_notifie_a_p
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- B15. dans l AUTRE sens — décision Q1 : A a bloqué Q, il ne peut plus accepter, mais son REFUS arrive bien chez Q, qui n a bloqué personne (attendu : ERROR OP020 au premier essai ; dans un second temps UPDATE 1 et 1 notification « demande_refusee »)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez plus accepter cette demande. Vous pouvez encore la refuser.
+| ROLLBACK
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| refus_notifie_a_q
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### C. L URGENCE NE PART QUE VERS QUI Y RÉPOND — section 24.4, OP025 #####
+| --- C1. P envoie une urgence à B, électricien SANS ligne d urgence ni tarifs (attendu : ERROR OP025 « Cet artisan ne répond plus aux urgences de ce métier… » — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| ROLLBACK
+| --- C2. P envoie à A une urgence de SERRURERIE — A ne répond qu aux urgences de plomberie (attendu : ERROR OP025 — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| ROLLBACK
+| --- C3. P envoie à A une urgence d un métier INVENTÉ (attendu : ERROR OP025 — le déclencheur joue avant la contrainte ; avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| ROLLBACK
+| --- C3 bis. … et la contrainte garde la porte de la base elle-même (`postgres`, sans le déclencheur) (attendu : ERROR … sos_metier_key_check)
+| BEGIN
+| ERREUR 23514 new row for relation "sos_requests" violates check constraint "sos_metier_key_check"
+| ROLLBACK
+| --- C4. A n AFFICHE plus ses tarifs : plus d urgence vers lui (attendu : ERROR OP025 — avant : INSERT 0 1)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| ERREUR OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| ROLLBACK
+| --- C5. un compte PRO (B) n envoie pas d urgence — il ne lit aucun tarif (attendu : ERROR OP025 — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR OP025 Cet artisan ne répond plus aux urgences de ce métier en ce moment : relancez la recherche pour voir ceux qui sont disponibles.
+| ROLLBACK
+| --- C6. le cas qui doit PASSER : P, plomberie, vers A (attendu : INSERT 0 1, puis A a 1 notification « a besoin de vous EN URGENCE »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| texte
+| ----
+| Paule P. a besoin de vous EN URGENCE
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### D. LE LIEN D UN DEVIS — section 49.6 bis, OP020 #####
+| --- D1. sans blocage : A fait un devis pour la demande de P, et `peut_faire_un_devis` dit oui (attendu : t, puis INSERT 0 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SET
+| SET
+| peut
+| ----
+| t
+| (1 row)
+|
+| INSERT 0 1
+| ROLLBACK
+| --- D2. P a bloqué A — un blocage que A ne VOIT pas : `peut_faire_un_devis` dit non, et un NOUVEAU devis est refusé (attendu : f, puis ERROR OP020 « Vous ne pouvez plus rattacher un nouveau devis à cette demande… » — avant : INSERT 0 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| peut
+| ----
+| f
+| (1 row)
+|
+| ERREUR OP020 Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.
+| ROLLBACK
+| --- D3. … un devis COMMENCÉ AVANT le blocage reste modifiable — rien ne disparaît (attendu : UPDATE 1, et son lien est toujours posé : t)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| lien_garde
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- D4. A a bloqué Q (l autre sens) : pas de nouveau devis sur sa demande (attendu : ERROR OP020 — avant : INSERT 0 1)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez plus rattacher un nouveau devis à cette demande. Un devis déjà commencé reste modifiable.
+| ROLLBACK
+| --- D5. « pas à vous » est décidé AVANT le blocage : B tente de rattacher son devis à la demande de P adressée à A, P ayant bloqué A (attendu : ERROR OP013 — jamais OP020 : B n apprend rien du blocage)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| SELECT 1
+| GRANT
+| SET
+| SET
+| ERREUR OP013 Cette demande de devis ne vous a pas été adressée : un devis ne se rattache qu'à vos propres demandes.
+| ROLLBACK
+| --- D6. `peut_faire_un_devis` ne dit rien d une demande qui n est pas à l appelant, ni d un appel mal formé (attendu : f | f | f)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| SELECT 1
+| GRANT
+| SET
+| SET
+| pas_a_moi | inexistante | deux_cles
+| ----
+| f | f | f
+| (1 row)
+|
+| ROLLBACK
+| --- D7. un visiteur ne l appelle pas (attendu : ERROR permission denied for function peut_faire_un_devis)
+| BEGIN
+| SET
+| ERREUR 42501 permission denied for function peut_faire_un_devis
+| ROLLBACK
+| --- D8. la cascade passe : la demande disparaît, le lien du devis passe à vide malgré le blocage (attendu : DELETE 1, puis lien vide : t)
+| BEGIN
+| id
+| ----
+| <uuid>
+| (1 row)
+|
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| DELETE 1
+| lien_vide
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### E. LES NOTIFICATIONS — section 13.5 quater, décision Q1 #####
+| --- E1. ce qui se tait, et ce qui passe — B a bloqué A (attendu : commentaire 0 | sans_acteur 1 | admin 1 | autre_sens 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 0
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| commentaire | sans_acteur | admin | autre_sens
+| ----
+| 0 | 1 | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- E2. la liste des types qu un blocage fait taire, un par un (attendu : 12 types, tous à 0 ; demande_pro_nouvelle à 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| type | gardees
+| ----
+| commentaire | 0
+| reponse | 0
+| partenaire_demande | 0
+| partenaire_accepte | 0
+| devis | 0
+| rappel | 0
+| sos | 0
+| devis_accepte | 0
+| rappel_accepte | 0
+| sos_accepte | 0
+| demande_refusee | 0
+| annonce | 0
+| demande_pro_nouvelle | 1
+| (13 rows)
+|
+| ROLLBACK
+|
+| ##### F. CE QU ON ÉCRIT SOUS BLOCAGE — section 13.5 bis, règle R-B #####
+| (P a bloqué B dans chaque cas ; chaque cas commence par prouver que la MÊME écriture vers A passe)
+| --- F1. P aime la publication de A, puis celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy for table "post_likes"
+| ROLLBACK
+| --- F2. P commente la publication de A, puis celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy for table "comments"
+| ROLLBACK
+| --- F2 bis. B a commenté sous la publication de A (un TIERS) ; P, qui a bloqué B, lui répond (attendu : ERROR « Le commentaire parent n existe pas » — la lecture lui cache le commentaire de B)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| --- F2 ter. LE FIL INDIRECT (relecture du 26/10) : P a bloqué B. B a un commentaire d origine sous la publication de A, Q y a répondu ; P répond à la réponse de Q (attendu : ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, rangée sous le commentaire de B)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| --- F2 ter b. … l autre sens : P a un commentaire d origine, Q y a répondu ; B, que P a bloqué, répond à la réponse de Q (attendu : ERROR « Le commentaire parent n existe pas »)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| --- F2 ter c. TÉMOIN, sans blocage : B répond à la réponse de Q, et sa réponse est rangée sous le commentaire d origine (attendu : INSERT 0 1, puis t)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| sous_le_commentaire_d_origine
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- F2 ter d. UNE RÉPONSE VIT SOUS LA PUBLICATION DE SON PARENT (seconde relecture du 27/10) : P a bloqué B ; Q a commenté la publication de B ; P lit ce commentaire (pas la publication), et y répond en déclarant la publication de A (attendu : 0 | 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, accroché au fil de la publication de B)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| p_lit_la_publication_de_b | p_lit_le_commentaire_de_q
+| ----
+| 0 | 1
+| (1 row)
+|
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| --- F2 ter e. … et c est une règle d intégrité, pas de blocage : sans aucun blocage, A répond au même commentaire en déclarant SA publication, puis en déclarant la bonne (attendu : ERROR « Le commentaire parent n existe pas », puis INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ROLLBACK
+| --- F2 ter f. une réponse INCOHÉRENTE écrite avant cette règle ne bloque pas le droit à l effacement : P, son auteur, supprime son compte (attendu : t, puis anonymisee t | compte_parti t)
+| BEGIN
+| INSERT 0 1
+| ALTER TABLE
+| INSERT 0 1
+| ALTER TABLE
+| SET
+| SET
+| compte_prepare
+| ----
+| t
+| (1 row)
+|
+| RESET
+| anonymisee | compte_parti
+| ----
+| t | t
+| (1 row)
+|
+| ROLLBACK
+| --- F2 ter g. LE MARCHEPIED (troisième relecture du 27/10) : une réponse incohérente R, écrite avant la règle (Q, déclarée sur la publication de A, parent sous la publication de B) ; P a bloqué B, lit R, et répond à R en déclarant la publication de A (attendu : 1, puis ERROR « Le commentaire parent n existe pas » — avant la correction : INSERT 0 1, rangée sous le commentaire de la publication de B)
+| BEGIN
+| INSERT 0 1
+| ALTER TABLE
+| INSERT 0 1
+| ALTER TABLE
+| INSERT 0 1
+| SET
+| SET
+| p_lit_la_reponse_r
+| ----
+| 1
+| (1 row)
+|
+| ERREUR P0001 Le commentaire parent n'existe pas
+| ROLLBACK
+| --- F2 ter h. CORRIGER SON TEXTE ne juge pas le lien (troisième relecture du 27/10) : P a répondu au commentaire de Q, puis a bloqué Q ; P corrige sa réponse, personne n ayant écrit après (attendu : UPDATE 1, puis t — avant : ERROR « Le commentaire parent n existe pas »)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| RESET
+| corrigee_lien_intact
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- F2 quater. la notification d un commentaire qu on ne peut pas lire se tait : P a bloqué B ; dans le fil de Q, B avait répondu ; P y répond (attendu : INSERT 0 1, puis reponse_chez_b 0 | reponse_chez_q 1 — avant la correction : 1 | 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| RESET
+| reponse_chez_b | reponse_chez_q
+| ----
+| 0 | 1
+| (1 row)
+|
+| ROLLBACK
+| --- F3. P s abonne à A, puis à B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy for table "follows"
+| ROLLBACK
+| --- F3 bis. … et B, bloqué par P, ne s abonne pas à P non plus — les deux sens (attendu : ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "follows"
+| ROLLBACK
+| --- F3 ter. un « j aime » ne se DÉPLACE pas (relecture du 26/10) : P aime la publication de A, puis le déplace vers celle de B (attendu : INSERT 0 1, puis ERROR permission denied for table post_likes — avant : UPDATE 1, et le compteur de A gardait +1 sans ligne)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table post_likes
+| ROLLBACK
+| --- F3 quater. … un abonnement non plus (attendu : INSERT 0 1, puis ERROR permission denied for table follows — avant : UPDATE 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 permission denied for table follows
+| ROLLBACK
+| --- F3 quinquies. aimer et retirer, s abonner et se désabonner, passent toujours (attendu : INSERT 0 1, DELETE 1, INSERT 0 1, DELETE 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| DELETE 1
+| INSERT 0 1
+| DELETE 1
+| ROLLBACK
+| --- F4. P laisse un avis à A, puis à B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy for table "reviews"
+| ROLLBACK
+| --- F5. DÉCISION Q2 — un avis écrit AVANT le blocage : B, qu il vise, le LIT toujours ; Q, un tiers, aussi ; C, qui a bloqué P, ne le lit pas (attendu : 1 | 1 | 0 — avant : 0 | 1 | 0)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| b_lit_l_avis_qui_le_vise
+| ----
+| 1
+| (1 row)
+|
+| SET
+| q_tiers
+| ----
+| 1
+| (1 row)
+|
+| SET
+| c_a_bloque_l_auteur
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- F6. … P, après le blocage, ne CORRIGE plus son avis, mais peut le RETIRER (attendu : ERROR permission denied for table reviews au premier essai — depuis le lot S-c, plus personne ne corrige un avis une fois publié, blocage ou non, et c est le droit de table qui refuse, avant la règle ; le blocage sur l ÉCRITURE d un avis reste éprouvé par F4 ; DELETE 1 au second)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 permission denied for table reviews
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| ROLLBACK
+| --- F7. RÉPONDRE À UNE ANNONCE — A répond à celle de C, puis B a bloqué A et A répond à celle de B (attendu : INSERT 0 1, puis ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| INSERT 0 1
+| ERREUR 42501 new row violates row-level security policy for table "annonce_reponses"
+| ROLLBACK
+| --- F7 bis. … à SA PROPRE annonce, et à une annonce POURVUE (attendu : ERROR … row-level security, deux fois — avant : INSERT 0 1, deux fois)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "annonce_reponses"
+| ROLLBACK
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "annonce_reponses"
+| ROLLBACK
+| --- F8. CLORE reste permis : B a bloqué A ; A RETIRE sa réponse à l annonce de B, écrite avant (attendu : DELETE 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| ROLLBACK
+| --- F9. CLIENT VÉRIFIÉ — une demande seulement ENVOYÉE ne suffit pas (attendu : INSERT 0 1, INSERT 0 1, puis en_attente | f)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| INSERT 0 1
+| RESET
+| statut | client_verifie
+| ----
+| en_attente | f
+| (1 row)
+|
+| ROLLBACK
+| --- F9 bis. … une urgence ACCEPTÉE suffit (attendu : INSERT 0 1, UPDATE 1, INSERT 0 1, puis acceptee | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| UPDATE 1
+| SET
+| INSERT 0 1
+| RESET
+| statut | client_verifie
+| ----
+| acceptee | t
+| (1 row)
+|
+| ROLLBACK
+| --- F9 ter. … et la mention SURVIT au départ de l auteur : devis accepté, avis vérifié, puis P supprime son compte (attendu : t, puis t | t | t — avant la correction : f | t | t)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| UPDATE 1
+| SET
+| INSERT 0 1
+| client_verifie
+| ----
+| t
+| (1 row)
+|
+| suppression
+| ----
+| t
+| (1 row)
+|
+| RESET
+| client_verifie | auteur_supprime | anonyme
+| ----
+| t | t | t
+| (1 row)
+|
+| ROLLBACK
+| --- F10. LES CONVERSATIONS (seconde relecture du 27/10) : masquées des deux côtés sous un blocage, et revenues seulement quand PLUS AUCUN blocage ne sépare les deux personnes (attendu, P puis A à chaque étape : avant 1|1 1|1 ; P bloque A 0|0 0|0 ; A bloque P aussi 0|0 ; P retire le sien DELETE 1 puis 0|0 ; A retire le sien DELETE 1 puis 1|1 1|1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| etape | conv | msg
+| ----
+| avant, P | 1 | 1
+| (1 row)
+|
+| SET
+| etape | conv | msg
+| ----
+| avant, A | 1 | 1
+| (1 row)
+|
+| RESET
+| INSERT 0 1
+| SET
+| SET
+| etape | conv | msg
+| ----
+| P bloque A, P | 0 | 0
+| (1 row)
+|
+| SET
+| etape | conv | msg
+| ----
+| P bloque A, A | 0 | 0
+| (1 row)
+|
+| RESET
+| INSERT 0 1
+| SET
+| SET
+| DELETE 1
+| etape | conv | msg
+| ----
+| P a retiré le sien, A garde le sien, P | 0 | 0
+| (1 row)
+|
+| SET
+| DELETE 1
+| etape | conv | msg
+| ----
+| plus aucun blocage, A | 1 | 1
+| (1 row)
+|
+| SET
+| etape | conv | msg
+| ----
+| plus aucun blocage, P | 1 | 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### G. LES RÉPONSES AUX DEMANDES — section 30.3 #####
+| --- G1. A répond à la demande de P : le compteur de la demande monte (attendu : INSERT 0 1, puis nb_reponses = 1 lu par P)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- G2. P écrit « 40 réponses » sous sa demande, après une vraie réponse de A, puis la passe « pourvue » (seconde relecture du 27/10 : l ancien nombre est GARDÉ — attendu : INSERT 0 1, UPDATE 1, 1, UPDATE 1, 1 ; une garde qui remettrait 0 à chaque écriture rendrait 0)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| UPDATE 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| UPDATE 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- G2 bis. B écrit « 40 réponses » sous SON ANNONCE et change son titre, après une vraie réponse de A, puis la ferme (relecture du 26/10 et du 27/10 : attendu INSERT 0 1, UPDATE 1, 1, UPDATE 1, 1 — avant : 40)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| SET
+| UPDATE 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| UPDATE 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- G2 ter. … et le vrai compteur monte toujours : A répond à l annonce de B (attendu : INSERT 0 1, puis 1)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- G3. A DÉPLACE sa réponse vers la demande de Q (attendu : ERROR OP021 « Une réponse ne se déplace pas : seul son message peut changer. » — avant : UPDATE 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| ROLLBACK
+| --- G4. … son MESSAGE, lui, change (attendu : UPDATE 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- G5. P a bloqué B : B ne répond plus à sa demande (attendu : ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "demande_reponses"
+| ROLLBACK
+| --- G6. une demande POURVUE ne reçoit plus de réponse (attendu : ERROR … row-level security — avant : INSERT 0 1)
+| BEGIN
+| UPDATE 1
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "demande_reponses"
+| ROLLBACK
+| --- G7. un visiteur ne lit plus aucune réponse (attendu : ERROR permission denied for table demande_reponses — avant : 1 ligne, avec le message)
+| BEGIN
+| INSERT 0 1
+| SET
+| ERREUR 42501 permission denied for table demande_reponses
+| ROLLBACK
+| --- G8. le rattrapage RECALCULE : un compteur faussé par l éditeur SQL est remis juste au rejeu (attendu : 1)
+| BEGIN
+| INSERT 0 1
+| UPDATE 1
+| UPDATE 1
+| nb_reponses
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- G9. une réponse d ANNONCE ne se déplace pas non plus (attendu : ERROR OP021)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP021 Une réponse ne se déplace pas : seul son message peut changer.
+| ROLLBACK
+|
+| ##### H. LES PARTENARIATS — section 13.5 ter #####
+| --- H0. CAS 0 — la donnée existe : un partenariat ACCEPTÉ entre A et C, lu par Q, un tiers ; une demande EN ATTENTE de B vers A, lue par A (attendu : 1, puis 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| q_lit_l_accepte
+| ----
+| 1
+| (1 row)
+|
+| SET
+| a_lit_la_demande
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+| --- H1. un visiteur ne lit plus rien, pas même un partenariat accepté (attendu : ERROR permission denied for table professional_partners — avant : 2 lignes, la demande en attente comprise)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| ERREUR 42501 permission denied for table professional_partners
+| ROLLBACK
+| --- H2. un connecté TIERS ne lit pas une demande en attente (attendu : 0 — avant : 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| q_lit_l_attente
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- H3. Q a bloqué C : il ne lit plus le partenariat A–C (attendu : 0 — avant : 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| q_lit
+| ----
+| 0
+| (1 row)
+|
+| ROLLBACK
+| --- H4. B demande un partenariat déjà « accepte » (attendu : ERROR … row-level security, avant comme après)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 new row violates row-level security policy for table "professional_partners"
+| ROLLBACK
+| --- H5. B demande SANS statut : le défaut est « en attente » (attendu : INSERT 0 1, puis en_attente — avant : ERROR … row-level security, le défaut valait « accepte »)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| statut
+| ----
+| en_attente
+| (1 row)
+|
+| ROLLBACK
+| --- H6. B choisit sa DATE de demande (attendu : ERROR permission denied for table professional_partners — avant : INSERT 0 1)
+| BEGIN
+| SET
+| SET
+| ERREUR 42501 permission denied for table professional_partners
+| ROLLBACK
+| --- H6 bis. … et si un droit de colonne était un jour élargi par mégarde, la date resterait celle de la BASE (relecture du 26/10 : attendu INSERT 0 1, puis t)
+| BEGIN
+| GRANT
+| SET
+| SET
+| INSERT 0 1
+| date_de_la_base
+| ----
+| t
+| (1 row)
+|
+| ROLLBACK
+| --- H7. DÉFAUT N° 2 DU 19/10 : A, en ACCEPTANT la demande de B, en change l AUTEUR pour C (attendu : ERROR permission denied for table professional_partners — avant : UPDATE 1, et C se retrouvait partenaire de A sans rien avoir demandé)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR 42501 permission denied for table professional_partners
+| ROLLBACK
+| --- H8. A accepte ; la date de réponse est celle de la BASE, pas celle envoyée (attendu : UPDATE 1, puis accepte | t — avant : la date de 2001 restait)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| statut | date_de_la_base
+| ----
+| accepte | t
+| (1 row)
+|
+| ROLLBACK
+| --- H9. une demande REFUSÉE ne s accepte plus (attendu : UPDATE 0 — avant : UPDATE 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 0
+| ROLLBACK
+| --- H10. le DEMANDEUR ne supprime plus le refus — sinon il redemande en boucle ; celui qui a refusé, lui, le peut (attendu : DELETE 0, puis DELETE 1 — avant : DELETE 1, puis DELETE 0, le refus était déjà parti)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| DELETE 0
+| SET
+| DELETE 1
+| ROLLBACK
+| --- H11. sous blocage, on ne PROPOSE pas — dans les deux sens (attendu : ERROR OP020 « Vous ne pouvez pas proposer ce partenariat. », deux fois — avant : INSERT 0 1)
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez pas proposer ce partenariat.
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez pas proposer ce partenariat.
+| ROLLBACK
+| --- H12. une demande déposée AVANT le blocage : A ne l ACCEPTE plus, mais la REFUSE (attendu : ERROR OP020 « Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser. » ; puis UPDATE 1)
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| ERREUR OP020 Vous ne pouvez plus accepter ce partenariat. Vous pouvez encore le refuser.
+| ROLLBACK
+| BEGIN
+| INSERT 0 1
+| INSERT 0 1
+| SET
+| SET
+| UPDATE 1
+| ROLLBACK
+| --- H13. demander, annuler, redemander : A n est prévenu qu UNE fois par 24 h (attendu : INSERT 0 1, DELETE 1, INSERT 0 1, puis 1 notification — avant : 2)
+| BEGIN
+| SET
+| SET
+| INSERT 0 1
+| DELETE 1
+| INSERT 0 1
+| RESET
+| sonneries
+| ----
+| 1
+| (1 row)
+|
+| ROLLBACK
+|
+| ##### I. LE CATALOGUE #####
+| --- I1. les fonctions du lot, leur mode et leur appel (attendu : definer f/t comme ci-dessous ; aucune de déclencheur appelable ; peut_faire_un_devis appelable par authenticated seul)
+| proname | definer | anon | authentifie
+| ----
+| limite_profondeur_commentaire | f | f | f
+| maj_nb_reponses_demande | t | f | f
+| peut_faire_un_devis | t | f | t
+| tait_les_notifications_bloquees | t | f | f
+| tient_l_urgence | f | f | f
+| tient_la_demande | f | f | f
+| tient_la_reponse | f | f | f
+| tient_le_compteur_d_annonce | f | f | f
+| tient_le_compteur_de_demande | f | f | f
+| tient_le_lien_du_devis | t | f | f
+| tient_le_partenariat | f | f | f
+| (11 rows)
+|
+| --- I2. les droits de table qu un visiteur n a plus (attendu : f | f)
+| partenaires | reponses
+| ----
+| f | f
+| (1 row)
+|
+| --- I3. les droits de colonne des partenariats (attendu : insert : t t t f f ; update : f f t t f)
+| i_pro | i_part | i_statut | i_date | i_rep
+| ----
+| t | t | t | f | f
+| (1 row)
+|
+| u_pro | u_part | u_statut | u_rep | u_date
+| ----
+| f | f | t | t | f
+| (1 row)
+|
+| --- I4. toute politique qui appelle est_masque est `to authenticated` — appelée pour un visiteur, elle échouerait au lieu de filtrer (attendu : aucune ligne, avant comme après)
+| tablename | policyname | roles
+| ----
+| (0 rows)
+|
+|
+| ##### FIN #####
