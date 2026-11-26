@@ -1039,10 +1039,12 @@ export default function SaisieDevisScreen({
          n'est plus sûre, `etatDeLaListe` la tient « en route » — sans quoi
          la ligne passait au VERT, coche comprise, pendant l'aller-retour des
          totaux, sur une base qui comptait un point. La file le sait
-         (`relectureAVenir()`, file-ecriture.js) ; il ne change que DANS un
-         de ses événements (vrai à la confirmation, faux à `totaux` ou à
-         `totaux_illisibles`, qui relisent la liste dans le même rendu) :
-         le recopier ici, après chaque événement, ne laisse aucun trou. */
+         (`relectureAVenir()`, file-ecriture.js). Il devient vrai à une
+         confirmation (parfois sans événement, quand l'écriture garde un
+         reste à renvoyer : la file est alors encore en route, l'état aussi)
+         et faux seulement à `totaux` ou à `totaux_illisibles`, qui relisent
+         la liste dans le même rendu : le recopier ici, après chaque
+         événement, ne laisse aucun trou. */
       relectureAVenir: f.relectureAVenir(),
       /* Ceux que « Réessayer » de leur bande peut renvoyer : jamais un refus
          définitif (TC-1). */

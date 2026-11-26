@@ -5498,6 +5498,24 @@ savoir :
   des six clés du vert, pas les autres) ; et `mesure-devis`, seule à voir le
   dessin et la fenêtre de confirmation au navigateur, n'est toujours pas
   dans `npm run verifier` (« s. » la tient, il ne la joue pas).
+- [x] **Corrigé par la vérification indépendante, le 26/11** : « Relire »
+  (sous des totaux illisibles) touché pendant qu'une ligne s'écrit. La
+  relecture lisait la base AVANT l'écriture mais portait déjà la génération
+  courante : la confirmation n'en lançait pas une seconde, et le pied
+  gardait les totaux d'AVANT jusqu'au geste suivant (le vert, lui, n'était
+  pas touché : la liste se relisait). Une confirmation remet désormais
+  `generationRelue` à vide, et seule la relecture la plus RÉCENTE parle —
+  ce qui ferme aussi la variante plus ancienne où la première répondait
+  après la seconde. Tenu par « m quater » de `verifier-devis`, éprouvé par
+  trois sabotages ; le banc du vérificateur (27 scénarios) rend les mêmes
+  résultats ailleurs, et ses quatre cas K justes.
+- [ ] **Limite connue — un contrôle qui BOUCLE bloque `npm run verifier`.**
+  Trouvé par la vérification : `aRelire` qui ne retombe jamais (un
+  sabotage) fait rougir `verifier-devis` (deux ✘), puis un cas plus loin
+  tourne sans fin (le renvoi du plafond relancé à chaque `totaux`), et
+  `npm run verifier` n'a aucun délai par contrôle : il resterait bloqué au
+  lieu de rougir (sur GitHub, le travail s'arrête au bout de son délai
+  général). Un délai par contrôle, à poser avec 2c-E.
 - [ ] **Pas vérifié sur l'iPhone** : le vert qui attend le retour de la liste
   sur la vraie base (l'orange « Des changements partent… » dure de l'envoi
   au retour de la liste, au lieu de clignoter), la coche après le titre, et

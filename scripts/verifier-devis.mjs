@@ -2700,6 +2700,47 @@ process.on('unhandledRejection', (e) => { plantagesDeLaFile.push((e && e.stack) 
       && f4.etatDe('A') === 'enregistree' && f4.relectureAVenir() === false,
     json([lectures, vus, lectures2, vus2, vus3]));
   });
+  /* m quater. « RELIRE » TOUCHÉ PENDANT UNE ÉCRITURE EN VOL (vérification
+     du vert, 26/11/2026). La relecture R part pendant que A s'écrit : elle
+     lit la base AVANT A, mais porte déjà la génération courante (`envoyer`
+     l'a fait monter au départ de A). Sans la règle, la confirmation de A ne
+     lançait pas de seconde relecture (« une relecture est déjà en vol sous
+     cette génération »), et R affichait les totaux d'AVANT A jusqu'au geste
+     suivant. Désormais une confirmation remet ce compteur à vide : une
+     seconde relecture part, et seule la plus récente parle — que R réponde
+     avant elle ou après. */
+  await essayerCas(async () => {
+    const jouer = async (delaiR) => {
+      const b = fausseBase();
+      /* La ligne est écrite à +15 ms et confirmée à +20 ms : sous le délai
+         de la file (40 ms ici). */
+      b.commandes.push({ quand: (op) => op.id === 'A', avant: 15, apres: 5 });
+      let lectures = 0;
+      const emis = [];
+      const f = fabriquer(b, {
+        devisEnBase: true,
+        relireTotaux: async () => {
+          lectures += 1;
+          const n = b.lignes.size;   // ce que la base contient AU MOMENT de la lecture
+          await pause(lectures === 1 ? delaiR : 10);
+          return { n };
+        },
+      });
+      f.abonner((e) => { if (e.type === 'totaux') emis.push(e.totaux.n); });
+      f.ligne(ligne('A'));
+      await pause(5);
+      f.relireLesTotaux();
+      await f.attendre(500);
+      await pause(delaiR + 30);
+      return { lectures, emis, aVenir: f.relectureAVenir(), etatA: f.etatDe('A') };
+    };
+    const tot = await jouer(18);    // R (lue à +5) répond à +23 : après la confirmation, avant la seconde (+30)
+    const tard = await jouer(30);   // R répond à +35 : après la seconde
+    const juge = (r) => r.lectures === 2 && json(r.emis) === json([1]) && r.aVenir === false && r.etatA === 'enregistree';
+    verifier('« Relire » touché pendant qu’une ligne s’écrit : la relecture lue AVANT l’écriture n’affiche pas ses totaux périmés — '
+      + 'une seconde part à la confirmation, et seule la plus récente parle, que la première réponde avant ou après elle',
+    juge(tot) && juge(tard), json([tot, tard]));
+  });
   /* n. UN DÉLAI DÉPASSÉ ANNULE LA REQUÊTE : une modification lente ne
      repasse pas, plus tard, par-dessus la suivante (P5, S5). */
   await essayerCas(async () => {

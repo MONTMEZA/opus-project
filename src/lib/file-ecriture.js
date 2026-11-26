@@ -61,9 +61,11 @@
  *      prochain repos de la file relit. Une seule relecture à la fois sous
  *      une même génération (`generationRelue`) : un passage « à vide » de la
  *      file pendant qu'elle est en vol (une carte fermée sans rien changer)
- *      n'en lance pas une seconde — c'était déjà la règle, puisque
- *      `aRelire` était faux pendant ce temps. `relectureAVenir()` le dit à
- *      l'écran ;
+ *      n'en lance pas une seconde. Mais une écriture CONFIRMÉE pendant
+ *      ce vol remet ce compteur à vide : la relecture en vol a pu lire la
+ *      base avant elle, une seconde part, et seule la relecture la plus
+ *      récente peut parler (vérification du vert, 26/11/2026).
+ *      `relectureAVenir()` le dit à l'écran ;
  *   8. l'état de chaque ligne est public : `locale` (jamais partie :
  *      incomplète, ou refusée avant l'envoi), `en_cours`, `enregistree`,
  *      `echec` — et `null` pour ce que la file ne connaît plus (retiré, ou le
@@ -440,6 +442,8 @@ export function creerFileEcriture({
   let enRelecture = 0;
   let generationRelue = null;
   let aRelire = false;
+  /* Le numéro de la DERNIÈRE relecture lancée : seule elle peut parler. */
+  let derniereRelecture = 0;
   let enPause = false;
   let supprime = false;
   let suppression = null;
@@ -700,7 +704,7 @@ export function creerFileEcriture({
              suppression, jamais l'oublier en local (la ligne resterait en
              base, comptée dans les totaux, absente de l'écran). */
           e.peutEtreInseree = true;
-          aRelire = true;
+          aRelireDesormais();
           poser(e, 'echec', err2);
         }
       } else {
@@ -714,7 +718,7 @@ export function creerFileEcriture({
              de ce qui a peut-être été inséré reste à faire — APRÈS avoir
              levé l'horloge, car elle peut encore arriver (13) ; les colonnes
              d'une modification deviennent INCONNUES — elles repartiront. */
-          aRelire = true;
+          aRelireDesormais();
           if (op.action === 'inserer') { e.peutEtreInseree = true; e.insertionSansReponse = true; }
           if (op.action === 'modifier') {
             const c = { ...(e.confirme || {}) };
@@ -765,7 +769,7 @@ export function creerFileEcriture({
     if (!fini && etaitRenvoi && e.etat === 'echec' && attente.includes(e.cle)) e.renvoi = devisEnBaseIci();
 
     if (fini) {
-      aRelire = true;
+      aRelireDesormais();
       e.dejaReparti = false;
       if (op.action === 'supprimer') {
         if (e.retire) {
@@ -809,6 +813,20 @@ export function creerFileEcriture({
     pomper();
   }
 
+  /* UNE ÉCRITURE VIENT D'ÊTRE CONFIRMÉE (ou son issue est inconnue) : les
+     totaux sont à relire. Une relecture déjà en vol a pu LIRE la base
+     AVANT cette écriture — « Relire » touché pendant le vol : elle porte
+     déjà la génération courante, que `envoyer` a fait monter au départ.
+     Elle ne compte donc plus pour la garde du repos (`generationRelue`
+     remis à vide), qui en lancera une seconde ; et la première, si elle
+     répond après, se tait (`derniereRelecture`, dans `relire`). Trouvé par
+     la vérification du vert, le 26/11/2026 : les totaux du pied restaient
+     ceux d'AVANT l'écriture, jusqu'au geste suivant. */
+  function aRelireDesormais() {
+    aRelire = true;
+    generationRelue = null;
+  }
+
   /* Les totaux, relus quand la file devient inactive. Une relecture partie
      avant une autre écriture est jetée : elle montrerait un total périmé
      comme « le total de la base ». `aRelire` ne retombe QUE quand
@@ -819,17 +837,24 @@ export function creerFileEcriture({
   function relire() {
     if (typeof relireTotaux !== 'function' || supprime) return;
     const g = generation;
+    derniereRelecture += 1;
+    const n = derniereRelecture;
     const id = entrees.get(DEVIS).voulu.id;
     enRelecture += 1;
     generationRelue = g;
+    /* Jetée si une écriture est partie depuis (la génération), OU si une
+       relecture plus RÉCENTE a été lancée : celle-ci a peut-être lu la base
+       avant une écriture que la plus récente compte, et répondre après elle
+       remettrait à l'écran un total périmé. La plus récente parle toujours :
+       rien ne reste sans réponse. */
     delai(Promise.resolve().then(() => relireTotaux(id)))
       .then((totaux) => {
-        if (g !== generation) return;
+        if (g !== generation || n !== derniereRelecture) return;
         aRelire = false;
         prevenir({ type: 'totaux', totaux });
       })
       .catch((err) => {
-        if (g !== generation) return;
+        if (g !== generation || n !== derniereRelecture) return;
         aRelire = false;
         prevenir({ type: 'totaux_illisibles', erreur: err });
       })
