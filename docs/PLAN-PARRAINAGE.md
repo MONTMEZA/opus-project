@@ -142,7 +142,10 @@ Relevé avant d'écrire : rien de tout cela n'existe, ni dans le dépôt ni dans
 la vraie base (requête sur la FORME seulement). Aucun lien `https` n'ouvre
 l'application aujourd'hui (`app.json` n'a ni `associatedDomains` ni
 `intentFilters`) ; seuls existent les schémas `com.opusproject.app` (sur
-iPhone) et `exp+opus-project` (le build de développement).
+iPhone) et `exp+opus-project` (le build de développement). (Relevé du
+03/11. Depuis le 26/11, `app.json` porte `associatedDomains`, et le build
+de développement, « Opus Dev », a son propre lien
+`com.opusproject.app.dev` — étape 2c-0.)
 
 ---
 
@@ -681,7 +684,17 @@ version publiée sur les magasins, en une seule reconstruction. C'est un
 réglage NATIF, des deux côtés (iPhone et Android) : il impose une
 reconstruction. Il **s'essaie AVANT la publication**, dans le build de
 développement (même identifiant `com.opusproject.app`), et il doit être dans
-la **première version envoyée aux magasins**. Chaque chemin (`/i/`, puis
+la **première version envoyée aux magasins**. **Ce « même identifiant »
+n'est plus vrai depuis le 26/11/2026** (étape 2c-0) : le build de
+développement s'appelle « Opus Dev » et porte `com.opusproject.app.dev`. Le
+lien universel s'y essaie toujours, mais le fichier
+`apple-app-site-association` devra nommer LES DEUX identifiants (A.3 bis), et
+un essai dans Opus Dev ne prouve rien pour Opus : une « preview »
+(`com.opusproject.app`) l'éprouvera de son côté. Les domaines
+(`applinks:opus-project.com`, `applinks:www.opus-project.com`) sont dans
+la configuration des deux applications depuis cette reconstruction (mesuré
+par l'introspection) ; seule Opus Dev est construite ; rien n'est encore
+hébergé sur le domaine. Chaque chemin (`/i/`, puis
 `/p/` pour le QR) n'est déclaré que dans la version de l'application qui
 sait le traiter : déclaré trop tôt, un lien ouvrirait Opus sur l'accueil
 sans rien faire. Ce n'est pas un surcoût : Opus n'a pas de mise à jour à
@@ -965,7 +978,10 @@ tranchée. Les quatre premières (Q1 à Q4) sont dans « En bref ».
   tous les textes de l'application. Pourquoi le poser : le nom sous l'icône
   est aujourd'hui « Opus-Project » (`app.json`), et le partage d'une
   publication écrit « sur Opus-Project ». Le nom choisi pour les magasins
-  devra suivre.
+  devra suivre. (Depuis le 26/11/2026, le nom posé dans `app.json` est
+  « Opus », décidé le 25/11, visible dans une preview seulement :
+  l'application de test installée s'appelle « Opus Dev ». Le partage d'une
+  publication écrit encore « sur Opus-Project ».)
 - **Q15. Combien de temps garder les adresses de la liste d'attente ?**
   (la page doit l'écrire, y compris pour le cas où Opus n'ouvrirait jamais —
   RGPD, art. 13.2.a). **Recommandé :**
@@ -1632,11 +1648,14 @@ développement, en passant par la page de lancement) et sur un vrai Android.
 - iPhone : `ios.associatedDomains: ['applinks:opus-project.com']` dans
   `app.json`. C'est une reconstruction ; vérifier au premier build qu'EAS a
   bien ajouté la capacité « Associated Domains » à l'identifiant de
-  l'application.
+  l'application. **Vu pour Opus Dev le 26/11/2026** (« Synced capabilities:
+  Enabled: Associated Domains, … ») ; reste à le voir pour la preview
+  (`com.opusproject.app`).
 - iPhone : `/.well-known/apple-app-site-association`, sans extension, en
   HTTPS, rendu en 200 sans aucune redirection (Apple ne suit pas les
   redirections pour ce fichier). `appIDs` vaut `<TeamID>.com.opusproject.app`
-  ; chemins limités à `/i/*` (puis `/p/*` le jour du QR), avec
+  — **et, depuis le 26/11/2026, aussi `<TeamID>.com.opusproject.app.dev`**
+  (Opus Dev) ; chemins limités à `/i/*` (puis `/p/*` le jour du QR), avec
   `caseSensitive: false`.
 - Android : `intentFilters` avec `autoVerify`, `https`, `opus-project.com`,
   `pathPrefix /i/`. Sur Android, le chemin tient compte de la casse :
@@ -1645,7 +1664,9 @@ développement, en passant par la page de lancement) et sur un vrai Android.
   redirection, avec DEUX empreintes SHA-256 : celle du certificat d'EAS (les
   constructions internes) et celle de Play App Signing (la version du
   magasin, que Google signe avec une autre clé ; elle n'existe qu'à la
-  création de l'application dans la Play Console).
+  création de l'application dans la Play Console). **Et, depuis le
+  26/11/2026, les deux `package_name`** : `com.opusproject.app` et
+  `com.opusproject.app.dev` (Opus Dev, `app.config.js`).
 - Les deux fichiers en ligne AVANT d'installer la construction : le réseau
   d'Apple les relit sous 24 h, les téléphones environ une fois par semaine,
   et Android vérifie au moment de l'installation.

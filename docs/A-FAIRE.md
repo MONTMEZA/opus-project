@@ -1560,8 +1560,10 @@ essais SQL tournent tout seuls ».
   main, avec votre accord, et la vraie base se compare encore au dépôt à la
   main (l'empreinte du catalogue) à chaque migration. Les migrations
   numérotées de la piste ne sont pas faites ;
-- **le premier passage sur la machine de GitHub** n'a pas eu lieu (rien
-  n'est envoyé), et PostgreSQL 17, celui de la vraie base, n'est pas joué ;
+- ~~**le premier passage sur la machine de GitHub** n'a pas eu lieu (rien
+  n'est envoyé)~~ — **joué et vert le 26/11** (07 h 39 UTC, puis 20 h 15
+  UTC : relevé par `gh run view`, voir « Après l'étape 2c-E ») ;
+  PostgreSQL 17, celui de la vraie base, n'est toujours pas joué ;
 - les trous de couverture et le reste de la relecture : « Après l'étape
   2c-E — ce qui reste ».
 
@@ -1734,11 +1736,11 @@ pour la même raison que le §4 n'a pas posé ses sept réglages d'un coup :
 | ✅ | **Devis, lot 1 : le chiffrage** — fait le 23/10/2026 | 9 | Le brouillon chiffré pièce par pièce, le total calculé par la base (section 49) ; rien ne sort encore. CLAUDE.md, « Le chiffrage — lot 1 ». Ce qui reste : plus bas, « Après le lot 1 ». |
 | ✅ | **Devis, lot P : la base de postes** — fait le 25/10/2026 | 9 | Ses phrases et ses prix de référence, proposés pendant la frappe, les variantes d'une même phrase reconnues sans IA (section 50). CLAUDE.md, « La base de postes — lot P ». Ce qui reste : plus bas, « Après le lot P ». |
 | 2 | **Devis** | 9 | Le cœur du métier, et le premier document qui ENGAGE. Numérotation, TVA, mentions obligatoires, acceptation. |
-| — | **Après le devis, avant les factures (décidé le 25/11/2026)** | 4 | Un lot à part : « mot de passe oublié » et « Se connecter avec Google / avec Apple » (`docs/PLAN-DEVIS.md` §10.25). Ses pièces natives (schéma de lien, navigateur intégré, connexion Apple) entrent dans la reconstruction de 2c-0. |
+| — | **Après le devis, avant les factures (décidé le 25/11/2026)** | 4 | Un lot à part : « mot de passe oublié » et « Se connecter avec Google / avec Apple » (`docs/PLAN-DEVIS.md` §10.25). Ses pièces natives (schéma de lien, navigateur intégré, connexion Apple) entrent dans la reconstruction de 2c-0 — **installées le 26/11/2026**, sans code qui s'en sert. |
 | 3 | **Factures** | 10 | Elles NAISSENT d'un devis accepté : les écrire avant obligerait à tout ressaisir. Facturation électronique obligatoire entre entreprises, vérifiée le 17/10/2026 (FAQ officielle d'août 2026) : **réception** obligatoire pour toutes depuis le 01/09/2026 ; **émission** par les grandes entreprises et les ETI depuis la même date, par les PME, TPE et micro-entreprises au plus tard le 01/09/2027. À relire au moment de le construire. |
 | 4 | **Dashboard** | 8 | Il MONTRE ce que les trois précédents ont produit. Avant eux, il n'aurait rien à afficher — ce serait le « bouton §18 » à l'échelle d'un écran. |
 | 5 | **Agenda** | 11 | Il se nourrit des chantiers et des devis acceptés. |
-| — | **Après le tableau de bord et l'agenda (décidé le 25/11/2026)** | addendum | Les QR professionnels et la page publique du pro, lisible sans compte, avec « Créez un compte » pour aller plus loin. Le propriétaire : « On passe après l'agenda et le tableau de bord, on finit déjà tout ça proprement et que tout fonctionne parfaitement. » Les domaines associés (que le lien ouvre l'application quand elle est installée) entrent quand même dans la reconstruction de 2c-0, pour ne pas reconstruire ce jour-là. Le QR particulier et le Dossier Travaux restent hors de ce lot. |
+| — | **Après le tableau de bord et l'agenda (décidé le 25/11/2026)** | addendum | Les QR professionnels et la page publique du pro, lisible sans compte, avec « Créez un compte » pour aller plus loin. Le propriétaire : « On passe après l'agenda et le tableau de bord, on finit déjà tout ça proprement et que tout fonctionne parfaitement. » Les domaines associés (que le lien ouvre l'application quand elle est installée) entrent quand même dans la reconstruction de 2c-0, pour ne pas reconstruire ce jour-là — **posés le 26/11/2026** ; rien n'est encore hébergé sur le domaine. Le QR particulier et le Dossier Travaux restent hors de ce lot. |
 | 6 | **Dépenses et comptabilité préparatoire** | 13 | Demande les factures pour avoir un « sortant » en face d'un « entrant ». |
 | 7 | **Fournisseurs et prix** | 14, 15 | L'apprentissage des prix suppose des devis et des dépenses à apprendre. |
 
@@ -1825,6 +1827,9 @@ de chaque point est en 10.11). Aucun n'est du code du devis ; plusieurs le
   après la reconstruction EAS du lot 2. **Depuis le 25/10, Expo Go (passé au
   SDK 58) n'ouvre plus Opus** : seul le build de développement le fait, et
   migrer ne réglerait rien de durable — Expo Go passera au SDK 59 un jour.
+  **La reconstruction du lot 2 a eu lieu le 26/11 (étape 2c-0), au SDK 57** :
+  le cahier écartait le SDK 58 de cette construction. La question reste
+  ouverte, et une migration demandera une construction de plus.
 - [x] Les deux petites mises à jour qu'attend Expo (`expo` 57.0.31,
   `expo-notifications` 57.0.24, relevées le 25/10) : faites dans le dépôt le
   25/10, **juste avant la reconstruction** du build de développement (son
@@ -1869,11 +1874,21 @@ développement (voir plus bas) : ils sont cochés sur cette réponse globale.
 `development` et `preview` de `eas.json` portent la MÊME identité
 (`com.opusproject.app`) : installer la « preview » a remplacé le build de
 développement, sans prévenir, et elle contient le code du 17/10 figé.
+**Plus vrai** : la preview a quitté l'iPhone le 25/10 (la reconstruction du
+build de développement, plus haut), et les deux profils n'ont plus la même
+identité depuis le 26/11 (voir le point coché ci-dessous).
 
-- [ ] Donner au build de développement sa propre identité (« Opus Dev »,
+- [x] Donner au build de développement sa propre identité (« Opus Dev »,
   `com.opusproject.app.dev`, par une variable dans un `app.config.js`), pour
   que les deux applications vivent côte à côte. Demande un nouveau build de
-  développement. Proposé au propriétaire le 19/10, pas encore décidé.
+  développement. Proposé au propriétaire le 19/10, ~~pas encore décidé~~
+  décidé le 25/11. **FAIT le 26/11/2026 (étape 2c-0)** : `app.config.js`
+  change le nom, l'identifiant, l'icône et le lien quand `APP_VARIANT` vaut
+  `development`, que seul le profil `development` d'`eas.json` pose ; Opus
+  Dev construit et installé sur son iPhone le soir même, l'ancienne
+  « Opus-Project » supprimée ensuite. Une « preview » portera « Opus » et
+  `com.opusproject.app`, À CÔTÉ d'Opus Dev (CLAUDE.md, « La reconstruction
+  de l'application — étape 2c-0 »).
 
 **Le lot suivant, décidé le 18/10 (« juste après, à part ») :**
 
@@ -5045,14 +5060,22 @@ que la relecture et vos phrases ont ajouté) :
   construction devrait le dire dans son titre. (À +3 ans, +10 ans et à
   cheval sur le 31/12/2028 → 01/01/2029 : 38 sur 38.)
 
-**Le premier passage sur GitHub — pas encore joué (26/11/2026).**
+**Le premier passage sur GitHub — JOUÉ et vert le 26/11/2026.**
 
-- [ ] **Avant le premier envoi de la branche qui porte 2c-E, vous serez
-  prévenu** : un e-mail « Run failed » peut arriver. Le job `essais-sql`
+> **Relevé le 26/11 au soir par `gh run view`** : à l'envoi de `9eb38e1`
+> (07 h 39 UTC), le job `essais-sql` a rendu « ✔ Les 38 essais rendent ce
+> qu'ils rendaient », en 2 min 25 s, sur PostgreSQL **16.16** (16.15 dans
+> le conteneur), ICU des collations 153.121, glibc 2.39 ; vert de nouveau à
+> l'envoi de `2a1929a` (20 h 15 UTC). La mineure diffère, rien n'a rougi,
+> donc aucun « Run failed » n'a pu partir (déduit : GitHub n'en envoie que
+> sur un échec). Le point ci-dessous reste vrai pour un rouge futur.
+
+- ~~**Avant le premier envoi de la branche qui porte 2c-E, vous serez
+  prévenu**~~ — **sans objet** : le premier envoi est passé vert, et rien
+  n'établit que l'avertissement ait été donné avant. Ce qui reste vrai, pour
+  un rouge futur : un e-mail « Run failed » peut arriver. Le job `essais-sql`
   tourne à chaque envoi ET à chaque pull request : deux passages, deux
-  e-mails possibles. Ce sera le premier essai de la version MINEURE de
-  PostgreSQL 16 de l'image `ubuntu-24.04` (16.15 dans le conteneur), de son
-  ICU et de sa glibc. **Un rouge se lit dans cet ordre** : le code (2 : la
+  e-mails possibles. **Un rouge se lit dans cet ordre** : le code (2 : la
   machine, pas un essai) ; les trois versions que le journal imprime en
   tête, comparées à celles du conteneur ; puis l'essai, le cas et la ligne
   qu'il nomme, et l'artefact « sorties-essais-sql ». Quand GitHub rougit et
@@ -5156,28 +5179,220 @@ comment »). Rien de ce qui suit n'est corrigé : règle « Accélérer ».
   « t | t » attendu, « f | t » reçu) ; et la relecture a rendu 22 constats,
   pas 23. Dit dans CLAUDE.md, « Les essais SQL tournent tout seuls ».
 
+### Après l'étape 2c-0 — ce qui reste (26/11/2026)
+
+> **La reconstruction est faite** : le 26/11 au soir, vous avez construit
+> et installé « Opus Dev » (`com.opusproject.app.dev`, icône noire
+> « DEV ») et répondu aux questions de l'essai ; l'ancienne application
+> « Opus-Project » a été supprimée le soir même (annoncé avec l'essai du
+> commit B ; le moment exact n'est pas confirmé). Opus Dev contient les huit modules de 2c et de
+> la connexion, l'écran de démarrage orange, l'application en français et
+> les quatre textes d'autorisation (commit A, `b41a46b`) ; le raccord du
+> logo aux barrières est venu sans reconstruction (commit B, `2a1929a`).
+> Le détail : CLAUDE.md, « La reconstruction de l'application — étape
+> 2c-0 ». Ce qui suit reste à faire, à décider ou à savoir. Les codes
+> entre parenthèses (m5, D1, m6…) renvoient au cahier de 2c-0, qui n'est
+> pas dans le dépôt : chaque point dit sa règle en clair.
+
+**À vous, quand vous voudrez**
+
+- [ ] **L'étape 7 : la « preview »**, c'est-à-dire la vraie application
+  « Opus », à l'icône orange. Rien ne presse : elle sert à JUGER ce
+  qu'Opus Dev ne montre qu'à moitié (le nom sous l'icône, l'icône orange,
+  le passage de l'écran orange aux barrières sans le lanceur de
+  développement). **D'abord : `npm install --global eas-cli`, puis me le
+  dire**, pour que je relise les questions de la version installée (le
+  point suivant) ; ensuite seulement, dans PowerShell, dans `C:\dev\opus`,
+  après `git pull` et `npm ci` :
+  `eas build --platform ios --profile preview`, puis l'installer par le
+  lien. **La ligne à lire (m5)** : « Environment variables with visibility
+  "Plain text" and "Sensitive" loaded from the "preview" environment on
+  EAS: EXPO_PUBLIC_SUPABASE_ANON_KEY, EXPO_PUBLIC_SUPABASE_URL » — **si
+  elle manque : Ctrl+C**, sans elles la preview serait en mode
+  démonstration. « Synced capabilities: Enabled: … » doit nommer
+  Associated Domains et Sign In with Apple (Push Notifications y est déjà ;
+  EAS ne nomme que ce qu'il active — lu). Si EAS demande « Would you like to
+  reuse the profile? » : **une capture avant de répondre** (un profil sans
+  les nouvelles capacités ferait échouer la signature — déduit). Elle
+  s'appellera « Opus » et vivra À CÔTÉ d'Opus Dev, sans rien remplacer. Si
+  l'ancien écran blanc restait visible au démarrage, redémarrer l'iPhone
+  avant de conclure (iOS garde une image de l'écran de lancement — connu,
+  non mesuré). Si, au passage, la plaque orange s'affichait SANS le logo un
+  instant, la parade est `expo-image` et son `onDisplay` à la place de
+  `onLoadEnd` (non établi sous la nouvelle architecture de React Native).
+  Et `npx expo start` ne lui sert à rien : son code est figé à la
+  construction.
+- [ ] **`eas-cli` est resté en 24.14.0, exprès** (EAS proposait 25.3.0 puis
+  27.11.0) : une version majeure peut changer les questions. Celles de la
+  construction du 26/11 avaient été lues dans `eas-cli` 27.11.0, et les
+  principales recoupées dans 24.14.0 et 25.0.0 (identiques) ; la ligne
+  « Synced capabilities » ne l'a été que dans 27.11.0, et 25.3.0 nulle part.
+  Rester en 24.14.0 était le choix prudent, pour ne pas changer d'outil en
+  pleine construction. **Avant
+  la prochaine construction** (la preview comprise) : `npm install --global
+  eas-cli`, puis me le dire, pour que je relise les questions de la
+  nouvelle version AVANT que vous ne lanciez `eas build`.
+- [ ] **Trois rappels pour la prochaine construction** (notés par la
+  critique du cahier de 2c-0, sans tour de correction) : répondre « No » à
+  « Do you want to log in to your Apple account? » arrête EAS plus loin sur
+  « Failed to find Bundle ID item… » — rien n'est perdu, relancer et
+  répondre **Y** ; ne fermer PowerShell qu'une fois écrit « You can press
+  Ctrl+C to exit » (avant, l'envoi du projet s'interromprait) ; et si
+  `npx expo install --check` rougit ce jour-là alors que seuls des
+  `~57.0.x` plus récents sont listés, EAS installera quand même le verrou :
+  **à vous de choisir** entre construire quand même (et me le montrer
+  après) ou s'arrêter (la règle d'aujourd'hui, D1 : si `npx expo install
+  --check` n'est pas vert, ne pas construire ; une capture, et on décide
+  ensemble).
+- [ ] **Le « trader status » d'App Store Connect (Digital Services Act)** :
+  App Store Connect l'affichait le 26/11 ; **non rempli, exprès.** Il ne
+  sert qu'à publier sur l'App Store dans l'Union européenne, et un
+  « trader » y rend publiques son adresse et ses coordonnées. À trancher le
+  jour de la publication, avec deux questions qui vont avec : votre SARL
+  est-elle l'éditeur d'Opus, et `STATUT` quitte-t-il `'essai'` (CLAUDE.md,
+  « Le propriétaire n'a PAS de société ni de SIRET » — titre qui n'est plus
+  vrai depuis le 20/10). Rien de ce qui se construit ou s'installe pour
+  vous-même ne l'exige.
+- [ ] **Les deux fichiers d'essai de la question 10** (la photo et le PDF de
+  l'assurance « Essai ») restent dans votre espace privé `documents`, que
+  vous seul et l'administration lisez. Ils partiront avec la suppression du
+  compte ; rien à faire, c'est dit pour ne pas les prendre pour autre
+  chose.
+- [ ] **Question (du cahier, §10)** : « OPUS-PROJECT » reste écrit DANS
+  l'application — l'ouverture, l'accueil, le partage d'une publication. Le
+  garder, ou passer à « OPUS », comme le nom sous l'icône ? C'est du
+  JavaScript, sans reconstruction.
+
+**À revérifier à la prochaine installation d'Opus Dev**
+
+- [ ] **La fenêtre du réseau local : en anglais, ou en français ?** NON
+  ÉTABLI. Vous l'avez vue en anglais ; or la configuration évaluée porte le
+  texte français (« Opus Dev cherche sur votre réseau Wi-Fi… »), la région
+  `fr` et `CFBundleLocalizations [fr]`, et le greffon du lanceur ne pose son
+  texte anglais que quand il n'y en a pas (lu). Le plus probable : l'écran
+  du lanceur (« Finding Dev Servers », en anglais) pris pour la fenêtre du
+  système. iOS ne pose la question qu'une fois par installation : à
+  regarder la prochaine fois qu'Opus Dev sera installé de neuf, avec une
+  capture.
+- [ ] **Les deux autorisations qui ne se sont pas encore présentées** : le
+  micro (filmer une vidéo avec le son) et « Enregistrer dans Photos » (rien
+  ne s'en sert encore : 2c-4 décidera). La phrase sous la question doit être
+  en français.
+
+**Pour les étapes suivantes de 2c**
+
+- [ ] **Les enveloppes de `verifier-imports`** : six des sept sont encore
+  vides. 2c-1 ouvrira celles d'`expo-print` et de `react-native-webview`,
+  2c-4 celle de `react-native-share`, le lot de la connexion celles
+  d'`expo-web-browser`, `expo-crypto` et `expo-apple-authentication`.
+  Chaque ouverture est une décision écrite dans son commit.
+- [ ] **`react-native-share` n'est pas dans la liste d'Expo pour le SDK
+  57** : il a compilé le 26/11, il n'a jamais tourné. S'il ne marchait pas
+  en 2c-4, la parade est un petit module Expo local — une construction de
+  plus.
+- [ ] **m8 — `verifier-demarrage` lit `app.json`, pas la configuration
+  évaluée.** Compensé au commit B par les deux `expo config` lus à la main.
+  Un contrôle qui lirait `npx expo config --type public --json` dans les
+  deux variantes (Opus et Opus Dev) fermerait le trou ; il demande
+  `node_modules`, comme `verifier-dependances`.
+
+**Avant la première construction PUBLIÉE (sur l'App Store)**
+
+- [ ] **D10 — `CFBundleAllowMixedLocalizations`** : le greffon de
+  `expo-apple-authentication` la pose à `true`, et elle est restée ainsi
+  (le cahier n'en voulait pas, l'épreuve a tranché sans tour de plus). Sur
+  un iPhone en français, rien ne change (déduit) ; sur un iPhone réglé dans
+  une autre langue, ce que dessine le système (le menu d'un champ, le
+  bouton d'Apple) pourrait suivre la langue du téléphone — non établi.
+  `false` est respecté (mesuré par introspection) : à décider.
+- [ ] **`UIBackgroundModes = audio`**, posé d'office par `expo-audio`
+  (`enableBackgroundPlayback` vaut vrai par défaut). Opus ne joue rien
+  application fermée, et Apple demande à la publication que chaque mode
+  d'arrière-plan serve (règle 2.5.4). À retirer dans la construction de
+  publication, en regardant aussi le manifeste Android.
+- [ ] **VoiceOver dit « checked » en anglais** sur une case à cocher (et
+  « checkbox », « radio button »), quelle que soit la langue d'Opus : React
+  Native 0.86 cherche ces mots dans un fichier de traductions vide (lu dans
+  son code, pas entendu). C'est probablement la réponse aux questions
+  « coché ou checked » de 2b-5 et 2b-6. Se corrige en JavaScript (dire
+  l'état dans l'étiquette), plus tard, partout à la fois.
+
+**Pour le lot de la connexion (après le PDF des devis)**
+
+- [ ] **Tout réglage hors de l'application nomme LES DEUX identifiants**,
+  `com.opusproject.app` et `com.opusproject.app.dev` : les adresses de
+  retour de Supabase (Authentication → URL Configuration :
+  `com.opusproject.app://auth/callback` et
+  `com.opusproject.app.dev://auth/callback`) ; Supabase → Apple → « Client
+  IDs » (les deux, comme le dit la page de Supabase pour un build de
+  développement à identifiant à lui) ; le fichier
+  `apple-app-site-association`, sur `opus-project.com` ET
+  `www.opus-project.com`, avec les deux identifiants préfixés de
+  l'identifiant d'équipe Apple. Sans le second, une connexion lancée
+  depuis Opus Dev ne revient pas. Côté Android, Opus Dev a aussi son
+  `package` à lui (`com.opusproject.app.dev`, `app.config.js`) :
+  `assetlinks.json` devra nommer les deux `package_name`.
+- [ ] **m6 — deux groupes chez Apple.** D'après le code
+  d'`@expo/apple-utils` 2.3.0 (lu, pas vu sur le portail d'Apple), EAS a dû
+  déclarer Opus Dev comme identifiant PRINCIPAL de « Se connecter avec
+  Apple » ; Opus en formera un autre. Effet pour la personne : non établi.
+  À trancher au lot : regrouper Opus Dev sous Opus dans le portail d'Apple,
+  ou vérifier que deux groupes ne créent pas deux comptes Supabase pour la
+  même personne.
+- [ ] **La règle de l'identité** (CLAUDE.md, « La reconstruction de
+  l'application — étape 2c-0 ») : `Application.applicationId`, jamais
+  `Constants.expoConfig`, `Linking.createURL` ni `makeRedirectUri`.
+
+**À savoir, sans rien faire**
+
+- [ ] **`expo-doctor` reste à 20/21** : le seul échec est celui des
+  dépendances paires `expo-asset` et `react-native-worklets`, antérieur à
+  2c-0. **Ne pas le « réparer » par `npx expo install react-native-worklets`** :
+  il ferait redescendre ce module natif de 0.10.4 à 0.10.1.
+- [ ] **Avec `app.config.js`, `npx expo install` d'un paquet à greffon rend
+  le code 1, installe quand même, et n'écrit pas le greffon** (m7) :
+  CLAUDE.md, « Les versions de paquets Expo se désalignent toutes seules ».
+- [ ] **Plus de chemin de retour par l'ancienne application** : elle est
+  supprimée. Si Opus Dev cassait, on reconstruirait ; vos données, elles,
+  sont toutes dans la base.
+
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
 Votre image (le casque et « OPUS », noir sur orange) est devenue l'icône de
 l'application, pour l'iPhone et pour Android (détail dans CLAUDE.md,
 « L'icône d'Opus »).
 
-- [ ] **À vous, quand vous voulez : reconstruire le build de développement**
+- [x] **À vous, quand vous voulez : reconstruire le build de développement**
   (`eas build --platform ios --profile development`, puis l'installer par le
   lien ou le code QR qu'EAS donne). Une icône est gravée dans l'application à
   sa construction : `git pull` ne la change pas sur le téléphone. Rien ne
   presse et rien ne casse en attendant — l'ancienne icône reste, c'est tout.
   Le plus économique : la faire en même temps que la prochaine
-  reconstruction dont on aura besoin de toute façon.
-- [ ] **À décider : le nom sous l'icône.** Il est écrit « Opus-Project »
+  reconstruction dont on aura besoin de toute façon. **FAIT le 26/11/2026,
+  avec la reconstruction de 2c-0** — mais depuis ce jour-là le profil
+  `development` construit « Opus Dev », dont l'icône est votre logo aux
+  couleurs inversées (fond noir, pastille « DEV »), vue sur votre iPhone.
+  **L'icône ORANGE n'apparaîtra qu'avec une « preview »** (« Après l'étape
+  2c-0 », l'étape 7).
+- [x] **À décider : le nom sous l'icône.** Il est écrit « Opus-Project »
   (`app.json`, `name`). Votre logo dit « OPUS ». Le changer se fait en une
   ligne, mais seulement visible après la même reconstruction : autant le
-  décider avant.
-- [ ] **À décider : l'écran de lancement.** Celui qui apparaît une fraction
+  décider avant. **Décidé le 25/11 (« Opus ») et posé dans `app.json` le
+  26/11** ; visible dans une preview seulement — Opus Dev s'appelle « Opus
+  Dev ». Le mot « OPUS-PROJECT » écrit DANS l'application (l'ouverture,
+  l'accueil, le partage d'une publication) reste, lui, une question
+  (« Après l'étape 2c-0 »).
+- [x] **À décider : l'écran de lancement.** Celui qui apparaît une fraction
   de seconde avant les barrières n'est pas réglé (le réglage de `app.json`
   n'est plus lu par Expo 57, et le module qui le remplace n'est pas
   installé). Y mettre votre logo demande un module natif de plus
-  (`expo-splash-screen`), donc la même reconstruction.
+  (`expo-splash-screen`), donc la même reconstruction. **FAIT le 26/11/2026**
+  (décidé le 25/11) : votre logo sur l'orange, 288 points, installé avec la
+  reconstruction, puis la « plaque » d'`Ouverture.js` qui le fond dans les
+  barrières (commit B). Vu dans Opus Dev : une page orange avec le logo, et
+  pas d'écran blanc (« c'est fait, pas d'écran blanc ») ; le saut du logo
+  n'a pas été nommé. Le jugement fidèle, sans le lanceur de
+  développement, se fera dans une preview.
 
 ### La démonstration et la publicité — décidé le 26/10/2026
 
@@ -5695,8 +5910,8 @@ en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
   construire **juste après 2c**, avec « Se connecter avec Google » et « avec
   Apple » (décision du 25/11). Il faudra : une boîte d'envoi sur
   `opus-project.com` (à créer par le propriétaire chez IONOS) branchée sur
-  Supabase, le lien qui rouvre Opus (son schéma entre dans la reconstruction
-  de 2c-0), la configuration Google Cloud et Apple, et le SIRET vérifié
+  Supabase, le lien qui rouvre Opus (son schéma est entré dans la reconstruction
+  de 2c-0, le 26/11), la configuration Google Cloud et Apple, et le SIRET vérifié
   quand un artisan s'inscrit par Google.
 
   **Décidé le 26/11/2026 par le propriétaire (« Oui, un code ») : un CODE à
@@ -5717,18 +5932,35 @@ en faux plafond isolé. « Placo : 25 € » serait faux même anonyme.
   `Constants.expoConfig`, `Linking.createURL` ni `makeRedirectUri` : dans
   Opus Dev, ils décrivent la configuration servie par le PC, c'est-à-dire
   Opus.
-- [ ] **Les quatre phrases d'autorisation d'iOS** (photos, appareil photo,
+- [x] **Les quatre phrases d'autorisation d'iOS** (photos, appareil photo,
   micro, enregistrer dans Photos) : validées telles quelles par le
   propriétaire le 26/11/2026, avant la reconstruction. Elles vivent dans
   `app.json` → `ios.infoPlist` ; en changer une demande une construction.
+  **Construites le 26/11** ; vues en français sur l'iPhone pour la
+  Photothèque et l'appareil photo. Celles du micro et d'« Enregistrer dans
+  Photos » ne se sont pas encore présentées.
 - [ ] **L'attestation décennale du compte principal finit vers le
   01/01/2027** : demander la nouvelle à l'assureur, et la joindre dans « Mon
   entreprise ».
-- [ ] **La clé Anthropic est refusée** (25/11, « invalid x-api-key » dans les
+- [x] **La clé Anthropic est refusée** (25/11, « invalid x-api-key » dans les
   journaux de la fonction `ai`, quatre appels) : le propriétaire crée une
   nouvelle clé et la range dans Supabase → Edge Functions → Secrets
   (`ANTHROPIC_API_KEY`), guidé pas à pas. Puis vérifier dans les journaux
-  qu'un appel passe.
+  qu'un appel passe. **RÉGLÉ le 26/11/2026 au soir** : l'ancienne clé était
+  EXPIRÉE. Une première clé neuve a été refusée elle aussi (cause non
+  établie) ; la seconde, créée avec la portée « Default Workspace » et sans
+  expiration (« Never »), passe : au `journal_ia`, un « recit » et un
+  « ameliorer » `ok` à 20 h 09, jetons comptés, et les trois versions vues
+  sur l'iPhone. L'ancienne clé et la première neuve sont supprimées. Le
+  détail et les leçons : CLAUDE.md, « « La clé Anthropic est refusée » — la
+  clé avait expiré ».
+- [ ] **Le texte d'erreur de la clé ne nomme pas l'expiration** (relevé le
+  26/11) : `messageLisible()` (`supabase/functions/ai/index.ts`) dit « une
+  clé révoquée ou recopiée de travers », alors que la vraie cause du 25/11
+  était une clé EXPIRÉE ; et son texte du crédit épuisé envoie encore vers
+  `console.anthropic.com → Plans & Billing` (l'adresse renvoie aujourd'hui
+  vers `platform.claude.com`). Deux phrases à retoucher, puis un
+  redéploiement de la fonction : rien ne presse.
 - [ ] **« Votre entreprise — aucun point » sans phrase dessous** dans la carte
   « Pour le remettre » (relevé par la mesure du vert, 25/11) : « Ce devis » a
   sa phrase « rien ne manque… », l'entreprise non. Demandé au propriétaire,

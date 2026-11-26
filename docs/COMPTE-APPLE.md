@@ -7,6 +7,11 @@ lui.
 Tout ce qui est écrit ici a été vérifié le 02/10/2026 sur les pages d'Apple
 et d'Expo, pas de mémoire. Les liens sont en bas.
 
+> **Depuis le 25/10/2026, Expo Go n'ouvre plus Opus** (il est passé au SDK
+> 58), et `npx expo start --go` ne sert plus à rien. **Depuis le 26/11/2026,
+> on teste dans « Opus Dev »**, l'application de développement (voir 7 ter).
+> Ce que les §1, 2 et 7 ter disent d'Expo Go décrit ce qui était vrai avant.
+
 ---
 
 ## 1. Pourquoi maintenant, et pas plus tôt
@@ -119,6 +124,21 @@ Et la phrase suivante de la même page d'Apple est celle qui compte :
 >
 > Pour construire et installer Opus sur VOTRE iPhone, aucune fiche App Store
 > Connect n'est nécessaire. Seul l'abonnement l'est.
+
+> **Deux faits nouveaux, à relire le jour de la publication.** Depuis le
+> 20/10/2026, vous avez une SARL active : « Organization » (avec un numéro
+> D-U-N-S) n'est donc plus fermée par principe (déduit : une SARL est une
+> personne morale ; comment Apple fait passer un compte existant
+> d'« Individual » à « Organization » n'a pas été regardé), et le nom
+> public d'Opus redevient une vraie question — à poser avec celle de
+> l'éditeur d'Opus
+> (CLAUDE.md, « Le propriétaire n'a PAS de société ni de SIRET », dont le
+> titre n'est plus vrai). Et le 26/11, App Store Connect affichait une
+> demande de **« trader status »** (le Digital Services Act de l'Union
+> européenne). Elle n'a **pas** été remplie, exprès : elle ne sert qu'à
+> publier dans l'Union européenne, et un « trader » y rend publiques son
+> adresse et ses coordonnées. Rien de ce qui se construit pour votre iPhone
+> ne l'exige (`docs/A-FAIRE.md`, « Après l'étape 2c-0 »).
 
 ---
 
@@ -356,6 +376,20 @@ Deux endroits, qui disent la même chose :
 > celui-là) demande de relancer `eas build --platform ios --profile
 > development` puis de réinstaller par le code QR. Les notifications, déjà
 > présentes dans cette construction, n'en demanderont pas.
+>
+> **Ce qui a changé depuis (26/11/2026).** Expo Go n'ouvre plus Opus depuis
+> le 25/10 (il est passé au SDK 58) : `npx expo start --go` ne sert plus à
+> rien. Et depuis la reconstruction du 26/11 (étape 2c-0), le profil
+> `development` construit **« Opus Dev »** — son propre identifiant
+> (`com.opusproject.app.dev`), une icône noire avec une pastille « DEV » —,
+> installé À CÔTÉ de toute future « preview », qui s'appellera « Opus ».
+> Partout ci-dessous, « l'icône d'Opus » et « ouvrez Opus » veulent dire,
+> désormais, **Opus Dev**. Ce soir-là, la construction a d'abord échoué sur
+> « Failed to register bundle identifier com.opusproject.app.dev » : Apple
+> avait mis à jour son contrat (« Program License Agreement »). Accepté sur
+> developer.apple.com/account, la même commande est passée. **Devant un
+> refus d'Apple pendant `eas build`, regarder d'abord cette page.** Le
+> détail : CLAUDE.md, « La reconstruction de l'application — étape 2c-0 ».
 
 **Le compte est actif depuis le 15/10/2026 à 20 h 12** (le courriel « Welcome
 to the Apple Developer Program » est arrivé). Ce qui est déjà fait de mon côté,
@@ -465,13 +499,15 @@ pendant ce temps : le lien affiché permet de suivre.
 **7. Installer.** Sur la page de la construction (le lien affiché), bouton
 **Install** : un code QR. Scannez-le avec l'appareil photo de l'iPhone.
 
-**8. Le Mode développeur — une seule fois.** Touchez l'icône d'Opus : l'iPhone
+**8. Le Mode développeur — une seule fois.** Touchez l'icône d'Opus (depuis
+le 26/11 : d'**Opus Dev**) : l'iPhone
 dit qu'il faut le Mode développeur → **OK**. Puis **Réglages → Confidentialité
 et sécurité → Mode développeur** → activer → **Redémarrer**. Après le
 redémarrage, touchez **Activer** et tapez votre code.
 
-**9. Ensuite, tous les jours** : `npx expo start`, puis ouvrez Opus sur
-l'iPhone et choisissez le serveur dans « Development servers ».
+**9. Ensuite, tous les jours** : `npx expo start`, puis ouvrez **Opus Dev**
+sur l'iPhone (avant le 26/11 : « Opus ») et choisissez le serveur dans
+« Development servers ».
 
 **Au moindre écran ou message dont vous n'êtes pas sûr : capture, et
 montrez-la-moi.** Surtout pendant l'étape 6, où une mauvaise réponse se

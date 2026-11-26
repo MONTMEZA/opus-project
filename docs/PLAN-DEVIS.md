@@ -3043,9 +3043,9 @@ Revérifiée en lisant le code natif publié (`expo-print@57.0.2`, `expo-sharing
 | envoi « en deux pièces » | une seule feuille de partage (l.1393-1398) | `shareAsync` ne partage **qu'un fichier**, et se résout à la fermeture de la feuille sans dire si l'envoi a eu lieu | deux feuilles successives, ou un autre montage. L'attestation, rangée dans l'espace privé `documents`, doit d'abord être téléchargée sur le téléphone. `remis` signifie « PDF produit et archivé », **jamais** « envoyé au client » |
 | unités | — | qu'un px CSS vaille 1 pt sur iPhone et 0,75 pt dans Chromium n'est pas tranché | tailles du gabarit en **pt ou en mm**, jamais en px |
 
-Les éliminations du plan restent confirmées. `react-native-html-to-pdf` n'a rien publié depuis le 04/09/2025 ; l'argument « inessayable » tombe avec le build de développement, mais l'élimination tient pour les autres raisons. `react-native-webview` reste écarté.
+Les éliminations du plan restent confirmées. `react-native-html-to-pdf` n'a rien publié depuis le 04/09/2025 ; l'argument « inessayable » tombe avec le build de développement, mais l'élimination tient pour les autres raisons. `react-native-webview` reste écarté. **Plus vrai depuis le 25/11/2026** : le propriétaire veut l'aperçu en vraie page A4 DANS Opus (10.25), et `react-native-webview` 13.16.1 est entré dans la reconstruction du 26/11 (10.27) pour le montrer.
 
-**Signature au doigt.** La **capture** du tracé se fait sans nouveau module : `react-native-gesture-handler` (~2.32.0) est déjà dans l'application, et le tracé se range comme un chemin SVG écrit dans le HTML du PDF ; elle se vérifie ici par de vrais événements tactiles. **L'affichage du trait pendant qu'on signe, lui, demande `react-native-svg` (ou Skia), absent de `package.json`** : c'est un module natif, à mettre dans la **même** reconstruction EAS que `expo-print` et `expo-sharing`. L'autre voie, sans module, dessine le trait en segments de `View` ; sa fluidité est à mesurer avant de la retenir.
+**Signature au doigt.** La **capture** du tracé se fait sans nouveau module : `react-native-gesture-handler` (~2.32.0) est déjà dans l'application, et le tracé se range comme un chemin SVG écrit dans le HTML du PDF ; elle se vérifie ici par de vrais événements tactiles. **L'affichage du trait pendant qu'on signe, lui, demande `react-native-svg` (ou Skia), absent de `package.json`** : c'est un module natif, à mettre dans la **même** reconstruction EAS que `expo-print` et `expo-sharing`. **Décidé autrement depuis** : la signature au doigt est passée au second plan (10.12, point 3), et la reconstruction du 26/11 (10.27) s'est faite SANS `react-native-svg`. Si un jour le client doit signer sur le téléphone : la capture par `react-native-gesture-handler` (déjà là), et le trait dessiné dans une page HTML de `react-native-webview` (installé le 26/11) — piste lue, non essayée. L'autre voie, sans module, dessine le trait en segments de `View` ; sa fluidité est à mesurer avant de la retenir.
 
 Juridiquement (10.3), c'est une signature électronique **simple** :
 
@@ -3204,7 +3204,7 @@ Ensuite, l'ordre **0 → 1 → P → 2 → 3 → 4 → 5** (et 6, conditionnel) 
 - **Lot 0** : rétréci (10.1). La moitié qui bloque n'est plus l'identité, mais assurances, médiateur, régime de TVA, garanties, modalités et frais. La réponse sur les tarifs (tour 1) décide de la façon de ranger la fiche, avant de l'écrire. Le logo y entre, pour les trois modèles.
 - **Lot 1** **(FAIT le 23/10/2026 — 10.16 ; la main-d'œuvre y est un drapeau SANS contrainte d'unité)** : la forme d'une ligne (10.6) se décide avant la table ; et quatre décisions de schéma deviennent urgentes parce qu'elles sont imprimées ou contrôlées : unité en liste fermée, main-d'œuvre horaire ou forfait, lieu d'exécution structuré, taux en centièmes de point avec la formule `(base * taux + 5000) / 10000`. La réponse sur les gros chantiers (tour 1) décide des colonnes de la table `devis`.
 - **Lot P — la base de postes** **(FAIT le 25/10/2026 — 10.17 ; aucune colonne métier, tranché le 23/10)** (10.6) : nouveau, sans risque juridique, entièrement vérifiable ici. La colonne métier devait s'y trancher avant (10.6) : c'est fait, aucune.
-- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, puis en six le 16/11 (2b-4 redécoupée), toutes FAITES : 2b-1 le 08/11, 2b-2 le 10/11, 2b-3 le 13/11, 2b-4 le 17/11, 2b-5 le 22/11, 2b-6 le 24/11 — voir 10.18 et 10.20 à 10.24 ; 2c reste)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`.
+- **Lot 2** **(sous-lot 2a — la réduction, l'acompte, la validité — FAIT le 04/11/2026 ; 2b découpé en quatre étapes le 05/11, puis en six le 16/11 (2b-4 redécoupée), toutes FAITES : 2b-1 le 08/11, 2b-2 le 10/11, 2b-3 le 13/11, 2b-4 le 17/11, 2b-5 le 22/11, 2b-6 le 24/11 — voir 10.18 et 10.20 à 10.24 ; 2c reste)** : reste le seul palier pénal, et il s'alourdit (question L. 221-2 12°, déchets, formulaire au mot, support durable, tout l'acompte et le « 8e jour », urgence par ligne). Il **commence par la reconstruction EAS** — `expo-print`, `expo-sharing`, et `react-native-svg` si la signature au doigt l'exige — et il imprime « Document d'essai — sans valeur » tant que `STATUT = 'essai'`. **Reconstruction FAITE le 26/11/2026 (étape 2c-0, 10.27)**, et pas tout à fait avec ces modules : `expo-print`, `react-native-webview` (l'aperçu A4 dans Opus, décidé le 25/11) et `react-native-share` (plusieurs fichiers en une feuille, à la place d'`expo-sharing`, qui n'en partage qu'un) ; **pas de `react-native-svg`**, comme le décidait déjà 10.12, point 3 (« La signature au doigt passe au second plan »).
 - **Lot 4** : le mécanisme de purge est une décision, pas un acquis (10.3) ; la question des factures s'y repose.
 - **Lot 5** : trois modèles au lieu de cinq.
 
@@ -3428,7 +3428,9 @@ Ce que cela change au plan, **sans toucher au défaut** :
    cas « très rare » du papier sur place, où le papier signé en deux
    exemplaires reste de toute façon la voie sûre (10.4). **`react-native-svg`
    n'entre donc PAS dans la reconstruction du lot 2** : un module natif de
-   moins, `expo-print` et `expo-sharing` seulement.
+   moins, `expo-print` et `expo-sharing` seulement. (Faite le 26/11/2026, sans
+   `react-native-svg` : `expo-print`, `react-native-webview` et
+   `react-native-share` à la place d'`expo-sharing` — 10.25, 10.27.)
 4. **Ces devis acceptés par voie électronique se conservent dix ans** quand
    ils dépassent 120 € et s'adressent à un particulier (L. 213-1, 10.3,
    « Conservation ») : c'est désormais le cas **ordinaire**, pas l'exception.
@@ -4299,6 +4301,12 @@ incomplet).
 application NOUVELLE, qui demande de se reconnecter — le propriétaire doit
 connaître son mot de passe. L'ancien build reste installé à côté.
 
+> **La reconstruction est FAITE le 26/11/2026** (10.27) : son mot de passe
+> a été éprouvé au navigateur AVANT, Opus Dev s'est installé à côté de
+> l'ancien build, et le propriétaire a supprimé l'ancien une fois l'essai
+> fini. « Mot de passe oublié » se fera par un CODE à 6 chiffres (décision
+> du 26/11, `docs/A-FAIRE.md`, « Décidé le 25/11/2026 »).
+
 **Et avant la première remise** : l'attestation décennale enregistrée sur le
 compte principal finit vers le 01/01/2027 ; sans la nouvelle, la liste
 refusera tout devis où la décennale est « Oui ».
@@ -4317,11 +4325,15 @@ PostgreSQL 16 neuve, y rejoue `schema.sql` deux fois, puis les 33 essais de
 sessions et la parité de `cas-remise.json` (237 cas), chacun jugé par son
 oracle figé dans `supabase/essais-attendus/` ; GitHub fait la même chose à
 chaque envoi, dans un job à part (`essais-sql`). Commits `caa30e5` (la
-construction) et `4f52007` (la relecture, 22 constats, et ses corrections) ;
+construction) et `4f52007` (la relecture, 22 constats, et ses corrections) —
+sur la branche, `be8ae03` et `f05bef8`, les mêmes changements rejoués après
+le commit A de 2c-0 ;
 ce qui est construit et vérifié : CLAUDE.md, « Les essais SQL tournent tout
 seuls — étape 2c-E » ; ce qui reste : `docs/A-FAIRE.md`, « Après l'étape
-2c-E » et §2.3. **Pas encore joué sur la machine de GitHub** : rien n'est
-envoyé.
+2c-E » et §2.3. ~~**Pas encore joué sur la machine de GitHub** : rien n'est
+envoyé.~~ **Joué et vert depuis** : le 26/11 à 07 h 39 UTC (envoi de
+`9eb38e1`) puis à 20 h 15 UTC (`2a1929a`), sur PostgreSQL 16.16 (relevé par
+`gh run view`).
 
 Ce que 2c doit savoir :
 
@@ -4351,7 +4363,69 @@ gagné un délai par contrôle, et deux contrôles importent le script des
 essais) ; l'étiquette annotée de `d0560e8` que proposait la critique du
 cahier (non posée : elle ne part qu'avec `git push --tags`). Et il doit être
 prévenu, avant le premier envoi, qu'un e-mail « Run failed » peut arriver :
-deux passages par envoi (push et pull request), deux e-mails possibles.
+deux passages par envoi (push et pull request), deux e-mails possibles. (Le
+premier envoi a eu lieu le 26/11, vert : aucun e-mail n'a pu partir —
+déduit : GitHub n'en envoie que sur un échec.)
 
 **La suite** : 2c-0, la reconstruction ; puis 2c-1, l'aperçu au format
 final.
+
+### 10.27 L'étape 2c-0 — FAITE le 26/11/2026 : la reconstruction de l'application
+
+**Une construction, aucun écran nouveau.** Le commit A (`b41a46b`, AVANT la
+construction) met dans l'application tout ce que 2c et le lot de la
+connexion demanderont au téléphone : `expo-print` (le PDF),
+`react-native-webview` 13.16.1 (l'aperçu A4 dans Opus), `react-native-share`
+12.3.1 (plusieurs fichiers en une feuille), `expo-splash-screen` (le logo au
+démarrage), et les quatre pièces de la connexion (`expo-web-browser`,
+`expo-crypto`, `expo-apple-authentication`, `expo-application`) ; les mises à
+jour en attente du SDK 57, sans SDK 58 ; le nom « Opus » ; l'application de
+test « Opus Dev » (`com.opusproject.app.dev`, `app.config.js`), à côté ;
+l'application en français pour iOS et ses quatre textes d'autorisation,
+validés par le propriétaire ; le lien `com.opusproject.app`, « Se connecter
+avec Apple » et les domaines associés ; et une garde dans `verifier-imports`
+(les « enveloppes ») qui refuse tout chargement de ces modules hors du
+fichier autorisé. **Pas de `react-native-svg`** (10.12, point 3), **pas
+d'`expo-sharing`** (`react-native-share` à sa place, 10.25).
+
+Le propriétaire a construit Opus Dev le 26/11 au soir
+(`eas build --platform ios --profile development` ; un premier essai arrêté
+par un contrat d'Apple mis à jour, accepté, puis relancé), l'a installé, a
+répondu aux questions de l'essai sur la vraie base avec son vrai compte —
+l'icône, l'écran orange, le menu d'un champ désormais en français, la
+Photothèque, l'appareil photo, une assurance d'ESSAI ajoutée puis retirée,
+le Fil, Découvrir, un brouillon de devis d'essai, le clavier. Le commit B (`2a1929a`, après la
+réinstallation, sans reconstruction) branche le raccord : l'écran orange du
+téléphone attend, et `Ouverture.js` le retire quand sa copie exacte est à
+l'écran ; rouvert ensuite, Opus Dev ne montre pas d'écran blanc (« c'est
+fait, pas d'écran blanc » ; le saut du logo n'a pas été nommé). L'ancienne
+application a été supprimée le soir du 26/11 (annoncé avec l'essai du
+commit B ; le moment exact n'est pas confirmé).
+**Vérifié** : les 58 contrôles, l'export iOS et ses marqueurs, les deux
+configurations évaluées, 17 sabotages de `verifier-demarrage`, la plaque au
+navigateur, GitHub vert sur `2a1929a` (les deux jobs). Le détail : CLAUDE.md,
+« La reconstruction de l'application — étape 2c-0 » ; ce qui reste :
+`docs/A-FAIRE.md`, « Après l'étape 2c-0 ».
+
+Ce que 2c doit savoir :
+
+- **les enveloppes s'ouvrent une à une, et seulement maintenant** : 2c-1
+  ajoute à `verifier-imports` le fichier qui charge `expo-print` et celui
+  qui charge `react-native-webview` ; 2c-4, celui de `react-native-share`.
+  Ouvrir une enveloppe est une décision écrite dans son commit ;
+- **la « preview » n'est pas encore construite** (l'étape 7, quand il
+  voudra) : c'est elle qui montrera le nom « Opus », l'icône orange et le
+  démarrage sans le lanceur. Elle ne remplacera plus Opus Dev : les deux
+  identités diffèrent ;
+- **`react-native-share` n'est pas validé par Expo pour le SDK 57** : il a
+  compilé, il n'a jamais tourné. S'il échoue en 2c-4, un petit module Expo
+  local, et une construction de plus ;
+- **`eas-cli` est resté en 24.14.0** : à mettre à jour avant la prochaine
+  construction, en relisant ses questions ;
+- **les essais du code NEUF se font désormais dans Opus Dev** (une
+  preview a son code figé), et plus jamais dans l'ancienne application,
+  supprimée ; seuls le nom, l'icône orange et le démarrage sans lanceur se
+  jugent dans une preview.
+
+**La suite** : 2c-1, le PDF des devis — l'aperçu au format final, marqué
+« APERÇU » sur chaque page, sans bouton pour l'envoyer.

@@ -201,10 +201,28 @@ témoin `accentTexte` à 1). Il a rejoint la liste des outils, avec sa preuve.
 ### Les versions de paquets Expo se désalignent toutes seules
 
 `npm install` d'un nouveau paquet peut laisser les autres en arrière.
-`npx expo install --check` le dit, `--fix` le répare. Un `expo-image-picker`
+`npx expo install --check` le dit, `--fix` le réparait (vrai jusqu'au 26/11 : plus jamais `--fix`, voir la note ci-dessous). Un `expo-image-picker`
 en retard sur la version attendue par Expo Go casse le choix des photos sans
 qu'aucune ligne de code n'ait changé. **À lancer après chaque ajout de
 dépendance.**
+
+> **Deux choses ont changé depuis, et la seconde compte (26/11/2026).**
+> Expo Go n'ouvre plus Opus depuis le 25/10 : la version qui compte est
+> celle que porte l'application INSTALLÉE (Opus Dev, construite le 26/11).
+> Et depuis qu'`app.config.js` existe (étape 2c-0), **`npx expo install`
+> d'un paquet à greffon rend le code 1 tout en ayant installé, et n'écrit
+> plus le greffon dans `app.json`** (mesuré par la critique du cahier 2c-0,
+> et dans l'épreuve du commit A). Un code 1 n'y veut donc pas dire « rien
+> n'est fait » : lire `package.json` et `app.json` avant de relancer quoi
+> que ce soit, et écrire le greffon à la main. `--check` reste sans danger.
+> **Jamais `npx expo install --fix`** (le cahier de 2c-0 l'interdisait
+> déjà) : il passe par le même mécanisme (`fixPackages.js` appelle
+> `applyPluginsAsync`, lu dans `@expo/cli`), donc il rend le code 1 et
+> n'écrit pas le greffon dès qu'un paquet corrigé porte un greffon qui n'est
+> pas déjà dans `app.json` (déduit, pas mesuré pour `--fix`) ; et un module
+> natif ne change de version qu'avec une reconstruction. Les versions se
+> règlent à la main, avec une reconstruction (voir « La reconstruction de
+> l'application — étape 2c-0 »).
 
 ### En particulier : les contraintes `check (... in (...))`
 
@@ -1185,7 +1203,7 @@ Le `.env` et le dossier `.git` voyagent avec le dossier : rien n'est perdu.
 ## Comment vérifier
 
 ```bash
-# 0. les contrôles du projet, sans base (57 au 26/11/2026)
+# 0. les contrôles du projet, sans base (58 depuis le 26/11/2026 au soir)
 npm run verifier                     # lire le CODE de sortie
 
 # 1. le SQL : schema.sql rejoué DEUX fois sur une grappe PostgreSQL 16
@@ -7649,6 +7667,13 @@ n'ajoute aucun module natif.
 > téléphone », demander QUELLE application il a ouverte : la version de
 > développement s'ouvre sur une page de lancement, la « preview »
 > directement sur Opus.
+>
+> **Ce n'est plus vrai depuis le 26/11/2026 (étape 2c-0)** : le build de
+> développement s'appelle « Opus Dev » (`com.opusproject.app.dev`, icône
+> noire « DEV ») et une « preview » s'appellera « Opus »
+> (`com.opusproject.app`, icône orange). Les deux vivent côte à côte ;
+> installer l'une ne remplace plus l'autre. La question reste la bonne,
+> elle se pose maintenant au NOM sous l'icône.
 
 **Ce qui n'a PAS été vérifié** : le chemin « nom d'entrepreneur individuel » n'a été
 éprouvé que par l'API. La démonstration ne montre ni l'adresse du siège ni
@@ -7767,6 +7792,58 @@ l'application :
 faudrait soixante appels payants) ; un refus du modèle et une réponse
 illisible ne se provoquent pas à la demande — ces deux chemins ne sont
 tenus que par le contrôle. Et rien sur l'iPhone.
+
+### « La clé Anthropic est refusée » — la clé avait expiré (25-26/11/2026)
+
+L'assistant d'Opus affichait « La clé Anthropic est refusée » (le texte de
+`messageLisible()`, `supabase/functions/ai/index.ts`). **Rien ne changeait
+dans l'application** : la clé ne vit que dans les secrets de Supabase, et
+tout s'est réglé dans le navigateur, sans `git pull`, sans reconstruction,
+sans redéploiement.
+
+| | ce qui s'est passé |
+|---|---|
+| 25/11 au soir | quatre appels, quatre refus d'Anthropic, **401 « invalid x-api-key »** (journaux de la fonction `ai`) ; au `journal_ia`, quatre lignes `erreur` sans jetons |
+| la cause | relevée par le propriétaire sur `platform.claude.com/settings/keys` : l'ancienne clé était **EXPIRÉE**. Le crédit n'était pas en cause (il n'était pas épuisé) |
+| 26/11, 19 h 54 (heure de Paris) | une première clé neuve collée dans Supabase → Edge Functions → Secrets → `ANTHROPIC_API_KEY` |
+| 19 h 58 à 20 h 00 | **refusée elle aussi** : six 401 « invalid x-api-key » (cinq « ameliorer », un « recit » au `journal_ia`), à 19 h 58 min 37, 58 min 50, 58 min 58, 19 h 59 min 54, 20 h 00 min 02 et 20 h 00 min 24, dont **trois APRÈS un redémarrage de la fonction** à 19 h 59 (« shutdown » à 19 h 59 min 52, « booted » à 19 h 59 min 54) ; et le premier vient déjà d'un exemplaire démarré à 19 h 58 min 37, après le collage de 19 h 54 — ce n'était donc pas un délai de prise en compte. Cause **non établie**. Le plus probable : un collage de travers. Une « Portée » laissée vide aurait rendu, d'après la documentation d'Anthropic, un **400** `invalid_request_error` (« This API key is not scoped to a workspace… »), pas le 401 des journaux |
+| 20 h 06 | une seconde clé, créée avec **Portée = Default Workspace** et **expiration « Never »**, collée dans un champ VIDÉ d'abord, enregistrée (la colonne « Updated » de Supabase est en UTC : une heure de moins qu'à Paris) |
+| 20 h 09 | la fonction répond 200, **sans redéploiement** ; au `journal_ia`, un « recit » `ok` à 20 h 09 min 04 s et un « ameliorer » `ok` à 20 h 09 min 45 s, jetons comptés ; les trois versions vues sur l'iPhone |
+| ensuite | le propriétaire a supprimé l'ancienne clé expirée et la première clé refusée |
+
+**La clé n'est jamais passée par la conversation ni par un fichier.** La
+vérification s'est faite sans la voir : par la FORME du `journal_ia`
+(l'heure, l'action, `ok` ou `erreur`, des jetons comptés ou non — jamais
+le compte ni le texte) et par les journaux de la fonction, en lecture
+seule.
+
+> **Un « La clé Anthropic est refusée » se diagnostique par les journaux de
+> la fonction `ai`** (`function_logs` : « Erreur Anthropic … invalid
+> x-api-key »), pas en devinant. Le `journal_ia` dit QUAND ça a cessé de
+> marcher (la dernière ligne `ok`), les journaux disent POURQUOI.
+
+Ce qu'il faut savoir pour la prochaine fois :
+
+- **une clé qui a une date d'expiration finit par tomber, sans prévenir
+  Opus** : rien dans l'application ne le voit venir. La clé d'Opus est
+  désormais créée « Never » ; un jour où l'on voudrait une durée, c'est une
+  date à noter dans `docs/A-FAIRE.md` ;
+- **à la création, Portée = Default Workspace.** La portée est l'ESPACE DE
+  TRAVAIL de la clé : sans elle, chaque appel devrait nommer son espace de
+  travail, ce que la fonction `ai` ne fait pas. Cette règle protège d'une
+  AUTRE panne que celle du 26/11 : sans portée, Anthropic répond 400 (lu dans
+  sa documentation), que `messageLisible()` traduit par un message général
+  (« L'assistant IA n'a pas pu répondre… »), pas par « La clé Anthropic est
+  refusée » ;
+- **on vide le champ avant de coller** (Ctrl+A, Suppr), et on colle la clé
+  seule — ni espace, ni guillemets, ni `ANTHROPIC_API_KEY=` devant ;
+- **pas de redéploiement** (mesuré : la fonction a répondu 200 à 20 h 09,
+  sur un exemplaire démarré à cet instant ; le précédent s'était arrêté à
+  20 h 01) ; elle lit le secret dans le traitement de chaque appel (lu,
+  `index.ts` l.191), mais un exemplaire déjà démarré peut garder l'ancienne
+  valeur une à deux minutes (non mesuré) ;
+- le texte d'erreur dit « une clé révoquée ou recopiée de travers » : il ne
+  nomme pas l'expiration, qui était la vraie cause (`docs/A-FAIRE.md`).
 
 ### Les tarifs réunis — lot T (19-20/10/2026)
 
@@ -9152,23 +9229,32 @@ sur son téléphone avant le 25/10. On ne peut pas réinstaller une
 ancienne Expo Go sur un iPhone.
 
 > **Depuis le 25/10, Opus ne s'ouvre sur l'iPhone QUE dans le build de
-> développement** (l'icône Opus, construite par `eas build --profile
-> development`). Toute phrase de ce dépôt qui dit « Expo Go ou le build de
-> développement » décrit ce qui était vrai avant ; `npx expo start --go` ne
-> sert plus à rien sur un vrai iPhone.
+> développement** (construit par `eas build --profile development` ; depuis
+> le 26/11, c'est l'icône « **Opus Dev** »). Toute phrase de ce dépôt qui dit
+> « Expo Go ou le build de développement » décrit ce qui était vrai avant ;
+> `npx expo start --go` ne sert plus à rien sur un vrai iPhone.
 
 Le terminal le disait déjà : « Using development build », et un code QR en
 `exp+opus-project://`. Ce code s'ouvre avec l'appareil photo de l'iPhone, ou
-depuis la page de lancement de l'icône Opus — **pas depuis Expo Go**.
+depuis la page de lancement du build de développement — **pas depuis Expo
+Go**. Depuis le 26/11, seule Opus Dev déclare ce lien (`addGeneratedScheme`,
+`app.config.js`) : une future « preview » n'y répondra pas (mesuré par
+`prebuild` dans l'épreuve du commit A, pas encore vu sur une vraie preview).
 
-**Et la question à poser d'abord : QUELLE icône Opus est sur son iPhone ?**
-Les profils `development` et `preview` portent la même identité
-(`com.opusproject.app`) : installer l'un remplace l'autre, sans prévenir.
+**Et la question à poser d'abord : QUELLE application il a ouverte ?**
+Jusqu'au 26/11/2026, les profils `development` et `preview` portaient la
+même identité (`com.opusproject.app`) : installer l'un remplaçait l'autre,
+sans prévenir — c'est ce qui était arrivé le 17/10. **Depuis la
+reconstruction du 26/11 (étape 2c-0), ce n'est plus le cas** : le profil
+`development` construit « Opus Dev » (`com.opusproject.app.dev`), le profil
+`preview` construira « Opus » (`com.opusproject.app`). Les deux vivent côte à
+côte, et le NOM sous l'icône dit laquelle on ouvre.
 
-| en touchant l'icône Opus | c'est | ce qu'il faut faire |
+| sur l'iPhone | c'est | ce qu'il faut faire |
 |---|---|---|
-| une page de lancement (la liste des serveurs) | le build de **développement** | `npx expo start` sur le PC, même Wi-Fi, toucher le serveur (ou scanner le code avec l'appareil photo) |
-| Opus directement, sur le Fil | la version **« preview » du 17/10**, au code figé | reconstruire le build de développement : `eas build --platform ios --profile development`, l'installer par le lien ou le code QR qu'EAS donne, puis `npx expo start` |
+| « **Opus Dev** », icône noire avec la pastille « DEV » ; elle s'ouvre sur le lanceur (« Development servers ») | le build de **développement**, construit le 26/11 | `npx expo start` sur le PC (sans `APP_VARIANT`), même Wi-Fi, toucher le serveur |
+| « **Opus** », icône orange ; elle s'ouvre directement sur Opus | une **« preview »**, au code figé à sa construction | pour essayer du code neuf : Opus Dev. **Aucune preview n'est construite au 26/11** (étape 7 de 2c-0, quand il voudra) |
+| « **Opus-Project** », icône carrée par défaut d'Expo | l'ancien build (25/10) | **supprimé par le propriétaire le 26/11.** S'il réapparaissait, ne pas s'en servir : il ne contient pas les modules de 2c-0 |
 
 **Migrer au SDK 58 ne règle pas le fond** : Expo Go passera au SDK 59 un jour,
 et le problème reviendra. La migration reste une décision du propriétaire
@@ -9195,6 +9281,11 @@ j'ai installé, ça fonctionne ». Son icône Opus est donc désormais le build 
 version « preview » du 17/10 n'est plus sur son téléphone (même identité :
 l'une a remplacé l'autre). Et le lot P y a été essayé le jour même (section
 précédente).
+
+> **Ce build du 25/10 n'existe plus** : le 26/11, la reconstruction de
+> l'étape 2c-0 a installé « Opus Dev » À CÔTÉ de lui, puis le propriétaire
+> l'a supprimé (« Opus-Project »). Voir « La reconstruction de
+> l'application — étape 2c-0 ».
 
 ### Le stockage et le badge suspendu — lot S-a (25-26/10/2026)
 
@@ -13379,8 +13470,12 @@ La suite : `docs/A-FAIRE.md`, « Après l'étape 2b-6 — ce qui reste » ;
 dans `supabase/essais-attendus/`, `scripts/verifier-juge-sql.mjs`, le job
 `essais-sql` de `.github/workflows/verifier.yml`, et un délai par contrôle
 dans `scripts/verifier.mjs`. Commits `caa30e5` (la construction) et
-`4f52007` (la relecture et ses corrections) ; le cahier (v1, sa critique,
-la v2) est dans le dossier de travail de la session, pas dans le dépôt.
+`4f52007` (la relecture et ses corrections) — **sur la branche, ce sont
+`be8ae03` et `f05bef8`** : les mêmes changements, rejoués après le commit A
+de 2c-0 (mesuré : `git diff caa30e5^ caa30e5` et `git diff be8ae03^
+be8ae03` rendent les mêmes 39 fichiers ; `caa30e5` et `4f52007` ne sont
+sur aucune branche) ; le cahier (v1, sa critique, la v2) est dans le
+dossier de travail de la session, pas dans le dépôt.
 **Rien ne change dans `schema.sql` ni dans l'application** : c'est un outil.
 
 Jusqu'ici, les fichiers `supabase/essais-*.sql` ne tournaient qu'à la main,
@@ -13563,14 +13658,17 @@ c'est ici qu'on le dit.
 
 #### Ce qui n'a PAS été vérifié
 
-- **le premier passage sur la machine de GitHub** : rien n'est encore
-  envoyé. Ce sera le premier essai de SA version mineure de PostgreSQL 16
-  (16.15 ici), de son ICU et de sa glibc ; un rouge de machine rend le
-  code 2, et le journal imprime d'abord ces trois versions : c'est la
-  première chose à comparer. **Un rouge envoie un e-mail « Run failed » au
-  propriétaire** : le prévenir avant le premier envoi. Le job tourne à
-  chaque envoi ET à chaque pull request : deux passages, deux e-mails
-  possibles ;
+- ~~**le premier passage sur la machine de GitHub** : rien n'est encore
+  envoyé~~ — **joué depuis, et vert** (relevé le 26/11 au soir par
+  `gh run view`) : le 26/11 à 07 h 39 UTC, à l'envoi de `9eb38e1`, le job
+  `essais-sql` a rendu « ✔ Les 38 essais rendent ce qu'ils rendaient » en
+  2 min 25 s, sur **PostgreSQL 16.16** (16.15 ici), ICU des collations
+  153.121, glibc 2.39, Node 22 ; puis de nouveau vert à l'envoi de
+  `2a1929a` (20 h 15 UTC). La mineure diffère, et rien n'a bougé. Un rouge
+  de machine rendrait le code 2, et le journal imprime d'abord ces trois
+  versions : c'est la première chose à comparer. **Un rouge envoie un
+  e-mail « Run failed » au propriétaire** ; le job tourne à chaque envoi ET
+  à chaque pull request (les passages relevés sont tous des envois) ;
 - PostgreSQL 17, celui de la vraie base : tout est joué sur la 16 ;
 - **des régressions RÉELLES passent encore au vert**, faute d'un cas qui
   les éprouve : une fonction `security definer` rendue à `anon` (C6),
@@ -13586,6 +13684,296 @@ c'est ici qu'on le dit.
 
 La suite : `docs/A-FAIRE.md`, « Après l'étape 2c-E — ce qui reste », et
 §2.3 ; `docs/PLAN-DEVIS.md` 10.26.
+
+### La reconstruction de l'application — étape 2c-0 (26/11/2026)
+
+`app.json`, `app.config.js` (nouveau), `eas.json`, `package.json` et son
+verrou, `assets/icon-dev.png` et les deux icônes Android d'Opus Dev,
+`assets/splash-icon.png`, `App.js`, `src/components/Ouverture.js`,
+`scripts/verifier-imports.mjs` (la garde des enveloppes),
+`scripts/verifier-demarrage.mjs` (nouveau, `npm run verifier-demarrage`).
+Commits `b41a46b` (le commit A, AVANT la construction) et `2a1929a` (le
+commit B, APRÈS la réinstallation) ; entre les deux, les trois commits de
+2c-E (`be8ae03`, `f05bef8`, `9eb38e1`) et `545d003` (deux décisions du
+26/11). Le cahier (v1, ses deux critiques, la v2) et les
+journaux sont dans le dossier de travail de la session, pas dans le dépôt.
+**Aucun écran nouveau** : les modules du PDF, de l'aperçu, du partage et de
+la connexion sont seulement INSTALLÉS dans l'application. C'est la première
+étape de 2c (`docs/PLAN-DEVIS.md` 10.25 et 10.27).
+
+> **Pourquoi une étape à elle seule.** Un module natif n'existe sur le
+> téléphone qu'après une construction et une réinstallation, et un `import`
+> d'un module absent fait planter l'application au démarrage. 2c a besoin
+> de trois modules (le PDF, son aperçu dans Opus, le partage de plusieurs
+> fichiers), le lot de la connexion de quatre : les mettre TOUS dans UNE
+> construction, avant d'écrire une ligne qui s'en sert, coûte une
+> construction au lieu de trois.
+
+#### Ce que la reconstruction a mis dans l'application
+
+| quoi | comment | pour qui |
+|---|---|---|
+| fabriquer un PDF | `expo-print` | 2c-1 |
+| le montrer dans Opus, sans bouton pour l'envoyer | `react-native-webview` 13.16.1 exactement | 2c-1 |
+| plusieurs fichiers en une seule feuille de partage | `react-native-share` 12.3.1 exactement — **absent de la liste d'Expo pour le SDK 57** : il a compilé (la construction a réussi), il n'a jamais tourné | 2c-4 |
+| le logo au démarrage | `expo-splash-screen`, son greffon AVEC ses options (le dessin du logo sur fond transparent, 288 points, l'orange `#E85C1F`, aucune option `dark`) ; la clé `splash` du haut d'`app.json`, que le SDK 57 ne lit plus, retirée | tout de suite |
+| « Se connecter avec Google » (par le navigateur) et « avec Apple », le hasard sûr et l'empreinte, l'identité de l'application qui tourne | `expo-web-browser` ; `expo-apple-authentication` et `ios.usesAppleSignIn` ; `expo-crypto` ; `expo-application` (déclaré, il était déjà dans le verrou) | le lot de la connexion |
+| le lien qui rouvre Opus | `"scheme": "com.opusproject.app"` ; Opus Dev reçoit `com.opusproject.app.dev` | la connexion, « mot de passe oublié » |
+| les domaines associés | `applinks:opus-project.com`, `applinks:www.opus-project.com`, `webcredentials:opus-project.com`, dans la configuration des deux applications (mesuré par l'introspection) ; seule Opus Dev est construite ; rien n'est encore hébergé sur le domaine | les futurs QR, la page publique du pro |
+| l'application en français pour iOS | `ios.infoPlist` : `CFBundleDevelopmentRegion: "fr"`, `CFBundleLocalizations: ["fr"]` | tout de suite |
+| quatre textes d'autorisation en français | photos, appareil photo, micro, enregistrer dans Photos — **validés tels quels par le propriétaire le 26/11** ; un cinquième, le réseau local, pour Opus Dev seul | tout de suite |
+| le nom « Opus » sous l'icône | `"name": "Opus"` ; `slug`, `projectId` et `com.opusproject.app` inchangés | une future « preview » |
+| « Opus Dev », l'application de test À CÔTÉ | `app.config.js`, quand `APP_VARIANT` vaut `development` — et seul le profil `development` d'`eas.json` la pose | tout de suite |
+| les mises à jour en attente du SDK 57 | `expo` ~57.0.34, `expo-dev-client`, `expo-notifications`, `expo-image-manipulator`, `expo-image-picker` ; **pas de SDK 58** | — |
+
+Puis le commit B, sans nouvelle construction : `App.js` appelle
+`SplashScreen.preventAutoHideAsync()` au niveau du FICHIER (dans un
+composant, l'ordre arriverait trop tard) ; `Ouverture.js` pose, par-dessus
+les barrières fermées, une « plaque » orange plein écran qui redessine au
+point près l'écran du téléphone — la même image, en 288 × 288, au centre de
+l'écran ENTIER — et retire l'écran du téléphone quand l'image de la plaque
+est chargée, avec deux filets (3 s, et la fin de l'ouverture : un doigt
+peut passer l'ouverture avant que l'image ne charge). `verifier-demarrage`
+tient l'écran du téléphone et sa copie ensemble : si la largeur ou l'image
+divergent entre `app.json` et `Ouverture.js`, le logo saute au passage.
+(Le message du commit B dit la plaque « posée sous les barrières » : elle
+vient APRÈS elles dans le rendu, donc PAR-DESSUS — c'est ce que vérifie
+`verifier-demarrage`. Un message de commit ne se récrit pas ; c'est ici
+qu'on le dit.)
+
+#### Deux applications sur l'iPhone, et ce qui les distingue
+
+| | Opus Dev | Opus |
+|---|---|---|
+| construite par | `eas build --platform ios --profile development` | `eas build --platform ios --profile preview` — **aucune au 26/11** |
+| identifiant et lien | `com.opusproject.app.dev` | `com.opusproject.app` |
+| icône | noire, le logo en orange, une pastille « DEV » (`assets/icon-dev.png`) | orange, le logo du propriétaire (`assets/icon.png`) |
+| s'ouvre sur | le lanceur de développement (« Development servers »), puis le code que sert le PC | Opus directement, au code figé à la construction |
+| répond au code QR de `npx expo start` | oui (`exp+opus-project`) | non (mesuré par `prebuild` à l'épreuve) |
+
+> **Depuis le 26/11, installer l'une ne remplace plus l'autre.** C'est la
+> réparation du défaut du 17/10, où une preview avait écrasé le build de
+> développement sans prévenir. `app.config.js` ne change que l'IDENTITÉ —
+> le nom, l'identifiant, l'icône, le lien, le texte du réseau local — et
+> rend `app.json` tel quel pour tout le reste : mesuré à l'épreuve, les
+> droits engendrés (notifications, Apple, domaines) sont identiques dans les
+> deux.
+
+> **Jamais `APP_VARIANT` sur le PC**, ni dans `.env` ni dans la fenêtre
+> PowerShell : c'est `eas.json` qui la pose. Restée dans la fenêtre, elle
+> fausserait une future preview — EAS préparerait chez Apple l'identité
+> d'Opus Dev pendant que son serveur construirait Opus (déduit, lu dans
+> `eas-cli`). `npx expo start` tourne sans elle, et c'est juste : le PC sert
+> le même JavaScript aux deux applications.
+
+#### La règle des enveloppes — `verifier-imports`
+
+Cinq des modules nouveaux chargent leur code natif DÈS L'IMPORT
+(`expo-print`, `react-native-webview`, `react-native-share`,
+`expo-web-browser`, `expo-crypto` — lu dans leur code publié) : importés par
+une version d'Opus dont l'application installée ne les contient pas, ils la
+font planter au démarrage. Deux autres se taisent (`expo-splash-screen`,
+`expo-apple-authentication`), mais la règle de l'ordre vaut pour eux.
+
+> **Chacun des sept a sa liste de fichiers qui ont le droit de le charger —
+> son « enveloppe » —, et une liste vide veut dire PERSONNE.** Ajouter un
+> fichier à une liste est une DÉCISION, prise dans un commit qui part APRÈS
+> la réinstallation. Au 26/11, une seule enveloppe est ouverte :
+> `expo-splash-screen`, pour `App.js` et `Ouverture.js` (commit B). Les six
+> autres sont vides : 2c-1 ouvrira celles d'`expo-print` et de
+> `react-native-webview`, 2c-4 celle de `react-native-share`, le lot de la
+> connexion les trois dernières.
+
+Elle lit `src/`, `App.js` et `index.js` par l'arbre syntaxique, sous toutes
+les formes (`import`, `export … from`, `require`, `import()`, un
+sous-chemin) ; un commentaire qui nomme un module ne la fait pas rougir.
+Contre-épreuve du commit B : la liste d'`expo-splash-screen` remise à vide,
+elle rougit (code 1) en nommant `App.js:27` et `Ouverture.js:56`. **Ses
+limites** : un alias de `require` (`const r = require`) n'est pas suivi, et
+`scripts/` n'est pas lu. `expo-application` n'est pas dans la liste, exprès :
+il était déjà dans le verrou de la construction du 25/10 (l'importer ne
+fait rien planter — déduit).
+
+> **Et l'ancienne application n'existe plus** : depuis le 26/11 au soir, le
+> seul Opus installé est Opus Dev, qui contient les huit modules. Le danger
+> que la garde surveille revient avec le PROCHAIN module natif : installer,
+> construire, réinstaller, PUIS ouvrir son enveloppe.
+
+#### La règle pour le lot de la connexion — l'identité se lit côté natif
+
+> **L'identité de l'application qui tourne se lit par `expo-application`**
+> (`Application.applicationId`, gravé dans le binaire), et l'adresse de
+> retour s'écrit `${Application.applicationId}://auth/callback` — toujours
+> juste, puisque le lien de chaque application EST son identifiant.
+> **Jamais** `Constants.expoConfig.scheme` ni
+> `Constants.expoConfig.ios.bundleIdentifier`, jamais `Linking.createURL`,
+> jamais `makeRedirectUri` : dans Opus Dev, ils décrivent la configuration
+> que sert le PC, qui tourne sans `APP_VARIANT` — c'est-à-dire Opus. Une
+> connexion lancée depuis Opus Dev reviendrait dans Opus.
+
+Et tout réglage hors de l'application nomme LES DEUX identifiants : les
+adresses de retour de Supabase, les « Client IDs » d'Apple dans Supabase,
+le fichier `apple-app-site-association` (`docs/A-FAIRE.md`, « Après
+l'étape 2c-0 »). « Mot de passe oublié » se fera par un CODE à 6 chiffres,
+qui ne demande aucune pièce native (décision du 26/11).
+
+#### La reconstruction du 26/11, par le propriétaire
+
+Sur son PC Windows (`C:\dev\opus`, PowerShell), puis sur son iPhone, le soir
+du 26/11 :
+
+| étape | ce qui s'est passé |
+|---|---|
+| 0, avant `git pull` | une seule icône, « Opus-Project » ; `git status` propre ; `npx expo start --web` : **connexion à son compte au navigateur réussie**, sans mode démonstration — son mot de passe marche (Opus n'a pas de « mot de passe oublié », et Opus Dev, application neuve, demande de se reconnecter). L'ancienne application montrait une page blanche avec un pourcentage de chargement avant les barrières, et **son petit menu d'un champ (« Coller », « Sélectionner ») était EN ANGLAIS** |
+| 1, le PC | Node v22.21.0 ; `eas-cli` 24.14.0 — EAS proposait 25.3.0 puis 27.11.0, **pas mis à jour, exprès** ; `eas whoami` : le compte de la ligne `owner` d'`app.json` ; `git pull` (jusqu'à `545d003`) ; `npm ci` : « 9 vulnerabilities (8 moderate, 1 high) », rien fait — c'est la règle ; `npx expo install --check` : « Dependencies are up to date » |
+| 2, la construction | `eas build --platform ios --profile development`. **Premier essai échoué** : « Failed to register bundle identifier com.opusproject.app.dev » — Apple avait mis à jour le Apple Developer Program License Agreement ; accepté sur developer.apple.com/account, la même commande relancée. Second essai : les trois lignes attendues, lues (« Environment variables loaded … APP_VARIANT », « Bundle identifier registered com.opusproject.app.dev », « Synced capabilities: Enabled: Associated Domains, Sign In with Apple, Push Notifications ») ; le certificat de distribution existant réutilisé, un profil ad hoc neuf pour `com.opusproject.app.dev` avec son iPhone, la clé de notifications existante réutilisée ; construction réussie (schéma Xcode « OpusDev ») |
+| 3, l'iPhone | installé par le code QR ; Opus Dev ouvert par son icône ; le lanceur (« Finding Dev Servers », en anglais : ce sont les textes du lanceur d'Expo, écrits en dur) ; il a touché « Done », l'accès au réseau local est accordé (le serveur a été trouvé, ce qui l'exige) ; `npx expo start -c` ; connexion à son compte principal, son Fil s'affiche |
+| 4, les questions | ci-dessous |
+| 6, après le commit B | `git pull`, `npx expo start -c`, Opus Dev fermé puis rouvert par son icône : **pas d'écran blanc** (« c'est fait, pas d'écran blanc ») ; le saut du logo n'a pas été nommé — jugé dans le build de développement, où le lanceur s'intercale |
+| le soir du 26/11 | **l'ancienne application « Opus-Project » supprimée** (« j'ai supprimé l'ancienne », dans le même message que l'essai du commit B) ; le moment exact n'est pas confirmé |
+
+Les questions, numérotées comme dans le cahier (§7). Elles se sont faites
+sur la VRAIE base, avec son vrai compte, et chacune était écrite pour ne
+rien laisser chez personne :
+
+| question | sa réponse |
+|---|---|
+| 1. sous l'icône, « Opus Dev » ? l'icône noire avec la pastille « DEV » ? | oui |
+| 2. au premier lancement, avant le lanceur | une page orange avec son logo : l'écran de démarrage du téléphone, venu du greffon (le commit B n'était pas encore là) |
+| 3 et 4. le PC trouvé ; la connexion | oui (étape 3) |
+| 5. le petit menu d'un champ | **en français** — il était en anglais dans l'ancienne |
+| 6 et 7. la Photothèque (« Modifier mon profil » → « Choisir dans la galerie », puis retour SANS « Enregistrer ») | marche ; l'autorisation est en français |
+| 6 et 8. l'appareil photo (« Publier » → « Prendre une photo », la croix de la vignette, retour SANS « Publier ») | marche ; en français, « Reprendre » / « Utiliser la photo » |
+| 9. une pièce jointe à une vraie personne | **pas faite, exprès** : un message et sa pièce ne se retirent pas |
+| 10. une assurance d'ESSAI ajoutée par l'appareil photo, changée par un PDF (Fichiers), puis retirée — jamais sa vraie décennale | tout fonctionne ; les deux fichiers d'essai restent dans son espace privé `documents` |
+| 11. le Fil, une vidéo, le double appui | oui |
+| 12. Découvrir, le glissement d'une page à l'autre | oui |
+| 13. un brouillon de devis d'essai, créé puis supprimé | oui |
+| 14. le clavier dans une conversation ; les vibrations | oui |
+| 15. après le commit B : le logo, puis les barrières | pas d'écran blanc (« c'est fait, pas d'écran blanc ») ; le saut du logo n'a pas été nommé — dans Opus Dev (étape 6) |
+
+#### Ce qu'il ne faut pas redécouvrir
+
+> **Un contrat Apple mis à jour bloque la construction.** La ligne
+> « Failed to register bundle identifier … » ne nomme pas le contrat, mais
+> EAS affiche juste après, quand l'erreur d'Apple parle d'un accord à
+> accepter, les messages de contrat d'Apple (ou « … agree to the latest
+> Program License Agreement in your developer account »), puis l'erreur
+> d'Apple elle-même — lu dans `eas-cli` 24.14.0, `ensureAppExists.js`
+> l.66-79. Le propriétaire n'a cité que la première ligne : rien ne dit que
+> la suite ne nommait pas le contrat. La cause était sur
+> developer.apple.com/account, à accepter. Rien n'était envoyé ni perdu ; la
+> même commande, relancée, est passée. **Devant un refus d'Apple pendant
+> `eas build`, lire les lignes qui SUIVENT, puis
+> developer.apple.com/account.**
+
+> **Le « trader status » d'App Store Connect n'a PAS été rempli, et c'est
+> voulu.** App Store Connect l'affichait (le Digital Services Act de l'Union
+> européenne). Il ne sert qu'à PUBLIER sur l'App Store en Europe, et un
+> « trader » y rend publiques son adresse et ses coordonnées. C'est une
+> décision à poser au propriétaire le jour de la publication, avec deux
+> autres : sa SARL est-elle l'éditeur d'Opus, et `STATUT` quitte-t-il
+> `'essai'`. Rien de ce qui se construit ou s'installe ne l'exige.
+
+> **La langue d'iOS se règle à la construction, et là seulement.** Le petit
+> menu d'un champ, en anglais dans l'ancienne application, est en français
+> dans Opus Dev sans une ligne de JavaScript : c'est
+> `CFBundleDevelopmentRegion` et `CFBundleLocalizations` (déduit : la
+> région `fr` et `CFBundleLocalizations` ; `CFBundleAllowMixedLocalizations`,
+> posée aussi par la reconstruction, ne change pas la langue choisie d'après
+> la note sur la langue du dossier de travail, E4). Ce qui reste en
+> anglais, et ne se corrige pas là : le lanceur de développement (ses
+> textes sont écrits en dur), et les mots que React Native ajoute pour
+> VoiceOver (« checked » — lu dans son code, pas entendu).
+
+> **La fenêtre du réseau local : en anglais, ou pas ? NON ÉTABLI.** Le
+> propriétaire l'a vue en anglais. Or la configuration évaluée (`npx expo
+> config --type introspect`, avec `APP_VARIANT=development`) porte le texte
+> français (`NSLocalNetworkUsageDescription`, région `fr`,
+> `CFBundleLocalizations [fr]`), et le greffon du lanceur ne pose son texte
+> anglais que quand il n'y en a pas (lu). Le plus probable : l'écran du
+> lanceur, en anglais, pris pour la fenêtre du système. iOS ne pose la
+> question qu'une fois : ça ne se revérifie qu'à une prochaine installation
+> d'Opus Dev.
+
+> **`eas-cli` est resté en 24.14.0, exprès.** Les questions avaient été
+> lues dans `eas-cli` 27.11.0, et les principales recoupées dans 24.14.0 et
+> 25.0.0 (identiques) ; la ligne « Synced capabilities » ne l'a été que dans
+> 27.11.0, et 25.3.0, que proposait EAS, ne l'a été nulle part. Rester en
+> 24.14.0 était le choix prudent, pour ne pas changer d'outil en pleine
+> construction. À mettre à jour AVANT la prochaine construction, en relisant
+> la version qui sera installée.
+
+> **Dans Opus Dev, le démarrage se juge mal.** Le lanceur s'intercale entre
+> l'écran orange du téléphone et Opus : « pas d'écran blanc » y est un bon
+> signe, pas une preuve, et le saut du logo n'a pas été nommé. Le passage écran orange → plaque →
+> barrières ne se juge fidèlement que dans une preview (l'étape 7).
+
+> **Il n'y a plus de chemin de retour par l'ancienne application.** Le
+> cahier en prévoyait un (revenir seul à l'ancien code, puis ouvrir
+> « Opus-Project ») : il n'a pas servi, et il n'existe plus depuis que
+> l'ancienne est supprimée. Si Opus Dev cassait, on reconstruirait.
+
+Et deux rappels : avec `app.config.js`, `npx expo install` rend le code 1,
+installe quand même et n'écrit pas le greffon (« Les versions de paquets
+Expo se désalignent toutes seules ») ; jamais `npx expo prebuild` dans le
+dépôt, il réécrit `package.json` (mesuré à chaque épreuve).
+
+#### Vérifié, et comment
+
+Avant la construction, sur le commit A (`b41a46b`, appliqué depuis un patch
+éprouvé dans des copies, puis critiqué deux fois ; ses dix empreintes sont
+celles du patch) : `npm ci` (799 paquets), `npx expo install --check` à
+jour, les deux `expo config` (Opus et Opus Dev ne diffèrent que par le nom,
+le lien, l'identifiant, les icônes, le texte du réseau local et le lien des
+codes QR), l'introspection des deux variantes (les trois droits,
+identiques), les 56 contrôles, le linter à 32, les exports iOS et Android
+(code 0, 0 « Import stack », aucun des 13 marqueurs des modules nouveaux
+dans les `.hbc`), et au navigateur le titre « Opus » et l'accueil sans
+erreur.
+
+Après, sur le commit B (`2a1929a`, poussé le 26/11 vers 21 h 15, heure de
+Paris) :
+
+| | relevé |
+|---|---|
+| `verifier-demarrage` | code 0, 30 vérifications vertes (plus la ligne de bilan) |
+| `verifier-imports` | code 0 ; la garde accepte les deux imports |
+| la garde remise à vide (contre-épreuve) | **code 1**, `App.js:27` et `Ouverture.js:56` nommés |
+| `npm run verifier` | « ✔ Les 58 contrôles passent », en 131 s |
+| le linter | 32, comme le cliquet |
+| `npx expo export --platform ios` | code 0, 1 « Exported », 0 « Import stack » ; `ExpoSplashScreen` et `preventAutoHideAsync` 1 chacun (en UTF-8), les onze autres marqueurs à 0 |
+| les deux `expo config` | « Opus » et « Opus Dev », le greffon avec ses options (`imageWidth` 288, `backgroundColor` `#E85C1F`), aucune clé `splash` en haut, `addGeneratedScheme` faux pour Opus, vrai pour Opus Dev |
+| les sabotages de `verifier-demarrage` | 17 sur 17 refusés, dans une copie ; le banc refuse le dépôt (code 2) |
+| au navigateur, en démonstration | la plaque `rgb(232, 92, 31)` plein écran, `[0, 0, 393, 852]`, son logo à `[52.5, 282, 288, 288]`, puis l'accueil ; 0 erreur de page, 0 de console ; le serveur arrêté par son numéro de groupe |
+| GitHub | « Vérifier » vert sur `2a1929a`, les deux jobs (relevé par `gh run view`) |
+| sur l'iPhone | la construction réussie, Opus Dev installé, les questions ci-dessus — par le propriétaire |
+
+#### Ce qui n'a PAS été vérifié
+
+- **la « preview »** (l'étape 7) n'est pas construite : le nom « Opus » sous
+  l'icône, l'icône orange, le passage écran orange → plaque → barrières sans
+  le lanceur, et les capacités Associated Domains et Sign In with Apple sur
+  `com.opusproject.app` n'ont été vus nulle part ;
+- **aucun des modules nouveaux n'a TOURNÉ**, `expo-splash-screen` mis à
+  part : ils sont compilés (la construction a réussi), jamais appelés ;
+  `react-native-share` n'est pas validé par Expo pour le SDK 57 ;
+- la langue de la fenêtre du réseau local (ci-dessus) ; la demande
+  d'autorisation du MICRO ; celle d'« Enregistrer dans Photos » ; une pièce
+  jointe dans une conversation (question 9, pas faite) ; la langue de
+  Fichiers et de la feuille de partage (d'autres processus que l'application :
+  probable, pas établi) ;
+- ce que fait iOS d'un domaine associé sans fichier hébergé (déduit des
+  pages d'Apple : le lien s'ouvre dans le navigateur, comme avant) ;
+- `CFBundleAllowMixedLocalizations` laissé à `true` par le greffon d'Apple
+  (D10) : sur un iPhone réglé dans une autre langue, l'effet n'est pas
+  établi ;
+- Android : rien n'est construit ; et VoiceOver.
+
+La suite : `docs/A-FAIRE.md`, « Après l'étape 2c-0 — ce qui reste » ;
+`docs/PLAN-DEVIS.md` 10.27. L'étape suivante est **2c-1, le PDF des
+devis** — l'aperçu au format final, qui ouvrira les enveloppes
+d'`expo-print` et de `react-native-webview`.
 
 ## L'icône d'Opus — le logo du propriétaire (02/11/2026)
 
@@ -13610,22 +13998,43 @@ faut savoir pourquoi avant de les retoucher :
   la silhouette seule, que le téléphone teinte. Même zone sûre ;
 - le navigateur : `favicon.png`, 48 × 48.
 
+**Et l'application de test a la sienne, depuis le 26/11/2026 (étape 2c-0)** :
+« Opus Dev » porte le même logo aux couleurs INVERSÉES — fond encre
+`#1A1B19`, le dessin en orange — et une pastille « DEV »
+(`assets/icon-dev.png`, 1024 × 1024, opaque ; pour Android,
+`android-icon-foreground-dev.png` et `android-icon-background-dev.png`, et la
+même icône monochrome qu'Opus). `app.config.js` la choisit quand `APP_VARIANT`
+vaut `development`. C'est elle qui dit, d'un coup d'œil, laquelle des deux
+applications on ouvre.
+
 > **Une icône est une donnée NATIVE.** Elle est gravée dans l'application au
 > moment de sa construction : `git pull` ne la change pas sur le téléphone.
-> Elle n'apparaît qu'après un nouveau `eas build --platform ios --profile
-> development` et la réinstallation. Et c'est sans risque dans l'autre sens :
+> Elle n'apparaît qu'après une nouvelle construction et la réinstallation —
+> et depuis le 26/11, l'icône ORANGE n'apparaît que dans une construction
+> d'Opus (`--profile preview`), puisque `--profile development` construit
+> Opus Dev, à l'icône noire. Et c'est sans risque dans l'autre sens :
 > l'application déjà installée ne lit pas ces fichiers, rien ne peut planter.
 
-**L'écran de lancement, lui, n'est PAS réglé.** La clé `splash` de
-`app.json` n'est plus lue par Expo 57 sur le téléphone (vérifié dans
-`@expo/config-types` : elle n'existe plus que pour le web), et le module qui
-la remplace, `expo-splash-screen`, n'est pas installé. Le téléphone affiche
-donc l'écran de lancement par défaut une fraction de seconde, puis
-l'ouverture d'Opus (les barrières). Le régler, c'est un module natif de plus,
-donc une reconstruction : à décider avec lui (`docs/A-FAIRE.md`).
+~~**L'écran de lancement, lui, n'est PAS réglé.**~~ **Réglé depuis le
+26/11/2026 (étape 2c-0).** La clé `splash` de `app.json` n'était plus lue
+par Expo 57 sur le téléphone (vérifié dans `@expo/config-types` : elle
+n'existe plus que pour le web) ; elle est retirée, et c'est
+`expo-splash-screen`, installé avec la reconstruction, qui dessine l'écran :
+son greffon, dans `plugins`, AVEC ses options — le dessin du logo sur fond
+transparent (`assets/splash-icon.png`), 288 points, l'orange `#E85C1F`.
+Sans options, le greffon ne fait rien. Puis `Ouverture.js` en pose une copie
+exacte, la « plaque », et retire l'écran du téléphone quand elle est à
+l'écran : le logo se fond dans les barrières au lieu de s'éteindre d'un
+coup. Vu sur l'iPhone le 26/11, dans Opus Dev : une page orange avec le
+logo, puis, après le commit B, pas d'écran blanc (le saut du logo n'a pas
+été nommé). Le passage sans le
+lanceur de développement ne se juge que dans une preview (« La
+reconstruction de l'application — étape 2c-0 »).
 
-Ce qui n'a PAS été vérifié : l'icône sur un vrai téléphone — elle n'a été vue
-qu'en aperçu, découpée comme le ferait iOS et deux marques d'Android.
+Ce qui n'a PAS été vérifié : **l'icône orange** sur un vrai téléphone — elle
+n'a été vue qu'en aperçu, découpée comme le ferait iOS et deux marques
+d'Android ; aucune preview n'est construite. L'icône d'Opus Dev, elle, a été
+vue sur l'iPhone le 26/11 (« oui »).
 
 ## Dépendances : vérifier avant de proposer
 
@@ -13636,10 +14045,23 @@ regarder la date de la dernière publication avant de conseiller un paquet.
 
 Et se rappeler qu'un **module natif impose de RECONSTRUIRE l'application** :
 depuis le 15/10/2026, le propriétaire essaie Opus dans un **build de
-développement** (`expo-dev-client`, profils `development` et `preview` de
-`eas.json`), plus dans Expo Go — qui, depuis le 25/10, ne PEUT plus l'ouvrir
-(il est passé au SDK 58). Un module natif ajouté au code n'existe donc
-dans son téléphone qu'après un nouveau `eas build` et une réinstallation —
-et un import statique d'un module absent fait planter l'application **dès le
-démarrage**. L'ordre est toujours : installer, construire, réinstaller, PUIS
-committer le code qui l'importe (`docs/PLAN-DEVIS.md` 10.4).
+développement** (`expo-dev-client`, profil `development` d'`eas.json`) —
+depuis le 26/11, « **Opus Dev** » ; le profil `preview` construit « Opus »,
+au code figé —, plus dans Expo Go —
+qui, depuis le 25/10, ne PEUT plus l'ouvrir (il est passé au SDK 58). Un
+module natif ajouté au code n'existe donc dans son téléphone qu'après un
+nouveau `eas build` et une réinstallation — et un import statique d'un
+module absent fait planter l'application **dès le démarrage**. L'ordre est
+toujours : installer, construire, réinstaller, PUIS committer le code qui
+l'importe (`docs/PLAN-DEVIS.md` 10.4). **Depuis le 26/11, une garde le
+tient** : `verifier-imports` refuse qu'un module de la reconstruction se
+charge hors de son « enveloppe », et une enveloppe ne s'ouvre que dans un
+commit qui part après la réinstallation (« La reconstruction de
+l'application — étape 2c-0 »). Un module natif nouveau entre dans cette
+liste le jour où on l'installe.
+
+Et un paquet qui n'est pas dans la liste d'Expo pour le SDK n'est pas exclu
+pour autant, mais il se vérifie plus : `react-native-share` 12.3.1 n'y est
+pas pour le SDK 57 ; sa compatibilité avec React Native 0.86 a été LUE, puis
+la construction du 26/11 l'a compilé. Qu'il marche au doigt, on le saura en
+2c-4.
