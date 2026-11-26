@@ -1,21 +1,31 @@
 {
   "expo": {
-    "name": "Opus-Project",
+    "name": "Opus",
     "slug": "opus-project",
+    "scheme": "com.opusproject.app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1A1B19"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.opusproject.app",
+      "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:opus-project.com",
+        "applinks:www.opus-project.com",
+        "webcredentials:opus-project.com"
+      ],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "fr",
+        "CFBundleLocalizations": [
+          "fr"
+        ],
+        "NSCameraUsageDescription": "Opus utilise l’appareil photo quand vous prenez une photo ou filmez une vidéo à publier, à joindre ou à mettre sur votre profil.",
+        "NSMicrophoneUsageDescription": "Opus utilise le micro pour enregistrer le son des vidéos que vous filmez.",
+        "NSPhotoLibraryUsageDescription": "Opus accède à vos photos et à vos vidéos pour que vous choisissiez celles à publier, à joindre ou à mettre sur votre profil.",
+        "NSPhotoLibraryAddUsageDescription": "Opus enregistre dans l’app Photos les images que vous choisissez d’y garder."
       }
     },
     "android": {
@@ -35,7 +45,18 @@
       "expo-video",
       "expo-audio",
       "expo-image",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-web-browser",
+      "expo-apple-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 288,
+          "resizeMode": "contain",
+          "backgroundColor": "#E85C1F"
+        }
+      ]
     ],
     "owner": "montmeza",
     "extra": {

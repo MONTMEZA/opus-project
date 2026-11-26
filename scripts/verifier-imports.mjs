@@ -36,6 +36,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import ts from 'typescript';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -205,6 +206,143 @@ console.log('\nChaque paquet importé existe vraiment');
         + 'Un paquet inventé passe le linter ET `expo export` (qui rend 0 en '
         + 'échouant) : l’application affiche un écran blanc au démarrage.'
       : '');
+}
+
+/**
+ * LES MODULES NATIFS DE LA RECONSTRUCTION 2c-0 — ajouté le 26/11/2026.
+ *
+ * POURQUOI. `expo-print`, `react-native-webview`, `react-native-share`,
+ * `expo-web-browser` et `expo-crypto` chargent leur code natif DÈS L'IMPORT
+ * (lu dans leur code publié : `requireNativeModule('ExpoPrint')`,
+ * `requireNativeModule('ExpoWebBrowser')`, `requireNativeModule('ExpoCrypto')`,
+ * `TurboModuleRegistry.getEnforcing`).
+ * Importés par une version d'Opus que le téléphone ne contient pas encore,
+ * ils font PLANTER Opus au démarrage. La règle de CLAUDE.md — installer,
+ * construire, réinstaller, PUIS committer le code qui importe — n'était
+ * tenue par rien : `from '…'` était lu, `require('…')` et `import '…'`
+ * (sans `from`) passaient sans être vus.
+ *
+ * `expo-splash-screen` et `expo-apple-authentication`, eux, ne plantent pas
+ * (`requireOptionalNativeModule`), mais ils suivent la même règle : leur
+ * import part après la réinstallation (sans son module natif, la connexion
+ * Apple lèverait `UnavailabilityError`).
+ *
+ * N'y sont PAS, exprès : `expo-application`, déjà dans l'application
+ * installée le 25/10 (dépendance d'`expo-notifications`, d'après le verrou
+ * de ce jour-là) — l'importer ne fait rien planter ; `expo-linking` et
+ * `expo-auth-session`, qui ne sont pas installés : la vérification « chaque
+ * paquet chargé est déclaré » les refuse déjà.
+ *
+ * LA RÈGLE. Un module de cette liste ne se charge QUE dans les fichiers
+ * nommés à côté de lui (son « enveloppe »), et sous AUCUNE forme ailleurs :
+ * `import … from`, `import '…'`, `export … from`, `require(…)`,
+ * `import(…)`. Une liste VIDE veut dire : personne. Ajouter un fichier à une
+ * liste est une DÉCISION, prise dans le commit qui part APRÈS la
+ * réinstallation sur l'iPhone — jamais avant.
+ *
+ * COMMENT IL LIT. Par l'arbre syntaxique de TypeScript (déjà une dépendance
+ * déclarée, et déjà utilisé par `verifier-siret` et `verifier-tva`), pas par
+ * une expression régulière : un commentaire qui NOMME le module ne fait pas
+ * rougir, une chaîne qui contient « // » ne cache pas ce qui la suit, un
+ * import écrit sur trois lignes est vu. Un `require(x)` ou un `import(x)`
+ * dont le nom n'est pas écrit en toutes lettres est refusé partout : on ne
+ * peut pas savoir ce qu'il charge. Un fichier que TypeScript ne sait pas
+ * lire est refusé, au lieu de passer pour vide.
+ *
+ * Il lit `src/`, et AUSSI `App.js` et `index.js`, qui sont hors de `src/`
+ * et que Metro met dans le paquet.
+ */
+console.log('\nLes modules natifs de la reconstruction ne se chargent que dans leur enveloppe');
+{
+  const ENVELOPPES = {
+    'expo-print': [],
+    'react-native-webview': [],
+    'react-native-share': [],
+    'expo-splash-screen': [],
+    'expo-web-browser': [],
+    'expo-crypto': [],
+    'expo-apple-authentication': [],
+  };
+  const lus = [
+    ...execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'src'],
+      { encoding: 'utf8' }).split('\n'),
+    'App.js', 'index.js',
+  ].filter((f) => /\.(js|jsx|mjs|cjs|ts|tsx)$/.test(f));
+
+  const moduleDe = (spec) => Object.keys(ENVELOPPES)
+    .find((m) => spec === m || spec.startsWith(`${m}/`));
+  const litteral = (n) => n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n));
+
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const declares = new Set([...Object.keys(pkg.dependencies || {}),
+    ...Object.keys(pkg.devDependencies || {})]);
+  const paquetDe = (spec) => (spec.startsWith('@')
+    ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
+  const inconnus = [];
+  const horsEnveloppe = [];
+  const illisibles = [];
+  const noms = [];
+  for (const f of lus) {
+    const texte = readFileSync(f, 'utf8');
+    const sf = ts.createSourceFile(f, texte, ts.ScriptTarget.Latest, true,
+      /\.tsx?$/.test(f) ? ts.ScriptKind.TSX : ts.ScriptKind.JSX);
+    /* `parseDiagnostics` n'est pas une propriété publique de TypeScript :
+       si une version future la retirait, un fichier illisible passerait
+       pour vide sans un mot. Son absence est donc un refus, pas un « rien ». */
+    if (!Array.isArray(sf.parseDiagnostics)) {
+      illisibles.push(`${f} : TypeScript ne dit plus s'il a su lire ce fichier`);
+      continue;
+    }
+    if (sf.parseDiagnostics.length) {
+      illisibles.push(`${f} : ${ts.flattenDiagnosticMessageText(sf.parseDiagnostics[0].messageText, ' ')}`);
+      continue;
+    }
+    const ligne = (n) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+    const charge = (spec, n, forme) => {
+      if (!spec.startsWith('.') && !spec.startsWith('/') && !declares.has(paquetDe(spec))) {
+        inconnus.push(`${f}:${ligne(n)} → ${forme} '${spec}'`);
+      }
+      const m = moduleDe(spec);
+      if (m && !ENVELOPPES[m].includes(f)) horsEnveloppe.push(`${f}:${ligne(n)} → ${forme} '${spec}'`);
+    };
+    const visiter = (n) => {
+      if (ts.isImportDeclaration(n) && litteral(n.moduleSpecifier)) {
+        charge(n.moduleSpecifier.text, n, n.importClause ? 'import … from' : 'import');
+      } else if (ts.isExportDeclaration(n) && n.moduleSpecifier && litteral(n.moduleSpecifier)) {
+        charge(n.moduleSpecifier.text, n, 'export … from');
+      } else if (ts.isCallExpression(n)) {
+        const appel = n.expression;
+        const estImport = appel.kind === ts.SyntaxKind.ImportKeyword;
+        const estRequire = (ts.isIdentifier(appel) && appel.text === 'require')
+          || (ts.isPropertyAccessExpression(appel) && ts.isIdentifier(appel.expression)
+            && appel.expression.text === 'require');
+        if (estImport || estRequire) {
+          const forme = estImport ? 'import(…)' : `${appel.getText(sf)}(…)`;
+          const arg = n.arguments[0];
+          if (litteral(arg)) charge(arg.text, n, forme);
+          else noms.push(`${f}:${ligne(n)} → ${forme} sans nom écrit en toutes lettres`);
+        }
+      }
+      ts.forEachChild(n, visiter);
+    };
+    visiter(sf);
+  }
+
+  verifier(`les ${lus.length} fichiers du paquet se lisent`, illisibles.length === 0,
+    `${illisibles.join('\n      ')}\n      → un fichier illisible passerait pour vide`);
+  verifier('aucun chargement dont le nom ne se lit pas', noms.length === 0,
+    `${noms.join('\n      ')}\n      → écrire le nom du module en toutes lettres`);
+  verifier('chaque paquet chargé, sous toutes ses formes, est déclaré', inconnus.length === 0,
+    `${inconnus.join('\n      ')}\n      → absent de package.json : écran blanc au démarrage`);
+  verifier(`${Object.keys(ENVELOPPES).join(', ')} : chargés nulle part hors de leur enveloppe`,
+    horsEnveloppe.length === 0,
+    `${horsEnveloppe.join('\n      ')}\n      `
+      + '→ importés par une version d’Opus que le téléphone ne contient pas encore, '
+      + 'expo-print, react-native-webview, react-native-share, expo-web-browser et '
+      + 'expo-crypto la font planter au démarrage (expo-splash-screen et '
+      + 'expo-apple-authentication, eux, se taisent, mais la règle de l’ordre vaut '
+      + 'pour eux aussi). Un module ne se charge que dans son enveloppe, et '
+      + 'l’enveloppe ne s’ajoute qu’APRÈS la réinstallation.');
 }
 
 console.log('');
