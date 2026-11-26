@@ -72,6 +72,7 @@
     "generer-rapprochement": "node scripts/generer-rapprochement.mjs",
     "generer-cas-remise": "node scripts/generer-cas-remise.mjs",
     "essais-sql": "node scripts/jouer-essais-sql.mjs",
+    "verifier-juge-sql": "node scripts/verifier-juge-sql.mjs",
     "verifier-imports": "node scripts/verifier-imports.mjs",
     "verifier-retour": "node scripts/verifier-retour.mjs",
     "verifier-demandes": "node scripts/verifier-demandes.mjs",

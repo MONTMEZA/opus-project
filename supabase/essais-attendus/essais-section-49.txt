@@ -4,7 +4,7 @@
 # se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
 # ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
 # rester celui que l’essai ANNONCE quand il en annonce un.
-oracle: 1
+oracle: 2
 essai: essais-section-49
 
 [partie essai]
@@ -1413,12 +1413,12 @@ valeurs-jugees: 200
 | ----
 | t | public.mes_donnees, public.motifs_refus_remise, public.recalcule_devis, public.tient_le_devis | recalcule_devis | 0
 |
-| --- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le <jour>, plus admin_valider_pieces (lot S-a, <jour> : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, <jour> : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) et remonter_publication (lot S-c, <jour> : la seule écriture de la remise en avant, et de son historique, que le client ne peut pas écrire), et quatre du lot S-d (<jour>) : profil_public (la fiche publique d un particulier, ville aux seuls pros), ma_fiche_pro (SA fiche pro entière, colonnes privées comprises), admin_etat_des_fiches (la suspension, pour l administration seule) et mes_donnees_sans_masquage (ce que la RLS cacherait à tort dans l export, et seulement ce qui concerne l appelant) — une NOUVELLE, quelle qu elle soit, rougit
+| --- 27b. sans texte : les fonctions security definer EXÉCUTABLES par un client (anon ou authenticated), comparées à la liste relevée le 21/10/2026, plus admin_valider_pieces (lot S-a, 25/10/2026 : valider la pièce que l administration a vue) et peut_faire_un_devis (lot S-b, 26/10/2026 : dire AVANT la saisie si un nouveau devis peut se rattacher à une demande, sans rien dire d une demande qui n est pas à l appelant) et remonter_publication (lot S-c, 30/10/2026 : la seule écriture de la remise en avant, et de son historique, que le client ne peut pas écrire), et quatre du lot S-d (30/10/2026) : profil_public (la fiche publique d un particulier, ville aux seuls pros), ma_fiche_pro (SA fiche pro entière, colonnes privées comprises), admin_etat_des_fiches (la suspension, pour l administration seule) et mes_donnees_sans_masquage (ce que la RLS cacherait à tort dans l export, et seulement ce qui concerne l appelant) — une NOUVELLE, quelle qu elle soit, rougit
 | definer_ouvertes_attendu_31 | nouvelles_attendu_tiret
 | ----
 | 31 | —
 |
-| --- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le <jour>, plus trois du lot S-b (<jour>) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (<jour>) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale), et une du lot 2a (<jour>) : recalcule_apres_reduction (il appelle le recalcul quand la réduction sur le total change) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)
+| --- 27c. sans texte : les fonctions security definer que AUCUN client ne peut appeler (fonctions de déclencheur, recalculs internes), comparées à la liste relevée le 22/10/2026, plus trois du lot S-b (26/10/2026) : maj_nb_reponses_demande (le compteur des réponses d une demande), tait_les_notifications_bloquees (il lit les blocages du DESTINATAIRE) et tient_le_lien_du_devis (il lit les blocages posés par le CLIENT), et une du lot S-d (30/10/2026) : tient_le_signalement (il relève l auteur et l extrait VRAIS de la cible d un signalement, même cachée à celui qui signale), et une du lot 2a (03/11/2026) : recalcule_apres_reduction (il appelle le recalcul quand la réduction sur le total change) — une NOUVELLE rougit, même sans un mot qui nomme les tables (N9 : un déclencheur definer qui écrivait dans le devis d un autre)
 | definer_fermees_attendu_32 | nouvelles_attendu_tiret
 | ----
 | 32 | —

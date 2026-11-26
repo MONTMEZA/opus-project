@@ -6,7 +6,11 @@
  *   npm run essais-sql -- --sorties <dossier>  garder les sorties brutes là
  *   npm run essais-sql -- --figer <nom> …      réécrire l'oracle de ces essais
  *   npm run essais-sql -- --figer --oracle     tout refiger, quand L'ORACLE change
- *   npm run essais-sql -- --comme-github       rejouer depuis un clone propre de HEAD
+ *   npm run essais-sql -- --figer --accepter-la-perte <nom>
+ *                                              figer un essai qui a perdu TOUS ses refus,
+ *                                              ses valeurs ou ses cas (à dire dans le commit)
+ *   npm run essais-sql -- --comme-github       rejouer depuis un clone propre de HEAD (complet)
+ * Sous CI (GitHub), le passage est COMPLET : aucun nom d'essai n'y est accepté.
  *
  * POURQUOI IL MANQUAIT
  * --------------------
@@ -22,10 +26,14 @@
  * CE QU'IL FAIT, DANS L'ORDRE
  * ---------------------------
  *  1. la LISTE FERMÉE (plus bas) est comparée à ce qui existe sur le disque :
- *     un essai ajouté demain qui n'est rangé nulle part fait rougir ;
+ *     un essai ajouté demain qui n'est rangé nulle part fait rougir, et tout
+ *     `.sql` qui ressemble à un essai, à toute profondeur de `supabase/` ;
  *  2. il crée SA grappe PostgreSQL 16 (`initdb` dans un dossier temporaire,
  *     une socket privée, aucun port TCP, aucun mot de passe), et la détruit à
- *     la fin, même sur une interruption. Une grappe PARTAGÉE garde les rôles
+ *     la fin. Sur une interruption, PAS tout de suite : Ctrl+C n'arrête que
+ *     l'essai en cours, la grappe part après les essais qui restent ; et un
+ *     SIGHUP (le terminal fermé) ou un SIGKILL la laisse dans /tmp, serveur
+ *     compris (relecture de 2c-E, M3 : docs/A-FAIRE.md). Une grappe PARTAGÉE garde les rôles
  *     et leurs attributs d'un passage à l'autre : mesuré par la critique du
  *     cahier, un prélude qui perdait `bypassrls` donnait 0 rouge sur la
  *     grappe du conteneur et 5 sur une grappe neuve. C'est aussi ce qui fait
@@ -44,7 +52,8 @@
  * CE QUE VEUT DIRE SON CODE DE SORTIE
  * -----------------------------------
  *   0  tout ce qui a été joué rend ce qu'il rendait ;
- *   1  un essai ne le rend plus, ou la liste, le prélude, le schéma ;
+ *   1  un essai ne le rend plus, ou la liste, le prélude, le schéma ; et,
+ *      sous CI, un passage qui n'a pas joué TOUTES les entrées ;
  *   2  les essais n'ont pas pu se jouer (pas de PostgreSQL 16, clone
  *      superficiel, mauvais réglage) : c'est la machine qu'on corrige.
  *
@@ -55,7 +64,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chownSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync,
-  readFileSync, readdirSync, rmSync, writeFileSync, appendFileSync,
+  readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, appendFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -68,14 +77,18 @@ const RACINE = join(dirname(ICI), '..');
    d'attendus. Le jour où la façon de juger change (la normalisation, la
    signature d'une erreur), TOUS les attendus deviennent faux à la fois, et
    rien ne le dirait : on monte ce nombre, et `--figer --oracle` les refige
-   d'un coup EN REFUSANT si le sens d'un seul a changé. */
-export const ORACLE = 1;
+   d'un coup EN REFUSANT si le sens d'un seul a changé.
+   Version 2 (26/11/2026, relecture de 2c-E, G1/M1/C1) : une date que
+   l'essai ÉCRIT n'est plus jamais normalisée, et celles de la base ne le
+   sont plus qu'à deux jours du passage (voir `normaliseur`). */
+export const ORACLE = 2;
 export const DOSSIER_ATTENDUS = 'supabase/essais-attendus';
 
 /* ==========================================================================
    LA LISTE FERMÉE — chaque fichier `supabase/essais-*.sql` est ICI, ou dans
    HORS_LISTE avec sa raison. `verifier-atelier` (donc `npm run verifier`,
-   sans base) rougit sinon, et ce script aussi.
+   sans base) rougit sinon, et ce script aussi. Le NOMBRE d'entrées est figé
+   dans verifier-atelier (relecture de 2c-E, C10) : en sortir une se décide.
 
    Les champs d'une entrée :
      audit     l'essai écrit « (attendu : ERROR … / UPDATE 0 …) » dans ses
@@ -208,7 +221,9 @@ const BLOB_SCHEMA_LOT_0A = 'cb5efd1a69791f67db59eae86f1ac5c8b66acd0e';
 const DELAI_ESSAI_S = 600;
 const DELAI_SESSION_S = 120;
 const PORT = '5432';
-const ANNEE_FENETRE = 2;
+/* La fenêtre des dates de la BASE, en jours autour du jour (UTC) du serveur
+   au départ du passage — la règle et sa mesure sont dans `normaliseur`. */
+export const FENETRE_JOURS = 2;
 
 /* Les comptes et la demande de l'essai 49, qui sert de DÉCOR à la famille D. */
 const D_A = 'a4900000-0000-4000-8000-00000000000a';
@@ -219,10 +234,35 @@ const D_LIGNE = 'f4990000-0000-4000-8000-0000000000c1';
 /* ==========================================================================
    LA LISTE, COMPARÉE À CE QUI EXISTE — avant toute base
    ========================================================================== */
+/* Tout fichier `.sql` qui RESSEMBLE à un essai, à toute profondeur de
+   `supabase/`, sans tenir compte de la casse (relecture de 2c-E, C8) : un
+   `essai-section-52.sql` (le singulier), un `Essais-….sql`, un `….SQL` ou un
+   essai rangé dans un sous-dossier ne tournaient nulle part, et rien ne
+   rougissait — même avec une division par zéro dedans. Seule la forme
+   `supabase/essais-<nom>.sql` est jouée ; les autres sont des écarts.
+   `verifier-atelier` appelle CETTE fonction au lieu d'en recopier le motif. */
+function fichiersQuiRessemblentAUnEssai(racine) {
+  const vus = [];
+  const parcourir = (dossier, relatif) => {
+    for (const e of readdirSync(dossier, { withFileTypes: true })) {
+      const rel = relatif ? `${relatif}/${e.name}` : e.name;
+      if (e.isDirectory()) parcourir(join(dossier, e.name), rel);
+      else if (/^essais?/i.test(e.name) && /\.sql$/i.test(e.name)) vus.push(rel);
+    }
+  };
+  parcourir(join(racine, 'supabase'), '');
+  return vus.sort();
+}
+
 export function ecartsDeLaListe(racine = RACINE) {
   const ecarts = [];
-  const surLeDisque = readdirSync(join(racine, 'supabase'))
-    .filter((f) => /^essais-.*\.sql$/.test(f)).map((f) => f.replace(/\.sql$/, '')).sort();
+  const ressemblent = fichiersQuiRessemblentAUnEssai(racine);
+  for (const rel of ressemblent.filter((f) => !/^essais-[^/]*\.sql$/.test(f))) {
+    ecarts.push(`Le fichier supabase/${rel} ressemble à un essai, mais il ne sera JAMAIS joué : seul un fichier `
+      + '`supabase/essais-<nom>.sql` (directement dans supabase/, en minuscules) l’est. Renommez-le ou déplacez-le, '
+      + 'puis rangez-le dans ESSAIS ou dans HORS_LISTE.');
+  }
+  const surLeDisque = ressemblent.filter((f) => /^essais-[^/]*\.sql$/.test(f)).map((f) => f.replace(/\.sql$/, ''));
   const dedans = new Set(ESSAIS.map((e) => e.nom));
   const dehors = new Set(HORS_LISTE.map((e) => e.nom));
   for (const nom of surLeDisque) {
@@ -259,9 +299,9 @@ export function ecartsDeLaListe(racine = RACINE) {
    LA LECTURE D'UNE SORTIE DE PSQL — tout ce qui juge est ici, pur
    ========================================================================== */
 const RE_UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
-const RE_HORO = /\b(\d{4})-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[+-]\d{2}(?::?\d{2})?|Z)?/g;
-const RE_JOUR = /\b(\d{4})-\d{2}-\d{2}\b/g;
-const RE_JOUR_FR = /\b\d{2}\/\d{2}\/(\d{4})\b/g;
+const RE_HORO = /\b(\d{4})-(\d{2})-(\d{2})[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:[+-]\d{2}(?::?\d{2})?|Z)?/g;
+const RE_JOUR = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
+const RE_JOUR_FR = /\b(\d{2})\/(\d{2})\/(\d{4})\b/g;
 const RE_PREFIXE = /^psql:[^:\n]*:\d+: /;
 const RE_MESSAGE = /^psql:[^:\n]*:\d+: (ERROR|WARNING|NOTICE|INFO|LOG|DEBUG\d?|FATAL|PANIC): {2}(.*)$/;
 const RE_CHAMP = /^(DETAIL|HINT|QUERY|CONTEXT|STATEMENT|LOCATION|SCHEMA NAME|TABLE NAME|COLUMN NAME|DATATYPE NAME|CONSTRAINT NAME): {2}(.*)$/;
@@ -273,8 +313,11 @@ const ESPACE = '␣';
 
 /* Ce que l'essai écrit lui-même : ses titres (les `\echo '…'` LITTÉRAUX, une
    seule chaîne, ses '' rendus en '), sa dernière annonce, les UUID qu'il nomme
-   (ils disent QUI : on les garde), et les fichiers qu'il lit. */
-export function lireSource(texte) {
+   (ils disent QUI : on les garde), ses DATES (elles disent quand : on les
+   garde aussi, voir `normaliseur`), et les fichiers qu'il lit. `annexes` :
+   le texte des fichiers de DONNÉES qu'il lit par `cat` (une date qui en vient
+   est écrite par l'essai, tout autant). */
+export function lireSource(texte, annexes = []) {
   const echos = [];
   for (const l of texte.split('\n')) {
     const m = l.match(/^\s*\\echo\s+'((?:[^']|'')*)'\s*$/);
@@ -283,31 +326,95 @@ export function lireSource(texte) {
   const fichiers = [];
   for (const m of texte.matchAll(/^\s*\\(i|ir|include|include_relative)\s+(\S+)/gm)) fichiers.push({ commande: m[1], chemin: m[2] });
   for (const m of texte.matchAll(/`cat\s+([^`\s]+)`/g)) fichiers.push({ commande: 'cat', chemin: m[1] });
+  /* Les dates écrites telles quelles, par FORME : « 2026-10-15 » protège
+     « 2026-10-15 » et tout horodatage de ce jour-là (« 2026-10-15 00:00:00+00 »,
+     la même valeur rendue en timestamptz) ; « 30/10/2026 » protège
+     « 30/10/2026 ». Le source entier est lu, commentaires compris : une date
+     fixe que la base calcule (`'2026-10-12'::date + 8`) se garde en l'écrivant
+     dans l'essai, un commentaire suffit (le refus de `--figer` le dit). */
+  const tout = [texte, ...annexes].join('\n');
+  const joursIso = new Set([...tout.matchAll(/\b(\d{4}-\d{2}-\d{2})\b/g)].map((m) => m[1]));
+  const joursFr = new Set([...tout.matchAll(/\b(\d{2}\/\d{2}\/\d{4})\b/g)].map((m) => m[1]));
   return {
     texte,
     echos,
     titres: new Set(echos.filter((e) => e.trim() !== '')),
     derniere: echos.filter((e) => e.trim() !== '').pop() ?? null,
-    uuidFixes: new Set((texte.match(RE_UUID) || []).map((u) => u.toLowerCase())),
+    uuidFixes: new Set((tout.match(RE_UUID) || []).map((u) => u.toLowerCase())),
+    joursIso,
+    joursFr,
     fichiers,
   };
 }
 
-/* La normalisation : ce qui bouge d'un passage à l'autre SANS que rien
-   n'ait changé. Un UUID tiré au hasard ; un horodatage ou une date dont
-   l'année est PROCHE de celle du passage (ceux que pose `now()`, et ses
-   relatifs : `now() - interval '8 days'`). Une date dont l'année est loin
-   (`2001-01-01`, `2099`), l'essai l'a écrite : elle reste (critique m5). La
-   règle « à plus de deux jours de l'heure du passage » a été écartée : une
-   date relative changerait chaque jour, et GitHub rougirait un matin sur un
-   dépôt immobile. */
-export function normaliseur(source, annee) {
-  const proche = (a) => Math.abs(Number(a) - annee) <= ANNEE_FENETRE;
+/* Le nombre de jours entre deux dates du calendrier, par Date.UTC : une
+   soustraction de deux `new Date()` traverserait un changement d'heure. */
+const jourUtc = (a, m, j) => Date.UTC(Number(a), Number(m) - 1, Number(j)) / 86400000;
+
+/* LA NORMALISATION : ce qui bouge d'un passage à l'autre SANS que rien
+   n'ait changé. Un UUID tiré au hasard, et une date que la BASE pose
+   (`now()`, `clock_timestamp()`, `current_date`).
+
+   CE QUE L'ESSAI ÉCRIT N'EST JAMAIS NORMALISÉ (relecture de 2c-E, G1/M1/C1).
+   La version 1 de l'oracle réduisait toute date à ±2 ANS de l'année du
+   passage — y compris « 2026-10-15 » (la version des conditions que l'essai
+   45 envoie) ou « 30/10/2026 » dans un titre. Deux défauts, mesurés : le
+   01/01/2029, ces dates sortaient de la fenêtre et cinq essais rougissaient
+   sur un dépôt immobile (45, 47, 49, 51c, suppression-compte) ; et
+   aujourd'hui, une régression qui rendait « 2026-10-16 » à la place de
+   « 2026-10-15 » restait VERTE à l'essai 45, la cellule valant `<jour>`
+   dans les deux cas. Les titres, eux, ne passent plus du tout par ici
+   (`analyser`) : c'est le texte de l'essai.
+
+   LES DATES DE LA BASE : à DEUX JOURS au plus du jour UTC du serveur au
+   départ du passage, pas à deux ans. Relevé le 26/11/2026 sur les 33
+   essais : les dates que la base AFFICHE sont toutes à moins d'un jour —
+   `now()`, `clock_timestamp()`, `prepare_le`, le journal de l'IA,
+   `now() - interval '2 hours'` (33), et la date du jour dans deux fuseaux
+   (49-remise : Kiritimati, à +14 h, et un fuseau à −11 h qui rend la
+   veille). Les relatifs lointains (`now() - interval '400 days'`, 46 et
+   49-remise) sont ÉCRITS en base, jamais affichés. Un jour couvre les
+   fuseaux (−12 à +14 h), le second un passage qui traverse minuit. Plus
+   large, la fenêtre masquerait une régression qui change une date fixe en
+   une autre date proche (la contre-épreuve de M1).
+
+   Et ce qui la rend sûre : `--figer` REFUSE une date de la sortie qui n'est
+   ni écrite par l'essai ni proche du passage (`datesInexpliquees`). Une date
+   qui dépendrait de `now()` sans être proche (`now() - 400 jours`) changerait
+   chaque jour : elle ne peut donc pas entrer dans un oracle, et GitHub ne
+   rougit pas un matin sur un dépôt immobile.
+
+   Ce qui reste, et se dit : le jour où la base rend une date qui est AUSSI
+   écrite, sous la même forme, dans le même essai — aujourd'hui toutes les
+   dates écrites par les essais sont passées, sauf 2099 —, cette date n'est
+   pas normalisée : `--figer` le refuse ce jour-là (« hier, aujourd'hui ou
+   demain »), et un passage ordinaire ce jour-là rougirait, le lendemain non.
+
+   `jour` : « AAAA-MM-JJ », le jour UTC du serveur au départ du passage. */
+export function normaliseur(source, jour) {
+  const [a0, m0, j0] = jour.split('-');
+  const ref = jourUtc(a0, m0, j0);
+  const proche = (a, m, j) => Math.abs(jourUtc(a, m, j) - ref) <= FENETRE_JOURS;
   return (s) => s
     .replace(RE_UUID, (u) => (source.uuidFixes.has(u.toLowerCase()) ? u : '<uuid>'))
-    .replace(RE_HORO, (h, a) => (proche(a) ? '<horodatage>' : h))
-    .replace(RE_JOUR, (j, a) => (proche(a) ? '<jour>' : j))
-    .replace(RE_JOUR_FR, (j, a) => (proche(a) ? '<jour>' : j));
+    .replace(RE_HORO, (h, a, m, j) => (!source.joursIso.has(`${a}-${m}-${j}`) && proche(a, m, j) ? '<horodatage>' : h))
+    .replace(RE_JOUR, (d, a, m, j) => (!source.joursIso.has(d) && proche(a, m, j) ? '<jour>' : d))
+    .replace(RE_JOUR_FR, (d, j, m, a) => (!source.joursFr.has(d) && proche(a, m, j) ? '<jour>' : d));
+}
+
+/* Les dates qu'une sortie DÉJÀ normalisée porte encore et que l'essai n'écrit
+   pas : elles ne sont pas proches du passage (sinon elles seraient devenues
+   `<jour>`), et rien ne dit qu'elles sont fixes. `--figer` les refuse. Les
+   titres sont exclus : c'est le texte de l'essai. */
+export function datesInexpliquees(projection, titres, source) {
+  const vues = new Set();
+  projection.forEach((l, i) => {
+    if (titres.has(i)) return;
+    for (const m of l.matchAll(RE_HORO)) if (!source.joursIso.has(`${m[1]}-${m[2]}-${m[3]}`)) vues.add(m[0]);
+    for (const m of l.replace(RE_HORO, '').matchAll(RE_JOUR)) if (!source.joursIso.has(m[0])) vues.add(m[0]);
+    for (const m of l.matchAll(RE_JOUR_FR)) if (!source.joursFr.has(m[0])) vues.add(m[0]);
+  });
+  return [...vues];
 }
 
 /* Un message du serveur et ses champs. En mode verbeux, le bloc finit à
@@ -428,7 +535,7 @@ export function juger(nom, valeur, exceptions = {}) {
    l'OUTIL, ses cellules jugées, sa projection. */
 export function analyser(texte, source, entree, norm) {
   const lignes = texte.replace(/\n$/, '').split('\n');
-  const res = { erreurs: [], outil: [], cellules: [], ecarts: [], libres: [], illisibles: 0, projection: [], vues: new Set() };
+  const res = { erreurs: [], outil: [], cellules: [], ecarts: [], libres: [], illisibles: 0, projection: [], titres: new Set(), vues: new Set() };
   const exceptions = entree.exceptions || {};
   const libres = entree.libres || {};
   let cas = '(avant le premier titre)';
@@ -438,7 +545,10 @@ export function analyser(texte, source, entree, norm) {
     /* Aucune ligne figée ne finit par un espace : un éditeur qui les retire à
        l'enregistrement ne doit pas pouvoir changer un oracle (ni `git diff
        --check` le signaler). Une dernière cellule VIDE se lit au « | » final. */
-    if (source.titres.has(s)) { cas = s.replace(/ +$/, ''); res.projection.push(norm(s).replace(/ +$/, '')); continue; }
+    /* Un titre est le TEXTE de l'essai : il ne passe pas par la normalisation
+       (une date qu'il cite, un UUID qu'il nomme restent tels quels). On garde
+       sa place dans la projection : les gardes de `--figer` ne le lisent pas. */
+    if (source.titres.has(s)) { cas = s.replace(/ +$/, ''); res.titres.add(res.projection.length); res.projection.push(cas); continue; }
     if (i + 1 < lignes.length && RE_SEPARATEUR.test(lignes[i + 1]) && s.startsWith(' ') && !source.titres.has(lignes[i + 1])) {
       const t = lireTable(lignes, i, source);
       res.projection.push(t.noms.join(' | ').replace(/ +$/, ''), '----');
@@ -559,7 +669,7 @@ export function lireAttendus(texte) {
 
 /* La comparaison d'une partie à son oracle : UNE phrase par écart, qui dit
    où et quoi. */
-function comparer(nom, r, a) {
+export function comparer(nom, r, a) {
   const pb = [];
   if (r.erreurs.length !== a.erreurs.length || r.erreurs.some((e, i) => e.cas !== a.erreurs[i].cas || e.signature !== a.erreurs[i].signature)) {
     const k = r.erreurs.findIndex((e, i) => !a.erreurs[i] || e.cas !== a.erreurs[i].cas || e.signature !== a.erreurs[i].signature);
@@ -828,7 +938,7 @@ function verifierFichiersLus(source, nom) {
 /* Tout ce qui ne dépend PAS de l'oracle figé : psql rend 0, l'outil n'a pas
    failli, toutes les valeurs jugées sont justes, la fin est là, le compte
    annoncé, l'audit. C'est aussi ce que `--figer` exige avant d'écrire. */
-function verdictPropre(entree, source, run, r) {
+export function verdictPropre(entree, source, run, r) {
   const pb = [];
   if (run.delaiDepasse) pb.push(`l’essai n’a pas fini en ${DELAI_ESSAI_S} s : arrêté.`);
   else if (run.code !== 0) pb.push(`psql a rendu le code ${run.code} (un fichier introuvable, une connexion perdue, ou ON_ERROR_STOP).`);
@@ -862,14 +972,26 @@ function verdictPropre(entree, source, run, r) {
   return pb;
 }
 
-function jouerEssai(g, modele, entree, sorties, annee, suffixe = '') {
+/* Le source d'un essai, et le texte des fichiers de DONNÉES qu'il lit par
+   `cat` (les `\ir` de 49-rattrapage lisent schema.sql : c'est le code
+   éprouvé, pas l'essai — une date qu'il écrit et que la base rend s'écrit
+   AUSSI dans l'essai pour être gardée). */
+function sourceDe(fichier) {
+  const texte = readFileSync(join(RACINE, fichier), 'utf8');
+  const premiere = lireSource(texte);
+  const annexes = premiere.fichiers.filter((f) => f.commande === 'cat' && existsSync(join(RACINE, f.chemin)))
+    .map((f) => readFileSync(join(RACINE, f.chemin), 'utf8'));
+  return annexes.length ? lireSource(texte, annexes) : premiere;
+}
+
+function jouerEssai(g, modele, entree, sorties, jour, suffixe = '') {
   const fichier = `supabase/${entree.nom}.sql`;
-  const source = lireSource(readFileSync(join(RACINE, fichier), 'utf8'));
+  const source = sourceDe(fichier);
   const base = `e_${process.pid}_${entree.nom.replace(/[^a-z0-9]/g, '_')}${suffixe}`;
   g.creerBase(base, modele);
   try {
     const run = g.jouer(base, fichier, join(sorties, `${entree.nom}${suffixe}.sortie`));
-    const r = analyser(run.texte, source, entree, normaliseur(source, annee));
+    const r = analyser(run.texte, source, entree, normaliseur(source, jour));
     return { run, r, source, propres: verdictPropre(entree, source, run, r) };
   } finally {
     g.supprimerBase(base);
@@ -898,14 +1020,14 @@ const MOITIES = [
   ['retrait', 'retrait', true], ['apres-retrait', 'apres_retrait', false],
 ];
 
-function jouerRattrapage(g, entree, sorties, annee, suffixe = '') {
+function jouerRattrapage(g, entree, sorties, jour, suffixe = '') {
   const fichier = `supabase/${entree.nom}.sql`;
-  const source = lireSource(readFileSync(join(RACINE, fichier), 'utf8'));
-  const norm = normaliseur(source, annee);
+  const source = sourceDe(fichier);
+  const norm = normaliseur(source, jour);
   const ancien = join(g.dossier, `schema-${COMMIT_LOT_0A}.sql`);
   writeFileSync(ancien, ancienSchema());
   const base = `r_${process.pid}${suffixe}`;
-  const res = { parties: {}, problemes: [], notice: null, duree: 0 };
+  const res = { parties: {}, problemes: [], notice: null, duree: 0, source };
   const t0 = Date.now();
   g.creerBase(base);
   try {
@@ -1084,30 +1206,130 @@ function versAttendue(r) {
    formes qu'un essai pourrait afficher et que la normalisation ne réduirait
    pas : une sortie qui en contient une rougirait le lendemain. */
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-function joursProches() {
+function joursProches(maintenant = Date.now()) {
   const j = new Set();
   for (const d of [-1, 0, 1]) {
     for (const tz of ['UTC', 'Europe/Paris']) {
       const [a, m, jj] = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
-        .format(new Date(Date.now() + d * 86400000)).split('-');
+        .format(new Date(maintenant + d * 86400000)).split('-');
       j.add(`${a}-${m}-${jj}`).add(`${jj}/${m}/${a}`).add(`${a}/${m}/${jj}`).add(`${Number(jj)} ${MOIS[Number(m) - 1]} ${a}`);
     }
   }
   return [...j];
 }
 
+/* Les « cas » d'une sortie figée : ses lignes de TEXTE — ce qui n'est ni un
+   tableau (l'en-tête, le trait, les lignes, « (n rows) »), ni une étiquette
+   de psql (BEGIN, INSERT 0 1, CREATE TABLE…), ni un message, ni une ligne
+   vide. Ce sont les `\echo` de l'essai. La forme de l'audit (« --- »,
+   « === », « ##### ») ne suffit pas : l'essai 25 numérote ses cas « 0. »,
+   « 1. »… (trouvé par le banc de la correction : vidé, il n'avait « perdu »
+   aucun cas). Pur : `verifier-juge-sql` le fait tourner. */
+export function casDeLaSortie(sortie) {
+  const cas = [];
+  for (let i = 0; i < sortie.length; i++) {
+    if (sortie[i + 1] === '----') {
+      i += 2;
+      while (i < sortie.length && !/^\(\d+ rows?\)$/.test(sortie[i])) i++;
+      continue;
+    }
+    const l = sortie[i];
+    if (l === '' || /^\(\d+ rows?\)$/.test(l) || /^[A-Z][A-Z_ ]*( -?\d+)*$/.test(l) || /^(ERREUR|NOTICE|WARNING|INFO|LOG|DEBUG\d?|psql:) /.test(l)) continue;
+    cas.push(l);
+  }
+  return cas;
+}
+
+/* CE QUE `--figer` EXIGE D'UNE PARTIE AVANT DE L'ÉCRIRE, en plus du verdict
+   propre (pur : `verifier-juge-sql` le fait tourner).
+     1. aucune date d'hier, d'aujourd'hui ou de demain sous une forme que la
+        normalisation ne réduit pas (« 2026/11/26 », « 26 novembre 2026 ») ;
+     2. aucune date que l'essai n'écrit pas et qui n'est pas proche du
+        passage (`datesInexpliquees`) — c'est ce qui rend sûre la fenêtre
+        étroite de `normaliseur` ;
+     3. PAS DE PERTE (relecture de 2c-E, C9) : un essai VIDÉ — réduit à un
+        seul `\echo` — s'écrivait sans broncher, « erreurs 9 → 0 », et
+        rejouait vert ensuite. Perdre TOUS ses refus, TOUTES ses valeurs
+        jugées, ou TOUS ses cas (aucun titre de l'oracle d'avant ne revient)
+        est refusé, sauf `--accepter-la-perte`, qui se tape à la main.
+   Les titres ne sont pas lus par 1 et 2 : c'est le texte de l'essai. */
+export function gardesDeFiger(r, source, ancien, { accepterLaPerte = false, maintenant = Date.now() } = {}) {
+  const pb = [];
+  const lignes = r.projection.filter((_, i) => !r.titres.has(i));
+  const proches = joursProches(maintenant).filter((j) => lignes.some((p) => p.includes(j)));
+  if (proches.length) pb.push(`la sortie contient la date d’hier, d’aujourd’hui ou de demain (${proches.join(', ')}) : figée, elle rougirait demain.`);
+  const inexpliquees = datesInexpliquees(r.projection, r.titres, source);
+  if (inexpliquees.length) {
+    pb.push(`la sortie contient ${inexpliquees.slice(0, 4).map((d) => `« ${d} »`).join(', ')}, que l’essai n’écrit pas et qui n’est pas `
+      + `proche du passage : si elle dépend de now() (now() - interval '400 days'), elle changerait chaque jour — affichez plutôt un `
+      + 't/f ; si elle est fixe, écrivez-la dans l’essai (un commentaire suffit).');
+  }
+  if (ancien && !accepterLaPerte) {
+    if (ancien.erreurs.length > 0 && r.erreurs.length === 0) {
+      pb.push(`l’essai a perdu TOUS ses refus (${ancien.erreurs.length} → 0) : un essai vidé ne se fige pas. Si c’est voulu, `
+        + '`--figer --accepter-la-perte <nom>`, et le dire dans le commit.');
+    }
+    if (ancien.valeurs.length > 0 && r.cellules.length === 0) {
+      pb.push(`l’essai a perdu TOUTES ses valeurs jugées (${ancien.valeurs.length} → 0). Si c’est voulu, \`--figer --accepter-la-perte <nom>\`.`);
+    }
+    const casAvant = casDeLaSortie(ancien.sortie);
+    const apres = new Set(r.projection);
+    if (casAvant.length > 0 && !casAvant.some((c) => apres.has(c))) {
+      pb.push(`aucun des ${casAvant.length} cas de l’oracle d’avant ne revient : l’essai a perdu tous ses cas. Si c’est voulu, `
+        + '`--figer --accepter-la-perte <nom>`.');
+    }
+  }
+  return pb;
+}
+
+/* LE CODE DE SORTIE, pur (relecture de 2c-E, C4 et C3) : `verifier-juge-sql`
+   le fait tourner, sans base, à chaque `npm run verifier`. Un `return 0`
+   glissé ici rendait GitHub vert sur un essai rouge, et rien ne le voyait.
+   Sous CI (GitHub), un passage qui n'a pas joué TOUTES les entrées est un
+   rouge : on n'y passe aucun nom (refusé plus tôt), et rien ne lève cette
+   règle — le workflow est figé par `verifier-atelier`. */
+export function codeDuBilan({ rouges, joues, total, ci }) {
+  const partiel = joues < total ? ` (${joues} sur ${total} joués : ce n’est PAS le passage complet)` : '';
+  if (rouges) return { code: 1, phrase: `✘ ${rouges} essai(s) sur ${joues} ne rendent plus ce qu’ils rendaient${partiel}.` };
+  if (ci && joues !== total) {
+    return { code: 1, phrase: `✘ Sous CI, le passage doit jouer les ${total} entrées : il en a joué ${joues}. Un passage partiel ne prouve rien.` };
+  }
+  return { code: 0, phrase: `✔ Les ${joues} essais rendent ce qu’ils rendaient${partiel}.` };
+}
+
 async function principal(argv) {
-  const opts = { noms: [], figer: false, oracle: false, sorties: null, commeGithub: false };
+  const opts = { noms: [], figer: false, oracle: false, sorties: null, commeGithub: false, accepterLaPerte: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--figer') opts.figer = true;
     else if (a === '--oracle') opts.oracle = true;
     else if (a === '--comme-github') opts.commeGithub = true;
+    else if (a === '--accepter-la-perte') opts.accepterLaPerte = true;
     else if (a === '--sorties') opts.sorties = argv[++i];
     else if (a.startsWith('--')) { console.error(`Option inconnue : ${a}`); return 2; }
     else opts.noms.push(a.replace(/^supabase\//, '').replace(/\.sql$/, ''));
   }
-  if (opts.commeGithub) return commeGithub(argv.filter((a) => a !== '--comme-github'));
+  /* Sous CI, le passage est COMPLET (relecture de 2c-E, C3) : un job ou une
+     commande npm restreints à un essai rendaient GitHub vert avec 1 essai
+     sur 38. Refusé ici, avant toute base ; le bilan le refuse encore. */
+  if (process.env.CI && opts.noms.length && !opts.figer) {
+    console.error(`  ✘ Sous CI, le passage est COMPLET : aucun nom d’essai (reçu : ${opts.noms.join(', ')}). `
+      + 'Jouer un seul essai se fait à la main, hors CI.');
+    return 2;
+  }
+  if (opts.commeGithub) {
+    /* --comme-github pose CI=true : il rejoue le passage COMPLET, comme
+       GitHub, et rien d'autre (la contradiction de C3). */
+    if (opts.noms.length || opts.figer) {
+      console.error('  ✘ --comme-github rejoue le passage COMPLET, comme GitHub : sans nom d’essai ni --figer.');
+      return 2;
+    }
+    return commeGithub(argv.filter((a) => a !== '--comme-github'));
+  }
+  if (opts.accepterLaPerte && (!opts.figer || opts.oracle || !opts.noms.length)) {
+    console.error('  ✘ --accepter-la-perte ne va qu’avec --figer et des noms d’essais (jamais avec --oracle) : c’est un geste à la main, essai par essai.');
+    return 2;
+  }
 
   console.log('\nOpus — les essais SQL\n');
   /* 1. LA LISTE, avant toute base. */
@@ -1157,7 +1379,7 @@ async function principal(argv) {
       + "current_setting('extra_float_digits'), current_setting('standard_conforming_strings'), current_setting('server_encoding'), "
       + "current_setting('client_encoding'), (select datcollate || '/' || datctype from pg_database where datname = 'template1'), version(), "
       + "coalesce((select pg_collation_actual_version(oid) from pg_collation where collname = 'und-x-icu'), '—'), "
-      + "to_char(now() at time zone 'UTC', 'YYYY')").split('\t');
+      + "to_char(now() at time zone 'UTC', 'YYYY-MM-DD')").split('\t');
     const glibc = process.report?.getReport?.()?.header?.glibcVersionRuntime ?? '?';
     console.log(`  ${version}`);
     console.log(`  ICU des collations ${icu} · glibc ${glibc} · Node ${process.version} · template1 ${coll} · ${g.enRoot ? 'serveur sous « postgres » (lancé en root)' : 'serveur sous l’utilisateur courant'}`);
@@ -1167,7 +1389,9 @@ async function principal(argv) {
       [senc, 'UTF8', 'server_encoding'], [cenc, 'UTF8', 'client_encoding'], [coll, 'C.UTF-8/C.UTF-8', 'la collation de template1']];
     const faux = attendu.filter(([v, a]) => v !== a);
     if (faux.length) throw new Environnement(`la grappe n’a pas les réglages des essais : ${faux.map(([v, a, q]) => `${q} vaut « ${v} » au lieu de « ${a} »`).join(' ; ')}.`);
-    const annee = Number(maintenant);
+    /* Le jour UTC du SERVEUR au départ du passage : c'est autour de lui que
+       la normalisation réduit les dates de la base (`normaliseur`). */
+    const jour = maintenant;
 
     /* 3. LE MODÈLE. */
     const modele = `m_${process.pid}`;
@@ -1197,13 +1421,18 @@ async function principal(argv) {
       if (!veut(entree.nom)) continue;
       joues += 1;
       if (entree.procedure === 'rattrapage-lot-t') {
-        const r = jouerRattrapage(g, entree, sorties, annee);
+        const r = jouerRattrapage(g, entree, sorties, jour);
         let pbs = [...r.problemes];
         const a = lire(entree.nom);
         if (opts.figer) {
-          const r2 = jouerRattrapage(g, entree, sorties, annee, '_bis');
+          const r2 = jouerRattrapage(g, entree, sorties, jour, '_bis');
           const pareil = MOITIES.every(([n]) => r.parties[n] && r2.parties[n] && r.parties[n].projection.join('\n') === r2.parties[n].projection.join('\n'));
           if (!pareil) pbs.push('deux passages de la procédure ne rendent pas la même sortie : rien à figer.');
+          for (const [n] of MOITIES) {
+            if (!r.parties[n]) continue;
+            pbs.push(...gardesDeFiger(r.parties[n], r.source, a?.parties[n], { accepterLaPerte: opts.accepterLaPerte })
+              .map((p) => `moitié « ${n} » : ${p}`));
+          }
           if (pbs.length) refus.push([entree.nom, pbs]);
           else aEcrire.push([entree.nom, rattrapageVersTexte(entree.nom, r), a, r]);
           ligne(!pbs.length, entree.nom, s1(r.duree), pbs.length ? 'NON FIGÉ' : 'à figer', pbs);
@@ -1226,19 +1455,19 @@ async function principal(argv) {
       const source = lireSource(readFileSync(join(RACINE, `supabase/${entree.nom}.sql`), 'utf8'));
       const kf = verifierFichiersLus(source, entree.nom);
       if (kf.length) { ligne(false, entree.nom, '—', 'pas joué', kf); rouges += 1; continue; }
-      const { run, r, propres } = jouerEssai(g, modele, entree, sorties, annee);
+      const { run, r, propres, source: lue } = jouerEssai(g, modele, entree, sorties, jour);
       writeFileSync(join(sorties, `${entree.nom}.projection`), `${r.projection.join('\n')}\n`);
       const detail = `${String(r.erreurs.length).padStart(3)} erreurs attendues · ${String(r.cellules.length).padStart(3)} valeurs jugées`;
       if (opts.figer) {
         const pbs = [...propres];
-        const bis = jouerEssai(g, modeleBis, entree, sorties, annee, '_bis');
+        const bis = jouerEssai(g, modeleBis, entree, sorties, jour, '_bis');
         if (bis.r.projection.join('\n') !== r.projection.join('\n')) {
           const k = r.projection.findIndex((p, i) => p !== bis.r.projection[i]);
           pbs.push(`deux modèles construits l’un après l’autre ne rendent pas la même sortie (ligne ${k + 1} : « ${r.projection[k]} » / « ${bis.r.projection[k]} ») : rien à figer.`);
         }
-        const proches = joursProches().filter((j) => r.projection.some((p) => p.includes(j)));
-        if (proches.length) pbs.push(`la sortie contient la date d’hier, d’aujourd’hui ou de demain (${proches.join(', ')}) : figée, elle rougirait demain.`);
-        if (pbs.length) { refus.push([entree.nom, pbs]); rouges += 1; } else aEcrire.push([entree.nom, essaiVersTexte(entree.nom, r), lire(entree.nom), { parties: { essai: r } }]);
+        const ancien = lire(entree.nom);
+        pbs.push(...gardesDeFiger(r, lue, ancien?.parties.essai, { accepterLaPerte: opts.accepterLaPerte }));
+        if (pbs.length) { refus.push([entree.nom, pbs]); rouges += 1; } else aEcrire.push([entree.nom, essaiVersTexte(entree.nom, r), ancien, { parties: { essai: r } }]);
         ligne(!pbs.length, entree.nom, s1(run.duree), `${detail} · ${pbs.length ? 'NON FIGÉ' : 'à figer'}`, pbs);
         continue;
       }
@@ -1338,26 +1567,27 @@ async function principal(argv) {
     if (propreSorties && existsSync(sorties) && readdirSync(sorties).length === 0) rmSync(sorties, { recursive: true, force: true });
   }
 
-  /* 8. LE BILAN. */
+  /* 8. LE BILAN. Le code vient de `codeDuBilan`, pure, éprouvée sans base par
+     `verifier-juge-sql` ; cette colle-ci y est comparée ENTIÈRE. */
   const total = ESSAIS.length + PROCEDURES_A_DEUX.length + PARITES.length;
-  const partiel = joues < total ? ` (${joues} sur ${total} joués : ce n’est PAS le passage complet)` : '';
   const nonCommites = ceQuiNEstPasCommite();
   if (nonCommites && nonCommites.length) {
     console.log(`\n  ⚠ ${nonCommites.length} fichier(s) lu(s) par les essais ne sont pas commités — GitHub jouera la version COMMITÉE :`);
     nonCommites.slice(0, 12).forEach((l) => console.log(`      ${l}`));
     console.log('    Après le commit, avant l’envoi : `npm run essais-sql -- --comme-github`.');
   }
-  if (rouges) {
-    console.error(`\n✘ ${rouges} essai(s) sur ${joues} ne rendent plus ce qu’ils rendaient${partiel}.`);
+  const bilan = codeDuBilan({ rouges, joues, total, ci: !!process.env.CI });
+  if (bilan.code !== 0) {
+    console.error(`\n${bilan.phrase}`);
     console.error(`  Les sorties brutes : ${sorties}\n`);
-    return 1;
+    return bilan.code;
   }
   if (propreSorties) rmSync(sorties, { recursive: true, force: true });
-  console.log(`\n✔ Les ${joues} essais rendent ce qu’ils rendaient${partiel}.\n`);
-  return 0;
+  console.log(`\n${bilan.phrase}\n`);
+  return bilan.code;
 }
 
-function essaiVersTexte(nom, r) {
+export function essaiVersTexte(nom, r) {
   return [...ENTETE_ATTENDUS(nom, `supabase/${nom}.sql`), `oracle: ${ORACLE}`, `essai: ${nom}`, '', ...ecrirePartie('essai', r), ''].join('\n');
 }
 
@@ -1392,7 +1622,18 @@ function commeGithub(argv) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === ICI) {
+/* Le travail ne part que si CE fichier est lancé, et pas quand on l'importe
+   (`verifier-atelier`, `verifier-juge-sql`). Les chemins se comparent
+   RÉSOLUS des deux côtés (relecture de 2c-E, m1) : Node résout
+   `import.meta.url` à travers les liens, pas `process.argv[1]` — lancé par un
+   chemin qui passe par un lien (sur un Mac, `/tmp` en est un), le script ne
+   faisait RIEN et rendait 0. */
+const lanceDirectement = () => {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(process.argv[1]) === realpathSync(ICI); } catch { return false; }
+};
+
+if (lanceDirectement()) {
   principal(process.argv.slice(2)).then((code) => process.exit(code), (e) => {
     console.error(`\n✘ Le script a planté : ${e.stack || e}\n`);
     process.exit(2);

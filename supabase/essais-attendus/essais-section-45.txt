@@ -4,7 +4,7 @@
 # se relit dans le diff — [sortie] est la sortie de psql, normalisée, ligne à
 # ligne —, puis se commite avec sa raison. Le compte d’erreurs figé ici doit
 # rester celui que l’essai ANNONCE quand il en annonce un.
-oracle: 1
+oracle: 2
 essai: essais-section-45
 
 [partie essai]
@@ -633,7 +633,7 @@ valeurs-jugees: 0
 | (1 row)
 |
 | ROLLBACK
-| --- C4. B DEVIENT PRO par le répertoire, depuis l'application (attendu : pro | 000000216 | BOIS ET CHARPENTE | f — le nom brut ne sort pas ; puis t ; puis pro | Jean Dupont — entreprise vide, on prend le nom du compte | Charleval (13) | 13350 | {charpentier} | t | <jour>)
+| --- C4. B DEVIENT PRO par le répertoire, depuis l'application (attendu : pro | 000000216 | BOIS ET CHARPENTE | f — le nom brut ne sort pas ; puis t ; puis pro | Jean Dupont — entreprise vide, on prend le nom du compte | Charleval (13) | 13350 | {charpentier} | t | 2026-10-15)
 | BEGIN
 | SET
 | SET
@@ -650,7 +650,7 @@ valeurs-jugees: 0
 | RESET
 | type | entreprise | ville | code_postal | metiers | placee | cgu_version
 | ----
-| pro | Jean Dupont | Charleval (13) | 13350 | {charpentier} | t | <jour>
+| pro | Jean Dupont | Charleval (13) | 13350 | {charpentier} | t | 2026-10-15
 | (1 row)
 |
 | ROLLBACK

@@ -4843,6 +4843,157 @@ que la relecture et vos phrases ont ajouté) :
 - [ ] **Le relevé complémentaire d'une migration** n'est toujours pas dans le
   dépôt : il vit dans les comptes rendus de la session.
 
+### Après l'étape 2c-E — ce qui reste (26/11/2026)
+
+> **Les essais SQL tournent tout seuls** (`npm run essais-sql`, et le job
+> `essais-sql` de GitHub). Une seule relecture (deux angles, chaque constat
+> contredit, règle « Accélérer ») : 23 constats. Corrigés dans la même étape :
+> les dates que l'essai écrit, qu'on effaçait (G1, M1, C1 — le seul grave :
+> cinq essais auraient rougi tout seuls le 01/01/2029) ; la forme du job et de
+> la commande, figées et comparées entières (C2, C3, M2) ; le juge éprouvé
+> sans base par `npm run verifier-juge-sql` (C4) ; le lancement par un lien
+> (m1), la liste qui voit tout fichier qui ressemble à un essai (C8), le
+> nombre d'entrées figé (C10), `--figer` qui refuse un essai vidé (C9). Ce
+> qui suit ne l'est PAS, avec sa mesure et sa correction.
+>
+> **⚠ C6 et C5 sont des trous de COUVERTURE des essais** : une régression
+> RÉELLE de la base passe, aujourd'hui, au vert — et `npm run verifier` avec.
+> Ce ne sont pas des défauts du juge : il n'y a simplement aucun cas qui les
+> éprouve. À traiter avant 2c-3, où un devis remis sera figé.
+
+- [ ] **C6 — une fonction `security definer` peut redevenir appelable sans
+  compte, et rien ne le voit.** Mesuré : retirer la ligne
+  `revoke execute on function public.mon_compte() from anon;` de
+  `schema.sql` → `has_function_privilege('anon', 'public.mon_compte()',
+  'execute')` vaut `t`, les 38 entrées de `npm run essais-sql` passent,
+  `npm run verifier` aussi. La cause : le cas 27b de l'essai 49 relève les
+  fonctions exécutables « par anon OU authenticated » — l'UNION des deux
+  rôles, qui ne bouge pas puisque 31 fonctions sont déjà ouvertes à
+  `authenticated`. Sans effet sur les données aujourd'hui (appelée sans
+  compte, `mon_compte()` ne rend rien), mais une alerte du conseiller de
+  sécurité de Supabase. **Correction** : relever DEUX listes fermées dans le
+  cas 27b (celle de `anon`, vide aujourd'hui, et celle de `authenticated`),
+  puis `npm run essais-sql -- --figer essais-section-49`.
+- [ ] **C5 — l'horodatage du journal d'administration peut redevenir celui
+  du début de la transaction.** Mesuré : `alter table public.journal_admin
+  alter column created_at set default now();` au lieu de
+  `clock_timestamp()` → 38 sur 38 verts, `npm run verifier` vert. Pire :
+  `verifier-backoffice` affiche « ✔ l'horodatage est `clock_timestamp()` » —
+  il lit la ligne du `create table`, que l'`alter` qui suit écrase. C'est
+  l'incident de la section 25 qui revient sans bruit : deux actes de la même
+  transaction (un transfert d'entreprise en écrit deux) portent le même
+  horodatage. **Correction** : au cas C12 de l'essai 45 (deux actes dans une
+  transaction), `count(distinct created_at) = 2 as …_attendu_t`, refiger ; et
+  faire viser à `verifier-backoffice` la ligne `alter … set default`.
+- [ ] **C7 — le refus OP012 peut perdre la colonne « horaire ».** Mesuré : la
+  branche `horaire` de `refuse_les_colonnes_mortes_du_sos` remplacée par
+  `or false` → tout vert ; une ancienne application pourrait écrire un taux
+  horaire mort. Les cas 19 a et 19 b de l'essai 47 écrivent les trois
+  colonnes d'un coup : « deplacement » suffit à lever OP012. **Correction**
+  (essayée par le contradicteur) : deux cas, `horaire` seul puis `majoration`
+  seule, refusés par OP012 ; l'oracle de 47 passe de 18 à 20 erreurs.
+- [ ] **C12 — trois régressions vues seulement par des contrôles de TEXTE.**
+  (a) Un espace en FIN de cellule est invisible : `tient_le_client` passé de
+  `btrim` à `ltrim` garde « SCI du Moulin   » en base, et l'essai 41 passe
+  (vu par `verifier-clients`). Correction : une colonne
+  `nom = 'SCI du Moulin' as …_attendu_t` à l'essai 41, ou garder la largeur
+  des colonnes dans la projection. (b) La personne BLOQUÉE peut lire et
+  supprimer le blocage posé contre elle si « mes blocages » devient
+  `using (auth.uid() in (bloqueur_id, bloque_id))` : aucun essai ne
+  l'éprouve. Correction : un cas à l'essai 51b. (c) La limite quotidienne de
+  l'IA passée de 60 à 61 : l'essai 38 ne passe que des limites explicites.
+  Correction : 60 appels sans `p_limite_jour`, puis le 61e refusé.
+- [ ] **C11 — le délai de `scripts/verifier.mjs` n'est contrôlé que par son
+  texte.** Mesuré : `delaiS * 1000` devenu `delaiS * 1000 * 1000` (trois
+  jours et demi) → `verifier-atelier` vert ; trois autres sabotages aussi
+  (l'arrêt du groupe retiré, `detached: true` passé en commentaire, la
+  minuterie neutralisée). Avec un faux contrôle qui dort 5 s et `--delai 1` :
+  intact, code 1 en 1,08 s ; saboté, code 0 en 5,23 s. **Correction** :
+  éprouver le COMPORTEMENT (un `package.json` temporaire, un contrôle qui
+  dort, `--delai 1`), et exiger la DURÉE (moins de 3 s), pas seulement le
+  texte « N'A PAS PU SE LANCER » — deux sabotages l'affichent aussi.
+- [ ] **M3 — une interruption ne détruit pas la grappe tout de suite, et un
+  SIGHUP jamais.** Les essais d'un seul fichier passent par `spawnSync` :
+  les gestionnaires de SIGINT ne tournent qu'au premier `await` (la famille
+  D). Mesuré : Ctrl+C pendant l'essai 50 le marque ✘ (« 57014 canceling
+  statement »), puis 51a à suppression-compte se jouent, et le script sort
+  24 s plus tard sans bilan ; SIGINT au seul `node` : 102 s ; SIGHUP (le
+  terminal fermé) : `node` meurt en 0,2 s, le serveur (détaché par `pg_ctl`)
+  et `/tmp/opus-essais-sql-*` restent POUR TOUJOURS ; le dossier de sorties
+  reste aussi, sans que son chemin soit écrit. Sans faux vert (le code est
+  129 ou 130), et GitHub tourne sur une machine jetable. **Correction** :
+  psql par `spawn` + `await`, SIGHUP géré, le psql en cours tué, le pid du
+  script dans le dossier de la grappe et, au démarrage, les grappes dont le
+  propriétaire est mort arrêtées et retirées ; à l'interruption, le chemin
+  des sorties imprimé. (L'en-tête du script ne promet plus « même sur une
+  interruption ».)
+- [ ] **m2 — dans un clone superficiel, le passage s'arrête au milieu.** Le
+  rattrapage du lot T lève l'erreur de machine au 22e essai : 17 entrées sur
+  38 ne sont pas jouées, aucun bilan ne le dit (« n'ont pas pu se jouer »
+  laisse croire que rien n'a tourné), et le dossier de sorties reste dans
+  `/tmp` sans son chemin. **Correction** : vérifier `d0560e8` AVANT de créer
+  la grappe, ou ne rougir que 47-rattrapage et continuer ; imprimer le chemin
+  des sorties aussi sur le code 2.
+- [ ] **m3 — des messages qui égarent.** Un FATAL du SERVEUR (l'essai a coupé
+  sa propre connexion) est présenté comme « erreur de l'outil psql, pas de
+  l'essai » ; après un Ctrl+C, « psql a rendu le code 3 (un fichier
+  introuvable, une connexion perdue, ou ON_ERROR_STOP) » ne dit pas
+  « interrompu » ; « Option inconnue » ne liste pas les options ; le code 2,
+  documenté « c'est la machine qu'on corrige », sort aussi pour un nom
+  d'essai inconnu et pour un plantage du script. **Correction** : classer
+  FATAL et PANIC du serveur à part, dire « interrompu », lister les options,
+  réserver le code 2 à la machine.
+- [ ] **m4 — deux écarts à la consigne de départ, à vous de trancher.** (a)
+  Aucun service `postgres:16` dans le job : le runner prend le PostgreSQL 16
+  de l'image `ubuntu-24.04`, dont la version MINEURE n'est ni fixée ni
+  comparée à celle du conteneur (16.15) — seulement imprimée ; le premier
+  passage sur GitHub sera le premier essai de SA mineure. Proposé : un
+  avertissement en tête du journal quand la mineure diffère de 16.15, pour
+  qu'un premier rouge se lise tout de suite comme une question de version.
+  (b) « `npm run verifier` reste inchangé » n'est pas tenu à la lettre :
+  `scripts/verifier.mjs` a gagné un délai par contrôle, et deux contrôles
+  importent le script des essais (`verifier-atelier`, `verifier-juge-sql`).
+  L'indépendance vis-à-vis de PostgreSQL, elle, tient (mesuré : PostgreSQL
+  masqué, `npm run verifier` vert).
+- [ ] **C13 — une copie de banc faite par `tar` ou `rsync` d'un worktree
+  partage son INDEX et son HEAD.** Le fichier `.git` d'un worktree n'est
+  qu'un renvoi (« gitdir: … »). Pendant la relecture, un `git rm` dans une
+  copie a posé une suppression dans l'index du dépôt de travail (défaite
+  aussitôt) ; un commit fait sans chemins l'aurait emportée, et un commit
+  dans la copie aurait fait avancer la branche. **Règle** : une copie de banc
+  se fait par `git clone` (c'est ce que fait `--comme-github`, et le banc de
+  2c-E) ; avant de commiter, relire `git diff --cached --stat`.
+- [ ] **La leçon de méthode de l'incident du 26/11 (04 h 10 UTC).** Un
+  relecteur a pris le processus d'un AUTRE agent avec
+  `pgrep -f "node scripts/verifier.mjs" | head -1`, puis lui a envoyé SIGHUP
+  et SIGKILL : le `npm run verifier` du banc est mort (code 129), son
+  `verifier-atelier` a survécu, orphelin. Sans effet sur les verdicts (le
+  banc a relancé et obtenu 56 sur 56), mais **jamais `pkill -f` ni
+  `pgrep -f … | kill`** : on ne signale que ce qu'on a lancé soi-même, par le
+  numéro qu'on a relevé en le lançant, et on vérifie son dossier courant
+  avant.
+- [ ] **Ce que la correction des dates laisse, et dit.** Le jour où la base
+  rend une date qui est AUSSI écrite, sous la même forme, dans le même essai,
+  cette date n'est pas normalisée : `--figer` le refuse ce jour-là, et un
+  passage ordinaire ce jour-là rougirait (le lendemain non). Aujourd'hui,
+  toutes les dates écrites par les essais sont passées, sauf `2099-01-01`.
+  Et `--figer` refuse désormais toute date de la sortie qui n'est ni écrite
+  par l'essai ni à deux jours du passage : un essai qui voudrait afficher une
+  date fixe que la base calcule l'écrit dans son source (un commentaire
+  suffit) ; une date relative lointaine (`now() - interval '400 days'`)
+  s'affiche en t/f.
+- [ ] **Un passage à −3 ans ne peut pas être vert, et c'est la BASE.** Sous
+  libfaketime au 27/11/2023, les essais 31, 45 et 51c rougissent sur la
+  version des conditions : `version_cgu_ou_null` refuse une version datée
+  après demain (`d > current_date + 1`), et en 2023 les versions de 2026 que
+  ces essais envoient sont « du futur ». Les lignes en cause sont des t/f et
+  un ∅, aucune date normalisée. Contre-épreuve, sur une COPIE où cette seule
+  garde est retirée : à −3 ans, il ne reste qu'un rouge, le cas I5 de 51c
+  (`version_inventee_ecartee`), qui éprouve justement cette garde. Le passé
+  ne revient pas : rien à corriger, mais un essai qui dépend de l'horloge par
+  construction devrait le dire dans son titre. (À +3 ans, +10 ans et à
+  cheval sur le 31/12/2028 → 01/01/2029 : 38 sur 38.)
+
 ### L'icône d'Opus — votre logo, posé le 02/11/2026
 
 Votre image (le casque et « OPUS », noir sur orange) est devenue l'icône de

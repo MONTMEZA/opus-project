@@ -36,11 +36,13 @@
  *
  *   npm run verifier-atelier
  */
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 /* La liste fermée des essais SQL, lue sans rien lancer : le module ne fait
    rien d'autre que se déclarer quand on l'importe. */
-import { ESSAIS, HORS_LISTE, PARITES, ORACLE, DOSSIER_ATTENDUS } from './jouer-essais-sql.mjs';
+import {
+  ESSAIS, HORS_LISTE, PARITES, PROCEDURES_A_DEUX, ORACLE, ecartsDeLaListe,
+} from './jouer-essais-sql.mjs';
 
 let echecs = 0;
 const verifier = (nom, ok, detail = '') => {
@@ -157,57 +159,137 @@ console.log('\nLes essais SQL : une liste fermée, hors de cette commande (étap
      y compris sans base. Ce qui se vérifie ICI, donc sur toutes les
      machines : qu'un essai ajouté demain n'échappe pas à la liste. C'est
      l'incident du 15-17/10 — sept fichiers d'essais cassés pendant deux
-     jours, parce que rien ne les rejouait. */
-  const surLeDisque = readdirSync('supabase').filter((f) => /^essais-.*\.sql$/.test(f)).map((f) => f.replace(/\.sql$/, ''));
-  const dedans = new Set(ESSAIS.map((e) => e.nom));
-  const dehors = new Set(HORS_LISTE.map((e) => e.nom));
-  const orphelins = surLeDisque.filter((n) => !dedans.has(n) && !dehors.has(n));
-  verifier(`chacun des ${surLeDisque.length} fichiers supabase/essais-*.sql est dans la liste fermée, ou hors d’elle avec sa raison`,
-    orphelins.length === 0,
-    `${orphelins.join(', ')} — rangez-le dans ESSAIS (scripts/jouer-essais-sql.mjs) et figez son oracle, `
-    + 'ou dans HORS_LISTE avec sa raison : un essai que rien ne rejoue ne protège de rien');
-  const fantomes = [...ESSAIS, ...HORS_LISTE].filter((e) => !surLeDisque.includes(e.nom)).map((e) => e.nom);
-  verifier('…et chaque entrée de la liste a son fichier', fantomes.length === 0, fantomes.join(', '));
-  const sansRaison = [...ESSAIS, ...HORS_LISTE].filter((e) => !(e.raison || '').trim()).map((e) => e.nom);
-  verifier('…et sa raison', sansRaison.length === 0, sansRaison.join(', '));
-  const doublons = [...dedans].filter((n) => dehors.has(n));
-  verifier('…et aucun n’est à la fois dedans et dehors', doublons.length === 0, doublons.join(', '));
+     jours, parce que rien ne les rejouait.
 
-  /* Chaque essai de la liste a son ORACLE, à la version du script : sans
-     lui, `npm run essais-sql` ne peut que rougir — sur GitHub, par un
-     e-mail « Run failed ». */
-  const doivent = [...ESSAIS.map((e) => e.nom), ...PARITES.map((p) => p.nom)];
-  const fichiers = existsSync(DOSSIER_ATTENDUS)
-    ? readdirSync(DOSSIER_ATTENDUS).filter((f) => f.endsWith('.txt')).map((f) => f.replace(/\.txt$/, '')) : [];
-  const sansOracle = doivent.filter((n) => !fichiers.includes(n));
-  verifier(`chacun des ${doivent.length} a son oracle dans ${DOSSIER_ATTENDUS}/`, sansOracle.length === 0,
-    `${sansOracle.join(', ')} — \`npm run essais-sql -- --figer <nom>\`, relire, commiter`);
-  const perimes = doivent.filter((n) => fichiers.includes(n)
-    && Number((lire(`${DOSSIER_ATTENDUS}/${n}.txt`).match(/^oracle: (\d+)$/m) || [])[1]) !== ORACLE);
-  verifier(`…à la version ${ORACLE} de l’oracle`, perimes.length === 0,
-    `${perimes.join(', ')} — la façon de juger a changé : \`npm run essais-sql -- --figer --oracle\``);
-  const sansEntree = fichiers.filter((n) => !doivent.includes(n));
-  verifier('…et aucun oracle n’est orphelin', sansEntree.length === 0, sansEntree.join(', '));
+     La comparaison au disque est CELLE du script (`ecartsDeLaListe`), pas
+     une recopie de son motif : la première version de ce contrôle ne voyait
+     ni un `essai-…` au singulier, ni un `Essais-…`, ni un `….SQL`, ni un
+     essai rangé dans un sous-dossier (relecture de 2c-E, C8). */
+  const ecarts = ecartsDeLaListe();
+  verifier('la liste fermée correspond à ce qui existe : chaque fichier qui ressemble à un essai est rangé, '
+    + `chacun a son fichier, sa raison et son oracle à la version ${ORACLE}, aucun oracle n’est orphelin`,
+  ecarts.length === 0, ecarts.join('\n      '));
 
+  /* LE NOMBRE D'ENTRÉES EST FIGÉ, comme le nombre de cas de la parité
+     (relecture de 2c-E, C10) : déplacer un essai dans HORS_LISTE avec
+     n'importe quelle raison et effacer son oracle faisait passer le total de
+     38 à 37 sans un mot. Sortir — ou ajouter — un essai se DÉCIDE : on change
+     ces nombres ici, dans le même commit, en disant pourquoi. Et la seule
+     entrée hors de la liste est nommée : l'outil de la famille D. */
+  const FIGES = { essais: 33, procedures: 4, parites: 1 };
+  const HORS_LISTE_FIGEE = ['essais-section-49-temoin'];
+  verifier(`${FIGES.essais} essais, ${FIGES.procedures} procédures à deux sessions, ${FIGES.parites} parité : `
+    + `${FIGES.essais + FIGES.procedures + FIGES.parites} entrées, le nombre figé`,
+  ESSAIS.length === FIGES.essais && PROCEDURES_A_DEUX.length === FIGES.procedures && PARITES.length === FIGES.parites,
+  `trouvé ${ESSAIS.length} essais, ${PROCEDURES_A_DEUX.length} procédures, ${PARITES.length} parité(s) — sortir ou ajouter `
+    + 'un essai se décide : mettre à jour FIGES dans scripts/verifier-atelier.mjs, et dire pourquoi dans le commit');
+  const horsListe = HORS_LISTE.map((e) => e.nom).sort();
+  verifier(`hors de la liste : ${HORS_LISTE_FIGEE.join(', ')}, et rien d’autre`,
+    JSON.stringify(horsListe) === JSON.stringify(HORS_LISTE_FIGEE),
+    `trouvé : ${horsListe.join(', ') || '(rien)'} — un essai ne sort pas de la liste sans qu’on le décide ici`);
+
+  /* LA COMMANDE NPM, EXACTE (relecture de 2c-E, C3) : « contient le nom du
+     script » laissait passer `node scripts/jouer-essais-sql.mjs || true` (un
+     rouge avalé) et `… essais-section-43` (un essai sur 38). Et aucun script
+     `pre`/`post` : npm les lance d'office autour de la commande. */
+  const scripts = JSON.parse(lire('package.json')).scripts || {};
+  verifier('`npm run essais-sql` est EXACTEMENT `node scripts/jouer-essais-sql.mjs`',
+    scripts['essais-sql'] === 'node scripts/jouer-essais-sql.mjs', `reçu : ${scripts['essais-sql'] ?? '(absent)'}`);
+  verifier('…sans `preessais-sql` ni `postessais-sql`', !scripts['preessais-sql'] && !scripts['postessais-sql']);
   /* Le NOM tient tout : `scripts/verifier.mjs` lance ce qui commence par
      `verifier-`. Préfixés ainsi, les essais demanderaient une base à tout
      `npm run verifier`. */
-  const scripts = JSON.parse(lire('package.json')).scripts || {};
-  verifier('`npm run essais-sql` existe', /scripts\/jouer-essais-sql\.mjs/.test(scripts['essais-sql'] || ''));
   const prefixes = Object.entries(scripts).filter(([n, c]) => n.startsWith('verifier-') && /jouer-essais-sql/.test(c)).map(([n]) => n);
   verifier('…et aucun contrôle `verifier-` ne le lance', prefixes.length === 0,
     `${prefixes.join(', ')} — \`npm run verifier\` aurait besoin d’une base, et rougirait partout ailleurs`);
 
-  if (existsSync('.github/workflows/verifier.yml')) {
-    /* Les commentaires d'abord retirés : celui qui présente le job nomme la
-       commande, et un contrôle qui lit du code ne doit pas accuser (ni
-       croire) sa documentation. */
-    const ci = lire('.github/workflows/verifier.yml').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
-    const [avant, apres = ''] = ci.split(/^ {2}essais-sql:\s*$/m);
-    const job = apres.split(/^ {2}[a-z][a-z-]*:\s*$/m)[0];
-    verifier('GitHub les joue, dans un job À PART', /npm run essais-sql/.test(job) && !/npm run essais-sql/.test(avant),
-      'sans lui, ils ne tournent que si quelqu’un y pense');
-    verifier('…avec l’historique entier (le rattrapage du lot T lit d0560e8)', /fetch-depth:\s*0\b/.test(job));
+  const WORKFLOW = '.github/workflows/verifier.yml';
+  if (!existsSync(WORKFLOW)) verifier(`${WORKFLOW} existe`, false);
+  else {
+    /* LA FORME DU JOB, FIGÉE ET COMPARÉE ENTIÈRE (relecture de 2c-E, C2, M2) :
+       le premier contrôle ne cherchait que « npm run essais-sql » et
+       « fetch-depth: 0 ». Sept retouches qui empêchent le job d'échouer
+       passaient au vert : `|| true` sur la ligne, `continue-on-error: true`
+       sur le job ou l'étape, `if: false` sur le job ou l'étape, `run: echo
+       npm run essais-sql`, un seul essai nommé. C'est la règle « une forme
+       figée, comparée entière » de verifier-moderation : changer ce job se
+       DÉCIDE — on change le workflow ET la forme ci-dessous, dans le même
+       commit, en disant pourquoi.
+
+       Lu : les lignes de commentaire retirées (elles ne s'exécutent pas, et
+       celle qui présente le job nomme la commande), les lignes vides
+       retirées, les fins de ligne rognées. Rien d'autre n'est toléré : un
+       commentaire en FIN de ligne, une ancre YAML, un `env:` ajouté rougissent. */
+    const lignes = lire(WORKFLOW).split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l !== '' && !/^\s*#/.test(l));
+    const iJobs = lignes.findIndex((l) => l === 'jobs:');
+    const PREAMBULE = [
+      'name: Vérifier',
+      'on:',
+      '  push:',
+      "    branches: ['**']",
+      '  pull_request:',
+    ];
+    /* Le préambule entier : les déclencheurs RÉELS (tout envoi, toute branche,
+       et chaque pull request), et rien d'autre — un `env: { CI: '' }` posé ici
+       lèverait la règle « sous CI, le passage est complet ». */
+    verifier('le workflow se déclenche à chaque envoi, sur toute branche, et à chaque pull request — rien d’autre avant `jobs:`',
+      iJobs > 0 && JSON.stringify(lignes.slice(0, iJobs)) === JSON.stringify(PREAMBULE),
+      `reçu :\n        ${lignes.slice(0, Math.max(iJobs, 0)).join('\n        ')}`);
+    const iJob = lignes.findIndex((l) => l === '  essais-sql:');
+    const nbJobs = lignes.filter((l) => l === '  essais-sql:').length;
+    const finJob = lignes.findIndex((l, i) => i > iJob && /^ {2}\S/.test(l));
+    const job = iJob < 0 ? [] : lignes.slice(iJob, finJob < 0 ? lignes.length : finJob);
+    const JOB = [
+      '  essais-sql:',
+      '    runs-on: ubuntu-24.04',
+      '    timeout-minutes: 25',
+      '    steps:',
+      '      - uses: actions/checkout@v4',
+      '        with:',
+      '          fetch-depth: 0',
+      '      - uses: actions/setup-node@v4',
+      '        with:',
+      "          node-version: '22'",
+      '      - name: PostgreSQL 16',
+      '        run: |',
+      '          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then',
+      '            sudo apt-get update',
+      '            sudo apt-get install -y postgresql-16',
+      '          fi',
+      '          /usr/lib/postgresql/16/bin/postgres --version',
+      '      - name: Les essais SQL',
+      '        run: npm run essais-sql -- --sorties "$RUNNER_TEMP/sorties-essais-sql"',
+      '      - name: Garder les sorties brutes si un essai a rougi',
+      '        if: failure()',
+      '        uses: actions/upload-artifact@v4',
+      '        with:',
+      '          name: sorties-essais-sql',
+      '          path: ${{ runner.temp }}/sorties-essais-sql',
+      '          retention-days: 7',
+    ];
+    verifier('GitHub les joue, dans UN job à part, `essais-sql`', nbJobs === 1, `${nbJobs} job(s) de ce nom`);
+    /* Les causes, nommées une à une — la forme entière, plus bas, est ce qui
+       ferme tout le reste. */
+    const lignesRun = job.filter((l) => /essais-sql/.test(l) && /^\s+(- )?run:/.test(l));
+    const run = '        run: npm run essais-sql -- --sorties "$RUNNER_TEMP/sorties-essais-sql"';
+    verifier('…la ligne `run:` des essais, mot pour mot : ni `||`, ni `;`, ni `&&`, ni `true`, ni `echo`, ni nom d’essai',
+      lignesRun.length === 1 && lignesRun[0] === run
+        && !/\|\||;|&&|\btrue\b|\becho\b|essais-section|essais-suppression/.test(lignesRun[0].replace('npm run essais-sql', '')),
+      `reçu : ${lignesRun.join(' / ') || '(aucune)'}`);
+    verifier('…aucun `continue-on-error`, sur le job ni sur ses étapes', !job.some((l) => /continue-on-error/.test(l)),
+      'un job qui ne peut plus échouer ne rougit plus jamais, même avec un essai cassé');
+    const conditions = job.filter((l) => /^\s+(- )?if:/.test(l));
+    const iArtefact = job.findIndex((l) => /actions\/upload-artifact/.test(l));
+    verifier('…un seul `if:`, `if: failure()`, et c’est celui de l’artefact',
+      conditions.length === 1 && conditions[0] === '        if: failure()' && iArtefact === job.indexOf('        if: failure()') + 1,
+      `reçu : ${conditions.join(' / ') || '(aucun)'} — un \`if: false\` sur le job ou l’étape les fait SAUTER, en vert`);
+    verifier('…avec l’historique entier (le rattrapage du lot T lit d0560e8)', job.includes('          fetch-depth: 0'));
+    verifier('…et le job a EXACTEMENT sa forme figée (scripts/verifier-atelier.mjs)', JSON.stringify(job) === JSON.stringify(JOB),
+      (() => {
+        const k = JOB.findIndex((l, i) => l !== job[i]);
+        const i = k >= 0 ? k : JOB.length;
+        return `ligne ${i + 1} du job : attendu « ${JOB[i] ?? '(fin du job)'} », reçu « ${job[i] ?? '(fin du job)'} »`;
+      })());
   }
 }
 
