@@ -258,7 +258,7 @@ console.log('\nLes modules natifs de la reconstruction ne se chargent que dans l
     'expo-print': [],
     'react-native-webview': [],
     'react-native-share': [],
-    'expo-splash-screen': [],
+    'expo-splash-screen': ['App.js', 'src/components/Ouverture.js'],
     'expo-web-browser': [],
     'expo-crypto': [],
     'expo-apple-authentication': [],

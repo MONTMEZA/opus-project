@@ -32,9 +32,10 @@
  *   3. **« Réduire les animations » la remplace par un fondu.** Ce réglage
  *      n'est pas un goût : il existe pour les personnes que le mouvement
  *      rend malades.
- *   4. **Aucune dépendance nouvelle.** Reanimated est là depuis le début ;
- *      ajouter une bibliothèque, c'est risquer de devoir quitter Expo Go,
- *      le seul moyen d'essai du propriétaire.
+ *   4. **Aucune dépendance pour l'animation.** Reanimated est là depuis le
+ *      début. La seule bibliothèque ajoutée (étape 2c-0) est celle de
+ *      l'écran de démarrage du téléphone, `expo-splash-screen` : elle ne
+ *      dessine rien ici, elle dit seulement QUAND retirer cet écran.
  *
  * LE DÉTAIL QUI FAIT QUE ÇA RESSEMBLE À UNE VRAIE BARRIÈRE
  * --------------------------------------------------------
@@ -45,13 +46,14 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, useWindowDimensions,
+  View, Text, Image, Pressable, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withSequence, withDelay,
   runOnJS, Easing, interpolate,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SplashScreen from 'expo-splash-screen';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   C, F, T,
@@ -84,6 +86,30 @@ const COURTE = { tremblement: 0, ecart: 700, logo: 200, sortie: 200 };
    au lieu de s'éteindre à mi-chemin. */
 const COURSE = 150;
 const PIVOT = 8;
+
+/* LA COPIE DE L'ÉCRAN DE DÉMARRAGE DU TÉLÉPHONE — étape 2c-0.
+   Le téléphone affiche, avant que JavaScript ne tourne, le logo du
+   propriétaire sur l'orange (`expo-splash-screen`, dans `app.json`). La
+   « plaque » ci-dessous le redessine AU POINT PRÈS, par-dessus les
+   barrières fermées : même image, même orange, même taille, au centre de
+   l'écran ENTIER (le storyboard d'Expo centre sur l'écran, pas sur la zone
+   sûre — lu dans `InterfaceBuilder.ts` du greffon). Quand elle est à
+   l'écran, on retire celui du téléphone : personne ne voit le passage.
+
+   CES DEUX VALEURS SONT AUSSI DANS `app.json` (`image` et `imageWidth` du
+   greffon) : si elles divergent, le logo saute au moment du passage. */
+const LOGO_DEMARRAGE = require('../../assets/splash-icon.png');
+const LARGEUR_LOGO_DEMARRAGE = 288;
+
+/* Si l'image ne dit jamais qu'elle est chargée, on retire quand même
+   l'écran du téléphone : mieux vaut un passage visible qu'un logo figé. */
+const FILET_DEMARRAGE = 3000;
+
+/* Le fondu de la plaque dure le TREMBLEMENT : le logo se dissout pendant
+   que les barrières tremblent, sans rien ajouter à la durée. Dans la
+   version courte (sans tremblement), il dure ceci, pendant le début de
+   l'écartement. */
+const FONDU_PLAQUE_COURT = 160;
 
 /** Largeur d'une bande du motif de chantier, et son pas. */
 const BANDE = 14;
@@ -146,6 +172,29 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
   const secousse = useSharedValue(0);
   const logo = useSharedValue(0);
   const voile = useSharedValue(1);
+  const plaque = useSharedValue(1);
+
+  /* RETIRER L'ÉCRAN DU TÉLÉPHONE, une seule fois. `hideAsync` ne fait
+     rien dans un build qui n'a pas le module, ni au navigateur. Une image
+     d'attente de plus (`requestAnimationFrame`) : la plaque vient d'être
+     posée, on laisse à l'écran le temps de l'afficher. */
+  const natifRetire = React.useRef(false);
+  const retirerLeDemarrage = React.useCallback(() => {
+    if (natifRetire.current) return;
+    natifRetire.current = true;
+    requestAnimationFrame(() => { SplashScreen.hideAsync().catch(() => {}); });
+  }, []);
+
+  /* Deux filets : un délai, et la fin de l'ouverture (`terminer`, plus
+     bas). Sans le second, un doigt qui passe l'ouverture AVANT que la
+     plaque n'ait chargé son image laisserait le logo du téléphone affiché
+     pour toujours. Pas dans le nettoyage de l'effet : React, en mode
+     développement strict, le joue une fois à vide, et retirerait l'écran
+     du téléphone avant que la plaque ne soit là. */
+  useEffect(() => {
+    const filet = setTimeout(retirerLeDemarrage, FILET_DEMARRAGE);
+    return () => clearTimeout(filet);
+  }, [retirerLeDemarrage]);
 
   /* Première fois ou non ? La réponse vient du téléphone, donc elle arrive
      avec un retard — on garde les barrières fermées en attendant, ce qui
@@ -160,9 +209,10 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
   }, []);
 
   const terminer = React.useCallback(() => {
+    retirerLeDemarrage();
     setFini(true);
     if (onFini) onFini();
-  }, [onFini]);
+  }, [onFini, retirerLeDemarrage]);
 
   /* L'ouverture elle-même. Elle ne part que lorsque les DEUX conditions sont
      réunies : le travail est fini (`pret`) et on sait quelle version jouer. */
@@ -175,11 +225,16 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
          même droit à une ouverture soignée. */
       voile.value = withTiming(0, { duration: 260 }, (ok) => { if (ok) runOnJS(terminer)(); });
       logo.value = withTiming(1, { duration: 200 });
+      plaque.value = withTiming(0, { duration: 260 });
       return;
     }
 
     const d = court ? COURTE : COMPLETE;
     logo.value = withDelay(d.tremblement, withTiming(1, { duration: d.logo }));
+    plaque.value = withTiming(0, {
+      duration: d.tremblement || FONDU_PLAQUE_COURT,
+      easing: Easing.out(Easing.quad),
+    });
 
     /* Le tremblement, puis l'écartement. `withSequence` enchaîne les deux
        sur le fil natif : rien ne passe par JavaScript entre les deux, donc
@@ -200,7 +255,7 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
         });
       }),
     );
-  }, [pret, court, sansMouvement, fini, terminer, ecart, secousse, logo, voile]);
+  }, [pret, court, sansMouvement, fini, terminer, ecart, secousse, logo, voile, plaque]);
 
   /* LE DOIGT PASSE DEVANT TOUT. On ne « saute » pas d'un coup — ce serait un
      clignement désagréable — on termine très vite. */
@@ -208,6 +263,9 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
     if (fini) return;
     ecart.value = withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) });
     logo.value = withTiming(1, { duration: 100 });
+    /* La plaque n'est pas touchée ici : elle part AVEC le voile. Un doigt
+       pendant le logo fait donc passer du logo à l'application d'un seul
+       fondu, sans montrer des barrières qui s'écartent à toute vitesse. */
     voile.value = withDelay(140, withTiming(0, { duration: 120 }, (ok) => {
       if (ok) runOnJS(terminer)();
     }));
@@ -239,6 +297,7 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
     transform: [{ scale: interpolate(logo.value, [0, 1], [0.94, 1]) }],
   }));
   const styleVoile = useAnimatedStyle(() => ({ opacity: voile.value }));
+  const stylePlaque = useAnimatedStyle(() => ({ opacity: plaque.value }));
 
   if (fini) return null;
 
@@ -302,16 +361,40 @@ export default function Ouverture({ pret, sansMouvement, onFini }) {
         >
           <Panneau largeur={demi} hauteur={hautPanneau} />
         </Animated.View>
+
+        {/* LA PLAQUE, au-dessus de tout : la copie de l'écran du téléphone.
+            Elle est là dès la première image, opaque, et ne s'efface que
+            lorsque les barrières se mettent en mouvement. */}
+        <Animated.View style={[s.plaque, stylePlaque]} pointerEvents="none">
+          <Image
+            source={LOGO_DEMARRAGE}
+            style={{ width: LARGEUR_LOGO_DEMARRAGE, height: LARGEUR_LOGO_DEMARRAGE }}
+            resizeMode="contain"
+            fadeDuration={0}
+            onLoadEnd={retirerLeDemarrage}
+            accessible={false}
+          />
+        </Animated.View>
       </Pressable>
     </Animated.View>
   );
 }
 
 const s = StyleSheet.create({
-  /* Le MÊME presque-noir que l'écran de lancement d'iOS (app.json) : on ne
-     doit pas voir la jointure entre les deux. */
+  /* Le fond de la scène, sous les barrières. Ce commentaire disait « le
+     même presque-noir que l'écran de lancement d'iOS (app.json) » : c'était
+     faux en SDK 57 — la clé `splash` n'y est plus lue (expo-doctor la
+     refuse), et l'écran du téléphone, celui du gabarit d'Expo, était
+     BLANC (lu dans le gabarit, pas vu sur l'iPhone). La jointure avec le
+     téléphone, c'est maintenant la plaque qui la fait. */
   scene: { backgroundColor: C.ink, zIndex: 100 },
   panneau: { position: 'absolute' },
+  /* Le MÊME orange que l'écran du téléphone (`backgroundColor` du greffon,
+     dans `app.json`) : la jointure ne doit pas se voir. */
+  plaque: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
+  },
   traverse: {
     position: 'absolute', left: 0, right: 0, height: 7,
     backgroundColor: C.ink, opacity: 0.85,

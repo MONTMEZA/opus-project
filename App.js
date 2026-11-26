@@ -24,12 +24,30 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import { Oswald_500Medium, Oswald_600SemiBold, Oswald_700Bold } from '@expo-google-fonts/oswald';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import OpusApp from './src/OpusApp';
 import Ouverture from './src/components/Ouverture';
 import { useMouvementReduit } from './src/lib/retour';
 import { C } from './src/theme';
+
+/* L'ÉCRAN DE DÉMARRAGE DU TÉLÉPHONE ATTEND L'OUVERTURE — étape 2c-0.
+   ------------------------------------------------------------------
+   Le logo sur fond orange que l'iPhone affiche en touchant l'icône est
+   dessiné par le TÉLÉPHONE (`expo-splash-screen`, réglé dans `app.json`),
+   avant même que JavaScript ne tourne. Laissé à lui-même, il disparaît
+   d'un coup dès que React affiche quelque chose — ici, les barrières :
+   le logo s'éteindrait en une image, et c'est un saut.
+
+   On lui dit donc d'attendre (`preventAutoHideAsync`). C'est l'OUVERTURE
+   qui le retire, au moment où elle affiche sa copie exacte du logo :
+   rien ne change à l'écran, puis le logo se fond dans les barrières.
+
+   Ici, au niveau du fichier, et sans `await` : c'est ce que demande
+   Expo. Appelé dans un composant, l'ordre arriverait trop tard — l'écran
+   du téléphone serait déjà retiré. */
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [fontsLoaded] = useFonts({
