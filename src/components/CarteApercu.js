@@ -51,8 +51,13 @@ export default function CarteApercu({ seance, onFermer }) {
 }
 
 const s = StyleSheet.create({
-  /* LA CARTE prend l'écran, comme « Pour le remettre ». */
-  ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
+  /* LA CARTE prend l'écran. `StyleSheet.absoluteFill`, et SURTOUT PAS
+     `absoluteFillObject` : React Native 0.86 ne le connaît plus (seul
+     `react-native-web` le garde). Étalé, il ne posait RIEN sur l'iPhone :
+     la carte se rangeait sous le pied du devis, réduite à sa barre, et
+     l'aperçu n'avait aucune hauteur (constaté par le propriétaire le
+     27/11, capture à l'appui). Au navigateur, rien ne se voyait. */
+  ecran: { ...StyleSheet.absoluteFill, backgroundColor: C.surface, zIndex: 20 },
   barre: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     paddingHorizontal: S.sm, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface,

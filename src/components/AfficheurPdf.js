@@ -139,7 +139,9 @@ export default function AfficheurPdf({ uri, onEchec = null, onAdresses = null })
 const s = StyleSheet.create({
   boite: { flex: 1, backgroundColor: C.bg },
   vue: { flex: 1, backgroundColor: C.bg },
-  attente: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  /* `absoluteFill`, pas `absoluteFillObject`, que React Native 0.86 ne
+     connaît plus (voir `CarteApercu.js`). */
+  attente: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   phrase: {
     fontFamily: F.inter, fontSize: T.courant, color: C.bad, lineHeight: interligne(T.courant), padding: S.lg,
   },

@@ -123,6 +123,70 @@ console.log('\nLe cliquet — ce qui est écrit à la main ne peut que diminuer'
     classement.map(([f, n]) => `        ${String(n).padStart(4)}  ${f}`).join('\n')}`);
 }
 
+/* UN MEMBRE DE `StyleSheet` QUE L'IPHONE NE CONNAÎT PAS — constaté le
+   27/11/2026, capture du propriétaire à l'appui. React Native 0.86 n'a plus
+   `StyleSheet.absoluteFillObject` (seul `absoluteFill`) ; `react-native-web`
+   les a tous les deux. Étalé dans un style, `...StyleSheet.absoluteFillObject`
+   ne posait donc RIEN sur le téléphone, et TOUT au navigateur : la carte de
+   l'aperçu se rangeait sous le pied du devis, réduite à sa barre, pendant que
+   chaque mesure au navigateur la voyait plein écran.
+
+   LA PROPRIÉTÉ, pas une liste écrite à la main : les membres que l'iPhone
+   connaît se LISENT dans `StyleSheetExports.js` de React Native (l'objet
+   exporté), et chaque `StyleSheet.<membre>` de `src/` y est cherché. Un
+   membre inconnu n'est toléré que sous le CLIQUET (les usages d'avant le
+   27/11, qui ne peuvent que diminuer) et JAMAIS dans les fichiers de
+   l'aperçu (2c-1). */
+console.log('\nChaque `StyleSheet.<membre>` existe dans React Native du téléphone');
+{
+  const RN = 'node_modules/react-native/Libraries/StyleSheet/StyleSheetExports.js';
+  let membres = null;
+  try {
+    const texte = lire(RN);
+    const debut = texte.indexOf('export default {');
+    if (debut >= 0) {
+      membres = new Set();
+      const re = /^ {2}(?:get\s+)?([A-Za-z_$][\w$]*)\s*(?=[,:(<])/gm;
+      re.lastIndex = debut;
+      let m;
+      while ((m = re.exec(texte))) membres.add(m[1]);
+    }
+  } catch (e) {
+    membres = null;
+  }
+  verifier('les membres de `StyleSheet` se lisent dans React Native (`npm ci` fait)',
+    !!membres && membres.has('create') && membres.has('absoluteFill'),
+    `${RN} : introuvable, ou sans « create » ni « absoluteFill ».`);
+  if (membres) {
+    /* Ce que les fichiers de l'aperçu n'ont JAMAIS le droit d'écrire, et le
+       cliquet des autres : 16 le 27/11/2026, tous `absoluteFillObject`. */
+    const APERCU = ['src/components/CarteApercu.js', 'src/components/AfficheurPdf.js',
+      'src/components/AfficheurPdf.web.js', 'src/components/ApercuDevis.js'];
+    const PLAFOND_INCONNUS = 16;
+    const inconnus = [];
+    [...fichiers, 'App.js'].forEach((f) => {
+      let c;
+      try { c = sansCommentaires(lire(f)); } catch (e) { return; }
+      const re = /\bStyleSheet\.([A-Za-z_$][\w$]*)/g;
+      let m;
+      while ((m = re.exec(c))) {
+        if (!membres.has(m[1])) inconnus.push({ f, membre: m[1] });
+      }
+    });
+    const dansLApercu = inconnus.filter((x) => APERCU.includes(x.f));
+    verifier('aucun membre inconnu de l’iPhone dans les fichiers de l’aperçu', dansLApercu.length === 0,
+      dansLApercu.map((x) => `${x.f} : StyleSheet.${x.membre}`).join(' ; '));
+    verifier(`membres inconnus de l’iPhone ailleurs : ${inconnus.length} (plafond ${PLAFOND_INCONNUS})`,
+      inconnus.length <= PLAFOND_INCONNUS,
+      `${inconnus.length - PLAFOND_INCONNUS} de trop : ${[...new Set(inconnus.map((x) => `StyleSheet.${x.membre}`))].join(', ')}`
+        + ' n’existe pas dans React Native 0.86 — sur l’iPhone, il vaut `undefined` et ne pose rien. '
+        + 'Écrivez `StyleSheet.absoluteFill`.');
+    if (inconnus.length < PLAFOND_INCONNUS) {
+      console.log(`      ↓ ${PLAFOND_INCONNUS - inconnus.length} de moins qu'au plafond : redescendez-le à ${inconnus.length} dans ce fichier.`);
+    }
+  }
+}
+
 console.log('\nUne seule gouttière, sur tous les écrans');
 {
   const theme = lire('src/theme.js');
