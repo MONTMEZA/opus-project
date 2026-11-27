@@ -27,7 +27,7 @@ import {
   clientsVisibles, clientCorrespond, clientDepuisDemande, nomNormalise,
   TYPES_CLIENT, LONGUEUR_MAX, villeSansDepartement, chiffresDuTelephone, clientsDuMemeNumero,
   lieuDepuisUrgence, ficheAPartirDeLaDemande, POURQUOI_LA_FICHE, decouperLieuLibre, lieuDeLaDemande,
-  lireLeCarnet,
+  lireLeCarnet, clientDepuisBase,
 } from '../src/lib/clients.js';
 import { adresseDUrgence } from '../src/lib/adresse.js';
 import { initialClients, proProfiles } from '../src/data/demo.js';
@@ -957,6 +957,38 @@ console.log('\nLES CHAMPS D’ADRESSE NE MONTRENT PAS UNE ADRESSE');
   const chiffres = champs.filter((e) => /\b(valeur|value)=\{v\.(adresse|codePostal|ville)\}/.test(e))
     .map((e) => (e.match(/\bplaceholder=(["{])([^"}]*)/) || [])[2] || '').filter((p) => /\d/.test(p));
   verifier('…et aucun chiffre dans le texte gris d’un champ d’adresse', chiffres.length === 0, chiffres.join(' | '));
+}
+
+/* LA LECTURE D'UNE FICHE, DÉMÉNAGÉE SANS CHANGER (2c-1, cahier §8.2).
+   `rowToClient` vivait dans `api.js` ; l'aperçu d'un devis a besoin de la
+   même conversion sous `node` (l'instantané la lit), et `api.js` charge
+   Supabase. Elle vit donc dans `clients.js`, sous le nom
+   `clientDepuisBase`, et `api.js` l'importe. Ce qu'elle rend est écrit ICI
+   en toutes lettres, champ par champ — celui de l'ancienne fonction : une
+   conversion qui changerait en déménageant changerait la fiche de chaque
+   client à l'écran et sur le devis. */
+console.log('\nLA LECTURE D’UNE FICHE (`clientDepuisBase`) : déménagée de `api.js` sans changer');
+{
+  const pleine = clientDepuisBase({
+    id: 'c1', pro_id: 'p1', type: 'entreprise', nom: 'SCI Témoin', siret: '12345678900012', telephone: '0639980000',
+    email: 'a@b.fr', adresse: '1 rue', code_postal: '13000', ville: 'Marseille', notes: 'n', archive: 1,
+    created_at: '2026-10-01T00:00:00Z', modifie_le: '2026-10-02T00:00:00Z', inconnue: 'ne passe pas',
+  });
+  const vide = clientDepuisBase({ id: 'c2', pro_id: 'p1', nom: 'Vide', archive: null });
+  verifier('`clientDepuisBase` rend EXACTEMENT les quinze champs de l’ancienne `rowToClient`, dans leur ordre, et rien d’autre',
+    JSON.stringify(pleine) === JSON.stringify({
+      id: 'c1', proId: 'p1', type: 'entreprise', nom: 'SCI Témoin', siret: '12345678900012', telephone: '0639980000',
+      email: 'a@b.fr', adresse: '1 rue', codePostal: '13000', ville: 'Marseille', notes: 'n', archive: true,
+      creeLe: '2026-10-01T00:00:00Z', modifieLe: '2026-10-02T00:00:00Z',
+    }), JSON.stringify(pleine));
+  verifier('…et ses défauts : « particulier », `null` pour ce qui manque, `archive` à `false`',
+    JSON.stringify(vide) === JSON.stringify({
+      id: 'c2', proId: 'p1', type: 'particulier', nom: 'Vide', siret: null, telephone: null, email: null, adresse: null,
+      codePostal: null, ville: null, notes: null, archive: false, creeLe: null, modifieLe: null,
+    }), JSON.stringify(vide));
+  const api = readFileSync('src/lib/api.js', 'utf8');
+  verifier('`api.js` l’importe de `clients.js`, et n’en garde aucune seconde écriture',
+    /import \{ clientDepuisBase \} from '\.\/clients';/.test(api) && !/function rowToClient|const rowToClient/.test(api), '');
 }
 
 if (echecs) {

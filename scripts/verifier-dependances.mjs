@@ -150,6 +150,29 @@ const importeParLApplication = (nom) => {
 const estUnOutil = (chemin) => chemin.some((hop) => OUTILS.includes(hop))
   || (DEV.includes(chemin[0]) && !importeParLApplication(chemin[0]));
 
+/* 2c-1 (cahier §8.2, relu) : L'APERÇU D'UN DEVIS PART SUR LE TÉLÉPHONE.
+   `@cantoo/pdf-lib` (le tampon de chaque page), `expo-print` (la mise en
+   page) et `react-native-webview` (l'afficheur) sont des dépendances de
+   l'APPLICATION, et la chaîne de `@cantoo/pdf-lib` (lue dans le verrou :
+   `culori`, `fflate`, `node-html-better-parser`, `tslib`) n'est pas un
+   outil : une alerte sur l'un d'eux doit faire rougir ce contrôle, et c'est
+   voulu. On le vérifie ici, sur la règle elle-même, pour qu'un réglage de
+   `OUTILS` ou de `DEV` ne la range pas un jour parmi les outils sans bruit. */
+console.log('\nL’aperçu d’un devis part sur le téléphone : ses alertes compteraient');
+{
+  const verrou = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+  const pdf = (verrou.packages || {})['node_modules/@cantoo/pdf-lib'] || null;
+  const chaine = pdf ? Object.keys(pdf.dependencies || {}) : [];
+  const pourLeTelephone = ['@cantoo/pdf-lib', 'expo-print', 'react-native-webview'];
+  verifier('@cantoo/pdf-lib, expo-print et react-native-webview sont des dépendances de l’APPLICATION, pas de développement',
+    pourLeTelephone.every((m) => Object.prototype.hasOwnProperty.call(PAQUET.dependencies || {}, m) && !DEV.includes(m)),
+    pourLeTelephone.filter((m) => !(PAQUET.dependencies || {})[m] || DEV.includes(m)).join(', '));
+  const rangesOutils = [...pourLeTelephone.map((m) => [m]), ...chaine.map((d) => ['@cantoo/pdf-lib', d])].filter((p) => estUnOutil(p));
+  verifier(`…et ni elles, ni la chaîne de @cantoo/pdf-lib (${chaine.join(', ') || 'illisible dans le verrou'}) ne sont comptées parmi `
+    + 'les outils : une alerte sur l’une d’elles fait rougir ce contrôle', !!pdf && chaine.length > 0 && rangesOutils.length === 0,
+  rangesOutils.map((p) => p.join(' > ')).join(' | '));
+}
+
 console.log('\nExpo n’a pas été ramené en arrière');
 {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));

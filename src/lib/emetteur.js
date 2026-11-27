@@ -1662,17 +1662,46 @@ const libelleNature = (a) => {
 };
 
 /**
- * L'EN-TÊTE DU DEVIS, tel qu'il s'imprimera : `{ identite, mentions, source, manques }`.
- *
- * Les noms sont ceux de la base, pour que le lot 2 lui passe l'instantané
- * figé au moment de la remise. Ce qui manque s'imprime À SA PLACE,
- * « [à compléter : …] », et les mots portent l'information, pas la
- * couleur. JAMAIS imprimé : le badge, une juridiction, le mot « vérifié »,
- * le nom brut du répertoire, « garantie contractuelle », « extension de
- * garantie ». Aucune assurance n'est réclamée : celles qui sont déclarées
- * s'impriment, aucune ligne « à compléter » n'en tient lieu.
+ * L'ORDRE D'IMPRESSION DES ASSURANCES (2c-1, §3.6) : par la date de création,
+ * comparée PAR POINTS DE CODE, puis par l'identifiant. `localeCompare`
+ * dépend de la langue et du moteur — la critique du cahier a mesuré deux
+ * rangements différents de « …00+00:00 » et « …00.5+00:00 » — : la page d'un
+ * aperçu ne doit pas changer d'ordre selon le téléphone. Une copie : la liste
+ * reçue n'est jamais réordonnée.
  */
-export function enteteImprime({
+function parPointsDeCode(a, b) {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+export function assurancesDansLOrdre(assurances) {
+  return [...(assurances || [])].sort((x, y) => parPointsDeCode(String(x.created_at || ''), String(y.created_at || ''))
+    || parPointsDeCode(String(x.id == null ? '' : x.id), String(y.id == null ? '' : y.id)));
+}
+
+/**
+ * L'EN-TÊTE DU DEVIS, LIGNE PAR LIGNE, AVEC CE QUE CHAQUE LIGNE EST (2c-1,
+ * D7, C-m3) : `{ identite, mentions, source }`, chaque ligne
+ * `{ texte, genre, cle, quoi }` :
+ *   - `genre` dit CE QUE la ligne dit (`nom`, `adresse_etablissement`,
+ *     `telephone`, `assurance`, `modalites_paiement`, `frais`…) : c'est par
+ *     lui que l'aperçu range une ligne dans son bloc, jamais par son texte ;
+ *   - `cle` n'existe que pour une ligne qui MANQUE : la clé du motif
+ *     d'`emetteur_incomplet()` qu'elle montre (`conso_telephone`…), pour que
+ *     l'aperçu ne garde, pour un client professionnel, que ce que la liste
+ *     compte (`mentionComptee`) ; `quoi` est ce qui manque, en mots ;
+ *   - une ligne `assurance` porte aussi `assurance` : sa nature (la clé),
+ *     son libellé (une « autre » assurance) et sa fin de validité
+ *     (`valideJusquau`), pour que l'aperçu dise une attestation échue (D8) ;
+ *   - `seulementSurLeDevis` : une ligne que la PAGE d'un devis montre et que
+ *     l'aperçu de « Mon entreprise » ne montre pas — la seule aujourd'hui :
+ *     une société qui doit être au RCS et a déclaré le RNE ou « aucun
+ *     registre » (le motif `registre` est allumé, la page le dit à sa place).
+ *
+ * C'est la LOGIQUE de l'en-tête, écrite une fois ; `enteteImprime` la lit, et
+ * rend EXACTEMENT ce qu'il rendait avant 2c-1 (comparé, au caractère près,
+ * aux sorties figées avant la refonte, cahier §1.4 étape 0).
+ */
+export function enteteImprimeDetaille({
   entreprise = null, emetteur = null, assurances = [], tarifs = null, preuveTva = null,
 } = {}) {
   const r = entreprise || null;
@@ -1680,16 +1709,16 @@ export function enteteImprime({
   const t = tarifs || {};
   const identite = [];
   const mentions = [];
-  const manques = [];
-  const manque = (quoi) => { manques.push(quoi); return aCompleter(quoi); };
-  const manqueParticulier = (quoi) => { manques.push(quoi); return aCompleterParticulier(quoi); };
+  const ligne = (texte, genre) => ({ texte, genre, cle: null, quoi: null });
+  const manque = (quoi, genre, cle) => ({ texte: aCompleter(quoi), genre, cle, quoi });
+  const manqueParticulier = (quoi, genre, cle) => ({ texte: aCompleterParticulier(quoi), genre, cle, quoi });
   /* Même partage que les motifs : au RCS, l'adresse du siège est due sur
      tout devis ; hors RCS, seulement face à un particulier. */
   const rcs = soumisAuRcs(r, e);
   if (!r) {
-    identite.push(manque('l’entreprise rattachée à votre compte'));
+    identite.push(manque('l’entreprise rattachée à votre compte', 'nom', 'entreprise'));
   } else if (estEI(r)) {
-    identite.push(e.denomination_ei || manque('votre nom suivi de « EI »'));
+    identite.push(e.denomination_ei ? ligne(e.denomination_ei, 'nom') : manque('votre nom suivi de « EI »', 'nom', 'nom_ei'));
   } else {
     /* Une société, ou une entreprise de nature INCONNUE (ouverte par
        l'administration, SIREN et SIRET seuls) : le motif `identite` la
@@ -1706,40 +1735,53 @@ export function enteteImprime({
       else capitalManque = doitIndiquerSonCapital(r);
     }
     if (r.denomination) {
-      identite.push(`${r.denomination}${forme ? ` — ${forme}` : ''}${capital}`);
+      identite.push(ligne(`${r.denomination}${forme ? ` — ${forme}` : ''}${capital}`, 'nom'));
     } else {
-      identite.push(manque(eiSql(r) === false ? 'la dénomination de votre société' : 'le nom légal de votre entreprise'));
-      if (forme) identite.push(`${forme}${capital}`);
+      identite.push(manque(eiSql(r) === false ? 'la dénomination de votre société' : 'le nom légal de votre entreprise',
+        'nom', 'identite'));
+      if (forme) identite.push(ligne(`${forme}${capital}`, 'forme'));
     }
-    if (capitalManque) identite.push(manque('votre capital social'));
+    if (capitalManque) identite.push(manque('votre capital social', 'capital', 'capital'));
   }
   if (r && r.nom_commercial && r.nom_commercial !== r.denomination) {
-    identite.push(`Nom commercial : ${r.nom_commercial}`);
+    identite.push(ligne(`Nom commercial : ${r.nom_commercial}`, 'nom_commercial'));
   }
 
   if (r) {
     const adr = adresseImprimee(r, e);
-    if (adr.etablissement.length) identite.push(...adr.etablissement);
-    else if (r.est_siege === true && rcs) identite.push(manque('l’adresse de votre établissement'));
-    else identite.push(manqueParticulier('l’adresse de votre établissement'));
-    if (adr.siege) identite.push(`Siège : ${adr.siege.join(', ')}`);
-    else if (r.est_siege === false) {
-      identite.push(rcs ? manque('l’adresse du siège') : manqueParticulier('l’adresse du siège'));
+    if (adr.etablissement.length) identite.push(...adr.etablissement.map((x) => ligne(x, 'adresse_etablissement')));
+    else if (r.est_siege === true && rcs) {
+      identite.push(manque('l’adresse de votre établissement', 'adresse_etablissement', 'adresse_etablissement'));
+    } else {
+      identite.push(manqueParticulier('l’adresse de votre établissement', 'adresse_etablissement', 'conso_adresse_etablissement'));
     }
-    if (r.siret) identite.push(`SIRET ${formaterSiret(r.siret)}`);
+    if (adr.siege) identite.push(ligne(`Siège : ${adr.siege.join(', ')}`, 'adresse_siege'));
+    else if (r.est_siege === false) {
+      identite.push(rcs ? manque('l’adresse du siège', 'adresse_siege', 'adresse_siege')
+        : manqueParticulier('l’adresse du siège', 'adresse_siege', 'conso_adresse_siege'));
+    }
+    if (r.siret) identite.push(ligne(`SIRET ${formaterSiret(r.siret)}`, 'siret'));
   }
 
   if (e.registre === 'rcs' && !e.greffe_ville) {
-    identite.push(manque('la ville du greffe'));
+    identite.push(manque('la ville du greffe', 'registre', 'registre'));
   } else if (e.registre === 'rcs') {
-    let ligne = `RCS ${e.greffe_ville}${r ? ` ${sirenLisible(r.siren)}` : ''}`;
-    if (e.en_liquidation === true) ligne += ' — en liquidation';
-    if (e.locataire_gerant === true) ligne += ' — locataire-gérant';
-    identite.push(ligne);
+    let texte = `RCS ${e.greffe_ville}${r ? ` ${sirenLisible(r.siren)}` : ''}`;
+    if (e.en_liquidation === true) texte += ' — en liquidation';
+    if (e.locataire_gerant === true) texte += ' — locataire-gérant';
+    identite.push(ligne(texte, 'registre'));
   } else if (e.registre === 'rne') {
-    identite.push(r ? `RNE · SIREN ${sirenLisible(r.siren)}` : 'RNE');
+    identite.push(ligne(r ? `RNE · SIREN ${sirenLisible(r.siren)}` : 'RNE', 'registre'));
   } else if (e.registre == null) {
-    identite.push(manque('où votre entreprise est immatriculée'));
+    identite.push(manque('où votre entreprise est immatriculée', 'registre', 'registre'));
+  }
+  /* UNE SOCIÉTÉ QUI DOIT ÊTRE AU RCS et a déclaré le RNE ou « aucun
+     registre » : le motif `registre` est allumé (`emetteur_incomplet()`),
+     et la page d'un devis doit le montrer à sa place (2c-1, §4.2 bis).
+     L'aperçu de « Mon entreprise » ne l'a jamais montré : la ligne lui est
+     cachée (`seulementSurLeDevis`), et `enteteImprime` ne change pas. */
+  if (r && (e.registre === 'rne' || e.registre === 'aucun') && rcsObligeSql(r) === true) {
+    identite.push({ ...manque('où votre entreprise est immatriculée', 'registre', 'registre'), seulementSurLeDevis: true });
   }
 
   /* LE N° DE TVA S'IMPRIME DÈS QU'IL EXISTE, quel que soit le régime :
@@ -1748,48 +1790,96 @@ export function enteteImprime({
      pas. Celui de l'annuaire d'abord ; sinon celui que VIES a reconnu
      (section 48), pour le SIREN actif seulement. */
   const tva = numeroTvaImprime(r, preuveTva);
-  if (tva) identite.push(`N° de TVA intracommunautaire : ${tva.numero}`);
-  if (e.regime_tva === 'franchise') identite.push(LIBELLES_IMPRIMES.franchise);
-  else if (e.regime_tva == null) identite.push(manque('votre régime de TVA'));
+  if (tva) identite.push(ligne(`N° de TVA intracommunautaire : ${tva.numero}`, 'tva_numero'));
+  if (e.regime_tva === 'franchise') identite.push(ligne(LIBELLES_IMPRIMES.franchise, 'tva_regime'));
+  else if (e.regime_tva == null) identite.push(manque('votre régime de TVA', 'tva_regime', 'regime_tva'));
   else if (e.regime_tva === 'reel' && r && !tva) {
-    identite.push(manqueParticulier('votre numéro de TVA intracommunautaire'));
+    identite.push(manqueParticulier('votre numéro de TVA intracommunautaire', 'tva_numero', 'conso_tva_intra'));
   }
 
-  identite.push(e.telephone ? `Tél. ${e.telephone}` : manqueParticulier('votre téléphone'));
-  identite.push(e.email ? `E-mail : ${e.email}` : manqueParticulier('votre adresse e-mail'));
+  identite.push(e.telephone ? ligne(`Tél. ${e.telephone}`, 'telephone')
+    : manqueParticulier('votre téléphone', 'telephone', 'conso_telephone'));
+  identite.push(e.email ? ligne(`E-mail : ${e.email}`, 'email')
+    : manqueParticulier('votre adresse e-mail', 'email', 'conso_email'));
 
-  for (const a of [...(assurances || [])].sort((x, y) => String(x.created_at || '').localeCompare(String(y.created_at || '')))) {
-    mentions.push(`${libelleNature(a)} — ${a.assureur_nom}, ${a.assureur_coordonnees}. `
-      + `Couverture : ${a.couverture}${a.numero_contrat ? `. Contrat n° ${a.numero_contrat}` : ''}`);
+  for (const a of assurancesDansLOrdre(assurances)) {
+    mentions.push({
+      ...ligne(`${libelleNature(a)} — ${a.assureur_nom}, ${a.assureur_coordonnees}. `
+        + `Couverture : ${a.couverture}${a.numero_contrat ? `. Contrat n° ${a.numero_contrat}` : ''}`, 'assurance'),
+      assurance: Object.freeze({
+        nature: a.nature ?? null,
+        libelle: a.libelle ?? null,
+        valideJusquau: a.valide_jusquau == null ? null : String(a.valide_jusquau),
+      }),
+    });
   }
   mentions.push(e.mediateur_nom
-    ? `Médiateur de la consommation : ${e.mediateur_nom}, ${e.mediateur_adresse}, ${e.mediateur_site}`
-    : manqueParticulier('votre médiateur de la consommation'));
+    ? ligne(`Médiateur de la consommation : ${e.mediateur_nom}, ${e.mediateur_adresse}, ${e.mediateur_site}`, 'mediateur')
+    : manqueParticulier('votre médiateur de la consommation', 'mediateur', 'conso_mediateur'));
   mentions.push(e.garantie_legale_texte
-    ? `Garantie légale : ${e.garantie_legale_texte}` : manqueParticulier('vos garanties légales'));
-  if (e.garantie_commerciale_texte) mentions.push(`Garantie commerciale : ${e.garantie_commerciale_texte}`);
-  if (e.sav_texte) mentions.push(`Service après-vente : ${e.sav_texte}`);
+    ? ligne(`Garantie légale : ${e.garantie_legale_texte}`, 'garantie_legale')
+    : manqueParticulier('vos garanties légales', 'garantie_legale', 'conso_garantie_legale'));
+  if (e.garantie_commerciale_texte) {
+    mentions.push(ligne(`Garantie commerciale : ${e.garantie_commerciale_texte}`, 'garantie_commerciale'));
+  }
+  if (e.sav_texte) mentions.push(ligne(`Service après-vente : ${e.sav_texte}`, 'sav'));
   mentions.push(e.modalites_paiement_texte
-    ? `Modalités de paiement : ${e.modalites_paiement_texte}` : manqueParticulier('vos modalités de paiement'));
+    ? ligne(`Modalités de paiement : ${e.modalites_paiement_texte}`, 'modalites_paiement')
+    : manqueParticulier('vos modalités de paiement', 'modalites_paiement', 'conso_modalites_paiement'));
   mentions.push(e.modalites_execution_texte
-    ? `Modalités d’exécution : ${e.modalites_execution_texte}`
-    : manqueParticulier('vos modalités d’exécution'));
+    ? ligne(`Modalités d’exécution : ${e.modalites_execution_texte}`, 'modalites_execution')
+    : manqueParticulier('vos modalités d’exécution', 'modalites_execution', 'conso_modalites_execution'));
   mentions.push(e.reclamations_texte
-    ? `Réclamations : ${e.reclamations_texte}` : manqueParticulier('le traitement des réclamations'));
+    ? ligne(`Réclamations : ${e.reclamations_texte}`, 'reclamations')
+    : manqueParticulier('le traitement des réclamations', 'reclamations', 'conso_reclamations'));
 
   if (t.frais_deplacement_centimes === 0) {
-    mentions.push(LIBELLES_IMPRIMES.fraisNonFactures);
+    mentions.push(ligne(LIBELLES_IMPRIMES.fraisNonFactures, 'frais'));
   } else if (t.frais_deplacement_centimes != null) {
-    mentions.push(`Frais de déplacement : ${centimesLisibles(t.frais_deplacement_centimes)}`
-      + (t.frais_deplacement_texte ? ` — ${t.frais_deplacement_texte}` : ''));
+    mentions.push(ligne(`Frais de déplacement : ${centimesLisibles(t.frais_deplacement_centimes)}`
+      + (t.frais_deplacement_texte ? ` — ${t.frais_deplacement_texte}` : ''), 'frais'));
   } else if (t.frais_deplacement_texte) {
-    mentions.push(`Frais de déplacement : ${t.frais_deplacement_texte}`);
+    mentions.push(ligne(`Frais de déplacement : ${t.frais_deplacement_texte}`, 'frais'));
   } else {
-    mentions.push(manque('vos frais de déplacement'));
+    mentions.push(manque('vos frais de déplacement', 'frais', 'frais_deplacement'));
   }
 
-  return { identite, mentions, source: ligneSource(r, preuveTva), manques };
+  return { identite, mentions, source: ligneSource(r, preuveTva) };
 }
+
+/**
+ * L'EN-TÊTE DU DEVIS, tel qu'il s'imprimera : `{ identite, mentions, source, manques }`.
+ *
+ * Les noms sont ceux de la base, pour que le lot 2 lui passe l'instantané
+ * figé au moment de la remise. Ce qui manque s'imprime À SA PLACE,
+ * « [à compléter : …] », et les mots portent l'information, pas la
+ * couleur. JAMAIS imprimé : le badge, une juridiction, le mot « vérifié »,
+ * le nom brut du répertoire, « garantie contractuelle », « extension de
+ * garantie ». Aucune assurance n'est réclamée : celles qui sont déclarées
+ * s'impriment, aucune ligne « à compléter » n'en tient lieu.
+ *
+ * Depuis 2c-1, elle LIT `enteteImprimeDetaille` (la logique) et rend les
+ * mêmes chaînes qu'avant, au caractère près — l'aperçu de « Mon entreprise »
+ * ne change pas ; les lignes `seulementSurLeDevis` ne s'y montrent pas.
+ */
+export function enteteImprime({
+  entreprise = null, emetteur = null, assurances = [], tarifs = null, preuveTva = null,
+} = {}) {
+  const d = enteteImprimeDetaille({ entreprise, emetteur, assurances, tarifs, preuveTva });
+  const montree = (l) => !l.seulementSurLeDevis;
+  const identite = d.identite.filter(montree);
+  const mentions = d.mentions.filter(montree);
+  return {
+    identite: identite.map((l) => l.texte),
+    mentions: mentions.map((l) => l.texte),
+    source: d.source,
+    manques: [...identite, ...mentions].filter((l) => l.quoi != null).map((l) => l.quoi),
+  };
+}
+
+/** Le SIRET tel que l'en-tête l'imprime (« 123 456 789 00012 ») : la même
+ *  écriture pour le SIRET d'un CLIENT sur la page de l'aperçu (2c-1). */
+export { formaterSiret };
 
 /* ================================================================== */
 /*  LES AVIS — ce qui mérite d'être dit, et ne bloque rien             */

@@ -13,6 +13,11 @@
  * l'identité — « répertoire Sirene (INSEE), … consultée le … » — s'écrit en
  * petit sous l'identité : c'est la date de CONSULTATION, jamais une « date
  * de vérification », et c'est l'attribution que demande la Licence Ouverte.
+ *
+ * 2c-1 (Annexe A.2) : sa phrase ne promet plus « la mise en page viendra
+ * avec les modèles » — elle existe, dans l'aperçu de chaque devis. Elle dit
+ * que ce qui s'imprime pour UN devis dépend du client et des assurances à
+ * jour, et renvoie à « Aperçu du devis ».
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -36,7 +41,7 @@ export default function ApercuEntete({
     <View style={s.carte}>
       <Text style={s.titre}>Votre en-tête de devis</Text>
       <Text style={s.aide}>
-        Le texte est celui qui s’imprimera ; la mise en page viendra avec les modèles.
+        Voici l’en-tête de vos devis ; ce qui s’imprime pour un devis précis (selon le client et vos assurances à jour) se voit dans « Aperçu du devis ».
       </Text>
       <View style={s.groupe}>
         {identite.map((l, i) => <Ligne key={`i${i}`} texte={l} />)}

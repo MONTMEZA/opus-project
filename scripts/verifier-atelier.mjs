@@ -149,6 +149,69 @@ console.log('\nCe qui tourne tout seul');
     verifier('…et elle construit le paquet des DEUX plateformes',
       /platform ios/.test(ci) && /platform android/.test(ci),
       'une construction qui ne passe que d’un côté se découvre trop tard');
+    /* LE JOB `verifier`, FIGÉ ENTIER (2c-1, cahier §8.2, K12), comme celui
+       des essais SQL plus bas : l'aperçu d'un devis a des fichiers propres
+       à une plateforme (`devis-pdf.web.js`, `AfficheurPdf.web.js`), et une
+       construction iOS ou Android qu'on ferait sauter (`if: false`,
+       `continue-on-error`, `|| true`) cacherait celle qui ne passe pas.
+       Changer ce job se DÉCIDE : le workflow ET la forme ci-dessous, dans le
+       même commit. Depuis 2c-1 (§8.4), les quatre exports — iOS, Android,
+       le navigateur et le paquet iOS de développement — gardent leur
+       journal, et l'étape `lire-exports` LIT leur sortie : la retirer, ou
+       sauter un export, rougit ici (S61). Lu comme le job des essais : sans
+       commentaires, sans lignes vides, les fins de ligne rognées. */
+    const lignesCi = ci.split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l !== '' && !/^\s*#/.test(l));
+    const iVerifier = lignesCi.findIndex((l) => l === '  verifier:');
+    const finVerifier = lignesCi.findIndex((l, i) => i > iVerifier && /^ {2}\S/.test(l));
+    const jobVerifier = iVerifier < 0 ? [] : lignesCi.slice(iVerifier, finVerifier < 0 ? lignesCi.length : finVerifier);
+    const JOB_VERIFIER = [
+      '  verifier:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - uses: actions/checkout@v4',
+      '      - uses: actions/setup-node@v4',
+      '        with:',
+      "          node-version: '22'",
+      '          cache: npm',
+      '      - name: Installer les dépendances',
+      '        run: npm ci',
+      '      - name: Les contrôles du projet',
+      '        run: npm run verifier',
+      /* Chaque export garde son journal, sous `bash -o pipefail` : c'est
+         sa SORTIE que `lire-exports` lit (§8.4) — un export a déjà rendu 0
+         en affichant une pile d'import. */
+      '      - name: Construire le paquet iOS',
+      '        shell: bash',
+      '        run: npx expo export --platform ios --output-dir /tmp/paquet-ios 2>&1 | tee /tmp/export-ios.log',
+      '      - name: Construire le paquet Android',
+      '        shell: bash',
+      '        run: npx expo export --platform android --output-dir /tmp/paquet-android 2>&1 | tee /tmp/export-android.log',
+      '      - name: Construire le paquet du navigateur',
+      '        shell: bash',
+      '        run: npx expo export --platform web --source-maps --output-dir /tmp/paquet-web 2>&1 | tee /tmp/export-web.log',
+      '      - name: Construire le paquet iOS de développement',
+      '        shell: bash',
+      '        run: npx expo export --platform ios --dev --output-dir /tmp/paquet-ios-dev 2>&1 | tee /tmp/export-ios-dev.log',
+      '      - name: Lire les paquets',
+      '        run: node scripts/lire-exports.mjs --dans /tmp',
+    ];
+    verifier('…et le job `verifier` a EXACTEMENT sa forme figée (K12 : ni `if:`, ni `continue-on-error`, ni `|| true`)',
+      lignesCi.filter((l) => l === '  verifier:').length === 1 && JSON.stringify(jobVerifier) === JSON.stringify(JOB_VERIFIER),
+      (() => {
+        const k = JOB_VERIFIER.findIndex((l, i) => l !== jobVerifier[i]);
+        const i = k >= 0 ? k : JOB_VERIFIER.length;
+        return `ligne ${i + 1} du job : attendu « ${JOB_VERIFIER[i] ?? '(fin du job)'} », reçu « ${jobVerifier[i] ?? '(fin du job)'} »`;
+      })());
+    /* …et `lire-exports` lit EXACTEMENT ce que le job écrit : chaque journal
+       et chaque dossier de paquet nommés par une étape d'export le sont
+       aussi par le script. Renommer l'un sans l'autre, et l'étape de lecture
+       chercherait un journal qui n'existe pas — elle rougirait dans GitHub,
+       mais ici, avant l'envoi, c'est mieux. */
+    const lecteur = existsSync('scripts/lire-exports.mjs') ? lire('scripts/lire-exports.mjs') : '';
+    const ecrits = JOB_VERIFIER.join('\n').match(/\/tmp\/(export-[a-z-]+\.log|paquet-[a-z-]+)/g) || [];
+    const oublies = ecrits.map((x) => x.replace('/tmp/', '')).filter((x) => !lecteur.includes(`'${x}'`));
+    verifier(`…et \`scripts/lire-exports.mjs\` lit les ${ecrits.length} journaux et paquets que le job écrit`,
+      !!lecteur && ecrits.length === 8 && oublies.length === 0, oublies.join(', ') || 'scripts/lire-exports.mjs absent');
   }
 }
 
@@ -202,6 +265,27 @@ console.log('\nLes essais SQL : une liste fermée, hors de cette commande (étap
   const prefixes = Object.entries(scripts).filter(([n, c]) => n.startsWith('verifier-') && /jouer-essais-sql/.test(c)).map(([n]) => n);
   verifier('…et aucun contrôle `verifier-` ne le lance', prefixes.length === 0,
     `${prefixes.join(', ')} — \`npm run verifier\` aurait besoin d’une base, et rougirait partout ailleurs`);
+
+  /* LES COMMANDES DES CONTRÔLES, EXACTES (relecture « contrôles » de 2c-1,
+     27/11) : `scripts/verifier.mjs` lance chaque `npm run --silent
+     verifier-…` et lit son CODE. Un `|| true` posé dans `package.json` sur
+     `verifier-apercu` avalait ses 271 vérifications, et `npm run verifier`
+     restait vert, dans GitHub aussi. Chaque contrôle est donc EXACTEMENT
+     `node scripts/<son nom>.mjs` — un seul nom fait exception, écrit ici —,
+     sans `pre`/`post`, et leur nombre ne descend pas sans qu'on le décide. */
+  const EXCEPTIONS_DE_NOM = { 'verifier-signature': 'verifier-signature-cloudinary' };
+  const NOMBRE_DE_CONTROLES = 59;
+  const controles = Object.keys(scripts).filter((n) => n.startsWith('verifier-'));
+  const commandesFausses = controles.filter((n) => scripts[n] !== `node scripts/${EXCEPTIONS_DE_NOM[n] || n}.mjs`)
+    .map((n) => `${n} : ${scripts[n]}`);
+  verifier('chaque contrôle `verifier-…` est EXACTEMENT `node scripts/<son nom>.mjs` (une exception, écrite ici), et `verifier` aussi',
+    commandesFausses.length === 0 && scripts.verifier === 'node scripts/verifier.mjs',
+    `${commandesFausses.join(' | ')}${scripts.verifier === 'node scripts/verifier.mjs' ? '' : ` | verifier : ${scripts.verifier}`}`);
+  const prePost = Object.keys(scripts).filter((n) => /^(pre|post)verifier/.test(n));
+  verifier('…sans aucun script `pre`/`post` autour d’eux', prePost.length === 0, prePost.join(', '));
+  verifier(`…au moins ${NOMBRE_DE_CONTROLES}, dont \`verifier-apercu\` et \`verifier-atelier\` — retirer un contrôle se décide ici`,
+    controles.length >= NOMBRE_DE_CONTROLES && controles.includes('verifier-apercu') && controles.includes('verifier-atelier'),
+    `${controles.length} contrôles`);
 
   const WORKFLOW = '.github/workflows/verifier.yml';
   if (!existsSync(WORKFLOW)) verifier(`${WORKFLOW} existe`, false);

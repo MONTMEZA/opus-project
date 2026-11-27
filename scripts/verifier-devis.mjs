@@ -105,7 +105,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const ICI = fileURLToPath(import.meta.url);
@@ -1222,7 +1222,11 @@ console.log('\n  5. les lignes rangées, les demandes, le régime, les phrases d
        liste est désormais comparée au RELEVÉ de `git ls-files` (plus bas). */
     'src/components/ChantierDevis.js', 'src/components/PourRemettre.js', 'src/components/FeuilleAQuelTitre.js',
     'src/components/FeuilleChantierNeuf.js', 'src/components/FeuillePoste.js', 'src/components/FeuilleAjoutPoste.js',
-    'src/components/FicheClient.js', 'src/screens/DemandesRecuesScreen.js'];
+    'src/components/FicheClient.js', 'src/screens/DemandesRecuesScreen.js',
+    /* 2c-1 (cahier §8.2) : l'aperçu d'un devis — la carte (le cadre) et le
+       corps, partagé avec l'écran des exemples. `verifier-apercu` (I.1)
+       compare la liste à la fermeture des imports de l'aperçu. */
+    'src/components/ApercuDevis.js', 'src/components/CarteApercu.js'];
   /* LA LISTE EST COMPLÈTE : tout fichier de `src/components` et de
      `src/screens` dont le nom finit par `Devis.js`, ou qui importe
      `../lib/devis`, y est — relevé par `git ls-files` (les fichiers suivis,
@@ -6491,9 +6495,16 @@ console.log('\n  32. dans les fichiers du calcul : une seule orthographe, jamais
      (cahier du lot P, §6.2 : une fonction `mesPostes` échapperait sinon à la
      règle par son seul nom). Les écrans et la section 49 s'y ajoutent avec
      leurs étapes. */
+  /* 2c-1 (cahier §8.2) : les fichiers NOUVEAUX de l'aperçu entrent dans la
+     règle — l'aperçu imprime des montants que la base a calculés, il ne les
+     arrondit jamais. */
+  const FICHIERS_DE_L_APERCU = ['src/lib/instantane-devis.js', 'src/lib/document-devis.js', 'src/lib/devis-html.js',
+    'src/lib/composition-apercu.js', 'src/lib/devis-pdf.js', 'src/lib/devis-pdf.web.js', 'src/lib/etapes-apercu.js',
+    'src/components/ApercuDevis.js', 'src/components/CarteApercu.js', 'src/components/AfficheurPdf.js',
+    'src/components/AfficheurPdf.web.js', 'src/data/apercu-exemples.js'];
   const MODULE = ['src/lib/devis.js', 'src/lib/centimes.js', 'src/lib/file-ecriture.js', 'src/lib/identifiant.js',
     'src/lib/rapprochement.js', 'src/lib/postes.js', 'src/data/devis-demo.js', ...Object.values(ECRANS_DEVIS), ...ECRANS_POSTES,
-    ...ECRANS_2B2];
+    ...ECRANS_2B2, ...FICHIERS_DE_L_APERCU];
   const textes = MODULE.map((f) => [f, sansCommentairesJs(lire(f))]);
   verifier('…ni dans la section 49 (le schéma du devis ne lit aucun statut de `sos_requests`)', S49.length > 5000
     && !/\b(acceptee|refusee)\b/.test(S49));
@@ -7087,7 +7098,15 @@ console.log('\n  35. le lot 2a — les conditions, FAITES TOURNER');
       && colonnesDemande.every((c) => new RegExp(`\\bd\\.${c}\\b`).test(corpsTotaux))
       && /demande: \{/.test(corpsTotaux) && /demande: demandeDuDevis\(d\)/.test(lire('src/data/devis-demo.js'))
       && json(D.COLONNES_DE_LA_DEMANDE) === json(['remiseCentimes', 'remiseCentiemes', 'acompteCentimes', 'acompteCentiemes'])
-      && /demande: demandeDuDevis\(\{\}\)/.test(ECR.saisie) && /demande: demandeDuDevis\(r\.devis\)/.test(ECR.saisie),
+      && /demande: demandeDuDevis\(\{\}\)/.test(ECR.saisie)
+      /* 2c-1 (item 16, décidé) : la saisie ne compose plus l'objet des totaux
+         à la main — `poserTotaux(totauxDuDevisLu(r))`, et c'est
+         `totauxDuDevisLu` (devis.js, lue aussi par l'aperçu) qui lit la
+         demande dans la MÊME photo : `demande: demandeDuDevis(d)`, où `d` est
+         `r.devis`. */
+      && /poserTotaux\(totauxDuDevisLu\(r\)\);/.test(ECR.saisie)
+      && /const d = \(r && r\.devis\) \|\| \{\};[\s\S]*demande: demandeDuDevis\(d\)/
+        .test(corpsDeFonction(sansCommentairesJs(lire('src/lib/devis.js')), 'totauxDuDevisLu') || ''),
     selectTotaux.slice(0, 220));
 
     /* ÉCRAN-2 : le pourcentage du libellé vient de la demande RELUE. */
@@ -11562,7 +11581,7 @@ console.log('\n  40. le lot 2b-1 — ce qu’il manque pour remettre ce devis : 
     && /retourEntreprise=\{retourEntreprise\}/.test(opus));
   verifier('la carte se pose par `carte === CARTE_POUR_REMETTRE` (une valeur de PLUS de l’unique état de carte), reçoit `etatDeLaListe`, '
     + 'la liste rangée avec la table des sections d’« Mon entreprise », et les avis À PART — jamais dans la ligne',
-  /\{carte === CARTE_POUR_REMETTRE && \( <PourRemettre/.test(saE) && /if \(id === CARTE_POUR_REMETTRE \|\| id === CARTE_CHANTIER \|\| id === CARTE_ENERGIE\) return;/.test(saE)
+  /\{carte === CARTE_POUR_REMETTRE && \( <PourRemettre/.test(saE) && /if \(id === CARTE_POUR_REMETTRE \|\| id === CARTE_CHANTIER \|\| id === CARTE_ENERGIE \|\| id === CARTE_APERCU\) return;/.test(saE)
     && /lireMotifsDeRemise\(liste\.motifs, \{ sections: SECTION_DU_MOTIF \}\)/.test(saE) && /Array\.isArray\(liste\.motifs\) \?/.test(saE)
     && /erreur: liste\.erreur,/.test(saE) && /enBase: attente\.devisEnBase,/.test(saE)
     && balises(SA, 'LigneRemise').every((b) => !/\bavis\b/.test(b)) && balises(SA, 'PourRemettre').some((b) => /avis=\{avis\}/.test(b)));
@@ -16260,7 +16279,9 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
     + 'ouverte enregistrée, l’en-tête, le clavier fermé, le retour au devis, la rubrique, le titre) ; `enregistrerEnergie` ENTIER ; les '
     + 'deux portes ; la balise : les deux listes VIVANTES, le régime, la ligne d’état, la relecture, les portes',
   SAee.includes("const CARTE_ENERGIE = 'energie';")
-    && carteCorpsE.includes('if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE) return;')
+    /* 2c-1 (cahier §6.2) : la ligne s'allonge de la carte de l'aperçu, qui
+       n'a aucun champ — en le décidant. */
+    && carteCorpsE.includes('if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE || id === CARTE_APERCU) return;')
     && carteCorpsE.indexOf('id === CARTE_ENERGIE') < carteCorpsE.indexOf('refCarte.current')
     && SAee.includes('const ouvrirEnergie = (rubrique = null) => { if (carteRef.current && carteRef.current !== CARTE_ENERGIE) enregistrerCarte(); '
       + 'if (refEntete.current) refEntete.current.enregistrer(); Keyboard.dismiss(); poserRetour(null); setRubriqueEnergie(rubrique || null); '
@@ -16641,6 +16662,57 @@ console.log('  47. le lot 2b-6 — l’écran : la carte « Énergie et label RG
       + `|| ${nb(/\|\|/g)} ; return ${nb(/\breturn\b/g)} ; verifier ${nb(/\bverifier\(/g)} ; décisives absentes : `
       + `${json([...absentesM, ...absentesC].map((v) => v.slice(0, 60)))} ; glyphe lu ${glypheLu}`);
   }
+}
+
+/* 2c-1 (cahier §8.2) : L'APERÇU DANS LA SAISIE. La forme entière de
+   l'ouverture est figée par `verifier-apercu` (H.3) ; ici, ce que le MODULE
+   du devis doit tenir de son côté : la carte qui n'a aucun champ, l'attente
+   de la file qui ne ferme rien, les deux props de `BasDuDevis`, et les deux
+   conversions déménagées d'`api.js` dans `devis.js` SANS CHANGER (l'aperçu
+   les lit sous `node`). */
+console.log('\n  2c-1. l’aperçu dans la saisie : une carte sans champ, une attente qui ne ferme rien, les lignes lues comme avant');
+{
+  const SAp = sansCommentairesJs(lire('src/screens/SaisieDevisScreen.js'));
+  const D = await import(pathToFileURL(path.join(RACINE, 'src/lib/devis.js')).href);
+  verifier('`CARTE_APERCU` vaut `\'apercu\'`, exportée par `devis.js`, importée par la saisie', D.CARTE_APERCU === 'apercu'
+    && /totauxDuDevisLu, CARTE_APERCU,\n\} from '\.\.\/lib\/devis';/.test(SAp), String(D.CARTE_APERCU));
+  const ouvrir = sansEspaces(corpsFleche(SAp, 'const ouvrirApercu = () =>'));
+  verifier('`ouvrirApercu` : la carte ouverte enregistrée, le retour remis à zéro, `attendreLaFile` (jamais `enregistrerTout`), la '
+    + 'carte posée, une clé neuve, la séance démarrée par le geste', ouvrir.includes('if (carteRef.current && carteRef.current !== CARTE_APERCU) enregistrerCarte();')
+    && ouvrir.includes('poserRetour(null);') && ouvrir.includes('const seance = creerSeance({ attendreLaFile, lire: lireLApercu,')
+    && ouvrir.includes('poserCarte(CARTE_APERCU); setCleCarte((k) => k + 1);') && ouvrir.includes('seance.demarrer();')
+    && !/enregistrerTout|fermerCarte/.test(ouvrir), ouvrir.slice(0, 300));
+  const attendre = sansEspaces(corpsFleche(SAp, 'const attendreLaFile = async () =>'));
+  verifier('`attendreLaFile` : l’en-tête envoyé, la file attendue, le bilan — sans `fermerCarte` ni `poserRetour` (E-G1)',
+    attendre === '=> { if (refEntete.current) refEntete.current.enregistrer(); const f = fileRef.current; if (f) await f.attendre(DELAI_ECRITURE); return bilan(); }',
+    attendre);
+  const bdd = sansEspaces(corpsDeFonction(SAp, 'BasDuDevis') || '');
+  verifier('`BasDuDevis` reçoit `devisEnBase` et `onOuvrirApercu`, et sa rangée n’appelle rien sur Android',
+    /devisEnBase = false, onOuvrirApercu = null,/.test(SAp) && /devisEnBase=\{attente\.devisEnBase\}\s+onOuvrirApercu=\{ouvrirApercu\}/.test(SAp)
+    && bdd.includes("{Platform.OS === 'android' ? ( <View style={s.apercuPlace}> <Text style={s.aide}>{TEXTES_DE_L_ECRAN.android}</Text> </View> )"),
+    '');
+  const api = sansCommentairesJs(lire('src/lib/api.js'));
+  verifier('`ligneDepuisBase`, `rowToDevis` et `totauxDepuisBase` vivent dans `devis.js` : `api.js` les importe et n’en garde aucune '
+    + 'seconde écriture', !/function (rowToLigne|ligneDepuisBase|rowToDevis|totauxDepuisBase)\b/.test(api)
+    && /rowToDevis, totauxDepuisBase, ligneDepuisBase/.test(api), '');
+  /* Ce qu'elle rend, écrit ICI en toutes lettres — mesuré, au déménagement,
+     identique au caractère près à l'ancienne `rowToLigne` d'`api.js`. */
+  const pleine = D.ligneDepuisBase({ id: 'l1', devis_id: 'd1', ordre: '2000', type: 'option', designation: 'Pose',
+    quantite_milliemes: '2500', unite: 'm2', prix_unitaire_centimes: '1234', taux_tva_centiemes: '1000', total_centimes: '3085',
+    offert: true, main_oeuvre: false, fourniture_non_comprise: true, surface_sol_milliemes: null, surface_murs_milliemes: '7000',
+    urgence: true, generation: '17', modifie_le: '2026-11-01T00:00:00Z', inconnue: 1 });
+  const vide = D.ligneDepuisBase({ id: 'l2' });
+  verifier('`ligneDepuisBase` rend exactement les dix-huit champs de l’ancienne `rowToLigne`, nombres convertis, et rien d’autre',
+    JSON.stringify(pleine) === JSON.stringify({ id: 'l1', devisId: 'd1', ordre: 2000, type: 'option', designation: 'Pose',
+      quantiteMilliemes: 2500, unite: 'm2', prixUnitaireCentimes: 1234, tauxTvaCentiemes: 1000, totalCentimes: 3085, offert: true,
+      mainOeuvre: false, fournitureNonComprise: true, surfaceSolMilliemes: null, surfaceMursMilliemes: 7000, urgence: true,
+      generation: 17, modifieLe: '2026-11-01T00:00:00Z' })
+    && JSON.stringify(vide) === JSON.stringify({ id: 'l2', devisId: null, ordre: null, type: 'poste', designation: null,
+      quantiteMilliemes: null, unite: null, prixUnitaireCentimes: null, tauxTvaCentiemes: null, totalCentimes: null, offert: false,
+      mainOeuvre: false, fournitureNonComprise: false, surfaceSolMilliemes: null, surfaceMursMilliemes: null, urgence: false,
+      generation: null, modifieLe: null }) && D.ligneDepuisBase(null) === null, `${JSON.stringify(pleine)} / ${JSON.stringify(vide)}`);
+  verifier('`rangeesImprimees` et `totauxDuDevisLu` sont exportées (l’aperçu les lit ; `verifier-apercu` les fait tourner)',
+    typeof D.rangeesImprimees === 'function' && typeof D.totauxDuDevisLu === 'function', '');
 }
 
 console.log('');

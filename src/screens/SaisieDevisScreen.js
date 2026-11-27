@@ -100,7 +100,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  View, Text, FlatList, Pressable, ActivityIndicator, Keyboard, StyleSheet,
+  View, Text, FlatList, Pressable, ActivityIndicator, Keyboard, Platform, StyleSheet,
 } from 'react-native';
 import {
   C, F, T, S, R, GOUTTIERE, CARTE, TOUCHE, APPUI, interligne, surFond,
@@ -118,7 +118,7 @@ import * as api from '../lib/api';
 import * as retour from '../lib/retour';
 import { CLAVIER } from '../lib/clavier';
 import {
-  messageClair, messageDeContrainte, estUnRefusDefinitif, messageDEcritureDuDevis,
+  messageClair, messageDeContrainte, estUnRefusDefinitif, messageDEcritureDuDevis, avecDelai,
 } from '../lib/erreurs';
 import { DELAI_ECRITURE } from '../lib/file-ecriture';
 import { nouvelIdentifiant, IDENTIFIANT_IMPOSSIBLE } from '../lib/identifiant';
@@ -147,6 +147,9 @@ import {
      rubrique. */
   CHAMPS_DE_L_ENERGIE, GABARITS_DE_L_ENERGIE, LE_LABEL, RUBRIQUE_DE_L_ENERGIE, resumeDeLEnergie,
   rubriqueDeLEnergieDuPoint,
+  /* 2c-1 : les totaux d'un devis relu, la même fonction que l'aperçu ; et
+     la carte de l'aperçu, qui n'a aucun champ. */
+  totauxDuDevisLu, CARTE_APERCU,
 } from '../lib/devis';
 import { memeValeur } from '../lib/meme-valeur';
 import { SECTION_DU_MOTIF } from '../lib/emetteur';
@@ -157,6 +160,14 @@ import ChantierDevis from '../components/ChantierDevis';
 import FeuilleAQuelTitre from '../components/FeuilleAQuelTitre';
 import FeuilleChantierNeuf from '../components/FeuilleChantierNeuf';
 import PourRemettre, { LigneRemise } from '../components/PourRemettre';
+/* 2c-1 : l'aperçu au format final. La séance (pure), l'enveloppe de
+   l'impression — écrite SANS extension : au navigateur, Metro prend alors
+   `devis-pdf.web.js` (K12) —, le cadre de la carte, et le statut de
+   l'éditeur (« Document d’essai — sans valeur » tant qu'il vaut `essai`). */
+import CarteApercu from '../components/CarteApercu';
+import { creerSeance, TEXTES_DE_L_ECRAN, PHRASES_DE_LA_SEANCE as PHRASES_LECTURE } from '../lib/etapes-apercu';
+import { fabriqueDuTelephone, composerPourLApercu } from '../lib/devis-pdf';
+import { STATUT } from '../data/legal';
 import { posteDepuisLaLigne, postesLus, phraseSuppressionDuBrouillon } from '../lib/postes';
 
 /* Ce que nomme la bande de la garde quand un champ de l'en-tête a été REFUSÉ
@@ -252,6 +263,19 @@ const RUBRIQUE_DU_CHAMP = Object.freeze({
    (`RUBRIQUE_DE_L_ENERGIE`, `devis.js`) — jamais par `RUBRIQUE_DU_CHAMP`, qui
    reste celle des déchets. */
 const CHAMPS_ENERGIE = CHAMPS_DE_L_ENERGIE;
+
+/* OÙ VIT UN CHAMP DE L'EN-TÊTE — ce que dit le refus de l'aperçu quand
+   l'écran a refusé ce champ (relecture « écran » du 27/11) : la rangée de
+   la carte qui le porte, sous son nom à l'écran, ou le haut du devis. Le
+   refus envoyait chercher « dans l’en-tête » une validité qui vivait dans
+   « Conditions ». */
+function ouVitLeChamp(champ) {
+  if (CHAMPS_CONDITIONS.includes(champ)) return 'dans « Conditions »';
+  if (CHAMPS_DECHETS.includes(champ)) return `dans « ${LES_DECHETS.rangee} »`;
+  if (CHAMPS_ENERGIE.includes(champ)) return `dans « ${LE_LABEL.rangee} »`;
+  if (CHAMPS_DU_CHANTIER.includes(champ)) return `dans « ${LE_CHANTIER.titre} »`;
+  return 'en haut du devis';
+}
 
 /* L'UNIQUE ÉTAT DE CARTE (cahier du lot 2, §3.4) : `null`, l'identifiant
    d'une LIGNE, `CARTE_CONDITIONS`, ou `CARTE_POUR_REMETTRE` (lot 2b-1,
@@ -476,6 +500,14 @@ function BasDuDevis({
      (`resumeDeLEnergie`, calculé par la saisie avec l'état de la file et les
      deux listes de « Mon entreprise ») et ce qu'elle ouvre. */
   resumeEnergie = null, onOuvrirEnergie = null,
+  /* 2c-1 (cahier §6.1, E-m2) : la rangée « Aperçu du devis (page A4) » —
+     possible dès que le brouillon est en base, et ce qu'elle ouvre.
+     `brouillonEnRoute` : le brouillon a déjà un objet ou une ligne, mais il
+     n'est pas encore en base (l'envoi continue, ou il a échoué) — « dès que
+     ce devis aura une ligne ou un objet » lui dirait qu'il lui manque ce
+     qu'il vient d'écrire (relecture « écran » du 27/11). */
+  brouillonEnRoute = false,
+  devisEnBase = false, onOuvrirApercu = null,
 }) {
   /* Les postes attendent le régime : `null` = on ne sait pas encore (en
      lecture, ou la lecture a échoué) ; `[]` = non déclaré — seuls les titres
@@ -730,6 +762,34 @@ function BasDuDevis({
           par « Conditions : » : c'est une autre rangée. */}
       {rangeeRemise}
 
+      {/* « APERÇU DU DEVIS (PAGE A4) » (2c-1, cahier §6.1) — une RANGÉE comme
+          ses voisines, avec son chevron, 44 points par sa BOÎTE (jamais par
+          `hitSlop`, que le navigateur ignore). Un brouillon qui n'est pas
+          encore en base n'a pas d'aperçu : sa phrase prend la MÊME hauteur,
+          rien ne saute quand il y entre. Sur Android, une phrase, et rien
+          n'est appelé : l'aperçu en pages A4 se fait sur iPhone. */}
+      {Platform.OS === 'android' ? (
+        <View style={s.apercuPlace}>
+          <Text style={s.aide}>{TEXTES_DE_L_ECRAN.android}</Text>
+        </View>
+      ) : devisEnBase ? (
+        <Pressable
+          onPress={onOuvrirApercu}
+          accessibilityRole="button"
+          accessibilityLabel={TEXTES_DE_L_ECRAN.rangeeVoix}
+          style={({ pressed }) => [s.resume, pressed && APPUI.discret]}
+        >
+          <View style={s.resumeTexte}>
+            <Text style={s.replieTexte}>{TEXTES_DE_L_ECRAN.rangee}</Text>
+          </View>
+          <ChevronRight size={16} color={C.accent2} />
+        </Pressable>
+      ) : (
+        <View style={s.apercuPlace}>
+          <Text style={s.aide}>{brouillonEnRoute ? TEXTES_DE_L_ECRAN.pasEncoreEnregistre : TEXTES_DE_L_ECRAN.pasEnBase}</Text>
+        </View>
+      )}
+
       {/* SUPPRIMER CE BROUILLON, en deux appuis — et le second le DIT. */}
       <Pressable
         onPress={onSupprimer}
@@ -851,6 +911,13 @@ export default function SaisieDevisScreen({
   });
   const [carte, setCarte] = useState(null);
   const [cleCarte, setCleCarte] = useState(0);
+  /* 2c-1 : la SÉANCE de l'aperçu, créée par le geste (`ouvrirApercu`) et
+     reçue par la carte, qui l'arrête en se démontant. Une carte rouverte en
+     reçoit une neuve. */
+  const [seanceApercu, setSeanceApercu] = useState(null);
+  /* Le geste de l'aperçu est verrouillé par une RÉFÉRENCE, relâchée dans un
+     `finally` : deux appuis rapprochés ne créent qu'une séance. */
+  const gesteApercu = useRef(false);
   const [memoire, setMemoire] = useState(null);
   /* L'UNIQUE ÉTAT DE FEUILLE : `null`, `{ type: 'client' }`,
      `{ type: 'ajout', valeurs, devisOrigineId }`,
@@ -1315,18 +1382,10 @@ export default function SaisieDevisScreen({
         lignesRef.current = vue.lignes;
         setLignes(vue.lignes);
         r.lignes.forEach((l) => { derniereEnvoyee.current[l.id] = l; });
-        poserTotaux({
-          ht: r.devis.totalHtCentimes, tva: r.devis.totalTvaCentimes, ttc: r.devis.totalTtcCentimes,
-          /* Les conditions telles que la BASE les a calculées (lot 2a). */
-          reduction: r.devis.remiseHtCentimes ?? 0,
-          brut: (r.devis.totalHtCentimes ?? 0) + (r.devis.remiseHtCentimes ?? 0),
-          acompte: r.devis.acompteTtcCentimes ?? 0,
-          ttcOptions: r.devis.totalTtcOptionsCentimes ?? r.devis.totalTtcCentimes,
-          /* La demande que la base a vue, lue dans la MÊME photo que les
-             totaux (relecture ÉCRAN-1 du lot 2a). */
-          demande: demandeDuDevis(r.devis),
-          ventilation: r.ventilation || [],
-        });
+        /* Les totaux tels que la BASE les a rangés, et la demande lue dans la
+           MÊME photo : `totauxDuDevisLu` (devis.js), que l'aperçu lit aussi
+           (2c-1, item 16) — une écriture, pas deux objets écrits à la main. */
+        poserTotaux(totauxDuDevisLu(r));
       } else {
         f = api.fileDuDevis({ devisId: devisIdInitial, devis: devisRef.current, horloge: 0 });
       }
@@ -1610,7 +1669,7 @@ export default function SaisieDevisScreen({
        carte « Le chantier » non plus : chaque pastille écrit à l'appui — ni
        « Énergie et label RGE » (2b-6), qui écrit à chaque appui. Sans cette
        sortie, elle tomberait sur `refCarte`, la carte d'une LIGNE. */
-    if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE) return;
+    if (id === CARTE_POUR_REMETTRE || id === CARTE_CHANTIER || id === CARTE_ENERGIE || id === CARTE_APERCU) return;
     if (!id || !refCarte.current) return;
     const lu = refCarte.current.lire();
     const f = fileRef.current;
@@ -2126,15 +2185,26 @@ export default function SaisieDevisScreen({
   const bilan = () => {
     const f = fileRef.current;
     const enteteRefuse = Object.keys(refusEntete.current);
+    /* Ce que le refus de l'aperçu NOMME (relecture « écran » du 27/11) :
+       chaque champ refusé, sous le nom de la bande de la garde
+       (`nomsDesRefus`), et l'endroit où il vit ; puis la première ligne
+       incomplète. */
+    const refusNommes = nomsDesRefus(enteteRefuse, {
+      noms: NOMS_ENTETE,
+      nature: textesConditions && textesConditions.choix ? textesConditions.choix.nature : devis.acompteNature,
+    });
+    const refusOu = [...new Set(enteteRefuse.map(ouVitLeChamp))];
     if (!f) {
       return {
-        ok: !enteteRefuse.length, incompletes: [], enCours: 0, enEchec: 0, nonEnregistrees: 0, devisEnEchec: false, enteteRefuse,
+        ok: !enteteRefuse.length, incompletes: [], incompletesNoms: [], enCours: 0, enEchec: 0, nonEnregistrees: 0,
+        devisEnEchec: false, enteteRefuse, refusNommes, refusOu,
       };
     }
     const e = f.etats();
-    const incompletes = lignesRef.current
-      .filter((l) => !ligneVierge(l) && (erreursRef.current[l.id] || e[l.id] === 'locale'))
-      .map((l) => l.id);
+    const lignesIncompletes = lignesRef.current
+      .filter((l) => !ligneVierge(l) && (erreursRef.current[l.id] || e[l.id] === 'locale'));
+    const incompletes = lignesIncompletes.map((l) => l.id);
+    const incompletesNoms = lignesIncompletes.map((l) => texteNet(l.designation) || null);
     const enCours = Object.keys(e).filter((id) => e[id] === 'en_cours').length;
     const enEchec = Object.keys(e).filter((id) => e[id] === 'echec').length;
     const etatEntete = f.etatDe('devis');
@@ -2148,7 +2218,8 @@ export default function SaisieDevisScreen({
     const { phrase, quitter } = bilanDeLaGarde({ enEchec, enCours, entete });
     return {
       ok: !incompletes.length && !enCours && !enEchec && !devisEnEchec && !enteteRefuse.length,
-      incompletes, enCours, enEchec, nonEnregistrees: enCours + enEchec, devisEnEchec, enteteRefuse, texte: phrase, quitter,
+      incompletes, incompletesNoms, enCours, enEchec, nonEnregistrees: enCours + enEchec, devisEnEchec, enteteRefuse, refusNommes,
+      refusOu, texte: phrase, quitter,
     };
   };
 
@@ -2168,6 +2239,115 @@ export default function SaisieDevisScreen({
   };
 
   const nonEnregistrees = () => bilan();
+
+  /* ------------------------------------------------------------------ */
+  /*  L'APERÇU DU DEVIS (étape 2c-1, cahier §6.2)                         */
+  /* ------------------------------------------------------------------ */
+  /* ATTENDRE LA FILE, ET SURTOUT PAS `enregistrerTout` (E-G1). Celle-ci
+     commence par fermer la carte ouverte : c'est la garde de SORTIE
+     d'OpusApp, qui part. Appelée par l'aperçu, elle fermait la carte
+     « Aperçu » dès le premier appui. Celle-ci ne ferme rien et ne touche pas
+     au retour : elle envoie ce qui est tapé dans l'en-tête, attend la file
+     (huit secondes au plus) et rend le bilan — ce qui n'est pas en base n'a
+     pas d'aperçu. */
+  const attendreLaFile = async () => {
+    if (refEntete.current) refEntete.current.enregistrer();
+    const f = fileRef.current;
+    if (f) await f.attendre(DELAI_ECRITURE);
+    return bilan();
+  };
+
+  /* LES LECTURES DE L'APERÇU, au moment du geste : le devis, « Mon
+     entreprise » (l'émetteur et l'entreprise), le client du devis, et la
+     liste « Pour le remettre ». Chacune a SON délai et SON nom : un refus dit
+     LAQUELLE n'a pas pu se faire — sur un défaut qu'on ne reproduit pas, le
+     message de l'utilisateur est la seule donnée dont on dispose. Le client
+     se lit APRÈS le devis (c'est lui qui le nomme) ; tout le reste en
+     parallèle. La liste ne bloque rien : sans elle, l'aperçu tait le compte
+     des points. */
+  const lireLApercu = async () => {
+    const f = fileRef.current;
+    const id = f ? f.devisId() : null;
+    if (!id) return { ok: false, phrase: PHRASES_LECTURE.devisAbsent, bouton: 'revenir' };
+    const pDevis = api.unDevis(id);
+    const pClient = pDevis.then((lu) => (lu && lu.devis && lu.devis.clientId
+      ? api.ficheDuCarnet(lu.devis.clientId) : null));
+    const [rDevis, rEmetteur, rEntreprise, rClient, rMotifs] = await Promise.allSettled([
+      pDevis,
+      avecDelai(api.monEmetteur(), 8000, 'La lecture de « Mon entreprise »'),
+      avecDelai(api.monEntreprise(), 8000, 'La lecture de « Mon entreprise »'),
+      pClient,
+      api.motifsRefusRemise(id),
+    ]);
+    if (rDevis.status === 'rejected') {
+      return {
+        ok: false, phrase: `[lecture du devis] ${messageClair(rDevis.reason)}`, bouton: 'reessayer', detail: String(rDevis.reason),
+      };
+    }
+    const echecEntreprise = [rEmetteur, rEntreprise].find((r) => r.status === 'rejected');
+    if (echecEntreprise) {
+      return {
+        ok: false,
+        phrase: `[lecture de « Mon entreprise »] ${messageClair(echecEntreprise.reason)}`,
+        bouton: 'reessayer',
+        detail: String(echecEntreprise.reason),
+      };
+    }
+    if (rClient.status === 'rejected') {
+      return {
+        ok: false, phrase: `[lecture du client] ${messageClair(rClient.reason)}`, bouton: 'reessayer', detail: String(rClient.reason),
+      };
+    }
+    const me = rEmetteur.value || {};
+    return {
+      ok: true,
+      donnees: {
+        devisLu: rDevis.value || null,
+        entreprise: rEntreprise.value || null,
+        emetteur: me.emetteur || null,
+        assurances: Array.isArray(me.assurances) ? me.assurances : [],
+        tarifs: me.tarifs || null,
+        preuveTva: me.preuveTva || null,
+        client: rClient.value || null,
+        statut: STATUT,
+        mode: 'apercu',
+        motifs: rMotifs.status === 'fulfilled' && Array.isArray(rMotifs.value) ? rMotifs.value : null,
+      },
+    };
+  };
+
+  /* LE GESTE. La carte ouverte s'enregistre d'abord, ce qui est tapé dans
+     l'en-tête part, le clavier se ferme (il n'y a rien à taper), puis la
+     séance est créée et DÉMARRÉE ici — jamais par un effet au montage (K2).
+     Une carte rouverte est un aperçu NEUF. Déjà ouverte, un second appui ne
+     fait rien. */
+  const ouvrirApercu = () => {
+    if (gesteApercu.current || carteRef.current === CARTE_APERCU) return;
+    gesteApercu.current = true;
+    try {
+      if (carteRef.current && carteRef.current !== CARTE_APERCU) enregistrerCarte();
+      if (refEntete.current) refEntete.current.enregistrer();
+      Keyboard.dismiss();
+      poserRetour(null);
+      const seance = creerSeance({
+        attendreLaFile,
+        lire: lireLApercu,
+        composer: composerPourLApercu,
+        fabrique: fabriqueDuTelephone(),
+        maintenant: () => new Date(),
+        attendre: (ms) => new Promise((resoudre) => { setTimeout(resoudre, ms); }),
+        annoncer: retour.annoncer,
+        vibrer: (nom) => (nom === 'reussite' ? retour.reussite() : retour.echec()),
+      });
+      setSeanceApercu(seance);
+      poserCarte(CARTE_APERCU);
+      setCleCarte((k) => k + 1);
+      if (rappels.current.onCarte) rappels.current.onCarte(TEXTES_DE_L_ECRAN.titre);
+      seance.demarrer();
+    } finally {
+      gesteApercu.current = false;
+    }
+  };
 
   const sortir = async ({ parLeRetour = false } = {}) => {
     /* Carte ouverte, le RETOUR ferme la carte (elle s'enregistre) au lieu de
@@ -2623,6 +2803,9 @@ export default function SaisieDevisScreen({
       onOuvrirDechets={() => ouvrirDechets(null)}
       resumeEnergie={resumeEnergie}
       onOuvrirEnergie={() => ouvrirEnergie(null)}
+      brouillonEnRoute={!attente.devisEnBase && (attente.enCours || attente.devisErreur != null || attente.nb > 0)}
+      devisEnBase={attente.devisEnBase}
+      onOuvrirApercu={ouvrirApercu}
     />
   );
 
@@ -3014,6 +3197,14 @@ export default function SaisieDevisScreen({
         />
       )}
 
+      {/* « APERÇU DU DEVIS » (2c-1, cahier §6.2) — une carte comme les
+          autres : elle prend l'écran, et elle n'a aucun champ. Sa séance est
+          créée par le geste ; la carte l'arrête en se démontant (fermer la
+          carte, c'est effacer l'aperçu). */}
+      {carte === CARTE_APERCU && !!seanceApercu && (
+        <CarteApercu key={`apercu-${cleCarte}`} seance={seanceApercu} onFermer={fermerCarte} />
+      )}
+
       {rendreLaFeuille()}
     </View>
   );
@@ -3079,6 +3270,10 @@ const s = StyleSheet.create({
   valeurTotal: { fontFamily: F.oswald6, fontSize: T.sousTitre, color: C.ink, textAlign: 'right' },
   mention: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   illisibles: { gap: S.xs, marginTop: S.sm },
+  /* La place de la rangée de l'aperçu quand elle ne s'ouvre pas (le
+     brouillon n'est pas en base, ou Android) : la MÊME hauteur, rien ne
+     saute quand le brouillon y entre. */
+  apercuPlace: { minHeight: TOUCHE, justifyContent: 'center', marginTop: S.md },
   /* La rangée qui résume les conditions : une cible qui OUVRE une carte,
      44 points au moins, comme une ligne de devis. */
   resume: {

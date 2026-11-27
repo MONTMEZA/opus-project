@@ -459,7 +459,14 @@ console.log('\nLa démonstration fait vivre CHAQUE issue, sans un vrai SIRET');
    NOM du badge, qu'emploie `IdentiteEntreprise.js` pour dire qu'une fiche
    badgée n'a pas de porte. */
 const VERIFIE = /v[ée]rifi[ée]e?s?(?![\p{L}_])/iu;
-const sansNomDuBadge = (t) => String(t).replace(/badge « vérifié »/g, '');
+const sansNomDuBadge = (t) => String(t).replace(/badge « vérifié »/g, '')
+  /* …et, depuis l'étape 2c-1 (27/11/2026), UNE phrase où « vérifie » est le
+     VERBE, au présent, et dit une limite d'Opus, pas un statut : « Rien ne
+     manque de ce qu’Opus vérifie aujourd’hui. » — la phrase de la liste
+     « Pour le remettre » (`RIEN_NE_MANQUE_POUR_CE_DEVIS`), que l'aperçu
+     redit (`TEXTES_DE_L_ECRAN.rienNeManque`). Retirée MOT POUR MOT : tout
+     autre « vérifie » reste vu. */
+  .replace(/ce qu’Opus vérifie aujourd’hui/g, '');
 
 console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée », jamais « registre »');
 {
@@ -602,7 +609,25 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
     'src/components/ApercuEntete.js', 'src/lib/emetteur.js', 'src/lib/declaration-tva.js',
     'src/components/FicheLieuDepot.js', 'src/components/DechetsDevis.js',
     'src/data/travaux-energie.js', 'src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js',
-    'src/components/EnergieDevis.js'];
+    'src/components/EnergieDevis.js',
+    /* …et, depuis l'étape 2c-1 (27/11/2026), la chaîne de l'aperçu d'un
+       devis : l'instantané, la composition (les phrases de la page), le
+       gabarit HTML, le format A4, le tampon (les marques posées sur chaque
+       page), la fabrication et la séance (les phrases d'échec et des
+       étapes), les réglages de l'afficheur. « [enregistrement] » et
+       « Enregistrement de vos dernières modifications… » contiennent les
+       lettres de « registre » : c'est pour cela que la règle est ici en MOT
+       ENTIER (cahier 2c-1 §8.2). */
+    'src/lib/instantane-devis.js', 'src/lib/document-devis.js', 'src/lib/devis-html.js', 'src/lib/format-a4.js',
+    'src/lib/tampon-apercu.js', 'src/lib/fabrication-apercu.js', 'src/lib/etapes-apercu.js', 'src/lib/reglages-afficheur.js',
+    /* …et, depuis l'étape 4 de 2c-1, ce qui la montre : la composition
+       partagée, les deux enveloppes de l'impression, l'écran, la carte, les
+       deux afficheurs et les exemples (Opus Dev). La liste est comparée à
+       la fermeture des imports de l'aperçu par `verifier-apercu` (I.1,
+       K-m4) : un fichier nouveau qui n'y serait pas rougit là-bas. */
+    'src/lib/composition-apercu.js', 'src/lib/devis-pdf.js', 'src/lib/devis-pdf.web.js', 'src/components/ApercuDevis.js',
+    'src/components/CarteApercu.js', 'src/components/AfficheurPdf.js', 'src/components/AfficheurPdf.web.js',
+    'src/data/apercu-exemples.js'];
   const fautifsDevis = [];
   DEVIS.forEach((f) => {
     const c = sansCommentaires(lire(f));
@@ -627,7 +652,9 @@ console.log('\nCe que l’écran dit d’une entreprise : jamais « vérifiée �
       .every((t) => VERIFIE.test(t))
     && ['Touchez « Vérifier »', 'une vérification à la main', 'r.verifie_le']
       .every((t) => !VERIFIE.test(t))
-    && !VERIFIE.test(sansNomDuBadge('porte le badge « vérifié », accordé')));
+    && !VERIFIE.test(sansNomDuBadge('porte le badge « vérifié », accordé'))
+    && !VERIFIE.test(sansNomDuBadge('Rien ne manque de ce qu’Opus vérifie aujourd’hui.'))
+    && VERIFIE.test(sansNomDuBadge('Opus vérifie votre entreprise')));
 }
 
 console.log('\nLe champ SIRET ne coupe rien, et la porte de secours ne démarre pas en pro');

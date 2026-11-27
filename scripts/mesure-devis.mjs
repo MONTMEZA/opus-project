@@ -195,6 +195,14 @@
  * P5 (il faudrait déplacer l'horloge) : l'iPhone et le banc de
  * `verifier-tva`.
  *
+ * L'APERÇU AU FORMAT FINAL (étape 2c-1, cahier §6.1, §8.2) : la rangée
+ * « Aperçu du devis (page A4) » dans le bas du devis — après « Conditions »
+ * et la rangée « Pour le remettre », avant « Supprimer ce brouillon », 44
+ * points par sa boîte, à 393 et 320 —, et sa phrase sur la même hauteur pour
+ * un brouillon neuf ; « Mes devis » : les trois exemples d'Opus Dev n'y
+ * comptent pas parmi les cinq brouillons. Ce que la CARTE fait — le cadre
+ * web, l'enregistrement, les refus — est mesuré par `mesure-apercu`.
+ *
  * « POUR LE REMETTRE » PASSE AU VERT (demande du propriétaire, 25/11/2026)
  * — la DERNIÈRE section, et elle recharge la page : une démonstration neuve,
  * dont l'entreprise est complétée PAR L'ÉCRAN (les boutons de la carte). Elle
@@ -1248,6 +1256,14 @@ await section('« Mon profil » → « Mes devis »', async () => {
      « Isolation des combles et des murs », le plus ancien, qui fait voir le
      point `devis_energie_mentions` et l'avis du label. */
   verifier(`cinq cartes de brouillon (${cartes})`, cartes === 5);
+  /* LES EXEMPLES DE L'APERÇU (2c-1, cahier §6.4, §8.2) : en Opus Dev — le
+     serveur de développement, `__DEV__` vrai — « Mes devis » porte trois
+     boutons « Exemple : … » sous « Ma base de postes ». Ce ne sont pas des
+     brouillons : les cinq cartes restent cinq, et aucun exemple n'est
+     « Ouvrir le brouillon … ». */
+  const exemples = await page.getByRole('button', { name: /^Exemple : / }).evaluateAll((es) => es.map((e) => e.getAttribute('aria-label') || e.innerText));
+  verifier(`…et les trois exemples d’Opus Dev n’y comptent pas (${exemples.length} : ${exemples.join(' ; ')})`,
+    exemples.length === 3 && cartes === 5 && exemples.every((x) => !/^Ouvrir le brouillon /.test(x)));
   const ordre = await page.locator('button[aria-label^="Ouvrir le brouillon "]').evaluateAll((es) => es.map((e) => e.getAttribute('aria-label')));
   verifier('…dans l’ordre « Mes devis » (le plus récemment modifié d’abord) : les deux du lot 1, puis « Terrasse », « Muret », puis '
     + '« Isolation des combles et des murs » (2b-6)',
@@ -11016,6 +11032,90 @@ const enregistrerMonEntreprise = async () => {
   await jusqua(async () => (await parLibelle('Fermer « Mon entreprise »').count()) === 0, 4000);
   await attendre(600);
 };
+
+/* LA RANGÉE DE L'APERÇU (2c-1, cahier §6.1, §8.2) — mesurée ici parce
+   qu'elle vit dans `BasDuDevis`, avec ses voisines ; ce que la CARTE fait
+   (le cadre web, l'enregistrement, les refus) est dans `mesure-apercu`. */
+const RANGEE_APERCU = 'Voir l’aperçu du devis, en pages A4, sans numéro. Opus ne l’envoie nulle part.';
+const PHRASE_PAS_EN_BASE = 'L’aperçu sera possible dès que ce devis aura une ligne ou un objet.';
+await section('2c-1 : la rangée « Aperçu du devis (page A4) » — dans le bas du devis, après « Pour le remettre » et avant « Supprimer ce brouillon », 44 points par sa BOÎTE ; un brouillon neuf : sa phrase, sur la même hauteur, et aucune rangée (cahier §6.1)', async () => {
+  const tailleAvant = page.viewportSize();
+  /* L'étape en cours, dite dans le message si un geste échoue : une cible
+     introuvable doit dire LAQUELLE. */
+  let etape = 'début';
+  try {
+    /* UNE DÉMONSTRATION NEUVE, sur le compte pro : la section d'avant (la
+       TVA, 2b-2) laisse un particulier passé pro, sans les brouillons de
+       la démonstration. Même geste que la section qui suit. */
+    etape = 'une démonstration neuve, sur le compte pro';
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
+    await jusqua(async () => (await page.getByText('JE SUIS UN PROFESSIONNEL').count()) > 0
+      || (await page.getByRole('tab', { name: 'Profil' }).count()) > 0, 120000, 500);
+    if (await page.getByText('JE SUIS UN PROFESSIONNEL').count()) {
+      await toucher(page.getByText('JE SUIS UN PROFESSIONNEL').first());
+      await attendre(3000);
+    }
+    if (await page.getByText('Plus tard').first().count()) { await toucher(page.getByText('Plus tard').first()); await attendre(800); }
+    await toucher(page.getByRole('tab', { name: 'Profil' }));
+    await attendre(900);
+    if ((await parLibelle('Mes devis : les brouillons de chiffrage').count()) === 0) {
+      await toucher(page.getByText('Se déconnecter', { exact: true }).first());
+      await page.getByText('JE SUIS UN PROFESSIONNEL').first().waitFor({ timeout: 10000 });
+      await toucher(page.getByText('JE SUIS UN PROFESSIONNEL').first());
+      await attendre(3000);
+      if (await page.getByText('Plus tard').first().count()) { await toucher(page.getByText('Plus tard').first()); await attendre(800); }
+    }
+    exiger(/MODE DÉMONSTRATION/.test(await texte()), 'la page rechargée est en démonstration, sur le compte pro');
+    for (const largeur of [393, 320]) {
+      etape = `à ${largeur}, « Mes devis »`;
+      await page.setViewportSize({ width: largeur, height: 852 });
+      await attendre(400);
+      /* Déjà sur « Mes devis » (on en sort à chaque tour), la barre du bas
+         n'y ramènerait pas : « Profil » y est déjà l'onglet choisi. */
+      if (!(await page.getByText('Nouveau devis', { exact: true }).count())) await allerAMesDevis();
+      etape = `à ${largeur}, ouvrir « Muret de clôture »`;
+      const nom = 'Muret de clôture';
+      await ouvrirLeDevis(nom);
+      etape = `à ${largeur}, la rangée de l’aperçu`;
+      const rangee = parLibelle(RANGEE_APERCU);
+      await rangee.scrollIntoViewIfNeeded().catch(() => {});
+      await attendre(300);
+      const b = await rangee.boundingBox();
+      const remise = await page.locator('[aria-label^="Pour le remettre"]').last().boundingBox();
+      const conditions = await page.getByLabel(/^Conditions : /).first().boundingBox();
+      const supprimer = await bouton('Supprimer ce brouillon').boundingBox();
+      verifier(`à ${largeur} : « ${nom} » — la rangée est UNE (« ${(await rangee.innerText().catch(() => '')).split('\n')[0].trim()} »), ${TOUCHE} points au moins par sa boîte (${b && Math.round(b.height)} × ${b && Math.round(b.width)})`,
+        (await page.getByLabel(RANGEE_APERCU, { exact: true }).count()) === 1 && !!b && b.height >= TOUCHE - 0.5 && b.width >= TOUCHE - 0.5
+        && (await rangee.innerText().catch(() => '')).includes('Aperçu du devis (page A4)'));
+      verifier(`…après « Conditions » (y ${conditions && Math.round(conditions.y)}) et la rangée « Pour le remettre » du bas (y ${remise && Math.round(remise.y)}), `
+        + `avant « Supprimer ce brouillon » (y ${supprimer && Math.round(supprimer.y)}) : y ${b && Math.round(b.y)}`,
+      !!b && !!remise && !!conditions && !!supprimer && conditions.y < b.y && remise.y < b.y && b.y + b.height <= supprimer.y + 0.5);
+      await capture(`2c1-rangee-apercu-${largeur}`);
+      etape = `à ${largeur}, quitter la saisie`;
+      await quitterLaSaisie();
+      /* UN BROUILLON NEUF, pas encore en base : la phrase, à la place de la
+         rangée, sur la MÊME hauteur — rien ne saute quand il y entre. Rien
+         n'est tapé : aucune écriture, aucun brouillon de plus. */
+      etape = `à ${largeur}, « Nouveau devis »`;
+      await toucher(page.getByText('Nouveau devis', { exact: true }).first());
+      await page.getByText(BANDEAU).first().waitFor({ timeout: 8000 });
+      await attendre(700);
+      const phrase = page.getByText(PHRASE_PAS_EN_BASE, { exact: true }).first();
+      await phrase.scrollIntoViewIfNeeded().catch(() => {});
+      const hp = await phrase.evaluate((e) => e.parentElement.getBoundingClientRect().height).catch(() => null);
+      verifier(`à ${largeur} : un brouillon neuf — « ${PHRASE_PAS_EN_BASE} », sur ${TOUCHE} points au moins (${hp && Math.round(hp)}), et aucune rangée`,
+        (await phrase.count()) === 1 && hp >= TOUCHE - 0.5 && (await page.getByLabel(RANGEE_APERCU, { exact: true }).count()) === 0);
+      etape = `à ${largeur}, quitter le brouillon neuf`;
+      await quitterLaSaisie();
+    }
+  } catch (e) {
+    throw new Error(`${etape} : ${e && e.message}`);
+  } finally {
+    await page.setViewportSize(tailleAvant).catch(() => {});
+    await attendre(400);
+  }
+});
 
 await section('Pour le remettre passe au VERT quand rien ne manque — « Muret de clôture », l’entreprise complétée par l’écran : le filet, le titre, la coche, l’étiquette, la hauteur à 393 et 320 ; jamais de vert pendant un envoi, sur une ligne non enregistrée ni sur une lecture coupée (demande du 25/11/2026)', async () => {
   const tailleAvant = page.viewportSize();

@@ -1,0 +1,775 @@
+{
+ "_lisez_moi": "La liste FERMÉE des champs de l’instantané d’un devis (étape 2c-1, cahier §3) : chaque clé que instantaneDuDevis (src/lib/instantane-devis.js) produit, et rien d’autre — verifier-apercu compare les deux, dans les deux sens. « chemin » : la table d’origine puis la colonne, aux noms de la base (« [] » pour une liste) ; « en2c3 » : ce que l’étape 2c-3 fera de la valeur à la remise — en_place (figée avec la ligne devis ou devis_lignes), copie, pose (posée par la base), aucun (paramètre d’aperçu). L’essai SQL de 2c-3a la relira. Jamais dans l’instantané : le téléphone, l’e-mail et les notes d’un client ; la source du devis, quote_request_id, sos_request_id, le texte d’une demande ou d’une urgence ; created_at, modifie_le et generation du devis ; le badge ; un prix de référence ; les avis de « Pour le remettre ».",
+ "champs": [
+  {
+   "chemin": "version",
+   "type": "entier, 1",
+   "source": "constante d’instantane-devis.js (VERSION_INSTANTANE)",
+   "imprime": "non",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "devis.id",
+   "type": "uuid",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.objet",
+   "type": "texte ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Objet : … » ; rien si vide (un avis de la liste, pas un motif)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.lieu_adresse",
+   "type": "texte ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Lieu d’exécution : … » ; les trois vides → « [à compléter : le lieu des travaux] » (devis_lieu)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.lieu_code_postal",
+   "type": "texte ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "avec lieu_adresse",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.lieu_ville",
+   "type": "texte ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "avec lieu_adresse",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.delai_execution",
+   "type": "texte ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Délai d’exécution : … » ; vide → « [à compléter : le délai d’exécution] » (devis_delai)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.validite_jours",
+   "type": "entier 1 à 365, ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Validité de l’offre : 30 jours à compter de la date du devis » ; vide → marqueur (devis_validite)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.cout_devis_centimes",
+   "type": "entier (TTC) ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Devis gratuit » ; « Devis payant : 30,00 € TTC » (réel) ; vide → marqueur (devis_cout)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.retenue_garantie_centiemes",
+   "type": "entier ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Retenue de garantie : 5 % » et sa place de 2c-2",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.remise_centiemes",
+   "type": "entier ou vide (la demande)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "le « 5 % » du libellé de la réduction",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.remise_centimes",
+   "type": "entier ou vide (la demande)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non (le montant imprimé est l’effectif)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.remise_ht_centimes",
+   "type": "entier (l’effectif)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Réduction 5 % » et son montant",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.acompte_centiemes",
+   "type": "entier ou vide (la demande)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "le « 30 % » du libellé de l’acompte",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.acompte_centimes",
+   "type": "entier ou vide (la demande)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non (le montant imprimé est l’effectif)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.acompte_nature",
+   "type": "acompte, arrhes ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Acompte », « Arrhes » ; vide → « [à compléter : acompte ou arrhes] » (devis_acompte_nature)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.acompte_ttc_centimes",
+   "type": "entier (l’effectif)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "le montant de l’acompte ; « Reste à payer, sans les options »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.total_ht_centimes",
+   "type": "entier (la base)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Total HT »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.total_tva_centimes",
+   "type": "entier (la base)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« TVA »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.total_ttc_centimes",
+   "type": "entier (la base)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Total TTC » (« Total » hors du réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.total_ttc_options_centimes",
+   "type": "entier (la base)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "« Total TTC si toutes les options sont commandées »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.client_id",
+   "type": "uuid ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non ; vide → « [à compléter : le client de ce devis] » (devis_client)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.dechets_concerne",
+   "type": "vrai, faux ou vide (vide vaut « Oui », par prudence)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non en 2c-1 : n’étant pas faux, il pose « [prochaine version d’Opus : ce que deviendront les déchets du chantier] » (D24)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.energie_travaux",
+   "type": "liste de clés de travaux d’énergie (text[]), {aucun}, ou vide",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non en 2c-1 : des travaux cochés, pour un client à titre privé, une association, une copropriété, une société civile ou une réponse vide, posent « [prochaine version d’Opus : les travaux d’économies d’énergie et le label RGE] » (D24)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.engage_decennale",
+   "type": "vrai, faux ou vide (vide vaut « Oui », par prudence)",
+   "source": "api.unDevis(id).devis (rowToDevis)",
+   "imprime": "non en 2c-1 : n’étant pas faux, il pose « [prochaine version d’Opus : l’attestation de votre assurance décennale, jointe au devis] » (D24)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.ventilation[].taux_tva_centiemes",
+   "type": "entier (la base, nb_lignes > 0, du plus fort au plus faible taux)",
+   "source": "api.unDevis(id).ventilation (totauxDepuisBase)",
+   "imprime": "le tableau de TVA (réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.ventilation[].base_centimes",
+   "type": "entier (la base, nb_lignes > 0, du plus fort au plus faible taux)",
+   "source": "api.unDevis(id).ventilation (totauxDepuisBase)",
+   "imprime": "le tableau de TVA (réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.ventilation[].remise_centimes",
+   "type": "entier (la base, nb_lignes > 0, du plus fort au plus faible taux)",
+   "source": "api.unDevis(id).ventilation (totauxDepuisBase)",
+   "imprime": "le tableau de TVA (réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.ventilation[].tva_centimes",
+   "type": "entier (la base, nb_lignes > 0, du plus fort au plus faible taux)",
+   "source": "api.unDevis(id).ventilation (totauxDepuisBase)",
+   "imprime": "le tableau de TVA (réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.ventilation[].nb_lignes",
+   "type": "entier (la base, nb_lignes > 0, du plus fort au plus faible taux)",
+   "source": "api.unDevis(id).ventilation (totauxDepuisBase)",
+   "imprime": "le tableau de TVA (réel)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "devis.pour_qui_valable",
+   "type": "consommateur, non_professionnel, professionnel_hors_activite, professionnel ou vide",
+   "source": "pourQuiValable(devis) — la réponse « à quel titre » qui vaut pour le client du devis",
+   "imprime": "non (J9) : elle choisit les mentions (D7) et les places de 2c-2 (D24)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "lignes[].id",
+   "type": "uuid",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "non",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].ordre",
+   "type": "entier",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "non (le rang)",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].type",
+   "type": "zone, piece, poste, option, reserve",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "la forme du bloc",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].designation",
+   "type": "texte",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "en entier, échappé ; vide → « [à compléter : la désignation] »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].quantite_milliemes",
+   "type": "entier ou vide",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« 12,5 »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].unite",
+   "type": "une des sept clés ou vide",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "UNITES_IMPRIMEES",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].prix_unitaire_centimes",
+   "type": "entier ou vide",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« × 45,00 € HT » (réel) / « × 45,00 € »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].taux_tva_centiemes",
+   "type": "0, 550, 1000, 2000 ou vide",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« TVA 10 % » au réel ; 0 au réel → « sans TVA » et « [à compléter : le taux de TVA de cette ligne] » (devis_taux_sans_tva) ; rien hors du réel",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].total_centimes",
+   "type": "entier (la base)",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« 562,50 € HT » au réel, « 562,50 € » sinon ; « Offert » à sa place",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].offert",
+   "type": "booléen",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« Offert »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].fourniture_non_comprise",
+   "type": "booléen",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« · fourniture non comprise »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "lignes[].urgence",
+   "type": "booléen",
+   "source": "api.unDevis(id).lignes (ligneDepuisBase), rangées par ordre puis id",
+   "imprime": "« · réparation urgente »",
+   "en2c3": "en_place"
+  },
+  {
+   "chemin": "entreprise.siren",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "« SIREN … » dans la ligne RCS ou RNE",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.siret",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "« SIRET 123 456 789 00012 »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.denomination",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "le nom",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.nom_commercial",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "« Nom commercial : … »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.est_ei",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "la forme (un EI écrit son nom)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.forme_juridique",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "la forme, le capital",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.tva",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "le n° de TVA de l’annuaire",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.est_siege",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "l’adresse du siège",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.adresse",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "l’adresse de l’établissement",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.code_postal",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "l’adresse de l’établissement",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.commune",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "l’adresse de l’établissement",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.maj_insee",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "la ligne de source (un jour AAAA-MM-JJ, résolu à Paris)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.verifie_le",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "la ligne de source (un jour AAAA-MM-JJ, résolu à Paris)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "entreprise.source",
+   "type": "texte, booléen ou vide",
+   "source": "api.monEntreprise() (ligne brute de entreprise_registre)",
+   "imprime": "registre, essai, administration ; exemple pour les exemples : la ligne de source",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.denomination_ei",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.registre",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.greffe_ville",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.capital_centimes",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.capital_variable",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.en_liquidation",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.locataire_gerant",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.etablissement_adresse",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.etablissement_code_postal",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.etablissement_ville",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.siege_adresse",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.siege_code_postal",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.siege_ville",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.telephone",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.email",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.regime_tva",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.mediateur_nom",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.mediateur_adresse",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.mediateur_site",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.garantie_legale_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.garantie_commerciale_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.sav_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.modalites_paiement_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.modalites_execution_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "emetteur.reclamations_texte",
+   "type": "texte, entier, booléen ou vide",
+   "source": "api.monEmetteur().emetteur (ligne brute)",
+   "imprime": "par enteteImprimeDetaille (identité, mentions, régime de TVA)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].nature",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "« Assurance décennale — … »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].libelle",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "le nom d’une « autre » assurance",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].assureur_nom",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "l’assureur",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].assureur_coordonnees",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "ses coordonnées",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].couverture",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "« Couverture : … »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].numero_contrat",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "« Contrat n° … »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].valide_jusquau",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "non ; passée au jour de Paris → « [à compléter : la nouvelle attestation …] » sous la ligne (D8)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].created_at",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "non : l’ordre d’impression (points de code, puis id)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "assurances[].attestation_chemin",
+   "type": "texte, date ou vide",
+   "source": "api.monEmetteur().assurances (lignes brutes)",
+   "imprime": "non lu en 2c-1 (2c-3 copie le FICHIER)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "tarifs.frais_deplacement_centimes",
+   "type": "entier (TTC) ou vide",
+   "source": "api.monEmetteur().tarifs (ligne brute)",
+   "imprime": "0 → « Déplacement offert » ; un montant → « Tarif de déplacement : … » (D25)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "tarifs.frais_deplacement_texte",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().tarifs (ligne brute)",
+   "imprime": "« — au-delà de 20 km »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "preuve_tva.numero",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().preuveTva (ligne brute)",
+   "imprime": "le numéro seulement, par numeroTvaImprime (l’annuaire gagne)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "preuve_tva.siren",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().preuveTva (ligne brute)",
+   "imprime": "non : la preuve ne vaut que pour ce SIREN",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "preuve_tva.source",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().preuveTva (ligne brute)",
+   "imprime": "non : vies, essai, declaration (la ligne de source d’une preuve d’essai)",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "preuve_tva.reconnu_le",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().preuveTva (ligne brute)",
+   "imprime": "non",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "preuve_tva.declare_le",
+   "type": "texte ou vide",
+   "source": "api.monEmetteur().preuveTva (ligne brute)",
+   "imprime": "non",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.nom",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "le nom ; pas de client → « [à compléter : le client de ce devis] »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.type",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "non (J9) : il dit seulement si le SIRET s’imprime",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.siret",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "« SIRET … » pour une entreprise",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.adresse",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "l’adresse",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.code_postal",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "« code postal ville »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "client.ville",
+   "type": "texte ou vide",
+   "source": "api.ficheDuCarnet(client_id) (clientDepuisBase) ; jamais telephone, email, notes",
+   "imprime": "« code postal ville »",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "jour",
+   "type": "AAAA-MM-JJ",
+   "source": "jourAParis(maintenant), maintenant donné par l’appelant ; jamais un défaut",
+   "imprime": "non",
+   "en2c3": "aucun"
+  },
+  {
+   "chemin": "annee",
+   "type": "entier",
+   "source": "l’année de jour",
+   "imprime": "le numéro en attente « DEV-2026-···· »",
+   "en2c3": "aucun"
+  },
+  {
+   "chemin": "statut",
+   "type": "essai, particulier, micro, societe",
+   "source": "STATUT (src/data/legal.js), passé par l’appelant",
+   "imprime": "« Document d’essai — sans valeur » tant que essai",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "mode",
+   "type": "apercu ou exemple (liste fermée)",
+   "source": "l’appelant",
+   "imprime": "« Exemple — données inventées » en mode exemple",
+   "en2c3": "aucun"
+  },
+  {
+   "chemin": "versions.composition",
+   "type": "entier",
+   "source": "VERSIONS_DU_RENDU (= VERSION_COMPOSITION de document-devis.js)",
+   "imprime": "non",
+   "en2c3": "copie"
+  },
+  {
+   "chemin": "versions.gabarit",
+   "type": "entier",
+   "source": "VERSIONS_DU_RENDU (= VERSION_GABARIT de devis-html.js)",
+   "imprime": "non",
+   "en2c3": "copie"
+  }
+ ]
+}

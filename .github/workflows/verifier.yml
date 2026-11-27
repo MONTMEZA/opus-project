@@ -7,14 +7,17 @@
 #
 # Ce que ça vérifie, dans l'ordre du moins cher au plus cher :
 #   1. les contrôles du projet (quelques secondes) ;
-#   2. la construction du paquet, iOS ET Android ;
+#   2. la construction du paquet, iOS ET Android, puis celui du navigateur et
+#      le paquet iOS de DÉVELOPPEMENT, et la lecture de ce qu'ils ont produit
+#      (`lire-exports`, étape 2c-1) ;
 #   3. dans un job À PART, les essais SQL de `supabase/` (étape 2c-E).
 #
 # Pourquoi les DEUX plateformes : une construction qui ne passe que d'un côté
-# se découvre au pire moment. Le code est pourtant le même — il n'y a aucun
-# fichier propre à une plateforme dans ce projet — mais Metro ne résout pas
-# toujours les mêmes choses, et deux minutes de machine valent mieux qu'une
-# mauvaise surprise.
+# se découvre au pire moment. Metro ne résout pas toujours les mêmes choses,
+# et depuis l'aperçu d'un devis (étape 2c-1) le projet a des fichiers propres
+# au navigateur (`devis-pdf.web.js`, `AfficheurPdf.web.js`) : deux minutes de
+# machine valent mieux qu'une mauvaise surprise. La forme de ce job est figée
+# par `verifier-atelier` (K12) : la changer se décide, dans le même commit.
 #
 # Ce que ça ne vérifie PAS, et c'est dit exprès : rien de ce qui demande un
 # navigateur ou un téléphone. Les captures, les gestes au doigt, la fluidité
@@ -49,15 +52,41 @@ jobs:
 
       # Sans `.env`, l'application part en mode démonstration — c'est voulu :
       # la construction ne doit dépendre d'aucun secret.
+      #
+      # CHAQUE EXPORT GARDE SON JOURNAL (`| tee`), parce qu'un export a déjà
+      # rendu 0 en affichant une pile d'import : c'est sa SORTIE qu'on lit, à
+      # la dernière étape. `shell: bash` est là pour `-o pipefail` : sans
+      # lui, le code de `tee` cacherait celui de l'export.
       - name: Construire le paquet iOS
-        run: npx expo export --platform ios --output-dir /tmp/paquet-ios
+        shell: bash
+        run: npx expo export --platform ios --output-dir /tmp/paquet-ios 2>&1 | tee /tmp/export-ios.log
 
       - name: Construire le paquet Android
-        run: npx expo export --platform android --output-dir /tmp/paquet-android
+        shell: bash
+        run: npx expo export --platform android --output-dir /tmp/paquet-android 2>&1 | tee /tmp/export-android.log
+
+      # Le navigateur a ses propres fichiers (`devis-pdf.web.js`,
+      # `AfficheurPdf.web.js`) : ses cartes de sources disent ce qui y entre.
+      - name: Construire le paquet du navigateur
+        shell: bash
+        run: npx expo export --platform web --source-maps --output-dir /tmp/paquet-web 2>&1 | tee /tmp/export-web.log
+
+      # Le paquet de DÉVELOPPEMENT : le seul où un `await import(...)` se
+      # voit (15 « asyncRequire » pour un seul, mesuré le 27/11/2026).
+      - name: Construire le paquet iOS de développement
+        shell: bash
+        run: npx expo export --platform ios --dev --output-dir /tmp/paquet-ios-dev 2>&1 | tee /tmp/export-ios-dev.log
+
+      # Lire ce que les quatre exports ont ÉCRIT et PRODUIT : un seul
+      # « Exported », aucune pile d'import, les textes du tampon dans le
+      # paquet iOS, ni `expo-print` ni `react-native-webview` ni `pdf-lib`
+      # au navigateur, aucun `asyncRequire` (cahier 2c-1, §8.4).
+      - name: Lire les paquets
+        run: node scripts/lire-exports.mjs --dans /tmp
 
   # LES ESSAIS SQL — étape 2c-E (26/11/2026). Un job À PART : il lui faut
   # un PostgreSQL, et `npm run verifier` doit passer partout, y compris sans
-  # base. Le job ci-dessus ne change pas.
+  # base. Le job ci-dessus n'en dépend pas.
   #
   # Aucun service Docker, et c'est voulu. `npm run essais-sql` crée SA grappe
   # (initdb dans un dossier temporaire, une socket privée, aucun port, aucun

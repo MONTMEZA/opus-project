@@ -33,6 +33,7 @@ import { reduireImage, TAILLE_MAX_MO } from './media';
 /* Le SIRET (section 45). `siret.js` n'importe rien, `erreurs.js` non plus,
    et `siret-demo.js` pas davantage : aucun cycle possible avec ce fichier. */
 import { chiffresSeuls, communeLisible, departementDe } from './siret';
+import { clientDepuisBase } from './clients';
 import {
   analyserNumeroTva, ESSAIS_VIES, REFUS_RETENU_MS, DECLARATION_TVA, declarableSansReponse,
 } from './tva';
@@ -68,8 +69,8 @@ import { creerFileEcriture, DELAI_ECRITURE } from './file-ecriture';
 import { nouvelIdentifiant } from './identifiant';
 import {
   choisirChamps, CHAMPS_DEVIS, CHAMPS_LIGNE, PAIRES_DEVIS, PLAFOND_LISTE, MEMOIRE_MAX, decouperListe,
-  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase, colonnesDuRefus,
-  motifsDeRemise, rowToMotifDeRemise,
+  texteDUrgence, LIENS_DU_DEVIS, LIENS_DU_DEVIS_OUVERT, rowToDevis, totauxDepuisBase, ligneDepuisBase, colonnesDuRefus,
+  motifsDeRemise, rowToMotifDeRemise, avecLesTotauxDeLigne,
 } from './devis';
 import { creerBaseDevisDemo, creerLienFermeDemo } from '../data/devis-demo';
 /* La base de postes (section 50, lot P). `postes.js` n'importe que quatre
@@ -1914,24 +1915,10 @@ export const enregistrerRecit = !hasSupabase
 /*  `pros[]`, qui est public, ni dans une notification, ni sur une fiche. */
 /* ==================================================================== */
 
-function rowToClient(c) {
-  return {
-    id: c.id,
-    proId: c.pro_id,
-    type: c.type || 'particulier',
-    nom: c.nom,
-    siret: c.siret || null,
-    telephone: c.telephone || null,
-    email: c.email || null,
-    adresse: c.adresse || null,
-    codePostal: c.code_postal || null,
-    ville: c.ville || null,
-    notes: c.notes || null,
-    archive: Boolean(c.archive),
-    creeLe: c.created_at || null,
-    modifieLe: c.modifie_le || null,
-  };
-}
+/* `rowToClient` VIT DANS `clients.js` sous le nom `clientDepuisBase` (2c-1) :
+   écrite ici, `node` ne pouvait pas l'ouvrir — ce fichier charge Supabase —,
+   et l'aperçu du devis lit la fiche par elle. Même fonction, sans un
+   changement : `verifier-apercu` la fait tourner sur une ligne brute. */
 
 /** Ce que l'écran envoie vers les colonnes de la base. Les valeurs sont
  *  déjà passées par `validerClient()` : ici on ne fait que renommer. */
@@ -1982,7 +1969,7 @@ async function mesClientsSupabase() {
   const { data, error } = await supabase.from('clients')
     .select('*').eq('pro_id', currentUserId).order('nom');
   if (error) throw error;
-  return (data || []).map(rowToClient);
+  return (data || []).map(clientDepuisBase);
 }
 
 export const mesClients = hasSupabase ? mesClientsSupabase : mesClientsDemo;
@@ -2026,13 +2013,13 @@ async function enregistrerClientSupabase(valeurs, id, { idNeuf = null } = {}) {
       .update(ligne).eq('id', id).eq('pro_id', currentUserId)
       .select().single();
     if (error) throw error;
-    return rowToClient(data);
+    return clientDepuisBase(data);
   }
   const { data, error } = await supabase.from('clients')
     .insert({ ...ligne, pro_id: currentUserId, ...(idNeuf ? { id: idNeuf } : {}) })
     .select().single();
   if (error) throw error;
-  return rowToClient(data);
+  return clientDepuisBase(data);
 }
 
 /* `idNeuf` : l'identifiant CHOISI PAR LE TÉLÉPHONE (« Faire un devis »,
@@ -2051,7 +2038,7 @@ async function ficheDuCarnetSupabase(id) {
     8000, 'La relecture de la fiche',
   );
   if (error) throw error;
-  return data ? rowToClient(data) : null;
+  return data ? clientDepuisBase(data) : null;
 }
 async function ficheDuCarnetDemo(id) {
   const c = initialClients.find((x) => String(x.id) === String(id));
@@ -2080,7 +2067,7 @@ async function archiverClientSupabase(id, archive) {
     .update({ archive: Boolean(archive) }).eq('id', id).eq('pro_id', currentUserId)
     .select().single();
   if (error) throw error;
-  return rowToClient(data);
+  return clientDepuisBase(data);
 }
 
 export const archiverClient = hasSupabase ? archiverClientSupabase : archiverClientDemo;
@@ -3224,40 +3211,10 @@ const nombreOuNul = (v) => (v === null || v === undefined ? null : Number(v));
    la mauvaise colonne) passaient au vert. `verifier-devis` les fait désormais
    tourner sur une ligne fabriquée comme PostgREST la rend. */
 
-/** Une ligne de la base, aux noms de l'application. Les nombres en nombres et
- *  les booléens en booléens : la file compare ce qu'on veut à ce que la base
- *  a gardé (`Object.is`), et `4500` n'est pas `'4500'`. */
-function rowToLigne(l) {
-  if (!l) return null;
-  const x = {
-    id: l.id,
-    devisId: l.devis_id ?? null,
-    ordre: nombreOuNul(l.ordre),
-    type: l.type ?? 'poste',
-    designation: l.designation ?? null,
-    quantiteMilliemes: nombreOuNul(l.quantite_milliemes),
-    unite: l.unite ?? null,
-    prixUnitaireCentimes: nombreOuNul(l.prix_unitaire_centimes),
-    tauxTvaCentiemes: nombreOuNul(l.taux_tva_centiemes),
-    totalCentimes: nombreOuNul(l.total_centimes),
-    offert: l.offert === true,
-    mainOeuvre: l.main_oeuvre === true,
-    fournitureNonComprise: l.fourniture_non_comprise === true,
-    surfaceSolMilliemes: nombreOuNul(l.surface_sol_milliemes),
-    surfaceMursMilliemes: nombreOuNul(l.surface_murs_milliemes),
-    /* 2b-3 : « Réparation urgente expressément demandée par le client » —
-       `not null default false` en base : seule une valeur VRAIE l'allume. */
-    urgence: l.urgence === true,
-    generation: nombreOuNul(l.generation),
-    modifieLe: l.modifie_le ?? null,
-  };
-  if (l.devis) {
-    x.devis = {
-      id: l.devis.id, objet: l.devis.objet ?? null, source: l.devis.source ?? null, modifieLe: l.devis.modifie_le ?? null,
-    };
-  }
-  return x;
-}
+/* `rowToLigne` VIT DANS `devis.js` sous le nom `ligneDepuisBase` (2c-1) :
+   écrite ici, `node` ne pouvait pas l'ouvrir — ce fichier charge Supabase —,
+   et l'aperçu du devis lit les lignes par elle. Même fonction, sans un
+   changement : `verifier-apercu` la fait tourner sur une ligne brute. */
 
 /**
  * CE QUE LE TÉLÉPHONE ENVOIE D'UN DEVIS — la liste FERMÉE, et rien d'autre.
@@ -3523,7 +3480,7 @@ async function relireUnDevisSupabase({ quoi, id }) {
   }
   const { data, error } = await supabase.from('devis_lignes').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
-  return rowToLigne(data);
+  return ligneDepuisBase(data);
 }
 async function relireUnDevisDemo(q) {
   return baseDevisDeDemo().relireUn(moiEnDemo(), q);
@@ -3699,12 +3656,17 @@ async function unDevisSupabase(id) {
   const { devis_lignes: lignes, ...devis } = data;
   return {
     devis: rowToDevis(devis),
-    lignes: (lignes || []).map(rowToLigne),
+    lignes: (lignes || []).map(ligneDepuisBase),
     ventilation: totauxDepuisBase(data).ventilation,
   };
 }
 async function unDevisDemo(id) {
-  return baseDevisDeDemo().un(moiEnDemo(), id);
+  /* 2c-1 : la vraie base range le total de chaque poste et de chaque option
+     (49.6) ; celle de démonstration, non — l'aperçu les imprime. Ce qui
+     manque se complète par le miroir (`avecLesTotauxDeLigne`), comme la base
+     l'aurait rangé. */
+  const r = await baseDevisDeDemo().un(moiEnDemo(), id);
+  return r ? { ...r, lignes: avecLesTotauxDeLigne(r.lignes) } : r;
 }
 export const unDevis = hasSupabase ? unDevisSupabase : unDevisDemo;
 
@@ -3886,7 +3848,7 @@ async function memoireDesLignesSupabase() {
       .order('id')
       .limit(MEMOIRE_MAX), signal));
   if (error) leverLecture(error);
-  return (data || []).map(rowToLigne);
+  return (data || []).map(ligneDepuisBase);
 }
 async function memoireDesLignesDemo() {
   return baseDevisDeDemo().memoire(moiEnDemo());

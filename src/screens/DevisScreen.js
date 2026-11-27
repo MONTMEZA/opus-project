@@ -29,10 +29,17 @@
  * second bouton à côté de « Nouveau devis ». C'est l'une des deux portes ;
  * l'autre est dans « Mon profil », parce que cet en-tête n'existe pas
  * pendant la toute première lecture de la liste.
+ *
+ * LES EXEMPLES DE L'APERÇU (2c-1, cahier §6.4) — Opus Dev SEULEMENT : sous
+ * « Ma base de postes », quand `__DEV__` ET `STATUT === 'essai'`, une ligne et
+ * trois boutons EN COLONNE (trois côte à côte ne tiennent pas à 320 points).
+ * Ils ne lisent ni n'écrivent la base : l'exemple est fabriqué en mémoire, au
+ * geste (`apercu-exemples.js`, chargé à ce moment-là par OpusApp). Une
+ * version publiée ne les montre jamais : `__DEV__` y est faux.
  */
 import React from 'react';
 import {
-  View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet,
+  View, Text, FlatList, Pressable, ActivityIndicator, Platform, StyleSheet,
 } from 'react-native';
 import {
   C, F, T, S, R, GOUTTIERE, CARTE_PLEINE, TOUCHE, APPUI, interligne, surFond,
@@ -46,6 +53,16 @@ import {
   PLAFOND_LISTE, origineLisible, depuisLisible, libelleCarteDevis,
 } from '../lib/devis';
 import { dateFrancaise } from '../lib/entreprise';
+import { TEXTES_DE_L_ECRAN } from '../lib/etapes-apercu';
+import { STATUT } from '../data/legal';
+
+/* Les trois exemples, dans l'ordre de l'écran et du protocole : la fonction
+   d'`apercu-exemples.js` que l'appui demande, et son nom à l'écran. */
+const EXEMPLES_APERCU = Object.freeze([
+  Object.freeze({ fonction: 'exempleUneLigne', libelle: TEXTES_DE_L_ECRAN.exempleUneLigne }),
+  Object.freeze({ fonction: 'exempleCinqPostes', libelle: TEXTES_DE_L_ECRAN.exempleCinqPostes }),
+  Object.freeze({ fonction: 'exempleSoixanteLignes', libelle: TEXTES_DE_L_ECRAN.exempleSoixanteLignes }),
+]);
 
 /* Le fond de la pastille « Brouillon » — son ENCRE se calcule (`surFond`) :
    écrite en dur, elle serait fausse le jour où ce fond change. */
@@ -101,7 +118,7 @@ function Intervalle() {
 
 export default function DevisScreen({
   devis = [], etat = 'vide', lus = false, tronque = false, enRetard = false, regime = null,
-  onRecharger, onOuvrir, onNouveau, onMaBase = null,
+  onRecharger, onOuvrir, onNouveau, onMaBase = null, onExemple = null,
 }) {
   const libelleTotal = regime === 'reel' ? 'Total TTC' : 'Total';
   const ouvrir = React.useCallback((id) => onOuvrir && onOuvrir(id), [onOuvrir]);
@@ -163,6 +180,17 @@ export default function DevisScreen({
           onPress={onMaBase}
         />
       )}
+      {/* Jamais sur Android : l'aperçu en pages A4 se fait sur iPhone, et un
+          exemple y finirait sur « mettez Opus à jour », qui est faux
+          (relectures « technique » et « écran » du 27/11). */}
+      {__DEV__ && STATUT === 'essai' && Platform.OS !== 'android' && !!onExemple && (
+        <View style={s.exemples}>
+          <Text style={s.exemplesTitre}>{TEXTES_DE_L_ECRAN.exemplesTitre}</Text>
+          {EXEMPLES_APERCU.map((x) => (
+            <BtnOutline key={x.fonction} label={x.libelle} onPress={() => onExemple(x.fonction)} />
+          ))}
+        </View>
+      )}
       {garderLaListe && (
         <View style={s.nonActualisee} accessibilityLiveRegion="polite">
           <Text style={s.nonActualiseeTexte}>
@@ -220,6 +248,10 @@ const s = StyleSheet.create({
   contenu: { padding: GOUTTIERE, paddingBottom: S.xxl * 2 },
   enteteBoite: { marginBottom: S.md },
   entete: { gap: S.md },
+  /* Les exemples de l'aperçu (Opus Dev) : une colonne, sous « Ma base de
+     postes ». */
+  exemples: { gap: S.sm },
+  exemplesTitre: { fontFamily: F.inter, fontSize: T.petit, color: C.muted, lineHeight: interligne(T.petit) },
   ligneHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.md },
   /* De la STRUCTURE posée sur la liste : angle vif, un filet rouge brique —
      la même famille que les bandes de la saisie. */

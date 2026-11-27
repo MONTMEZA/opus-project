@@ -55,9 +55,11 @@ console.log('\nLes noms sont inventés, et le restent');
     'Nogaret Chauffage', 'Sanchez Plomberie', 'BricoPro', 'AssurBTP',
     'Bâti Démo', 'BATI DEMO',
   ];
+  /* 2c-1 (cahier §7, §8.2) : les exemples de l'aperçu (Opus Dev) sont des
+     données inventées, comme la démonstration — relus pareil. */
   const fichiers = [
     'src/data/demo.js', 'src/data/siret-demo.js', 'src/data/tarifs-demo.js',
-    'src/data/devis-demo.js', 'src/data/emetteur-demo.js', 'supabase/seed.sql',
+    'src/data/devis-demo.js', 'src/data/emetteur-demo.js', 'src/data/apercu-exemples.js', 'supabase/seed.sql',
   ].filter(existsSync);
   const trouves = [];
   fichiers.forEach((f) => {
@@ -85,12 +87,13 @@ console.log('\nLes noms sont inventés, et le restent');
   const fichiersOrganismes = [
     'src/data/demo.js', 'src/data/siret-demo.js', 'src/data/tarifs-demo.js', 'src/data/devis-demo.js',
     'src/data/emetteur-demo.js', 'src/components/FicheLabel.js', 'src/components/FicheSousTraitant.js',
+    'src/data/apercu-exemples.js',
   ].filter(existsSync);
   const organismesTrouves = fichiersOrganismes.map((f) => [f, sansCommentaires(lire(f)).match(motOrganisme)])
     .filter(([, m]) => m).map(([f, m]) => `${f} : « ${m[2]} »`);
   verifier('aucun organisme réel de qualification (Qualibat, Qualit’EnR, Qualifelec…) dans la démonstration ni dans les deux formulaires '
     + 'des signes de qualité et des sous-traitants (2b-6, CTL-4)',
-  organismesTrouves.length === 0 && fichiersOrganismes.length === 7
+  organismesTrouves.length === 0 && fichiersOrganismes.length === 8
     && motOrganisme.test('Qualibat') && motOrganisme.test('QUALIT’ENR') && motOrganisme.test('certifié par Qualifelec.')
     && !motOrganisme.test('Qualifications de démonstration') && !motOrganisme.test('qualibatiment'),
   `${organismesTrouves.join('\n      ')} | ${fichiersOrganismes.length} fichiers relus`);
@@ -115,6 +118,7 @@ console.log('\nLes numéros sont ceux que l’Arcep réserve à la fiction');
     'src/data/demo.js', 'src/data/emetteur-demo.js', 'src/data/tarifs-demo.js',
     'src/data/devis-demo.js', 'src/screens/ProfilEditScreen.js',
     'src/components/FicheClient.js', 'src/components/FicheEmetteur.js',
+    'src/data/apercu-exemples.js',
   ].filter(existsSync);
   const hors = [];
   let vus = 0;

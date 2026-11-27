@@ -81,7 +81,7 @@ import { partagerPost } from './lib/partage';
 import PagesGlissantes from './components/PagesGlissantes';
 import { completerLieu } from './lib/adresse';
 import { chiffresSeuls, formaterSiret } from './lib/siret';
-import { VERSION as VERSION_CGU } from './data/legal';
+import { VERSION as VERSION_CGU, STATUT } from './data/legal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FeuilleRecherche from './components/FeuilleRecherche';
 import FenetreAgent from './components/FenetreAgent';
@@ -90,6 +90,13 @@ import MonEntreprise from './components/MonEntreprise';
 /* Le chiffrage d'un devis (lot 1) : la liste, la saisie, et les deux façons
    d'ouvrir un brouillon pré-rempli (depuis une fiche, depuis une demande). */
 import DevisScreen from './screens/DevisScreen';
+/* 2c-1 : l'aperçu des EXEMPLES (Opus Dev seulement, cahier §6.4) — le corps
+   seul, sa séance, et l'enveloppe de l'impression, écrite SANS extension
+   (au navigateur, Metro prend `devis-pdf.web.js`). Les exemples eux-mêmes ne
+   sont chargés qu'au geste. */
+import ApercuDevis from './components/ApercuDevis';
+import { creerSeance, TEXTES_DE_L_ECRAN as TEXTES_APERCU } from './lib/etapes-apercu';
+import { fabriqueDuTelephone, composerPourLApercu } from './lib/devis-pdf';
 import SaisieDevisScreen from './screens/SaisieDevisScreen';
 /* La base de postes (lot P) : la page, ouverte par deux portes. */
 import PostesScreen from './screens/PostesScreen';
@@ -4144,6 +4151,10 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
   const ecrituresPostes = useRef(0);
   /* D'où l'on a ouvert « Ma base de postes », pour y revenir. */
   const [origineMaBase, setOrigineMaBase] = useState('profil');
+  /* 2c-1 : la séance de l'exemple d'aperçu ouvert, et sa clé (un exemple
+     rouvert est un aperçu NEUF). */
+  const [seanceExemple, setSeanceExemple] = useState(null);
+  const [cleExemple, setCleExemple] = useState(0);
 
   /** Lire la base de postes. Rend la liste lue, ou `null` sur un échec —
    *  la feuille d'ajout s'en sert après un refus 23505 : elle MONTRE le
@@ -4316,6 +4327,32 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
    * porte ne l'ouvre depuis la saisie d'un devis : changer sa référence s'y
    * fait par une feuille posée par-dessus, sans la quitter.
    */
+  /**
+   * UN EXEMPLE D'APERÇU (2c-1, cahier §6.4) — Opus Dev SEULEMENT, et les
+   * DEUX conditions : `__DEV__` (une version publiée ne les montre jamais) et
+   * `STATUT === 'essai'`. L'appui crée la séance et la démarre (K2) : elle ne
+   * lit ni n'écrit la base, n'attend aucune file (il n'y a pas de saisie), et
+   * l'exemple est FABRIQUÉ à ce moment-là — `apercu-exemples.js` n'est chargé
+   * qu'ici, jamais au démarrage d'Opus. La flèche revient à « Mes devis ».
+   */
+  const ouvrirExemple = (fonction) => {
+    if (!(__DEV__ && STATUT === 'essai')) return;
+    const seance = creerSeance({
+      attendreLaFile: async () => ({ ok: true }),
+      lire: async () => require('./data/apercu-exemples')[fonction](new Date()),
+      composer: composerPourLApercu,
+      fabrique: fabriqueDuTelephone(),
+      maintenant: () => new Date(),
+      attendre: (ms) => new Promise((resoudre) => { setTimeout(resoudre, ms); }),
+      annoncer: retour.annoncer,
+      vibrer: (nom) => (nom === 'reussite' ? retour.reussite() : retour.echec()),
+    });
+    setSeanceExemple(seance);
+    setCleExemple((k) => k + 1);
+    setScreen('apercuExemple');
+    seance.demarrer();
+  };
+
   const ouvrirMaBase = () => {
     setOrigineMaBase(screen === 'devis' ? 'devis' : 'profil');
     setScreen('postes');
@@ -4763,6 +4800,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     || screen === 'confidentialite' || screen === 'legal' || screen === 'admin'
     || screen === 'clients' || screen === 'passerPro'
     || screen === 'devis' || screen === 'devisSaisie' || screen === 'postes'
+    || screen === 'apercuExemple'
     || (screen === 'messages' && activeConvId);
 
   const backTitle = screen === 'publication' ? 'Publication'
@@ -4778,6 +4816,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
     : screen === 'clients' ? 'Mes clients'
     : screen === 'devis' ? 'Mes devis'
     : screen === 'postes' ? 'Ma base de postes'
+    : screen === 'apercuExemple' ? TEXTES_APERCU.titreExemple
     /* En saisie, le titre de la PIÈCE quand une carte de ligne est ouverte :
        on ne voit plus les lignes voisines, le titre dit où l'on est. */
     : screen === 'devisSaisie'
@@ -4810,6 +4849,9 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             /* On revient d'où l'on a ouvert la base : « Mes devis » ou le
                profil. */
             if (screen === 'postes') { setScreen(origineMaBase); return; }
+            /* L'exemple d'aperçu revient à « Mes devis », d'où il s'ouvre ; le
+               corps arrête sa séance en se démontant. */
+            if (screen === 'apercuExemple') { setScreen('devis'); return; }
             /* On revient d'où l'on vient : la cloche. Repartir sur le
                fil ferait perdre la liste qu'on était en train de lire. */
             if (screen === 'publication') {
@@ -5381,7 +5423,12 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             onOuvrir={(id) => ouvrirDevis({ id }, 'devis')}
             onNouveau={() => ouvrirDevis({ valeurs: { source: 'manuelle' } }, 'devis')}
             onMaBase={ouvrirMaBase}
+            onExemple={ouvrirExemple}
           />
+        )}
+
+        {screen === 'apercuExemple' && !!seanceExemple && (
+          <ApercuDevis key={`exemple-${cleExemple}`} seance={seanceExemple} onRevenir={() => setScreen('devis')} />
         )}
 
         {screen === 'postes' && (

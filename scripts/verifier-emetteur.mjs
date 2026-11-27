@@ -53,6 +53,9 @@
  *   npm run verifier-emetteur
  */
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   messageClair, messageDeContrainte, estDefinitif, MESSAGES_CONTRAINTE,
 } from '../src/lib/erreurs.js';
@@ -68,6 +71,221 @@ const sansCommentaires = (c) => c
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
 const lire = (f) => readFileSync(f, 'utf8');
+
+/* ================================================================== */
+/*  LES SORTIES D'`enteteImprime` FIGÉES AVANT LA REFONTE (2c-1, K15)    */
+/* ================================================================== */
+/* Le cahier de 2c-1 (§1.4 étape 0, §8.2) : `enteteImprime` lit désormais
+   `enteteImprimeDetaille`, et doit rendre EXACTEMENT ce qu'il rendait avant,
+   au caractère près. Ses sorties ont été figées AVANT d'y toucher, sur
+   l'`emetteur.js` du commit 2fde28a, pour 554 entrées construites pour
+   passer par chaque branche (chaque entreprise croisée avec chaque fiche
+   « Mon entreprise », les assurances, les tarifs et la preuve de TVA qui
+   tournent ; puis chaque variante seule ; puis les trois formes d'appel).
+   Les ENTRÉES sont écrites ici en toutes lettres ; les empreintes de
+   l'entrée et de la sortie de chaque appel sont dans
+   `scripts/donnees/entete-figee.json`.
+   Pourquoi ce complément : les cas en toutes lettres plus bas n'attrapaient
+   pas tout — mesuré par le banc des sabotages de 2c-1 (S57) : « . Contrat
+   n° » devenu « , contrat n° » dans la logique partagée laissait ce
+   contrôle VERT, et seul ce rejeu le voit.
+   L'heure compte : « consultée le » lit un horodatage à l'heure du
+   téléphone (à Kiritimati, le 28/09 à 10 h UTC est déjà le 29). Le rejeu
+   tourne donc dans un SOUS-PROCESSUS à TZ=UTC, l'heure où il a été figé. */
+const ENTETE_A = {
+  id: 'a', siren: '000004887', siret: '00000488700014', denomination: 'ESSAI A', nom_commercial: null,
+  est_ei: false, forme_juridique: '5499', est_siege: true, tva: 'FR26000004887',
+  adresse: '12 RUE DE L ESSAI 13004 MARSEILLE', code_postal: '13004', commune: 'MARSEILLE',
+  statut_diffusion: 'O', maj_insee: '2026-09-02', source: 'registre', verifie_le: '2026-09-28T10:00:00.000Z', retiree_le: null,
+};
+const ENTETE_B = {
+  ...ENTETE_A, id: 'b', denomination: null, est_ei: true, forme_juridique: '1000', est_siege: false, tva: null,
+  adresse: '3 CHEMIN DES ESSAIS', code_postal: '13410', commune: 'LAMBESC',
+};
+const ENTETE_C = { ...ENTETE_B, id: 'c', est_siege: true, statut_diffusion: 'P', adresse: null };
+/* L'identité de démonstration (`src/data/siret-demo.js`), RECOPIÉE telle
+   qu'elle était au moment du figé : la sortie figée ne doit pas suivre la
+   démonstration si elle change. */
+const ENTETE_DEMO = {
+  siret: '00000488700014', siren: '000004887', denomination: 'MACONNERIE FERLANE', sigle: null,
+  nom_commercial: 'Maçonnerie Ferlane', est_ei: false, forme_juridique: '5499', date_creation: '2015-02-02',
+  tva: 'FR26000004887', ape: '43.99C', naf25: '43.91Y', est_siege: true, adresse: '12 RUE DE LA DEMONSTRATION',
+  commune: 'MARSEILLE', code_postal: '13004', code_insee: '13204', statut_diffusion: 'O', maj_insee: '2026-09-02',
+  source: 'registre',
+};
+const ENTETE_ENTREPRISES = [
+  ['aucune', null],
+  ['A SARL', ENTETE_A],
+  ['A nom commercial distinct', { ...ENTETE_A, nom_commercial: 'Le Mur Droit' }],
+  ['A nom commercial égal', { ...ENTETE_A, nom_commercial: 'ESSAI A' }],
+  ['A sans dénomination', { ...ENTETE_A, denomination: null }],
+  ['A rue seule', { ...ENTETE_A, adresse: '12 RUE DE L ESSAI' }],
+  ['A adresse finit par la commune', { ...ENTETE_A, adresse: '12 RUE DE L ESSAI MARSEILLE', code_postal: null }],
+  ['A adresse commence par le code postal', { ...ENTETE_A, adresse: '13004 MARSEILLE' }],
+  ['A établissement secondaire', { ...ENTETE_A, est_siege: false }],
+  ['A sans adresse, siège', { ...ENTETE_A, adresse: null }],
+  ['A source administration', { ...ENTETE_A, source: 'administration', tva: null }],
+  ['A source essai, sans dates', { ...ENTETE_A, source: 'essai', maj_insee: null, verifie_le: null }],
+  ['A sans SIRET ni SIREN', { ...ENTETE_A, siret: null, siren: null, tva: null }],
+  ['B EI secondaire', ENTETE_B],
+  ['B nature par la forme seule', { ...ENTETE_B, est_ei: null }],
+  ['B nature inconnue', { ...ENTETE_B, est_ei: null, forme_juridique: null, denomination: null }],
+  ['C EI siège non diffusé', ENTETE_C],
+  ['C siège inconnu', { ...ENTETE_C, est_siege: null }],
+  ['SCP 6578', { ...ENTETE_A, denomination: 'SCP ESSAI D', forme_juridique: '6578', tva: null }],
+  ['SNC 5202', { ...ENTETE_A, denomination: 'SNC ESSAI', forme_juridique: '5202' }],
+  ['SAS 5710', { ...ENTETE_A, denomination: 'SAS ESSAI', forme_juridique: '5710' }],
+  ['SCA 5308', { ...ENTETE_A, denomination: 'SCA ESSAI', forme_juridique: '5308' }],
+  ['SARL coopérative artisanale 5453', { ...ENTETE_A, denomination: 'COOP ESSAI', forme_juridique: '5453' }],
+  ['forme inconnue 9999', { ...ENTETE_A, forme_juridique: '9999' }],
+  ['démonstration', ENTETE_DEMO],
+];
+const ENTETE_COMPLETE = {
+  registre: 'rcs', greffe_ville: 'Marseille', capital_centimes: 100000, capital_variable: false,
+  telephone: '04 91 00 00 00', email: 'contact@exemple-opus.test', regime_tva: 'reel',
+  mediateur_nom: 'Médiation Solution', mediateur_adresse: 'Adresse de son contrat',
+  mediateur_site: 'https://sasmediationsolution-conso.fr/',
+  garantie_legale_texte: 'Garantie de parfait achèvement, biennale et décennale.',
+  modalites_paiement_texte: 'Paiement à réception de facture.',
+  modalites_execution_texte: 'Travaux réalisés aux dates convenues.',
+  reclamations_texte: 'Par écrit, réponse sous quinze jours.',
+};
+const ENTETE_EMETTEURS = [
+  ['aucune', null],
+  ['vide', {}],
+  ['complète', ENTETE_COMPLETE],
+  ['capital variable', { ...ENTETE_COMPLETE, capital_centimes: null, capital_variable: true }],
+  ['capital absent', { ...ENTETE_COMPLETE, capital_centimes: null }],
+  ['RNE', { ...ENTETE_COMPLETE, registre: 'rne', greffe_ville: null }],
+  ['RCS sans greffe', { ...ENTETE_COMPLETE, greffe_ville: null }],
+  ['aucun registre', { ...ENTETE_COMPLETE, registre: 'aucun', greffe_ville: null }],
+  ['registre non dit', { ...ENTETE_COMPLETE, registre: null }],
+  ['liquidation et location-gérance', { ...ENTETE_COMPLETE, en_liquidation: true, locataire_gerant: true }],
+  ['franchise', { ...ENTETE_COMPLETE, regime_tva: 'franchise' }],
+  ['régime non dit', { ...ENTETE_COMPLETE, regime_tva: null }],
+  ['siège et établissement saisis', { ...ENTETE_COMPLETE, siege_adresse: '1 rue du Siège', siege_code_postal: '13000',
+    siege_ville: 'Marseille', etablissement_adresse: '9 rue saisie', etablissement_code_postal: '13100',
+    etablissement_ville: 'Aix' }],
+  ['siège incomplet', { ...ENTETE_COMPLETE, siege_adresse: '1 rue du Siège', siege_code_postal: null, siege_ville: 'Marseille' }],
+  ['nom d’EI', { ...ENTETE_COMPLETE, denomination_ei: 'Jean Dupont EI', registre: 'rne' }],
+  ['garantie commerciale et SAV', { ...ENTETE_COMPLETE, garantie_commerciale_texte: 'Deux ans.', sav_texte: 'Sous 48 h.' }],
+  ['SAV seul', { ...ENTETE_COMPLETE, sav_texte: 'Par téléphone.' }],
+  ['contacts absents', { ...ENTETE_COMPLETE, telephone: null, email: '', mediateur_nom: null, garantie_legale_texte: null,
+    modalites_paiement_texte: null, modalites_execution_texte: null, reclamations_texte: null }],
+  ['texte tapé qui dit « artisan »', { ...ENTETE_COMPLETE, modalites_execution_texte: 'Main d’œuvre artisanale.' }],
+];
+const ENTETE_ASSURANCES = [
+  ['aucune', []],
+  ['null', null],
+  ['absente', undefined],
+  ['décennale avec contrat', [{ nature: 'decennale', assureur_nom: 'Assureur', assureur_coordonnees: '1 rue, Paris',
+    couverture: 'France', numero_contrat: 'C-42', created_at: '2026-10-01' }]],
+  ['deux, dans le désordre', [
+    { nature: 'rc_pro', assureur_nom: 'Second', assureur_coordonnees: '2 rue, Lyon', couverture: 'Europe',
+      numero_contrat: null, created_at: '2026-10-05' },
+    { nature: 'decennale', assureur_nom: 'Premier', assureur_coordonnees: '1 rue, Paris', couverture: 'France',
+      numero_contrat: null, created_at: '2026-10-01' }]],
+  ['autre avec libellé, autre sans, nature inconnue, sans date', [
+    { nature: 'autre', libelle: 'Bris de machine', assureur_nom: 'X', assureur_coordonnees: 'x', couverture: 'y', created_at: '2026-10-03' },
+    { nature: 'autre', libelle: null, assureur_nom: 'Y', assureur_coordonnees: 'y', couverture: 'z', created_at: '2026-10-02' },
+    { nature: 'inconnue', assureur_nom: 'Z', assureur_coordonnees: 'z', couverture: 'w', created_at: '2026-10-04' },
+    { nature: 'decennale', assureur_nom: 'W', assureur_coordonnees: 'w', couverture: 'v' }]],
+];
+const ENTETE_TARIFS = [
+  ['aucun', null],
+  ['offert', { frais_deplacement_centimes: 0, frais_deplacement_texte: null }],
+  ['montant seul', { frais_deplacement_centimes: 3500, frais_deplacement_texte: null }],
+  ['montant et conditions', { frais_deplacement_centimes: 3500, frais_deplacement_texte: 'au-delà de 20 km' }],
+  ['conditions seules', { frais_deplacement_centimes: null, frais_deplacement_texte: 'selon la distance' }],
+  ['rien de dit', { frais_deplacement_centimes: null, frais_deplacement_texte: null }],
+];
+const ENTETE_PREUVE = { siren: '000004887', numero: 'FR26000004887', reconnu_le: '2026-10-20T13:51:01.000Z', source: 'vies' };
+const ENTETE_PREUVES = [
+  ['aucune', null],
+  ['VIES', ENTETE_PREUVE],
+  ['essai', { ...ENTETE_PREUVE, source: 'essai' }],
+  ['déclaration', { ...ENTETE_PREUVE, source: 'declaration', declare_le: '2026-11-09T10:00:00.123456+00:00',
+    declaration_texte: 'texte' }],
+  ['source inconnue', { ...ENTETE_PREUVE, source: 'autre' }],
+  ['autre SIREN', { ...ENTETE_PREUVE, siren: '000048009', numero: 'FR91000048009' }],
+  ['numéro mal formé', { ...ENTETE_PREUVE, numero: 'FR2600000488' }],
+];
+/* Les 554 appels, DANS L'ORDRE où ils ont été figés. */
+function entreesDeLEnteteFigee() {
+  const entrees = [];
+  ENTETE_ENTREPRISES.forEach(([ne, en], i) => ENTETE_EMETTEURS.forEach(([nm, em], j) => {
+    const [na, as] = ENTETE_ASSURANCES[(i + j) % ENTETE_ASSURANCES.length];
+    const [nt, ta] = ENTETE_TARIFS[(i * 3 + j) % ENTETE_TARIFS.length];
+    const [np, pr] = ENTETE_PREUVES[(i + 2 * j) % ENTETE_PREUVES.length];
+    entrees.push([`${ne} × ${nm} · assurances ${na} · tarifs ${nt} · preuve ${np}`,
+      [{ entreprise: en, emetteur: em, assurances: as, tarifs: ta, preuveTva: pr }]]);
+  }));
+  const seules = [ENTETE_ENTREPRISES[1], ENTETE_ENTREPRISES[10], ENTETE_ENTREPRISES[13],
+    [`${ENTETE_ENTREPRISES[1][0]} sans TVA`, { ...ENTETE_A, tva: null }]];
+  for (const [ne, en] of seules) {
+    for (const [na, as] of ENTETE_ASSURANCES) entrees.push([`${ne} · assurances ${na}`, [{ entreprise: en, emetteur: ENTETE_COMPLETE, assurances: as }]]);
+    for (const [nt, ta] of ENTETE_TARIFS) entrees.push([`${ne} · tarifs ${nt}`, [{ entreprise: en, emetteur: ENTETE_COMPLETE, tarifs: ta }]]);
+    for (const [np, pr] of ENTETE_PREUVES) entrees.push([`${ne} · preuve ${np}`, [{ entreprise: en, emetteur: ENTETE_COMPLETE, preuveTva: pr }]]);
+  }
+  entrees.push(['sans argument', []]);
+  entrees.push(['objet vide', [{}]]);
+  entrees.push(['undefined explicites', [{ entreprise: undefined, emetteur: undefined, assurances: undefined, tarifs: undefined,
+    preuveTva: undefined }]]);
+  return entrees;
+}
+/* L'ENCODAGE FIDÈLE du figé (JSON seul perdrait `undefined`, les `Date`,
+   `NaN`, `-0`) : la même écriture qu'à l'étape 0, au caractère près — c'est
+   SA chaîne JSON dont on compare l'empreinte. Ce qu'on ne sait pas écrire
+   fidèlement LÈVE. */
+function encoderFidele(v, vus = new Set()) {
+  if (v === undefined) return { $t: 'undefined' };
+  if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+  if (typeof v === 'number') {
+    if (Number.isNaN(v)) return { $t: 'nombre', v: 'NaN' };
+    if (v === Infinity) return { $t: 'nombre', v: 'Infinity' };
+    if (v === -Infinity) return { $t: 'nombre', v: '-Infinity' };
+    if (Object.is(v, -0)) return { $t: 'nombre', v: '-0' };
+    return v;
+  }
+  if (typeof v === 'bigint') return { $t: 'bigint', v: v.toString() };
+  if (typeof v !== 'object') throw new Error(`valeur impossible à figer : ${typeof v}`);
+  if (vus.has(v)) throw new Error('référence circulaire : impossible à figer');
+  vus.add(v);
+  try {
+    if (v instanceof Date) return { $t: 'date', v: Number.isNaN(v.getTime()) ? null : v.toISOString() };
+    if (Array.isArray(v)) {
+      const r = [];
+      for (let i = 0; i < v.length; i += 1) r.push(i in v ? encoderFidele(v[i], vus) : { $t: 'undefined', trou: true });
+      return r;
+    }
+    const proto = Object.getPrototypeOf(v);
+    if (proto !== Object.prototype && proto !== null) {
+      throw new Error(`objet d'un type particulier impossible à figer : ${proto && proto.constructor && proto.constructor.name}`);
+    }
+    const r = {};
+    for (const k of Object.keys(v)) {
+      if (k === '$t') throw new Error('une clé « $t » se confondrait avec le codage');
+      r[k] = encoderFidele(v[k], vus);
+    }
+    return r;
+  } finally {
+    vus.delete(v);
+  }
+}
+const empreinteFigee = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 16);
+
+/* LE SOUS-PROCESSUS (`--entete-figee`, lancé plus bas à TZ=UTC) : il rejoue
+   les 554 appels, écrit leurs empreintes, et s'arrête là. */
+if (process.argv.includes('--entete-figee')) {
+  const Ef = await import('../src/lib/emetteur.js');
+  const appels = entreesDeLEnteteFigee().map(([pile, args]) => {
+    let sortie;
+    try { sortie = encoderFidele(Ef.enteteImprime(...args)); } catch (e) { sortie = `LÈVE : ${e && e.message}`; }
+    return [pile, empreinteFigee(encoderFidele(args)), empreinteFigee(sortie)];
+  });
+  process.stdout.write(JSON.stringify({ decalage: new Date('2026-09-28T10:00:00Z').getTimezoneOffset(), appels }));
+  process.exit(0);
+}
 
 /* Les NOMS des paramètres d'une fonction écrite `f({ a = …, b, … } = {})`,
    lus dans son TEXTE — `f.toString()` pour une fonction chargée, le fichier
@@ -768,7 +986,11 @@ if (E && M && D) {
     const lignes = (h) => [...h.identite, ...h.mentions, h.source || ''];
     const INTERDITS = /undefined|\bnull\b|NaN|juridiction|garantie contractuelle|extension de garantie|v[ée]rifi/i;
     const cas = [];
-    const h = (o) => { const r = E.enteteImprime(o); cas.push(r); return r; };
+    /* 2c-1 (cahier §8.2, K15) : chaque entrée est gardée aussi — plus bas,
+       `enteteImprime` doit rendre les TEXTES d'`enteteImprimeDetaille` sur
+       CHACUNE. */
+    const entrees = [];
+    const h = (o) => { const r = E.enteteImprime(o); cas.push(r); entrees.push(o); return r; };
 
     const ei = h({ entreprise: B, emetteur: { denomination_ei: 'Jean Dupont EI', registre: 'rne', siege_adresse: '1 rue du Siège',
       siege_code_postal: '13000', siege_ville: 'Marseille', regime_tva: 'franchise' } });
@@ -921,6 +1143,64 @@ if (E && M && D) {
     const fautives = cas.flatMap(lignes).filter((x) => INTERDITS.test(x));
     verifier('aucune ligne ne contient `undefined`, `null`, `NaN`, « juridiction », « vérifié »…',
       fautives.length === 0, fautives.join(' | '));
+
+    /* L'EN-TÊTE DÉTAILLÉ (2c-1, cahier §8.2, K15) : `enteteImprimeDetaille`
+       porte la LOGIQUE — chaque ligne avec son genre, et sa clé quand elle
+       manque —, et `enteteImprime` n'en est que la lecture : SES TEXTES, sans
+       les lignes que seule la page d'un devis montre. Prouvé sur chaque
+       entrée de ce bloc ; ses sorties d'AVANT la refonte, figées à l'étape 0
+       (24 appels, quatre fuseaux), se rejouent identiques au caractère près
+       hors du dépôt. Une ligne qui manque porte une clé, une ligne présente
+       n'en porte pas : l'aperçu range par le GENRE, jamais par le texte. */
+    const ecartsDetail = [];
+    entrees.forEach((o, i) => {
+      const d = E.enteteImprimeDetaille(o);
+      const vues = (t) => t.filter((l) => !l.seulementSurLeDevis);
+      const attendu = {
+        identite: vues(d.identite).map((l) => l.texte),
+        mentions: vues(d.mentions).map((l) => l.texte),
+        source: d.source,
+        manques: [...vues(d.identite), ...vues(d.mentions)].filter((l) => l.quoi != null).map((l) => l.quoi),
+      };
+      if (JSON.stringify(E.enteteImprime(o)) !== JSON.stringify(attendu)) ecartsDetail.push(`entrée ${i + 1} : textes`);
+      [...d.identite, ...d.mentions].forEach((l) => {
+        const manque = E.estUnManque(l.texte);
+        if (typeof l.genre !== 'string' || !l.genre) ecartsDetail.push(`entrée ${i + 1} : « ${l.texte} » sans genre`);
+        if (manque !== (l.cle != null && l.quoi != null)) ecartsDetail.push(`entrée ${i + 1} : « ${l.texte} » clé ${l.cle}`);
+      });
+    });
+    verifier(`\`enteteImprime\` = les textes d’\`enteteImprimeDetaille\` sur les ${entrees.length} entrées de ce bloc ; une ligne `
+      + 'qui manque porte sa clé, une ligne présente n’en porte pas, chacune a son genre (K15)',
+    ecartsDetail.length === 0 && entrees.length > 20, ecartsDetail.slice(0, 6).join(' | '));
+
+    /* LES SORTIES FIGÉES AVANT LA REFONTE (2c-1, §1.4 étape 0, §8.2, K15) :
+       les 554 appels du complément, rejoués dans un sous-processus à TZ=UTC
+       (l'heure du figé), comparés AU CARACTÈRE PRÈS — par l'empreinte de la
+       chaîne JSON de leur encodage fidèle — à ce qu'`enteteImprime` rendait
+       sur le commit 2fde28a. Les ENTRÉES sont comparées aussi : une entrée
+       retouchée ici ferait passer pour figée une sortie qui ne l'est pas. */
+    const figee = JSON.parse(lire('scripts/donnees/entete-figee.json'));
+    const rejeu = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--entete-figee'],
+      { env: { ...process.env, TZ: 'UTC' }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    let rejoues = null;
+    try { rejoues = JSON.parse(rejeu.stdout); } catch { rejoues = null; }
+    verifier('le rejeu des sorties figées a tourné jusqu’au bout, dans un sous-processus qui a VU TZ=UTC',
+      rejeu.status === 0 && !!rejoues && rejoues.decalage === 0 && Array.isArray(rejoues.appels),
+      `${rejeu.status} ${(rejeu.stderr || '').slice(0, 300)}`);
+    const appelsRejoues = (rejoues && rejoues.appels) || [];
+    const entreesChangees = [];
+    const sortiesChangees = [];
+    appelsRejoues.forEach(([pile, entree, sortie], k) => {
+      const f = figee.appels[k];
+      if (!f || f[0] !== entree) entreesChangees.push(`appel ${k} (${pile})`);
+      else if (f[1] !== sortie) sortiesChangees.push(`appel ${k} (${pile})`);
+    });
+    verifier(`les ${figee.nombre} entrées figées à l’étape 0 sont celles que ce contrôle construit, dans le même ordre (aucune retouchée)`,
+      figee.nombre === 554 && figee.appels.length === figee.nombre && appelsRejoues.length === figee.nombre
+      && entreesChangees.length === 0, `${appelsRejoues.length} rejouées ; ${entreesChangees.slice(0, 4).join(' | ')}`);
+    verifier(`\`enteteImprime\` rend, sur ces ${figee.nombre} entrées, EXACTEMENT ce qu’il rendait AVANT la refonte de 2c-1 `
+      + '(au caractère près ; une virgule qui change le fait rougir — K15, S57)', appelsRejoues.length === figee.nombre
+      && sortiesChangees.length === 0, `${sortiesChangees.length} sortie(s) changée(s) : ${sortiesChangees.slice(0, 4).join(' | ')}`);
 
     /* LES LIEUX DE DÉPÔT NE S'IMPRIMENT PAS DANS L'EN-TÊTE (2b-5, cahier
        T13 : « l'en-tête imprimé ne les imprime pas » ; le banc des

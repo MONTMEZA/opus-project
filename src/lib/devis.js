@@ -105,6 +105,24 @@ export const UNITES = Object.freeze([
   Object.freeze({ cle: 'forfait', court: 'forfait', pastille: 'forfait', nom: 'forfait' }),
 ]);
 
+/**
+ * LES UNITÉS SUR LE PAPIER (2c-1, D11) — ce que l'aperçu IMPRIME après une
+ * quantité : le singulier en dessous de deux (« 1 forfait », « 1,5 jour »),
+ * le pluriel à partir de deux (« 3 jours »). Jamais « ml », qu'on lit
+ * « millilitre » : « m linéaire », comme la pastille. Les symboles (m², m³,
+ * u, h) ne prennent pas de « s ». Les mêmes sept clés que `UNITES`, et le
+ * contrôle compare les deux listes.
+ */
+export const UNITES_IMPRIMEES = Object.freeze({
+  m2: Object.freeze({ singulier: 'm²', pluriel: 'm²' }),
+  m: Object.freeze({ singulier: 'm linéaire', pluriel: 'm linéaires' }),
+  m3: Object.freeze({ singulier: 'm³', pluriel: 'm³' }),
+  u: Object.freeze({ singulier: 'u', pluriel: 'u' }),
+  h: Object.freeze({ singulier: 'h', pluriel: 'h' }),
+  jour: Object.freeze({ singulier: 'jour', pluriel: 'jours' }),
+  forfait: Object.freeze({ singulier: 'forfait', pluriel: 'forfaits' }),
+});
+
 /** L'unité PROPOSÉE quand on allume « Main-d'œuvre » — jamais imposée : un
  *  prix au m² est un prix forfaitaire (arrêté du 24/01/2017, art. 2). */
 export const UNITE_MAIN_OEUVRE = 'h';
@@ -484,7 +502,7 @@ const vrai = (b) => b === true;
    (le défaut de la colonne, et ce que fait `nettoyerLigne`). Écrite deux
    fois, elle s'était déjà dédoublée : une ligne sans type comptait dans le
    total du devis et pas dans le sous-total de sa pièce. */
-const typeDe = (l) => (l && present(l.type) ? l.type : 'poste');
+export const typeDe = (l) => (l && present(l.type) ? l.type : 'poste');
 
 /** Un texte rogné de ses blancs (invisibles compris), ou `null` s'il ne
  *  reste rien : un blanc n'est pas une valeur. Miroir des déclencheurs. */
@@ -1306,6 +1324,40 @@ export function sousTotaux(lignes) {
 }
 
 /**
+ * LA SOMME DES TOTAUX RELUS (2c-1, C-m7) — pour un sous-total IMPRIMÉ : la
+ * somme des `totalCentimes` que la BASE a rangés sur les POSTES de la liste
+ * (une option n'est pas comprise ; une ligne offerte compte 0, la base l'y
+ * range). Pas `sousTotaux()`, qui additionne `totalLigne()`, le MIROIR : si la
+ * base et le miroir différaient d'un centime, le sous-total imprimé ne serait
+ * plus la somme des totaux imprimés juste au-dessus. `null` quand un poste
+ * n'a pas de total relu : une somme qui l'oublierait en silence serait fausse.
+ */
+export function sommeDesLignesLues(lignes) {
+  let somme = 0;
+  for (const l of lignes || []) {
+    if (typeDe(l) !== 'poste') continue;
+    if (!entier(l.totalCentimes)) return null;
+    somme += l.totalCentimes;
+  }
+  return somme;
+}
+
+/**
+ * LES TOTAUX DE LIGNE D'UNE BASE SANS DÉCLENCHEUR (2c-1) — la vraie base range
+ * `total_centimes` sur chaque poste et chaque option (49.6) ; la base de
+ * DÉMONSTRATION ne range que les totaux du devis. L'aperçu imprime le total
+ * RELU de chaque ligne (`sommeDesLignesLues`, C-m7) : sans eux, la
+ * démonstration et les exemples imprimeraient « — » sous chaque poste. On
+ * complète donc, par le miroir (`totalLigne`), ce qui MANQUE — jamais un
+ * total déjà relu. Pour la démonstration et les exemples SEULEMENT : sur la
+ * vraie base, un poste sans total relu doit rester sans total.
+ */
+export function avecLesTotauxDeLigne(lignes) {
+  return (lignes || []).map((l) => (['poste', 'option'].includes(typeDe(l)) && !entier(l.totalCentimes)
+    ? { ...l, totalCentimes: totalLigne(l) } : l));
+}
+
+/**
  * Les lignes qu'emporte un titre — pour la phrase de « Retirer » (« Les 4
  * lignes de cette pièce passeront dans… ») et pour « Retirer la pièce et
  * ses lignes ». Les OPTIONS n'en font pas partie : l'écran les montre à
@@ -2062,6 +2114,71 @@ export function totauxDepuisBase(d) {
         remise: Number(t.remise_centimes ?? 0), tva: Number(t.tva_centimes), nbLignes: Number(t.nb_lignes),
       }))
       .sort((a, b) => b.taux - a.taux),
+  };
+}
+
+/**
+ * UNE LIGNE DE LA BASE, aux noms de l'application — la conversion qui vivait
+ * dans `api.js` sous le nom `rowToLigne`, DÉMÉNAGÉE SANS CHANGER (2c-1,
+ * cahier §3 règle 5). `api.js` charge Supabase : `node` ne pouvait pas
+ * l'ouvrir, et l'aperçu lit les lignes par elle. Les nombres en nombres et
+ * les booléens en booléens : la file compare ce qu'on veut à ce que la base
+ * a gardé (`Object.is`), et `4500` n'est pas `'4500'`.
+ */
+export function ligneDepuisBase(l) {
+  if (!l) return null;
+  const x = {
+    id: l.id,
+    devisId: l.devis_id ?? null,
+    ordre: nombreOuNul(l.ordre),
+    type: l.type ?? 'poste',
+    designation: l.designation ?? null,
+    quantiteMilliemes: nombreOuNul(l.quantite_milliemes),
+    unite: l.unite ?? null,
+    prixUnitaireCentimes: nombreOuNul(l.prix_unitaire_centimes),
+    tauxTvaCentiemes: nombreOuNul(l.taux_tva_centiemes),
+    totalCentimes: nombreOuNul(l.total_centimes),
+    offert: l.offert === true,
+    mainOeuvre: l.main_oeuvre === true,
+    fournitureNonComprise: l.fourniture_non_comprise === true,
+    surfaceSolMilliemes: nombreOuNul(l.surface_sol_milliemes),
+    surfaceMursMilliemes: nombreOuNul(l.surface_murs_milliemes),
+    /* 2b-3 : « Réparation urgente expressément demandée par le client » —
+       `not null default false` en base : seule une valeur VRAIE l'allume. */
+    urgence: l.urgence === true,
+    generation: nombreOuNul(l.generation),
+    modifieLe: l.modifie_le ?? null,
+  };
+  if (l.devis) {
+    x.devis = {
+      id: l.devis.id, objet: l.devis.objet ?? null, source: l.devis.source ?? null, modifieLe: l.devis.modifie_le ?? null,
+    };
+  }
+  return x;
+}
+
+/**
+ * LES TOTAUX D'UN DEVIS LU (`api.unDevis(id)` : `{ devis, lignes,
+ * ventilation }`), dans la forme que le pied, la carte « Conditions » et
+ * l'aperçu lisent (2c-1, item 16). La saisie les écrivait à la main en
+ * rouvrant un devis ; l'aperçu les lit ici aussi : UNE écriture, sinon le
+ * pied et la page finiraient par ne plus dire la même somme. Les montants
+ * sont ceux que la BASE a rangés ; la demande (`demandeDuDevis`) est lue dans
+ * la même photo.
+ */
+export function totauxDuDevisLu(r) {
+  const d = (r && r.devis) || {};
+  return {
+    ht: d.totalHtCentimes, tva: d.totalTvaCentimes, ttc: d.totalTtcCentimes,
+    /* Les conditions telles que la BASE les a calculées (lot 2a). */
+    reduction: d.remiseHtCentimes ?? 0,
+    brut: (d.totalHtCentimes ?? 0) + (d.remiseHtCentimes ?? 0),
+    acompte: d.acompteTtcCentimes ?? 0,
+    ttcOptions: d.totalTtcOptionsCentimes ?? d.totalTtcCentimes,
+    /* La demande que la base a vue, lue dans la MÊME photo que les totaux
+       (relecture ÉCRAN-1 du lot 2a). */
+    demande: demandeDuDevis(d),
+    ventilation: (r && r.ventilation) || [],
   };
 }
 
@@ -3162,6 +3279,68 @@ export function rangeesDesTotaux(totaux, etatRegime, { nbOptions = 0 } = {}) {
     });
   }
   return r.map((e) => ({ ...e, aDire: `${e.libelle}${e.base != null ? ` ${centimesLisibles(e.base)}` : ''}, ${centimesLisibles(e.centimes) || 'montant inconnu'}` }));
+}
+
+/**
+ * LES RANGÉES DES TOTAUX SUR LE PAPIER (2c-1, D12, D27) — `{ rangees,
+ * notes }`. L'écran garde les siennes (`rangeesDesTotaux`) : la page dit
+ * davantage, parce qu'elle se lit SANS l'écran à côté.
+ *   - la TVA par taux n'est PAS ici : elle est dans le tableau de la page,
+ *     une seule fois (C-M2) — d'où aucune rangée `tva:*` ;
+ *   - l'acompte et le reste disent « sans les options » (C-M7) : avant la
+ *     signature, une option n'est pas commandée ; le reste dit aussi
+ *     « avant la retenue de garantie » quand il y en a une ;
+ *   - le total toutes options comprises vient APRÈS eux, et dit « si toutes
+ *     les options sont commandées » ;
+ *   - « La réduction ne porte pas sur les options. » quand il y a les deux.
+ * Une rangée d'acompte paraît dès que la DEMANDE en porte un — même ramené à
+ * 0,00 € (un devis tout offert) : sinon « acompte ou arrhes » manquerait à la
+ * page quand la liste le compte. Sans nature, son libellé est `sansNature`
+ * (la page y pose « [à compléter : acompte ou arrhes] ») et la rangée porte
+ * `natureManque`. Les montants sont ceux de la BASE (`totaux`), jamais
+ * refaits ici. Le régime : `'reel'`, `'franchise'` ou `null` (non déclaré) —
+ * hors du réel, ni « HT », ni « TTC », ni « TVA ».
+ */
+export function rangeesImprimees(totaux, etatRegime, { nbOptions = 0, sansNature = libelleAcompte(null) } = {}) {
+  if (!totaux) return { rangees: [], notes: [] };
+  const L = libellesDesTotaux(etatRegime);
+  const vue = totaux.demande && typeof totaux.demande === 'object' ? totaux.demande : {};
+  const r = [];
+  const reduction = Number(totaux.reduction) || 0;
+  if (reduction > 0) {
+    const brut = present(totaux.brut) ? totaux.brut : (Number(totaux.ht) || 0) + reduction;
+    r.push({ cle: 'brut', libelle: L.brut, centimes: brut });
+    const pct = present(vue.remiseCentiemes) && !present(vue.remiseCentimes) ? ` ${tauxLisible(vue.remiseCentiemes)}` : '';
+    r.push({ cle: 'reduction', libelle: `${L.reduction}${pct}`, centimes: reduction, moins: true });
+  }
+  if (L.taxe) {
+    r.push({ cle: 'net', libelle: L.net, centimes: totaux.ht });
+    r.push({ cle: 'tva', libelle: L.tva, centimes: totaux.tva });
+  }
+  r.push({ cle: 'total', libelle: L.total, centimes: totaux.ttc, fort: true });
+  const acompte = Number(totaux.acompte) || 0;
+  if (present(vue.acompteCentiemes) || present(vue.acompteCentimes) || acompte > 0) {
+    const pct = present(vue.acompteCentiemes) && !present(vue.acompteCentimes) ? ` ${tauxLisible(vue.acompteCentiemes)} du total` : '';
+    const nature = NATURES_ACOMPTE.includes(vue.acompteNature) ? vue.acompteNature : null;
+    r.push({
+      cle: 'acompte', libelle: `${nature ? libelleAcompte(nature) : sansNature}${pct}, sans les options`,
+      centimes: acompte, natureManque: !nature,
+    });
+    r.push({
+      cle: 'reste',
+      libelle: present(vue.retenueGarantieCentiemes)
+        ? 'Reste à payer, sans les options, avant la retenue de garantie' : 'Reste à payer, sans les options',
+      centimes: (Number(totaux.ttc) || 0) - acompte,
+    });
+  }
+  if (nbOptions > 0 && present(totaux.ttcOptions)) {
+    r.push({
+      cle: 'options',
+      libelle: L.taxe ? 'Total TTC si toutes les options sont commandées' : 'Total si toutes les options sont commandées',
+      centimes: totaux.ttcOptions,
+    });
+  }
+  return { rangees: r, notes: reduction > 0 && nbOptions > 0 ? ['La réduction ne porte pas sur les options.'] : [] };
 }
 
 /**
@@ -4315,6 +4494,83 @@ export const NATURE_DU_MOTIF_ENTREPRISE = Object.freeze({
  *  restent sous 100, ceux de l'entreprise au-dessus. */
 export const RANG_DE_L_ENTREPRISE = 100;
 
+/**
+ * OÙ CHAQUE POINT DE LA LISTE SE VOIT SUR LA PAGE DE L'APERÇU (2c-1, §4.2
+ * bis, C-G1) — écrit UNE fois, pour chaque clé de `MOTIFS_DEVIS` et de
+ * `MOTIFS` (`emetteur.js`, recopiées ici : ce fichier n'importe pas
+ * `emetteur.js`, et `verifier-apercu` compare la table aux deux listes, dans
+ * les deux sens). Trois places :
+ *   - `page` : un marqueur « [à compléter : …] » à sa place dans la page ;
+ *   - `pas_encore` : la page de 2c-1 n'a pas de place pour lui — la liste
+ *     « Pour le remettre » le dit (les mentions de 2c-2, la décennale, les
+ *     déchets, l'énergie ; « à quel titre », jamais imprimé, J9 ; les deux
+ *     montants « ramenés », dont la page imprime l'effectif) ;
+ *   - `pas_d_apercu` : il n'y a pas d'aperçu du tout (D13).
+ * Une clé nouvelle de 2c-2 sans place fait rougir le contrôle.
+ */
+export const PLACES_DES_MOTIFS = Object.freeze({
+  devis_client: 'page',
+  devis_pour_qui: 'pas_encore',
+  devis_lignes: 'page',
+  devis_taux_franchise: 'pas_d_apercu',
+  devis_taux_sans_tva: 'page',
+  devis_taux_reduit_neuf: 'pas_encore',
+  devis_lieu: 'page',
+  devis_delai: 'page',
+  devis_validite: 'page',
+  devis_acompte_nature: 'page',
+  devis_acompte_ramene: 'pas_encore',
+  devis_reduction_ramenee: 'pas_encore',
+  devis_acompte_signature: 'pas_encore',
+  devis_decennale: 'pas_encore',
+  devis_attestation_date: 'pas_encore',
+  devis_attestation: 'pas_encore',
+  devis_cout: 'page',
+  devis_dechets: 'pas_encore',
+  devis_dechets_rubriques: 'pas_encore',
+  devis_energie: 'pas_encore',
+  devis_energie_mentions: 'pas_encore',
+  devis_energie_mentions_prudence: 'pas_encore',
+  entreprise: 'page',
+  identite: 'page',
+  adresse_etablissement: 'page',
+  conso_adresse_etablissement: 'page',
+  entreprise_ancienne: 'pas_encore',
+  nom_ei: 'page',
+  adresse_siege: 'page',
+  conso_adresse_siege: 'page',
+  registre: 'page',
+  capital: 'page',
+  conso_telephone: 'page',
+  conso_email: 'page',
+  regime_tva: 'page',
+  conso_tva_intra: 'page',
+  conso_mediateur: 'page',
+  conso_garantie_legale: 'page',
+  conso_modalites_paiement: 'page',
+  conso_modalites_execution: 'page',
+  conso_reclamations: 'page',
+  frais_deplacement: 'page',
+  conso_profession_reglementee: 'pas_encore',
+});
+
+/**
+ * CE QUE L'ÉCRAN DE L'APERÇU COMPTE (A.2) : sur la liste LUE (`[{ cle }]`),
+ * combien de points se voient dans la page, et combien n'y ont pas encore
+ * de place. Une clé inconnue (une version en avance sur l'application) est
+ * comptée « pas encore » : la liste la dit, la page ne la montre pas.
+ */
+export function compterLesPlaces(motifs) {
+  let page = 0;
+  let pasEncore = 0;
+  for (const m of Array.isArray(motifs) ? motifs : []) {
+    const cle = m && typeof m === 'object' ? m.cle : null;
+    if (aLaCle(PLACES_DES_MOTIFS, cle) && PLACES_DES_MOTIFS[cle] === 'page') page += 1;
+    else pasEncore += 1;
+  }
+  return { page, pasEncore };
+}
+
 const aLaCle = (o, cle) => cle != null && Object.prototype.hasOwnProperty.call(o, cle);
 
 /**
@@ -5412,6 +5668,12 @@ export const CARTE_POUR_REMETTRE = 'pour_remettre';
 
 /** Le titre de la ligne et de la carte. */
 export const TITRE_POUR_REMETTRE = 'Pour le remettre';
+
+/** La valeur de l'état `carte` de la saisie quand l'APERÇU est ouvert (2c-1,
+ *  §6.2) — une carte comme les autres, sans aucun champ : `enregistrerCarte`
+ *  ne la lit pas. Un identifiant de ligne est un UUID : il ne vaut jamais
+ *  « apercu ». */
+export const CARTE_APERCU = 'apercu';
 
 /** La première lecture, pas encore revenue. */
 export const LISTE_EN_LECTURE = 'Lecture de la liste…';

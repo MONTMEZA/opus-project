@@ -448,3 +448,33 @@ export function ficheAPartirDeLaDemande(valeurs, carnet, { lieuLu = true, lieuSu
   if (!v.ok) return { geste: 'formulaire', raison: 'invalide' };
   return { geste: 'creer', valeurs: v.valeurs };
 }
+
+/**
+ * UNE FICHE DE LA BASE, aux noms de l'application — la conversion qui vivait
+ * dans `api.js` sous le nom `rowToClient`, DÉMÉNAGÉE SANS CHANGER (2c-1,
+ * cahier §3 règle 5). `api.js` charge Supabase : `node` ne pouvait pas
+ * l'ouvrir, donc personne ne prouvait que l'aperçu du devis lit la fiche
+ * comme la base la range. Ici, `verifier-apercu` la fait tourner sur une
+ * ligne brute, et `verifier-clients` vérifie qu'`api.js` l'importe.
+ *
+ * `type || 'particulier'` : une fiche sans type n'existe pas en base
+ * (`client_type_check`) ; le défaut ne sert qu'à la démonstration.
+ */
+export function clientDepuisBase(c) {
+  return {
+    id: c.id,
+    proId: c.pro_id,
+    type: c.type || 'particulier',
+    nom: c.nom,
+    siret: c.siret || null,
+    telephone: c.telephone || null,
+    email: c.email || null,
+    adresse: c.adresse || null,
+    codePostal: c.code_postal || null,
+    ville: c.ville || null,
+    notes: c.notes || null,
+    archive: Boolean(c.archive),
+    creeLe: c.created_at || null,
+    modifieLe: c.modifie_le || null,
+  };
+}

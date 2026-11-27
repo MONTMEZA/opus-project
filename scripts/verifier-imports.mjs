@@ -34,7 +34,8 @@
  *
  * npm run verifier-imports
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 
@@ -251,12 +252,36 @@ console.log('\nChaque paquet importé existe vraiment');
  *
  * Il lit `src/`, et AUSSI `App.js` et `index.js`, qui sont hors de `src/`
  * et que Metro met dans le paquet.
+ *
+ * DEPUIS L'ÉTAPE 2c-1 (cahier §8.2, 27/11/2026), trois enveloppes s'ouvrent,
+ * et `@cantoo/pdf-lib` entre dans la liste :
+ *   - `expo-print` et `@cantoo/pdf-lib` → `src/lib/devis-pdf.js` ;
+ *   - `react-native-webview` → `src/components/AfficheurPdf.js`.
+ * Chacune ne charge son module qu'AU MOMENT DE S'EN SERVIR (dans une
+ * fonction, jamais en haut du fichier), et APRÈS avoir demandé si son code
+ * natif est là (`requireOptionalNativeModule('ExpoPrint')`,
+ * `requireOptionalNativeModule('RNCWebViewModule')`) : une version d'Opus
+ * installée sans eux ne plante pas, l'aperçu dit « [module] ».
+ * `@cantoo/pdf-lib` n'a pas de code natif : il n'est pas là parce qu'il
+ * ferait planter au démarrage (« modules natifs » serait faux pour lui,
+ * K-m5), mais parce qu'il est lourd et ne sert qu'à l'aperçu — sa forme
+ * (`require` dans le bloc d'un `try`) est tenue par `verifier-apercu` (F.2).
+ * `react-native-share` reste SANS enveloppe : rien ne partage en 2c-1.
+ *
+ * ET LA VRAIE PROPRIÉTÉ, en plus de la règle par fichier : la FERMETURE des
+ * imports STATIQUES depuis `App.js` — ce que Metro charge au démarrage, quoi
+ * qu'il arrive — ne contient ni ces trois modules, ni les polices du devis,
+ * ni les exemples de l'aperçu, ni son témoin. Et `devis-pdf` et
+ * `AfficheurPdf` s'importent SANS extension : Metro prend alors leur
+ * variante `.web.js` au navigateur (K12) ; écrits `devis-pdf.js`, il
+ * prendrait celle du téléphone partout.
  */
-console.log('\nLes modules natifs de la reconstruction ne se chargent que dans leur enveloppe');
+console.log('\nLes modules natifs et l’impression d’un devis ne se chargent que dans leur enveloppe, au moment de s’en servir');
 {
   const ENVELOPPES = {
-    'expo-print': [],
-    'react-native-webview': [],
+    'expo-print': ['src/lib/devis-pdf.js'],
+    'react-native-webview': ['src/components/AfficheurPdf.js'],
+    '@cantoo/pdf-lib': ['src/lib/devis-pdf.js'],
     'react-native-share': [],
     'expo-splash-screen': ['App.js', 'src/components/Ouverture.js'],
     'expo-web-browser': [],
@@ -341,8 +366,65 @@ console.log('\nLes modules natifs de la reconstruction ne se chargent que dans l
       + 'expo-print, react-native-webview, react-native-share, expo-web-browser et '
       + 'expo-crypto la font planter au démarrage (expo-splash-screen et '
       + 'expo-apple-authentication, eux, se taisent, mais la règle de l’ordre vaut '
-      + 'pour eux aussi). Un module ne se charge que dans son enveloppe, et '
+      + 'pour eux aussi) ; @cantoo/pdf-lib, sans code natif, est lourd et ne sert '
+      + 'qu’à l’aperçu d’un devis. Un module ne se charge que dans son enveloppe, et '
       + 'l’enveloppe ne s’ajoute qu’APRÈS la réinstallation.');
+
+  /* LA FERMETURE DES IMPORTS STATIQUES DEPUIS `App.js` : ce que Metro
+     évalue au démarrage, quoi qu'il arrive. Un `require` dans une fonction
+     n'y est pas (il ne s'exécute qu'à l'appel) ; un `require` au niveau du
+     module, si. Les fichiers relatifs se résolvent comme Metro le fait pour
+     le téléphone : `x`, puis `x.js`, puis `x/index.js` (jamais `.web.js`,
+     qui n'est pas le paquet du téléphone). */
+  const auNiveauDuModule = (n) => {
+    for (let p = n.parent; p; p = p.parent) if (ts.isFunctionLike(p)) return false;
+    return true;
+  };
+  const resoudre = (de, spec) => {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(de), spec));
+    return [base, `${base}.js`, `${base}/index.js`].find((c) => /\.(js|jsx)$/.test(c) && existsSync(c)) || null;
+  };
+  const statiques = new Set();
+  const paquetsAuDemarrage = new Set();
+  const avecExtension = [];
+  const aVoir = ['App.js', 'index.js'].filter((x) => existsSync(x));
+  while (aVoir.length) {
+    const f = aVoir.shift();
+    if (statiques.has(f)) continue;
+    statiques.add(f);
+    const sf = ts.createSourceFile(f, readFileSync(f, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
+    const specs = [];
+    const visiter = (n) => {
+      if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
+        specs.push(n.moduleSpecifier.text);
+      } else if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'require'
+        && n.arguments[0] && ts.isStringLiteral(n.arguments[0]) && auNiveauDuModule(n)) {
+        specs.push(n.arguments[0].text);
+      }
+      ts.forEachChild(n, visiter);
+    };
+    visiter(sf);
+    for (const spec of specs) {
+      if (/(?:^|\/)(?:devis-pdf|AfficheurPdf)(?:\.web)?\.js$/.test(spec)) avecExtension.push(`${f} → '${spec}'`);
+      if (spec.startsWith('.')) {
+        const r = resoudre(f, spec);
+        if (r && !statiques.has(r)) aVoir.push(r);
+      } else paquetsAuDemarrage.add(spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]);
+    }
+  }
+  const interditsAuDemarrage = [
+    ...['expo-print', 'react-native-webview', '@cantoo/pdf-lib'].filter((m) => paquetsAuDemarrage.has(m)),
+    ...['src/data/polices-devis.js', 'src/data/apercu-exemples.js', 'src/data/pdf-temoin.js'].filter((x) => statiques.has(x)),
+  ];
+  verifier(`au démarrage (${statiques.size} fichiers chargés par les imports statiques depuis App.js) : ni expo-print, ni `
+    + 'react-native-webview, ni @cantoo/pdf-lib, ni les polices du devis, ni les exemples, ni le témoin de l’aperçu',
+  interditsAuDemarrage.length === 0 && statiques.size > 50 && statiques.has('src/screens/SaisieDevisScreen.js')
+    && statiques.has('src/lib/devis-pdf.js'),
+  interditsAuDemarrage.length ? `${interditsAuDemarrage.join(', ')} → chargés au démarrage d’Opus`
+    : `${statiques.size} fichiers ; la saisie ${statiques.has('src/screens/SaisieDevisScreen.js') ? 'y est' : 'n’y est pas'}, `
+      + `l’enveloppe ${statiques.has('src/lib/devis-pdf.js') ? 'y est' : 'n’y est pas'} (la fermeture doit les atteindre)`);
+  verifier('`devis-pdf` et `AfficheurPdf` s’importent SANS extension (Metro choisit la variante de la plateforme, K12)',
+    avecExtension.length === 0, avecExtension.join(' | '));
 }
 
 console.log('');

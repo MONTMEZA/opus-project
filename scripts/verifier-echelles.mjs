@@ -38,9 +38,17 @@ const verifier = (nom, ok, detail = '') => {
   console.error(`  ✘ ${nom}${detail ? `\n      ${detail}` : ''}`);
 };
 const lire = (f) => readFileSync(f, 'utf8');
+/* `src/lib/devis-html.js` est SORTI PAR SON NOM (étape 2c-1, cahier §8.2,
+   K3) : c'est la feuille de style d'un PAPIER A4, en millimètres et en
+   points, pas un écran. Ses `margin: 4mm` et `padding: 2.5pt` ne sont pas des
+   pixels de la grille de 4 — les compter « hors grille » ferait du cliquet un
+   faux ami (6 valeurs sur 8 d'un CSS plausible, mesuré). Ses règles, elles,
+   sont tenues par `verifier-apercu` (C.3, C.4 : unités du papier seulement,
+   listes positives de propriétés et de valeurs). */
+const HORS_DES_ECRANS = ['src/theme.js', 'src/lib/devis-html.js'];
 const fichiers = execFileSync('git',
   ['ls-files', '--cached', '--others', '--exclude-standard', 'src'], { encoding: 'utf8' })
-  .split('\n').filter((f) => f.endsWith('.js') && f !== 'src/theme.js');
+  .split('\n').filter((f) => f.endsWith('.js') && !HORS_DES_ECRANS.includes(f));
 const sansCommentaires = (c) => c
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');

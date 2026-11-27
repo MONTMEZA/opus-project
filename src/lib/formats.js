@@ -444,3 +444,94 @@ export function relativeTime(iso, maintenant = Date.now()) {
   if (diff < 172800) return 'Hier';
   return `Il y a ${Math.floor(diff / 86400)} j`;
 }
+
+/* ==========================================================================
+ *  LE JOUR À PARIS, ET LE PLURIEL — pour l'aperçu du devis (2c-1, D28, D11)
+ * ========================================================================== */
+
+/* Le dernier dimanche d'un mois, par `Date.UTC` : le jour de la semaine du
+   dernier jour du mois, compté en arrière. Aucune heure locale. */
+function dernierDimanche(annee, mois) {
+  const fin = new Date(Date.UTC(annee, mois + 1, 0));
+  return fin.getUTCDate() - fin.getUTCDay();
+}
+
+/* Un instant en millisecondes, ou `null` : une `Date` (ou ce qui en a la
+   forme : une horloge remplacée dans un contrôle reste une `Date`), un
+   nombre fini, ou un horodatage écrit « AAAA-MM-JJTHH:MM(:SS(.f)) » suivi
+   de son fuseau (« Z », « +01 », « +01:00 », « +0100 »). L'horodatage est
+   LU À LA MAIN, puis `Date.UTC` : jamais `Date.parse`, que chaque moteur lit
+   à sa façon (PostgREST rend six décimales, Hermes est moins tolérant que
+   `node`). Un horodatage SANS fuseau ne dit pas quel instant il est : `null`. */
+function instantDe(valeur) {
+  if (valeur && typeof valeur === 'object' && typeof valeur.getTime === 'function') {
+    const t = valeur.getTime();
+    return Number.isFinite(t) ? t : null;
+  }
+  if (typeof valeur === 'number') return Number.isFinite(valeur) ? valeur : null;
+  if (typeof valeur !== 'string') return null;
+  const m = valeur.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}(?::?\d{2})?)$/i);
+  if (!m) return null;
+  const [, a, mo, j, h, mi, s = '0', f = '', z] = m;
+  const ms = Number(`${f}000`.slice(0, 3));
+  let decalage = 0;
+  if (z.toUpperCase() !== 'Z') {
+    const signe = z[0] === '-' ? -1 : 1;
+    const chiffres = z.slice(1).replace(':', '');
+    decalage = signe * (Number(chiffres.slice(0, 2)) * 60 + Number(chiffres.slice(2) || '0'));
+  }
+  const t = Date.UTC(Number(a), Number(mo) - 1, Number(j), Number(h), Number(mi), Number(s), ms);
+  return Number.isFinite(t) ? t - decalage * 60000 : null;
+}
+
+/**
+ * LE JOUR À PARIS, « AAAA-MM-JJ », d'un instant — SANS `Intl` (2c-1, D28).
+ *
+ * L'aperçu du devis ne doit dépendre ni du fuseau du téléphone ni de son
+ * horloge : un même brouillon donne la même page à Lambesc, en Martinique
+ * ou à Kiritimati (mesuré par la critique du cahier : la ligne « consultée
+ * le » changeait de jour selon le fuseau). La base juge déjà au jour de
+ * Paris (49.9) ; l'aperçu aussi.
+ *
+ * LA RÈGLE DE L'HEURE D'ÉTÉ DE L'UNION, écrite (directive 2000/84/CE) :
+ * Paris est à UTC+1, et à UTC+2 du dernier dimanche de mars à 1 h UTC
+ * jusqu'au dernier dimanche d'octobre à 1 h UTC. `Intl` n'est pas pris :
+ * ses données de fuseaux dépendent du moteur et de sa version (Hermes,
+ * `node`), et une règle écrite ici se fait tourner par un contrôle.
+ *
+ * Une DATE seule (« 2026-09-02 », une colonne `date` comme `maj_insee`) EST
+ * déjà un jour : elle est rendue telle quelle, si elle existe au
+ * calendrier. Tout ce qui ne se lit pas rend `null`.
+ */
+export function jourAParis(valeur) {
+  if (typeof valeur === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valeur.trim())) {
+    const [a, m, j] = valeur.trim().split('-').map(Number);
+    const d = new Date(Date.UTC(a, m - 1, j));
+    return d.getUTCFullYear() === a && d.getUTCMonth() === m - 1 && d.getUTCDate() === j ? valeur.trim() : null;
+  }
+  const t = instantDe(valeur);
+  if (t === null) return null;
+  const annee = new Date(t).getUTCFullYear();
+  const debutEte = Date.UTC(annee, 2, dernierDimanche(annee, 2), 1, 0, 0);
+  const finEte = Date.UTC(annee, 9, dernierDimanche(annee, 9), 1, 0, 0);
+  const heures = t >= debutEte && t < finEte ? 2 : 1;
+  const d = new Date(t + heures * 3600000);
+  const deux = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${deux(d.getUTCMonth() + 1)}-${deux(d.getUTCDate())}`;
+}
+
+/**
+ * LE NOMBRE ET SON MOT, au singulier ou au pluriel : « 1 jour », « 30 jours »,
+ * « 1 page », « 3 points » (2c-1, D11). La règle française : le singulier
+ * en dessous de deux (« 1,5 jour »), le pluriel à partir de deux.
+ *
+ * `ecrit` : la façon dont le nombre s'écrit, quand ce n'est pas `String(n)`
+ * — une quantité en millièmes s'écrit « 2,5 » (`milliemesLisibles`), et
+ * c'est `n` qui décide du pluriel. Une espace ordinaire entre les deux,
+ * comme « 3 points » partout dans Opus.
+ */
+export function nombreDe(n, singulier, pluriel, ecrit = null) {
+  const v = Number(n);
+  const mot = Number.isFinite(v) && Math.abs(v) >= 2 ? pluriel : singulier;
+  return `${ecrit == null ? String(n) : ecrit} ${mot}`;
+}
