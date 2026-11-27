@@ -245,7 +245,7 @@ function ApercuFil() {
 const s = StyleSheet.create({
   card: { width: '100%', justifyContent: 'flex-end' },
 
-  apercu: { ...StyleSheet.absoluteFillObject, backgroundColor: C.ink, justifyContent: 'center' },
+  apercu: { ...StyleSheet.absoluteFill, backgroundColor: C.ink, justifyContent: 'center' },
   /* Le contenu est calé contre le bord par lequel l'écran arrive — sinon il
      reste au centre, donc caché par la vidéo pendant tout le glissement. */
   apercuCorps: { flex: 1, justifyContent: 'center', gap: 8, paddingHorizontal: 26, maxWidth: 300 },

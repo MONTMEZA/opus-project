@@ -112,5 +112,5 @@ export default function DoubleAppui({
 }
 
 const s = StyleSheet.create({
-  scene: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  scene: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 });

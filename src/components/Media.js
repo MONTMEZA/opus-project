@@ -286,7 +286,7 @@ export function EtiquetteVideo() {
 
 const s = StyleSheet.create({
   sansAffiche: { backgroundColor: C.dark },
-  voile: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  voile: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   pastille: {
     width: 44, height: 44, borderRadius: rond(44),
     backgroundColor: 'rgba(26,27,25,0.55)', alignItems: 'center', justifyContent: 'center',

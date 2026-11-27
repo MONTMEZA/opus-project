@@ -159,10 +159,14 @@ console.log('\nChaque `StyleSheet.<membre>` existe dans React Native du téléph
     `${RN} : introuvable, ou sans « create » ni « absoluteFill ».`);
   if (membres) {
     /* Ce que les fichiers de l'aperçu n'ont JAMAIS le droit d'écrire, et le
-       cliquet des autres : 16 le 27/11/2026, tous `absoluteFillObject`. */
+       cliquet des autres : 16 le 27/11/2026 au matin, tous
+       `absoluteFillObject` ; 0 le soir même, quand le propriétaire a décidé de
+       tout corriger (« Tout corriger », après l'audit des 16, un critique
+       adverse ayant confirmé chaque verdict). Il reste à ZÉRO : un seul
+       membre inconnu remis quelque part rougit. */
     const APERCU = ['src/components/CarteApercu.js', 'src/components/AfficheurPdf.js',
       'src/components/AfficheurPdf.web.js', 'src/components/ApercuDevis.js'];
-    const PLAFOND_INCONNUS = 16;
+    const PLAFOND_INCONNUS = 0;
     const inconnus = [];
     [...fichiers, 'App.js'].forEach((f) => {
       let c;

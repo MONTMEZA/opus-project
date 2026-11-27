@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, Linking, StyleSheet,
+  View, Text, FlatList, Pressable, Linking, Keyboard, StyleSheet,
 } from 'react-native';
 import { C, F, T, S, R, APPUI, interligne, viser } from '../theme';
 import { EmptyState } from '../components/ui';
@@ -444,7 +444,12 @@ export default function ConversationScreen({
       <View style={s.inputRow}>
         <Pressable
           style={({ pressed }) => [s.trombone, pressed && APPUI.discret]}
-          onPress={() => setChoixOuvert(true)}
+          /* LE CLAVIER SE FERME D'ABORD (27/11/2026) : la feuille « Joindre… »
+             s'ouvre depuis la barre de saisie, souvent clavier ouvert, et une
+             `Modal` ne le fait pas descendre — il recouvrait la feuille
+             entière. Le texte du message n'est pas perdu : il vit dans
+             `ChampLocal`. */
+          onPress={() => { Keyboard.dismiss(); setChoixOuvert(true); }}
           accessibilityRole="button"
           accessibilityLabel="Joindre une photo ou un fichier"
         >

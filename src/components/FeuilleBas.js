@@ -110,7 +110,7 @@ export default function FeuilleBas({
 }
 
 const s = StyleSheet.create({
-  fond: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  fond: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   /* `box-none` : l'ancrage occupe tout l'écran pour pouvoir pousser la
      feuille vers le bas, mais il ne doit RIEN intercepter — sinon il
      avalerait les touches destinées au voile, et la sortie de secours

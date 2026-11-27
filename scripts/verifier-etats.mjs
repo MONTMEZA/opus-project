@@ -704,7 +704,7 @@ console.log('\nLe champ SIRET ne coupe rien, et la porte de secours ne démarre 
   const avantConnexion = app.slice(app.indexOf('if (!userType) {'), app.indexOf('<AuthScreen'));
   verifier('un texte légal lu depuis l’inscription se pose PAR-DESSUS, sans la démonter',
     avantConnexion.length > 0 && !/if \(legalAvantConnexion\)\s*\{[\s\S]*?return/.test(avantConnexion)
-    && /!!legalAvantConnexion && \(\s*<View style=\{s\.legalPleinEcran\}>/.test(app),
+    && /!!legalAvantConnexion && \(\s*<View style=\{s\.legalPleinEcran\}[^>]*>/.test(app),
     'au retour des conditions, tout était à refaire — consultation du répertoire comprise');
 }
 

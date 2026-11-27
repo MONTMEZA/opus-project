@@ -45,7 +45,10 @@ export default function ChoixPiece({ ouvert, onChoisir, onFermer }) {
           puisse la refermer en touchant à côté donne l'impression d'être
           coincé — et on cherche un bouton qui n'existe pas. */}
       <Pressable style={s.fond} onPress={onFermer} accessibilityLabel="Fermer" />
-      <View style={s.ancrage}>
+      {/* `box-none` : l'ancrage occupe tout l'écran pour pousser la feuille
+          vers le bas, mais il ne doit RIEN intercepter — sinon il avalerait
+          les touches destinées au voile (la règle de `FeuilleBas`). */}
+      <View style={s.ancrage} pointerEvents="box-none">
         <View style={s.feuille}>
           <View style={s.haut}>
             <Text style={s.titre}>Joindre…</Text>
@@ -87,7 +90,7 @@ export default function ChoixPiece({ ouvert, onChoisir, onFermer }) {
 }
 
 const s = StyleSheet.create({
-  fond: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  fond: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
   ancrage: { flex: 1, justifyContent: 'flex-end' },
   feuille: {
     backgroundColor: C.surface, width: '100%',

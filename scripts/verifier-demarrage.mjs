@@ -143,8 +143,11 @@ console.log('\n5. Ouverture.js : la copie, et qui retire l’écran du télépho
     `Ouverture : ${largeur} — app.json : ${options && options.imageWidth}`);
   const plaque = (ouverture.match(/\n {2}plaque: \{([\s\S]*?)\n {2}\},/) || [])[1] || '';
   verifier('…sur l’orange `C.accent`, au centre de l’écran ENTIER',
-    /backgroundColor: C\.accent/.test(plaque) && /absoluteFillObject/.test(plaque)
-    && /alignItems: 'center'/.test(plaque) && /justifyContent: 'center'/.test(plaque));
+    /backgroundColor: C\.accent/.test(plaque) && /\.\.\.StyleSheet\.absoluteFill(?![\w$])/.test(plaque)
+    && !/absoluteFillObject/.test(plaque)
+    && /alignItems: 'center'/.test(plaque) && /justifyContent: 'center'/.test(plaque),
+    '`...StyleSheet.absoluteFill`, jamais `absoluteFillObject` : React Native 0.86 ne l’a plus, '
+    + 'et sur l’iPhone la plaque tomberait dans le flux, en bande de 288 points de haut.');
   verifier('l’image est carrée, en `contain`',
     /style=\{\{ width: LARGEUR_LOGO_DEMARRAGE, height: LARGEUR_LOGO_DEMARRAGE \}\}/.test(ouverture)
     && /resizeMode="contain"/.test(ouverture));

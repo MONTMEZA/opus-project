@@ -209,7 +209,7 @@ export default function ChantierDevis({
 
 const s = StyleSheet.create({
   /* LA CARTE prend l'écran, comme « Conditions » et « Pour le remettre ». */
-  ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
+  ecran: { ...StyleSheet.absoluteFill, backgroundColor: C.surface, zIndex: 20 },
   barre: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     paddingHorizontal: S.sm, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface,

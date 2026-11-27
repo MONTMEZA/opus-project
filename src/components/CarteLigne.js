@@ -652,7 +652,7 @@ export default CarteLigne;
 
 const s = StyleSheet.create({
   /* Elle PREND L'ÉCRAN : posée au-dessus de la liste, fond opaque. */
-  ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
+  ecran: { ...StyleSheet.absoluteFill, backgroundColor: C.surface, zIndex: 20 },
   barre: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     paddingHorizontal: S.sm, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface,

@@ -392,7 +392,7 @@ const s = StyleSheet.create({
   /* Le MÊME orange que l'écran du téléphone (`backgroundColor` du greffon,
      dans `app.json`) : la jointure ne doit pas se voir. */
   plaque: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
   },
   traverse: {
@@ -401,7 +401,7 @@ const s = StyleSheet.create({
   },
   /* Les trois valeurs qui suivent sont CELLES d'`OnboardingScreen` : si
      elles divergent, le logo sautera au moment du fondu. */
-  logoPlace: { ...StyleSheet.absoluteFillObject, alignItems: 'center', paddingHorizontal: 26 },
+  logoPlace: { ...StyleSheet.absoluteFill, alignItems: 'center', paddingHorizontal: 26 },
   outils: { flexDirection: 'row', gap: 16, marginTop: 60, opacity: 0.85 },
   mot: {
     fontFamily: F.oswald7, fontSize: T.heros, color: C.surface,

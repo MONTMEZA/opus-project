@@ -4770,7 +4770,7 @@ export default function OpusApp({ onSortie, messageInitial = null }) {
             saisis, un appui sur « conditions d’utilisation », et au retour
             tout était à refaire, consultation du répertoire comprise. */}
         {!!legalAvantConnexion && (
-          <View style={s.legalPleinEcran}>
+          <View style={s.legalPleinEcran} accessibilityViewIsModal>
             <BackBar
               title={TITRES_LEGAUX[legalAvantConnexion] || 'Informations légales'}
               onBack={() => setLegalAvantConnexion(null)}
@@ -5773,17 +5773,13 @@ const s = StyleSheet.create({
   },
   body: { flex: 1, backgroundColor: C.bg },
   chargementPleinEcran: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: C.bg,
     zIndex: 30,
   },
   legalPleinEcran: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: C.bg,
     zIndex: 40,
-  },
-  loader: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
   },
 });

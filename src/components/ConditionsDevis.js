@@ -549,7 +549,7 @@ export default ConditionsDevis;
 
 const s = StyleSheet.create({
   /* Elle PREND L'ÉCRAN, comme la carte d'une ligne. */
-  ecran: { ...StyleSheet.absoluteFillObject, backgroundColor: C.surface, zIndex: 20 },
+  ecran: { ...StyleSheet.absoluteFill, backgroundColor: C.surface, zIndex: 20 },
   barre: {
     flexDirection: 'row', alignItems: 'center', gap: S.sm,
     paddingHorizontal: S.sm, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface,
